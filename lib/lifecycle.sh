@@ -30,16 +30,36 @@ _lifecycle_load_head_locked() {
     _llhl_branch="$1"
     _llhl_operation="$2"
     _llhl_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    # Resolve the head before waiting so the shared project lock is held only
+    # to recheck it; a head that does not resolve yet is loaded under the lock.
+    _llhl_preloaded=0
+    if lifecycle_load_head "$_llhl_branch" 2>/dev/null; then _llhl_preloaded=1; fi
     LIFECYCLE_STATE_LOCK="state_${_llhl_project}"
     LIFECYCLE_STATE_LOCK_OWNED=0
+    LIFECYCLE_STATE_LOCK_BUSY=0
     if [ "${HYDRA_HELD_STATE_LOCK:-}" != "$LIFECYCLE_STATE_LOCK" ]; then
-        acquire_lock "$LIFECYCLE_STATE_LOCK" "$_llhl_operation" || return 1
+        # shellcheck disable=SC2034 # read by callers that report a busy store
+        acquire_lock "$LIFECYCLE_STATE_LOCK" "$_llhl_operation" || { LIFECYCLE_STATE_LOCK_BUSY=1; return 1; }
         LIFECYCLE_STATE_LOCK_OWNED=1
+    fi
+    if [ "$_llhl_preloaded" -eq 1 ] && _lifecycle_recheck_head "$_llhl_branch"; then
+        return 0
     fi
     if ! lifecycle_load_head "$_llhl_branch"; then
         [ "$LIFECYCLE_STATE_LOCK_OWNED" -eq 0 ] || release_lock "$LIFECYCLE_STATE_LOCK"
         return 1
     fi
+}
+
+# Under the state lock: the preloaded head still carries the branch, and its
+# current instance (which may have changed while waiting) is reloaded.
+_lifecycle_recheck_head() {
+    [ "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/branch" 2>/dev/null || true)" = "$1" ] || return 1
+    _lrh_instance="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/current-instance" 2>/dev/null || true)"
+    hydra_valid_id "$_lrh_instance" && [ -d "$LIFECYCLE_HEAD_DIR/instances/$_lrh_instance" ] || return 1
+    LIFECYCLE_INSTANCE_ID="$_lrh_instance"
+    LIFECYCLE_INSTANCE_DIR="$LIFECYCLE_HEAD_DIR/instances/$_lrh_instance"
+    export LIFECYCLE_INSTANCE_ID LIFECYCLE_INSTANCE_DIR
 }
 
 _lifecycle_release_head_lock() {
@@ -99,6 +119,24 @@ lifecycle_set_outcome() {
         "{\"outcome\":\"$(json_escape "$_lso_outcome")\"}" >/dev/null
 }
 
+# Atomically replaces scalar files in one directory with one mktemp and one
+# rename each, keeping the shared lock short. mktemp creates private (0600)
+# files; callers pass only validated single-line tokens (source is checked
+# here because adapters name it).
+_lifecycle_write_tokens() {
+    _lwt_dir="$1"
+    shift
+    while [ $# -ge 2 ]; do
+        case "$2" in *[!a-zA-Z0-9._-]*) return 1 ;; esac
+        _lwt_tmp="$(mktemp "$_lwt_dir/.hydra-tmp.XXXXXX")" || return 1
+        if ! printf '%s\n' "$2" > "$_lwt_tmp" || ! mv "$_lwt_tmp" "$_lwt_dir/$1"; then
+            rm -f "$_lwt_tmp"
+            return 1
+        fi
+        shift 2
+    done
+}
+
 lifecycle_set_observed() {
     _lso_branch="$1"
     _lso_status="$2"
@@ -109,17 +147,19 @@ lifecycle_set_observed() {
     case "$_lso_status" in starting|running|idle|exited|failed|unavailable) ;; *) return 1 ;; esac
     case "$_lso_confidence" in exact|reported|inferred|unavailable) ;; *) return 1 ;; esac
     case "$_lso_exit_code" in ''|*[!0-9]*) [ -z "$_lso_exit_code" ] || return 1 ;; esac
-    _lifecycle_load_head_locked "$_lso_branch" "record observed lifecycle" || return 1
+    _lso_now="$(date +%s)"
+    # Concurrent heads report status together (every supervised run finishes
+    # with one), so allow the same bounded two-second window as outcomes for
+    # the shared project state; explicit retry policy wins.
+    HYDRA_LOCK_RETRIES="${HYDRA_LOCK_RETRIES:-40}" \
+        _lifecycle_load_head_locked "$_lso_branch" "record observed lifecycle" || return 1
     if [ -n "$_lso_expected_instance" ] && [ "$_lso_expected_instance" != "$LIFECYCLE_INSTANCE_ID" ]; then
         _lifecycle_release_head_lock
         return 1
     fi
-    _lso_now="$(date +%s)"
-    if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status" "$_lso_status" || \
-       ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-source" "$_lso_source" || \
-       ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-confidence" "$_lso_confidence" || \
-       ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-at" "$_lso_now" || \
-       ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-exit-code" "$_lso_exit_code"; then
+    if ! _lifecycle_write_tokens "$LIFECYCLE_INSTANCE_DIR" observed-status "$_lso_status" \
+        observed-source "$_lso_source" observed-confidence "$_lso_confidence" \
+        observed-at "$_lso_now" observed-exit-code "$_lso_exit_code"; then
         _lifecycle_release_head_lock
         return 1
     fi

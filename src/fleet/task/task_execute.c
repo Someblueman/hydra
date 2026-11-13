@@ -95,6 +95,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     json_object *spec = f_field(package, "spec"), *work = f_field(spec, "work"), *limits = f_field(spec, "limits"), *evidence = NULL;
     struct f_capture cap = {0}; char bytes[32], home[F_PATH]; char *argv[140]; size_t i;
     struct task_control control;
+    struct task_telemetry telemetry;
     const char *clear[] = {"HYDRA_PROJECT_ID", "HYDRA_HEAD_ID", "HYDRA_INSTANCE_ID", "HYDRA_STATE_DIR", "HYDRA_BRANCH", "HYDRA_WORKTREE", NULL};
     int64_t startup;
     int64_t execution = json_object_get_int64(f_field(limits, "execution_seconds")), execution_start;
@@ -128,8 +129,10 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     f_string_add(state, "state", "running"); json_object_object_add(state, resume ? "resumed_at" : "started_at", json_object_new_int64((int64_t)time(NULL)));
     if (task_write_json(directory, "state.json", state, true)) goto done;
     execution_argv(argv, work, state, command, resume);
+    task_telemetry_begin(&telemetry);
     execution_start = monotonic();
     (void)phase(argv, execution_start + execution, &cap, &control.process);
+    task_telemetry_record(state, &telemetry, execution > 0, !cap.stop_unknown);
     execution -= monotonic() - execution_start;
     json_object_object_add(state, "execution_remaining_seconds", json_object_new_int64(execution > 0 ? execution : 0));
     json_object_object_add(state, "exit_status", json_object_new_int(cap.status));

@@ -114,6 +114,35 @@ static bool pids_gone(const char *path) {
     return count > 0U && trailing == EOF;
 }
 
+/* A terminated descendant stays in the process table as a zombie until its
+ * parent reaps it; once orphaned it belongs to init, and some inits (such as a
+ * container's) collect orphans on a schedule of a second or two rather than at
+ * once. The TUI reaps only its own child, so "gone" is checked within a bound. */
+#define PIDS_GONE_GRACE_MS 3000L
+static bool pids_gone_within(const char *path, long timeout_ms) {
+    long long deadline=monotonic_ms()+timeout_ms;
+    while (!pids_gone(path)) {
+        if (monotonic_ms()>=deadline) return false;
+        sleep_ms(10);
+    }
+    return true;
+}
+
+/* Copies the first `count` PIDs recorded: the fixture run that timed out
+ * (owner, then descendant). A periodic refresh may already have started the
+ * fixture again and appended a live pair before this copy is taken, so
+ * copying everything recorded so far would wait on that newer run. */
+static bool snapshot_pids(const char *path, unsigned count, char *copy, size_t capacity) {
+    FILE *in, *out; long pid; unsigned copied=0U; bool ok;
+    if (!path || (in=fopen(path,"r")) == NULL) return false;
+    snprintf(copy, capacity, "%s.snapshot", path);
+    if ((out=fopen(copy,"w")) == NULL) { fclose(in); return false; }
+    while (copied < count && fscanf(in,"%ld",&pid) == 1) { fprintf(out,"%ld\n",pid); copied++; }
+    ok=!ferror(in) && !ferror(out) && copied == count;
+    fclose(in);
+    return fclose(out) == 0 && ok;
+}
+
 static bool wait_for_stop_drain(struct session *session, const char *path, long timeout_ms,
                                 char *captured, size_t *used, long long *stopped_at) {
     long long deadline=monotonic_ms()+timeout_ms;
@@ -815,7 +844,7 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
             result(wait_for_file(pid_file, 1000), "early quit observes a live capture owner");
             write_input(session.master, "q", 1U);
             result(wait_for_exit(&session) == 0, "early quit stops the active capture");
-            result(pids_gone(pid_file), "early quit removes the capture owner and descendant");
+            result(pids_gone_within(pid_file, PIDS_GONE_GRACE_MS), "early quit removes the capture owner and descendant");
             result(terminal_restored(&session), "early quit preserves terminal state");
             close_session(&session);
             return;
@@ -823,13 +852,19 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
         if (await_failure)
             result(wait_for_marker(&session, failure_marker, 12000),
                    "failed observation reaches a bounded failure state");
-        if (pid_file) result(wait_for_file(pid_file, 1000) && pids_gone(pid_file),
-                             "timed-out capture owner and descendant are gone before quit");
+        if (pid_file) {
+            char recorded[200];
+            /* Only the owner that timed out, and its descendant, must be gone here. */
+            result(wait_for_file(pid_file, 1000) && snapshot_pids(pid_file, 2U, recorded, sizeof(recorded)) &&
+                   pids_gone_within(recorded, PIDS_GONE_GRACE_MS),
+                   "timed-out capture owner and descendant are gone before quit");
+            (void)unlink(recorded);
+        }
         write_input(session.master, "q", 1U);
         result(wait_for_exit(&session) == 0, await_failure ?
                "bounded failed observation is reaped before quit" :
                "bounded failed observation quits cleanly");
-        if (pid_file) result(pids_gone(pid_file), "timed-out capture has no owner after quit");
+        if (pid_file) result(pids_gone_within(pid_file, PIDS_GONE_GRACE_MS), "timed-out capture has no owner after quit");
     } else result(wait_for_exit(&session) == expected, message);
     result(terminal_restored(&session), "preflight failure preserves terminal state");
     close_session(&session);
@@ -908,6 +943,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
 #include "test_tui_layout.inc"
+#include "test_tui_remote.inc"
 
 /* Feed the raw PTY stream into a persistent emulator so a marker that spans
  * text the incremental presenter left unchanged is still observable. */
@@ -1009,6 +1045,13 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
+    if (getenv("HYDRA_TEST_REMOTE_ONLY")) {
+        test_remote_side_by_side(argv[1], argv[2], argv[3]);
+        test_remote_actions(argv[1], argv[2], argv[3]);
+        test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
+        printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
+        return failures ? 1 : 0;
+    }
     if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
         test_review_cancellation(argv[1], argv[2], argv[0]);
         test_fleet_attach(argv[1], argv[2], argv[3]);
@@ -1030,7 +1073,11 @@ int main(int argc, char **argv) {
     test_review_narrow(argv[1], argv[2]);
     test_review_cancellation(argv[1], argv[2], argv[0]);
     test_fleet_attach(argv[1], argv[2], argv[3]);
+    test_remote_side_by_side(argv[1], argv[2], argv[3]);
+    test_remote_actions(argv[1], argv[2], argv[3]);
+    test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
     test_workspace_layout(argv[1], argv[2], argv[3]);
+    test_workspace_enter(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);

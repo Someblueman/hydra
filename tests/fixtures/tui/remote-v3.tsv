@@ -1,0 +1,8 @@
+HYDRA_FLEET_TUI	3
+T	builder	responded	1	-	reachable	fresh	2026-10-17T10:00:00Z	3
+F	builder	/work/project	feature-build	head_aaaaaaaaaaaaaaaaaaaa	instance_aaaaaaaaaaaaaaaaaaaa	running
+O	builder	task_build	run_1	implement	attempt-1	/work/project	codex	recorded	waiting_approval	approval	Review the plan	decide	2026-10-17T10:00:00Z	2026-10-17T10:00:00Z	fresh	1	unavailable	unavailable	0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef	-	-	-	req-1
+T	archive	responded	1	-	reachable	stale	2026-10-17T09:55:00Z	300
+F	archive	/srv/archive	feature-index	head_bbbbbbbbbbbbbbbbbbbb	instance_bbbbbbbbbbbbbbbbbbbb	running
+T	offline	failed	0	ssh_failed	unknown	unknown	-	-
+R	observation	offline	ssh_failed	observed	inspect cached snapshot

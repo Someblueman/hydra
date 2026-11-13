@@ -5,16 +5,19 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_visualization.sh \
 	tests/test_native_install.sh \
 	tests/test_native_tui.sh \
+	tests/test_native_tui_i4.sh \
 	tests/test_fleet.sh \
 	tests/test_fleet_install.sh \
 	tests/test_task_package.sh \
 	tests/test_task_acceptance.sh \
+	tests/test_placement.sh \
 	tests/test_workflow_plan_task.sh \
 	tests/test_workflow_plan_v3.sh \
 	tests/test_headless_plan_adapter.sh \
 	tests/test_workflow_task.sh \
 	tests/test_workflow_data.sh \
 	tests/test_workflow_plan.sh \
+	tests/test_workflow_plan_expansion.sh \
 	tests/test_workflow_approval.sh \
 	tests/test_agent_execution.sh \
 	tests/test_agent_auth.sh \
@@ -22,7 +25,10 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_remote_agents.sh \
 	tests/test_remote_setup.sh \
 	tests/test_remote_provision.sh \
-	tests/test_bench_i1.sh
+	tests/test_t2_headless.sh \
+	tests/test_t3_distributed.sh \
+	tests/test_bench_i1.sh \
+	tests/test_u10_loopback.sh
 
 SHELL_TEST_FILES = $(filter-out $(SHELL_TEST_EXCLUDES),$(wildcard tests/test_*.sh))
 SHELL_TEST_NAMES = $(patsubst tests/test_%.sh,%,$(SHELL_TEST_FILES))
@@ -35,7 +41,7 @@ SHELL_TEST_SLOW = kill fleet_review workflow_run_heads workflow_runtime \
 	kill_all workflow_e2e verified_integration spawn_bootstrap merge_train \
 	orphan_worktrees admission_execution integration_safety parallel \
 	fixture_cleanup workflow_attention lifecycle workflow_review_bindings \
-	json_output init_source_tree dashboard admission
+	json_output init_source_tree dashboard admission concurrent_headless_observation
 SHELL_TEST_ORDER = $(filter $(SHELL_TEST_NAMES),$(SHELL_TEST_SLOW)) \
 	$(filter-out $(SHELL_TEST_SLOW),$(SHELL_TEST_NAMES))
 

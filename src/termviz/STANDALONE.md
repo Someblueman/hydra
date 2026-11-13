@@ -49,9 +49,14 @@ installation's responsibility.
 Local runtime qualification is recorded in the Hydra repository's acceptance
 record. macOS arm64 (Apple Clang 17, UBSan) and Linux aarch64
 (Debian GCC 12.2, ASan/UBSan) passed component and real PTY suites. Linux was
-tested in a Debian Bookworm container on LinuxKit 6.12.67. Other systems remain
-unqualified until their component and PTY suites run there. Windows has no
-provided process/terminal adapter. A portable-core build alone does not qualify a
-platform's display, terminal driver or process lifecycle.
+tested in a Debian Bookworm container on LinuxKit 6.12.67. For Hydra 3.0.0 the
+export (`make test-termviz-export`: independent build, component and PTY suites,
+destination preservation) was re-run on Linux x86_64 (Ubuntu GCC 13.3, no
+sanitizer). Other systems remain unqualified until their component and PTY
+suites run there. Windows has no provided process/terminal adapter. A
+portable-core build alone does not qualify a platform's display, terminal driver
+or process lifecycle.
 
 Exporting this source does not create a Git repository or publish a package.
+Whether, where and under which name the extraction is published is a separate
+release decision that this readiness check neither takes nor implies.

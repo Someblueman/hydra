@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / PLAN TOGETHER                                           Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  Attention  Recovery  Workflows  Statistics  [Workspace]  Hosts                                                   
+╭─ PROJECT ────────╮│╭─ SELECTED WORK ──────────────────────────────────────────────────────╮│╭─ DEPENDENCIES ────────────────────────────╮
+│ - This project   │││add-kill                                                              │││kill-dry-run / succeeded                   │
+│>  - add-kill     │││Session   running                                                     │││╭────────────────────╮     ╭───────────────│
+│     + plan run ki│││Agent     codex                                                       ││││ spawn-worker       │──┬─>│ implement     │
+│   └ notes-cleanup│││Where     this machine · this project                                 ││││ succeeded          │  │  │ succeeded     │
+│                  │││Changes   0 files not yet committed · 0 queued                        │││╰────────────────────╯  │  ╰───────────────│
+│                  │││Reported  nothing yet                                                 │││                        │                  │
+│                  │││                                                                      │││╭────────────────────╮  │                  │
+│                  │││                                                                      ││││ spawn-check        │──┘                  │
+│                  │││                                                                      ││││ succeeded          │                     │
+│                  │││                                                                      │││╰────────────────────╯                     │
+│                  │││a  talk to the agent here      Enter  full details                    ││╰───────────────────────────────────────────╯
+│                  │││:  more actions                d  technical details                   ││─────────────────────────────────────────────
+│                  │││                                                                      ││╭─ ACTIVITY ────────────────────────────────╮
+│                  │││                                                                      │││2 heads (+1 in runs) · 1 need attention · 1│
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││Selected add-kill · 3 events · 2 messages ·│
+│                  │││                                                                      │││Approval requests 0 of 0 approved · 0 queue│
+│                  │││                                                                      │││Claims 0 · scopes 0  (coordination with oth│
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││NEEDS REPAIR                               │
+│                  │││                                                                      │││Terminal stopped: notes-cleanup            │
+│                  │││                                                                      │││Recovery explains each finding and runs its│
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+│                  │││                                                                      │││                                           │
+╰──────────────────╯│╰──────────────────────────────────────────────────────────────────────╯│╰───────────────────────────────────────────╯
+ Live                                                                                                                                      
+ Tab pane  Enter details  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit                                 

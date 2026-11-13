@@ -7,6 +7,10 @@ explicit configuration/history transport, and a native fleet view.
 `fleet discover` and `fleet qualify` inspect explicitly
 selected OpenSSH aliases/static records and qualify them with a strict read-only
 handshake. Candidate evidence stays separate from registered aliases and trust.
+Opt-in [live sources](#discover-qualify-and-enroll-hosts) read the operator's own
+SSH configuration, an Ansible hosts file or an mDNS client and diff each
+acquisition against the previous private snapshot; [revocation](#revoke-decisions)
+blocks a candidate, source, alias, key, package or project decision for good.
 
 The `remote task interface` prepares exact source/input packages,
 persists receiver-owned acceptance and execution, and supports disconnected
@@ -16,8 +20,9 @@ flow. Existing direct remote workflow calls remain synchronous.
 
 Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
 approval suspension are available in v2.2.0; see the [changelog](../CHANGELOG.md).
-A remote workflow runs on one selected host. Cross-host DAG coordination and
-automatic placement remain on the [roadmap](ROADMAP.md).
+A remote workflow runs on one selected host. New remote tasks can be placed
+automatically across eligible hosts (see [Automatic placement](#automatic-placement));
+cross-host DAG coordination remains on the [roadmap](ROADMAP.md).
 
 ## Architecture and installation
 
@@ -147,7 +152,9 @@ the previous install stays installed, and after approval (`hydra remote setup NA
 path, plus `accepted_host_key` if it was not recorded before; every other alias
 field is preserved and the record is replaced atomically. If the alias already
 uses a compatible install of this version, provisioning and the alias change are
-skipped. A new setup whose NAME is taken by an alias created meanwhile still fails
+skipped (a preflight snapshot that an older Hydra recorded is not reused as this
+version). A host that already has setup state is upgraded as described in
+[Upgrading a host](#upgrading-a-host). A new setup whose NAME is taken by an alias created meanwhile still fails
 with `alias_conflict`.
 
 Exit statuses: 0 done, 1 error, 3 approval required, 4 outcome unknown (reconcile
@@ -172,6 +179,75 @@ path, remove the prefix yourself and rerun provisioning twice:
 ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/DIGEST'"  # data.prefix
 hydra remote provision ovh    # nothing at the prefix: install_failed
 hydra remote provision ovh    # shows a fresh plan to approve
+```
+
+### Upgrading a host
+
+Upgrade the coordinator first (a 2.x coordinator refuses 3.x hosts), then each
+host. A 3.0 coordinator still talks to 2.9 hosts on fleet protocol 1, but
+automatic placement and withdrawal consider only hosts that advertise
+`task-withdraw` (3.0), and guided setup verifies the exact version it
+provisioned.
+
+**A host set up with `hydra remote setup`.** When the provision step recorded a
+Hydra version other than this one (`steps.provision.detail.hydra_version` in
+`$HYDRA_HOME/fleet/setup/NAME.json`), `hydra remote setup status NAME` and
+`hydra remote setup list` report the provision step as `upgrade_available`, for
+example "older Hydra (2.9.0) on this host; upgrade to 3.0.0", with
+`data.upgrade` (`setups[].upgrade` in the list) and the next command. These views
+are read-only and never connect to the host. Then:
+
+```sh
+hydra remote setup status ovh            # provision: upgrade_available
+hydra remote provision ovh               # shows the upgrade plan; y approves it
+hydra remote provision ovh --approve PLAN_SHA256   # without a terminal (exit 3 before)
+hydra remote setup status ovh            # complete; verify and alias done again
+```
+
+`hydra remote setup ovh` reaches the same plan. The plan is an ordinary
+provisioning plan (the pinned release asset checked against
+`share/hydra/fleet-assets.tsv`, or the unpinned helper given with `--binary
+FILE`, the new prefix `~/.local/share/hydra/fleet/DIGEST`) plus `upgrade`: the
+old and new version, the previous install and prefix, which stays installed, and
+the alias change from the old to the new `bin/hydra` when the alias still uses
+the previous install. After approval Hydra installs the new prefix beside the old
+one; once the new install answers the fleet handshake and `--version` with exactly
+this version, it re-runs the verify step and switches only the alias's `hydra`
+path (no other alias field changes, no second approval). A lost install response
+is `outcome_unknown` and the rerun reconciles the recorded prefix without
+installing again; a re-verification that fails leaves the alias on the old
+install, and rerunning `hydra remote provision ovh` re-verifies and switches it.
+A rerun after the upgrade is a no-op. A setup of the same version reports no
+upgrade, and a host recorded with a newer Hydra is offered this version beside
+it the same way. `hydra remote setup remove NAME` still refuses a finished setup
+whose alias is published (`setup_complete`). The Hosts tab of `hydra tui` lists
+such a setup with the same "older Hydra (2.9.0) on this host; upgrade to 3.0.0"
+row; Enter runs the same commands and shows the plan before anything changes.
+
+The old prefix is reported (`previous_prefix` in the plan and in the provision
+step's `upgrade` record) and is never removed by Hydra. Once no alias in `hydra
+remote list` uses it, remove it yourself if you want the space back:
+
+```sh
+ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/OLD_DIGEST'"  # previous_prefix
+```
+
+**A manually enrolled alias** (`hydra remote add`, `hydra fleet bootstrap`, no
+setup state) is upgraded through guided setup in upgrade mode, described in
+[Upgrading an enrolled alias](#guided-remote-setup) above:
+
+```sh
+hydra remote setup ovh                     # binds to the alias; shows each plan
+hydra remote setup ovh --approve PLAN_SHA256   # the final alias change, without a terminal
+```
+
+or by bootstrapping a reviewed package yourself, which also updates the alias's
+`hydra` path after its handshake:
+
+```sh
+hydra fleet package --source /path/to/hydra-3.0.0 \
+  --binary /path/to/hydra-fleet-3.0.0-linux-x86_64 --output /tmp/hydra-3.0.0.json
+hydra fleet bootstrap ovh --input /tmp/hydra-3.0.0.json --sha256 HASH
 ```
 
 **From the control centre.** `hydra tui` (not only `hydra fleet tui`) has a Hosts
@@ -205,6 +281,198 @@ they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
 
+A development build has no pinned release helper for its version, so its
+control centre cannot provision from the Hosts tab on its own: set
+`HYDRA_REMOTE_SETUP_BINARY=/abs/path/to/hydra-fleet` (the `--binary FILE` the
+CLI's `asset_unavailable` recovery names, for example the output of `make
+build-fleet-static`) and the Hosts tab passes it to `hydra remote setup`, shows
+the helper as unpinned in the plan and reruns only the provisioning command
+that names that same file. Release builds leave it unset.
+
+`make test-u10-loopback` runs the whole guided flow without a VPS: a private
+sshd on a loopback port serves a throwaway account (created with `useradd`
+when the test runs as root or under passwordless sudo; otherwise it prints
+SKIP), the control centre is driven over a PTY through host-key trust, preflight,
+provisioning from this checkout's helper, the deterministic agent fixture
+installed as `codex` by a private `agent-recipes.json`, a sign-in killed
+mid-way and resumed without being repeated, a sign-in whose verification fails
+and is retried, a real fixture-agent task launched on the host and found again
+after reconnecting, a second setup of the same account, a host whose sshd
+hides `git`, untouched unrelated files and no copied credential. Its screens
+and logs land in `build/u10-loopback-evidence/`.
+
+## Discover, qualify and enroll hosts
+
+```sh
+hydra fleet discover --ssh build --ssh mac --json
+hydra fleet discover --inventory /path/hosts.json --select build --json
+hydra fleet qualify --ssh build --require list --timeout 5 > qualification.json
+hydra fleet enroll review --input qualification.json --candidate cand_6275696c64 \
+  --project /srv/project --output enrollment.json
+hydra fleet enroll apply --input enrollment.json --confirm INTENT_SHA256
+hydra fleet enroll status --input enrollment.json --json
+```
+
+`discover` resolves explicitly selected targets with `ssh -G` and makes no
+connection; `qualify` adds one strict read-only protocol-1 handshake per selected
+candidate and records the authenticated peer fingerprint. `enroll review` binds
+selected compatible candidates, their source, principal, fingerprint, policy
+digest, project and optional pinned package into a digest-confirmed intent;
+`enroll apply` performs the reviewed steps with durable per-host progress. The
+candidate/result, inventory, intent and progress schemas are in
+[CONTRACTS.md](CONTRACTS.md#fleet-coordination-since-v210). Discovery never
+accepts a host key, creates an alias, installs Hydra or submits work.
+`enroll status` (since 3.0.0) reads an intent's reviewed hosts with the per-host
+progress `enroll apply` recorded for its digest: `not_started` for a host never
+attempted, the recorded status and phase otherwise (`outcome_unknown` stays
+unknown), and `revoked` for a binding revoked since review. It connects nowhere,
+takes no lock and writes nothing.
+
+**Live sources.** `--source KIND[:LOCATOR]` acquires one explicitly selected
+inventory through its normal client or the operator's own files and feeds the
+same candidate importer. At most four distinct sources per invocation, each run
+once (Hydra never polls), each bounded to `--timeout` seconds of client time,
+1 MiB of file or client output and 100 records; beyond those the report is
+`partial`. Every record is `{name, target, labels}`; credentials never enter a
+record. The report carries the scope the records belong to (`account:USER@HOST`
+for local files, `network:DOMAIN via HOST` for mDNS) and the client used.
+
+| Source | Reads | Scope and limits |
+| --- | --- | --- |
+| `ssh-config[:FILE]` | Literal `Host` names from `~/.ssh/config` (or FILE) and its literal `Include` files; each becomes a candidate that the normal `ssh -G` resolution then explains. Patterns (`*`, `?`, `!`), `Match` blocks and glob includes are reported as skipped, never expanded. | The local account; at most 16 files, two include levels. |
+| `ansible-inventory:FILE` | Host lines of plain `[group]` sections in an INI hosts file; groups become labels, `ansible_host`/`ansible_user` form the target and `ansible_port` a `port:N` label. `[group:vars]` and `[group:children]` are ignored, ranges and non-SSH connections skipped, and any variable that looks like a secret (`pass`, `token`, `secret`, `private_key`, `become`, `vault`, `credential`) is counted in `credentials_omitted` and dropped. | The local account. |
+| `dns-sd[:DOMAIN]` | `_ssh._tcp` services from one terminating `avahi-browse -rtpk` run (port 22 only; names are unescaped). Without `avahi-browse` the source is `unavailable` with reason `client_missing` (`client_unsupported` when only macOS `dns-sd` is present): Hydra never browses the network itself. | `network:DOMAIN` (default `local`). Live multicast acquisition is unqualified; see the roadmap. |
+
+Each acquisition is compared with the previous private snapshot of the same
+source (`$HYDRA_HOME/fleet/discovery/sources/`, owner-only) before any
+selection: the report shows the cache age and the added, removed, changed and
+conflicting records (`--diff` lists them; counts are always present). The cache
+is replaced only by a complete or partial acquisition. When the file is gone,
+the client is missing or times out, or the source was revoked, the report is
+`unavailable`/`revoked`, the command fails with `source_unavailable`/`revoked`,
+the stale cache is shown with its age and record count, and nothing from it is
+imported. Only records of a complete current acquisition become candidates by
+default; `--select NAME` imports named records, also from a partial acquisition,
+and `qualify` over a source always requires `--select`. Records that conflict
+(two names for one target, one name for two targets, or a target that another
+name held in the previous snapshot) or whose identity is revoked are reported
+with provenance and never imported; selecting one is an error. A larger or
+changed acquisition changes the qualification progress binding, so a resumed
+batch cannot silently reuse results for a different membership.
+
+`make test-discovery` covers these adapters with fixture files and a fixture
+`avahi-browse` only. No live mDNS network, Ansible installation or provider was
+observed; that qualification needs a separately authorized operator run.
+
+### Onboarding in the control centre
+
+`O` on the Hosts tab of `hydra tui` opens the onboarding view: the same
+records, shown and acted on through the commands above. Every action is a
+`hydra fleet ...` child with an explicit argv whose envelope the view displays;
+the view never decides identity, state or progress itself and writes no state.
+Its files live in `$HYDRA_HOME/fleet/onboarding/` (owner-only, created by the
+CLI): qualification exports as `qualification-N.json` (`qualify --progress`) and
+reviewed intents as `intent-N.json` (`enroll review --output`). On open it
+loads the newest of each and reads the intent's progress through `enroll status`.
+
+| Screen | Shows | Keys |
+| --- | --- | --- |
+| Candidates | One row per candidate (name or target, state, source, platform, observation age) and each conflicting or revoked source record, with the export, completion and intent summary. At most 100 rows; the list pages within the terminal. | `j`/`k`, PgUp/PgDn, Enter detail; `s` state (new, qualified, failed, conflicting, revoked, reviewed, unknown, enrolled), `S` source kind, `P` platform, `l` label text, `/` search, `x` clears filters; `f` find (discover a selection), `Q` qualify, `r` review, `i` intent, `c` changes, `o` open another export, `R` reload |
+| Detail | Candidate ID, target, state; provenance per source (kind, locator, name, freshness, age when observed, scope and client); labels; resolution and policy digest; qualification result and attempt count; peer fingerprint, and on a changed key the presented and recorded fingerprints with their sources; remote platform and versions; revocation (who, when, reason); and the enrollment row (status, phase, alias, operation ID). | `j`/`k` scroll, Esc |
+| Changes | Each live source's status, scope, client, cache age and the added, removed, changed, conflicting and revoked records of `discover --diff`. | `j`/`k`, Esc |
+| Intent | The intent digest and file, review time, and per host the alias, apply status and phase, candidate, principal, fingerprint, project, package digest and prefix (or that none is pinned), operation ID; then the exact apply command. | `a` apply, `s` refresh status, Esc |
+
+One-host onboarding with a prepared alias, key, credentials and optional package
+takes three actions and one confirmation: `Q` with an empty list asks for the
+selection (SSH aliases, or a source or inventory with names) and runs `fleet
+qualify --progress` into a new export; `r` on a compatible candidate asks for the
+project, alias and optional package, digest and prefix and runs `fleet enroll
+review --output` into a new intent; `a` on the intent shows the bindings and
+the exact `hydra fleet enroll apply --input INTENT --confirm DIGEST --json`
+command, and runs it only after the operator types at least the first 12
+characters of that digest. A wrong prefix, Esc, or an intent that changed while
+the prompt was open runs nothing. `Q` on a loaded export continues its batch
+(the CLI skips hosts it already recorded).
+
+Revoked identities, failed or unqualified candidates and conflicting records are
+inspect-only: `r` refuses them with the reason. `a` refuses an intent whose
+hosts are all enrolled or revoked. No action is retried automatically. A
+finished apply shows every row it recorded; a cancelled apply is followed by a
+read-only `enroll status`, and a timed-out or unparsable one is shown as having
+no result, with Enter reading `enroll status` rather than rerunning anything.
+`outcome_unknown` rows stay visible until the operator applies again with a
+fresh confirmation, when the CLI reconciles each from the receiver's operation
+record instead of replaying it. The view never runs `fleet bootstrap`, `remote trust-key`
+or any other command; installing Hydra happens only as a reviewed step of the
+confirmed apply. Running children keep running when the view closes (`b`);
+`O` shows their result.
+
+`make test-tui` (headless screens over recorded envelopes, argv checks),
+`make test-one T=onboarding_view` (the CLI's `--json` and the view's model agree
+on every candidate ID, target, status, typed state and enrollment row for real
+`discover`, `enroll review` and `enroll status` output; mixed ten-host and
+interrupted fifty-host runs keep every row and outcome; 100 candidates stay
+paged at 80x24 and 140x40) and `make test-tui-pty` (`pty-onboarding`: the
+one-host path through a fake CLI, a single apply after confirmation, cancellation
+without rerun) qualify the view against local fixtures. Live multi-host
+onboarding through it has not been observed.
+
+## Revoke decisions
+
+```sh
+hydra fleet revoke transport build --reason "host key rotated 2026-10-17"
+hydra fleet revoke candidate cand_6275696c64 --reason "retired"
+hydra fleet revoke source ansible-inventory:/etc/ansible/hosts --reason "moved"
+hydra fleet revoke package PACKAGE_SHA256 --reason "superseded build"
+hydra fleet revoke project /srv/project --reason "decommissioned"
+hydra fleet revoke list [--scope transport] --json
+```
+
+A revocation is an explicit local decision about one identity: a candidate (by
+`cand_` ID or exact target), a source (`KIND:LOCATOR`), a transport binding (an
+alias name together with its recorded accepted host key), a package digest or a
+project path. The private record (`$HYDRA_HOME/fleet/revocations/SCOPE/`,
+0600 in 0700 directories) keeps who, when, the reason and the superseded
+binding: for an alias, the alias record with its target, principal, project and
+accepted key; for a source, its cached snapshot summary; for a project, the
+aliases mapped to it. The live alias record stays on disk for inspection and is
+never edited, and a second revocation of the same identity is refused with
+`already_revoked`. Revocation is final for that identity; there is no
+un-revoke, so a rotated host is enrolled again under a fresh review and a new
+alias.
+
+Revoked bindings block new operations and invalidate pending intents: a revoked
+alias cannot be loaded by any `fleet` operation, `fleet task` submission, agent
+sign-in or workflow binding (typed `revoked`, with the record's detail), shows
+as a `revoked` row in `fleet list`, cannot be re-added, re-set-up or published by
+enrollment under the same name, and no endpoint change or source refresh reaches
+the host through it. A revoked candidate shows as `revoked` in `discover`,
+`qualify` and resumed progress (its earlier evidence is retained under the
+status), is reported but not imported from any inventory or live source, and is
+refused by `enroll review`. A revoked source is not acquired. A revoked package
+digest is refused by `fleet bootstrap` and `enroll review`; a revoked project by
+`enroll review` and every `--project` operation. `enroll apply` marks a reviewed
+host whose candidate, alias, accepted key, package or project was revoked after
+review as `revoked` before any connection; rows already `enrolled` stay as they
+are. A host that still presents a revoked alias's accepted key is refused by
+review even under a new alias.
+
+Revocation alone cancels no task, uninstalls no package, deletes no remote state
+and rewrites no `known_hosts`; those actions keep their own explicit commands.
+
+**Changed host keys.** When strict OpenSSH refuses a changed key during
+`qualify`, the candidate's `host_key_changed` result adds `error.host_key`: the
+presented fingerprint, key type and offending `known_hosts` file and line as
+OpenSSH reported them, the fingerprints Hydra has recorded for that target
+(alias `accepted_host_key`, revoked transports' superseded keys, earlier
+qualification results) each with its source, and the acceptance path. `enroll
+apply` reports `host_key` with the reviewed and the presented fingerprint and
+where each was observed; `remote trust-key` adds the alias's recorded
+fingerprint next to the presented one. Hydra never accepts the new key or edits
+`known_hosts`: verify it out of band, remove the old entry with your own
+`ssh-keygen -R`, re-qualify, and review enrollment afresh. The old binding can
+then be revoked explicitly so nothing silently re-points to the rotated host.
+
 ## Register and bootstrap a host
 
 ```sh
@@ -218,7 +486,10 @@ settings. Hydra enforces batch authentication and strict host-key verification;
 verify the host key through your trusted process first. Aliases are private JSON
 records under `$HYDRA_HOME/fleet/remotes/`. `remote add` replaces that alias's record.
 Optional `--hydra /absolute/bin/hydra` selects an existing installation and `--home
-/absolute/state-directory` isolates remote Hydra state. `--multiplex` enables
+/absolute/state-directory` isolates remote Hydra state. `--ssh-config
+/absolute/file` binds the alias to one OpenSSH client configuration (`ssh -F`), as
+a finished guided setup records; every transport for that alias, including
+workflow task dispatch, uses it. `--multiplex` enables
 OpenSSH ControlMaster/ControlPersist with private control sockets; existing SSH
 multiplexing configuration is otherwise respected.
 
@@ -277,8 +548,10 @@ hydra fleet watch --interval 5 --timeout 5 --jobs 4
 The handshake exposes Hydra version, fleet/state/event/JSON protocols, native
 protocol expectations and executable presence, project mappings, capabilities,
 and supported signals. Native presence does not certify helper compatibility.
-The coordinator requires Hydra 2.x, fleet protocol 1, state 2, event 1, JSON 1,
-and the requested capability. Fleet is available from 2.1.0; build and bootstrap a qualified
+The coordinator requires Hydra 2.x or 3.x, fleet protocol 1, state 2, event 1, JSON 1,
+and the requested capability. A 2.x coordinator accepts only 2.x receivers, so a
+3.x receiver answers it with `version_mismatch`: upgrade the coordinator with or
+before its hosts. Fleet is available from 2.1.0; build and bootstrap a qualified
 fleet helper before using these commands.
 
 List returns canonical durable head records, including remote project paths.
@@ -435,28 +708,246 @@ observations; the receiving shell authority grants every reservation against liv
 policy. See [Contracts](CONTRACTS.md#durable-state-v2) for limits, labels, queue
 deadlines, and retained claims after owner loss.
 
-## Native fleet view
+## Automatic placement
+
+Remote task submission pins one host by default: the package's immutable `host`
+must be the alias you submit to, and nothing is recorded beyond the receiver's
+acceptance. Automatic placement (since 3.0.0) chooses the receiver for **new,
+unassigned work** from the registered aliases and records why:
 
 ```sh
-make build-tui
-hydra fleet tui
+hydra fleet task prepare --source . --spec task.json --output /tmp/task.json
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42
+hydra fleet task submit alpha --input /tmp/task.json --key build-43 --placement alpha
+hydra fleet placement explain task_ID --json     # the recorded decision
+hydra fleet placement replay task_ID             # re-derives it; must be identical
+hydra fleet placement policy                     # effective knobs and drained hosts
+hydra fleet placement drain ovh                  # keep new work off a host
+hydra fleet placement undrain ovh
 ```
 
-The native view displays host-qualified heads and recorded desired state. `j/k`,
-search, and views work as usual; recovery shows offline hosts. Select a current
-interactive head and press `a` to open its pane in the operator workspace. The
-selection includes host, project, branch, head, and current instance; attachment
-is refused for stale or unreachable hosts, headless heads, missing identities,
-and replaced instances. The remote shell rechecks that composite identity and
-the live tmux session before handing the client to tmux.
+With `--placement auto` the positional alias is omitted; the package's `host` is
+only the prepared template and the chosen host receives a copy whose `spec.host`
+and `spec_sha256` are rebound (bundle, inputs and limits are byte-identical).
+`--trust-spec` names the digest you reviewed (the prepared package); the
+host-bound digest the receiver trusts is reported as `bound_spec_sha256` and is
+what `hydra fleet task start HOST --id ID --trust-spec` needs later. `--placement
+HOST` is an explicit pin that also records a decision. `--separate-from TASK_ID`
+(repeatable, at most 8) excludes the current host of another placed task, which is
+how a validator stays off its producer's host.
 
-Inside an attached pane, `Ctrl-B Tab` leaves input (focus goes back to Hydra),
-`Ctrl-B x` closes the selected client while leaving the owner session alive, and
-`Ctrl-B q` exits the operator view. `c` requests a confirmed interrupt and `q`
-restores the terminal and exits when no pane is focused. Actions carry host, project, and
-observed instance through the public CLI. Local mutation shortcuts and local
-pane preview are disabled in fleet mode. Paths/identifiers that cannot be
-represented safely within native text bounds require the CLI.
+**Eligibility.** Every registered alias is observed with one handshake and one
+`admission status --json` call (serially, each bounded by the task's
+`transport_seconds`). A host is excluded, with every applicable reason recorded,
+when it is drained, offline or incompatible (`offline`, `timeout`,
+`version_incompatible`, ...), lacks `task-accept`/`task-withdraw` or an adapter
+capability the spec names (`capability_missing`), does not map the spec's
+project path (`project_unmapped`), differs from a `platform.OS-ARCH` capability
+(`platform_mismatch`), lacks a required `label.X` in its admission policy
+(`label_unsupported`), has no admission observation (`admission_unobserved`),
+reports an observation older than `max_observation_age_seconds` or ahead of the
+submitter's clock by more than that (`stale_observation`), has a full queue
+(`queue_full`) or more queued requests than `max_queued` (`queue_bound`), is
+below its disk floor or the task's log/artifact bytes (`disk_floor`,
+`disk_insufficient`), would consume validator headroom (`validator_reserved`),
+already recorded this task ID (`previous_generation`), or holds a task named by
+`--separate-from` (`validator_separation`). An idle host that fails any filter is
+not eligible.
+
+The project filter compares the spec's `project` with the receiver's registered
+project paths as text. Receivers register the resolved path (symbolic links
+followed), so a spec that names the project through a link, such as `/tmp/...`
+or `/var/...` on macOS where those are links to `/private/...`, is
+`project_unmapped` for automatic placement. An explicit `task submit HOST`
+resolves the path on the receiver and accepts it. Write the resolved path in
+specs meant for automatic placement.
+
+**Ranking.** Eligible hosts are ordered by capacity-normalized load
+`(reserved + queued) * 1000 / capacity` where `capacity` is the host's
+`host_limit`, or 1 when the host advertises no limit (an unbounded host looks
+fully loaded as soon as it holds one reservation; configure `host_limit` for
+balanced placement), then by reserved slots of the same task class (requests
+with the same required-label set), then by queue depth, then by alias order.
+The first host receives the task. The receiver's admission remains final: a
+definitive refusal (`capability_unavailable`, `unmapped_project`,
+`missing_dependency`, `invalid_package`, or a start that fails with `queue_full`)
+is recorded and the next-ranked host is tried; an ambiguous dispatch
+(`outcome_unknown`) leaves the task assigned to that host and a later submission
+with the same key reconciles with that host only, never a second one. Submissions
+for one key serialize on the record, so concurrent submitters cannot dispatch the
+same task twice. Each candidate also carries typed, versioned `estimates`
+(`queue_delay_seconds`, `measured_duration_seconds`, `transfer_cost_bytes`,
+estimates schema 1) that are recorded as unavailable and never used in ranking
+until measured evidence exists.
+
+**Policy.** `$HYDRA_HOME/fleet/placement-policy.json` (optional, closed schema,
+policy version 1) holds `max_observation_age_seconds` (default 60),
+`max_queued` (default 8, 0..128) and `validator_reserve_slots` (default 0,
+0..64): the number of free slots per host, out of its `host_limit`, kept for
+`role.validator` tasks so fan-out of producers cannot fill every host ahead of
+validation. The default reserves nothing; raise it where validators demonstrably
+wait behind producers. Receivers keep FIFO queue order; placement never
+reorders a receiver's queue. Task classes come from capability names:
+`role.producer`, `role.validator` (otherwise `general`); receivers accept and
+record `role.*` and check `platform.OS-ARCH` against their own platform.
+
+**Record.** Every `--placement` submission writes
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json` (`fleet-placement` schema
+1, digest-sealed): the inputs derived from the spec, the policy used, and for
+each assignment generation every round's observations (with ages), candidates
+(eligibility, reasons, score, rank, estimates), the decision, and every dispatch
+attempt with its reservation outcome (`accepted`, `refused` with the receiver's
+code, `unknown`, `error`). `placement explain` prints it; `placement replay`
+re-runs the ranking from the recorded observations and policy and fails with
+`replay_mismatch` unless the result is identical. A record whose digest does not
+match is refused (`not_found`). Drain markers live in
+`$HYDRA_HOME/fleet/placement-drained/HOST` and affect only automatic placement.
+
+**Rebalancing.** Only accepted work that has not started moves:
+
+```sh
+hydra fleet placement withdraw task_ID        # the current receiver records the withdrawal
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42   # generation 2
+```
+
+`withdraw` sends `task withdraw` to the assigned host. The receiver takes the
+launch owner lock, records `withdrawal.json` and the durable `withdrawn` state
+only for an accepted task without a launch claim, and refuses anything else
+(`execution_owned`); a withdrawn task never starts there (`withdrawn`). Nothing
+is released because admission is requested only at launch. The submitter then
+opens the next generation on the next submission, excluding every host that
+recorded the task. A lost withdrawal response marks the generation
+`withdrawal: unknown` and blocks transfer (`withdrawal_unconfirmed`) until a
+rerun confirms it; running agents are never migrated and uncertain work is never
+replayed as balancing. Receivers that advertise `task-withdraw` record the
+submitter's `assignment_generation` at acceptance and reject a start, resume or
+re-submission that names another generation (`stale_generation`); result
+collection admits a snapshot only from the current generation and host
+(`stale_generation`), and promotion consumes only collected results, so a late
+result from a superseded generation can never be integrated. This fence covers
+Hydra's own records; a task's external side effects (pushes, API calls, provider
+sessions) need their own idempotency or fencing contract, and expiry of a queue
+deadline or lease never authorizes a second execution.
+
+Placement is qualified here with local receivers behind a controlled SSH
+boundary. Heterogeneous-host trials comparing explicit and balanced placement
+(queue wait, time to verified result, throughput, transfer bytes, starvation)
+need real hosts and have not been run; no performance improvement is claimed.
+
+## Task telemetry
+
+Since 3.0.0 the task owner records what it measured about the execution phase in
+the task's `state.json` as an optional, additive `telemetry` object (telemetry
+block 1). The block travels with the receipt: `task status`, `task observation`
+and the coordinator's `attempt-N/remote/observation.json` carry it under
+`runtime.telemetry`, and the sealed `result.json` keeps it under
+`receipt.runtime.telemetry`. Receivers without it, and tasks that never started,
+carry no block; a reader never treats its absence as zero.
+
+```json
+"telemetry": {
+  "schema_version": 1,
+  "measured_by": "task_owner",
+  "scope": "execution_phase",
+  "clock": "monotonic",
+  "cpu_source": "getrusage_children",
+  "rss_source": "getrusage_children_maxrss",
+  "invocations": 1,
+  "wall_seconds": 12,
+  "cpu_user_microseconds": 300000,
+  "cpu_system_microseconds": 50000,
+  "unmeasured": {"peak_rss_bytes": "rss_not_distinguishable"}
+}
+```
+
+The provenance fields say who measured and how: the owner process measures the
+`hydra workflow run` or `hydra exec` child and every descendant it waited for,
+from the moment it launches that child until it reaps it, with `CLOCK_MONOTONIC`
+for `wall_seconds` and the difference of `getrusage(RUSAGE_CHILDREN)` for the CPU
+times. Preparation (bundle clone, checkout, head spawn), result sealing and
+transport are outside the scope. `peak_rss_bytes` is present only when the
+execution child raised the owner's children maximum RSS above what earlier
+children (git, the head spawn) had reached; otherwise its peak is known to be no
+larger than theirs but not itself, and the field is listed under `unmeasured` as
+`rss_not_distinguishable`. The other recorded reasons are
+`execution_not_started` (the deadline passed before launch), `child_not_reaped`
+(the child could not be collected after a cancellation; its CPU is unknown),
+`owner_measurement_unavailable` (the owner's clock or rusage call failed),
+`prior_invocation_unmeasured` and `overflow`. A resumed task adds a new
+invocation's wall and CPU to the recorded totals and keeps the larger RSS;
+`invocations` counts the owner runs that contributed. Provider tokens, model and
+cost are not part of this block: they come from the exec receipt (`agent.json`)
+the result collects as evidence, and only when the provider reported them.
+Transport bytes and calls come from the coordinator's `transport-metrics.json`,
+which records no time.
+
+No daemon or poller is involved: the measurement is taken once, by the process
+that already waits for the child, and written with the state it already writes.
+`hydra workflow statistics-data` (schema 5), `statistics-json` (export schema 3)
+and the native Statistics view read these records per workflow step through the
+read-only `workflow-task remote-tsv` helper and group remote steps into cohorts
+by host, placement mode, assignment generation and provider; see
+[Contracts](CONTRACTS.md#tui-protocols-and-parity) for the rows and
+[workflows](workflows.md#reviewing-a-finished-plan) for the screen. Everything
+the receipt does not carry stays unknown with its reason. The block is qualified
+here with local receivers behind the local transport and a controlled SSH
+loopback; measurements from real remote hosts are operator observations and no
+provider or performance claim is made from them.
+
+## Remote work in the control centre
+
+```sh
+make build-tui build-fleet
+hydra tui                      # local and remote work in one workspace
+hydra tui --location remote    # the same, opened on remote work only
+hydra fleet tui                # compatibility entry: the same, filtered to remote work
+```
+
+`hydra tui` observes every registered remote host beside the local project. A
+remote head is a row `host/branch` of the same Work and Overview lists as a
+local head, a remote task (receiver-owned, no head on this machine) a row
+`task ID`; from 95 columns a `WHERE` column names the machine, and every
+summary and detail names the host, the desired state the host recorded and the
+observation it comes from (`fresh, 3s old`, `stale, 300s old`, `unknown`). `L`
+cycles the location filter (all work, local, remote, then each host) and Esc
+shows all work again; the Hosts tab (`H`) lists the observed hosts with their
+connection, head count and observation age, Enter there follows one host's
+work and `r` asks for a fresh observation of it; `A` adds a host through
+[guided setup](#guided-remote-setup) and `O` opens
+[onboarding](#onboarding-in-the-control-centre).
+
+Details, attention (`I`) and review (`r`) use the same keys for remote work.
+Select a current interactive remote head and press `a` to open its pane in the
+workspace: the selection carries host, project, branch, head and current
+instance into `hydra fleet attach`, the remote shell rechecks that composite
+identity and the live tmux session before handing the client to tmux, and the
+pane behaves like a local one (`Ctrl-B Tab` leaves input, `Ctrl-B x` closes
+the client while the owner session lives on, `Ctrl-B r` reconnects, `Ctrl-B n`
+switches agents, `Ctrl-B q` quits). `Ctrl-B [` scrolls the host's own tmux
+history: Hydra forwards the host tmux's default prefix and `[` through the
+client, so the host's copy mode handles PgUp/PgDn and arrows and `q` (or
+`Ctrl-B ]`) leaves it; a host tmux configured with another prefix receives
+those keys instead, which Hydra cannot verify. `x` on a remote head interrupts
+its agent through `hydra fleet cancel` after a confirmation that names the host
+and branch (`:` offers `interrupt remote head`); removal, grouping and the
+local palette actions run on the host, not here. On a remote task row `Y`,
+`N`, `R` and `X` dispatch `hydra fleet task decide|resume|cancel` with the
+exact task, request and bound spec after a typed confirmation.
+
+Attach, interrupt and task controls are authorized only by a fresh observation
+of a host that answers. A host that stops answering is `disconnected`: its
+heads and tasks stay listed as retained rows from the last observation, with
+that observation's age, and refuse every action until the host answers again.
+When the remote observation itself fails the footer says `Remote: STALE, last
+good observation Ns ago` with the reason, every remote status reads `stale`,
+and `r` retries. Nothing in the control centre stops, completes or replays
+remote work because an observation is missing; remote liveness is never
+observed, and a remote head is never counted as running.
+
+`hydra fleet tui` keeps working as a compatibility entry: it opens the same
+control centre filtered to remote work and reads the fleet helper's own
+`tui-visual-data` and `attention-data` streams. Paths and identifiers that
+cannot be represented within native text bounds require the CLI.
 
 Qualification evidence is host- and provider-specific; local fixtures and controlled
 SSH failures do not establish live-provider or external-host qualification.

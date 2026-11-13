@@ -1,0 +1,112 @@
+{
+  "schema": "hydra-attention-cases/1",
+  "note": "Annotated local workflow states for I2 attention qualification. Each case mutates one real completed run (exec step succeeded, approval-wait pending) under its run directory; paths are relative to that directory. Expected items are (kind, step) pairs from `hydra workflow attention --json`; `unknown` items are matched by count, and `signal_absent_by_design` marks cases the local route cannot classify (reported separately from missed signals).",
+  "cases": [
+    {
+      "id": "blocked-approval-pending",
+      "class": "blocked/approval",
+      "mutations": [],
+      "expected": [{"kind": "approval", "step": "approval"}, {"kind": "result", "step": "produce"}]
+    },
+    {
+      "id": "blocked-approval-expired",
+      "class": "blocked/approval",
+      "mutations": [{"op": "write", "path": "approvals/{request}/expires-at", "text": "1\n"}],
+      "expected": [{"kind": "approval_expired", "step": "approval"}, {"kind": "result", "step": "produce"}]
+    },
+    {
+      "id": "question-with-request",
+      "class": "question",
+      "note": "A waiting state the local route does not model; the pending request keeps the item explicit as unknown rather than a question.",
+      "mutations": [{"op": "write", "path": "steps/approval/state", "text": "waiting-question\n"}],
+      "expected": [{"kind": "unknown", "step": "approval"}, {"kind": "result", "step": "produce"}],
+      "question_classified": false
+    },
+    {
+      "id": "question-without-request",
+      "class": "question",
+      "note": "No request record and an unmodelled waiting state: the route emits nothing for this step.",
+      "mutations": [
+        {"op": "write", "path": "steps/approval/state", "text": "waiting-question\n"},
+        {"op": "move-aside", "path": "steps/approval/request-id"}
+      ],
+      "expected": [{"kind": "result", "step": "produce"}],
+      "signal_absent_by_design": ["approval"]
+    },
+    {
+      "id": "working-running-step",
+      "class": "working",
+      "mutations": [
+        {"op": "move-aside", "path": "steps/approval"},
+        {"op": "write", "path": "steps/produce/state", "text": "running\n"}
+      ],
+      "expected": []
+    },
+    {
+      "id": "done-but-unseen",
+      "class": "done-but-unseen",
+      "mutations": [{"op": "move-aside", "path": "steps/approval"}],
+      "expected": [{"kind": "result", "step": "produce"}],
+      "seen_check": "unseen"
+    },
+    {
+      "id": "done-but-seen",
+      "class": "done-but-unseen",
+      "note": "Marking seen is a per-user presentation marker: the signal must remain in the public route.",
+      "mutations": [{"op": "move-aside", "path": "steps/approval"}],
+      "expected": [{"kind": "result", "step": "produce"}],
+      "seen_check": "mark-then-listed"
+    },
+    {
+      "id": "idle-empty-runs",
+      "class": "idle",
+      "mutations": [{"op": "empty-runs"}],
+      "expected": []
+    },
+    {
+      "id": "idle-no-workflow-storage",
+      "class": "idle",
+      "note": "A registered project that has never recorded a run has no run storage yet: an exact, empty list (3.0.0), not an unavailable one.",
+      "mutations": [{"op": "remove-runs"}],
+      "expected": []
+    },
+    {
+      "id": "unknown-run-storage-unavailable",
+      "class": "unknown",
+      "note": "Run storage exists but is not a directory: the route cannot read it and fails explicitly instead of reporting an empty list.",
+      "mutations": [{"op": "runs-not-directory"}],
+      "expected": [],
+      "expect_error": "not_initialized"
+    },
+    {
+      "id": "unknown-binding-tampered",
+      "class": "unknown",
+      "mutations": [{"op": "write", "path": "approvals/{request}/binding-hash", "text": "bad\n"}],
+      "expected": [{"kind": "unknown", "step": "approval"}, {"kind": "result", "step": "produce"}]
+    },
+    {
+      "id": "unknown-missing-request",
+      "class": "unknown",
+      "mutations": [{"op": "move-aside", "path": "steps/approval/request-id"}],
+      "expected": [{"kind": "unknown", "step": "approval"}, {"kind": "result", "step": "produce"}]
+    },
+    {
+      "id": "unknown-result-tampered",
+      "class": "unknown",
+      "mutations": [
+        {"op": "move-aside", "path": "steps/approval"},
+        {"op": "write", "path": "steps/produce/attempt-1/artifacts/answer", "text": "tampered\n"}
+      ],
+      "expected": [{"kind": "unknown", "step": "produce"}]
+    },
+    {
+      "id": "blocked-failed-step",
+      "class": "blocked/failure",
+      "mutations": [
+        {"op": "move-aside", "path": "steps/approval"},
+        {"op": "write", "path": "steps/produce/state", "text": "failed\n"}
+      ],
+      "expected": [{"kind": "failure", "step": "produce"}]
+    }
+  ]
+}

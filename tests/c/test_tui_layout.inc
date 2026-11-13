@@ -10,6 +10,31 @@ static void layout_resize(struct session *session, unsigned short cols, unsigned
     (void)ioctl(session->master, TIOCSWINSZ, &size);
 }
 
+/* Enter follows the selected head into its full details from whichever
+ * Hydra pane holds focus, as the SELECTED WORK pane says; Esc returns to the
+ * workspace with the selection kept. */
+static void test_workspace_enter(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    if (!result(open_session(&session, tui, hydra, fake_bin, 100, 30) == 0, "open workspace Enter terminal")) return;
+    result(wait_for_raw(&session), "workspace Enter terminal enters raw mode");
+    (void)wait_for_model(&session);
+    write_input(session.master, "W", 1U);
+    result(wait_for_marker(&session, "Enter  full details", 3000), "the selected-work pane offers Enter for full details");
+    write_input(session.master, "\t", 1U);
+    sleep_ms(100);
+    write_input(session.master, "\r", 1U);
+    result(wait_for_markers(&session, "Details: feature-live", "HYDRA / DETAILS", 3000), "Enter from the selected-work pane opens the head's details");
+    write_input(session.master, "\033", 1U);
+    result(wait_for_marker(&session, "PLAN TOGETHER", 3000), "Esc returns from the details to the workspace");
+    write_input(session.master, "\r", 1U);
+    result(wait_for_marker(&session, "Details: feature-live", 3000), "Enter from the project pane opens the same head's details");
+    write_input(session.master, "\033", 1U);
+    (void)wait_for_marker(&session, "PLAN TOGETHER", 3000);
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "workspace Enter terminal exits and restores the terminal");
+    close_session(&session);
+}
+
 static void test_workspace_layout(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     if (!result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open planning layout terminal")) return;

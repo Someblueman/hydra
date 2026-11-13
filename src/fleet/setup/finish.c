@@ -76,9 +76,10 @@ static bool alias_unchanged_since(const struct f_remote *before) {
     return !f_remote_load(before->name, &now) && same_text(now.target, before->target) && same_text(now.hydra, before->hydra) &&
         same_text(now.accepted_host_key, before->accepted_host_key);
 }
-static json_object *update_alias(struct setup_ctx *ctx, const struct f_remote *alias) {
+/* with_key: also record a host key the alias lacked (upgrade mode only). */
+static json_object *update_alias(struct setup_ctx *ctx, const struct f_remote *alias, bool with_key) {
     struct f_remote updated = *alias; json_object *detail; char summary[F_PATH * 2 + 32];
-    const char *key = new_host_key(ctx, alias);
+    const char *key = with_key ? new_host_key(ctx, alias) : NULL;
     if (!alias_unchanged_since(alias))
         return setup_error(ctx, "alias_conflict", "the alias changed while setup was running", "inspect hydra remote list, then rerun hydra remote setup NAME", NULL);
     f_copy(updated.hydra, sizeof(updated.hydra), ctx->remote.hydra);
@@ -106,13 +107,39 @@ static json_object *upgrade_alias(struct setup_ctx *ctx, const char *approve) {
     plan = upgrade_plan(ctx, &alias);
     gate = setup_plan_gate(ctx, "alias", plan, approve, argv);
     json_object_put(plan);
-    return gate ? gate : update_alias(ctx, &alias);
+    return gate ? gate : update_alias(ctx, &alias, true);
+}
+
+/* ---- Runtime upgrade: the provision plan approved switching hydra ---- */
+static json_object *switch_blocked(struct setup_ctx *ctx, const char *message) {
+    (void)setup_state_step(ctx, "alias", "blocked", NULL);
+    return setup_error(ctx, "alias_conflict", message,
+                       "inspect hydra remote list; setup never re-points an alias or overwrites a changed one: remove the alias "
+                       "deliberately with hydra remote remove NAME, then rerun hydra remote setup NAME to publish it with the new install", NULL);
+}
+static json_object *switch_runtime(struct setup_ctx *ctx, json_object *change, const struct f_remote *alias) {
+    const char *old_hydra = f_string(change, "old_hydra"), *new_hydra = f_string(change, "new_hydra");
+    json_object *detail; char summary[F_PATH + 64];
+    if (!same_text(alias->target, ctx->remote.target) || !same_text(alias->ssh_config, ctx->remote.ssh_config))
+        return switch_blocked(ctx, "the alias now points at a different destination");
+    if (same_text(alias->hydra, ctx->remote.hydra)) {
+        detail = json_object_new_object();
+        f_string_add(detail, "alias", ctx->name); f_string_add(detail, "hydra", alias->hydra);
+        snprintf(summary, sizeof(summary), "alias uses Hydra " F_VERSION " at %s", alias->hydra);
+        f_string_add(detail, "summary", summary);
+        return finished(ctx, "alias", detail);
+    }
+    if (!old_hydra || !new_hydra || !same_text(alias->hydra, old_hydra) || !same_text(new_hydra, ctx->remote.hydra))
+        return switch_blocked(ctx, "the alias no longer uses the install the approved upgrade replaces");
+    return update_alias(ctx, alias, false);
 }
 json_object *setup_step_alias(struct setup_ctx *ctx) {
     return setup_step_alias_approved(ctx, NULL);
 }
 json_object *setup_step_alias_approved(struct setup_ctx *ctx, const char *approve) {
-    json_object *error = provisioned(ctx);
+    json_object *error = provisioned(ctx), *change = f_field(f_field(setup_state_detail(ctx, "provision"), "upgrade"), "alias");
+    struct f_remote alias;
     if (error) return error;
+    if (json_object_is_type(change, json_type_object) && !f_remote_load(ctx->name, &alias)) return switch_runtime(ctx, change, &alias);
     return setup_upgrade(ctx) ? upgrade_alias(ctx, approve) : publish_alias(ctx);
 }

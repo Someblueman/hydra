@@ -169,11 +169,20 @@ static void step_list(struct setup_ctx *ctx, struct step_list *list) {
 static bool finished_status(const char *status) {
     return !strcmp(status, "done") || !strcmp(status, "skipped");
 }
-static const char *first_open_step(struct setup_ctx *ctx, struct step_list *list) {
+/* recorded: persisted statuses only; otherwise an offered upgrade reopens provision. */
+static const char *open_step(struct setup_ctx *ctx, struct step_list *list, bool recorded) {
     size_t i;
     step_list(ctx, list);
-    for (i = 0; i < list->count; i++) if (!finished_status(setup_state_status(ctx, list->ids[i]))) return list->ids[i];
+    for (i = 0; i < list->count; i++) {
+        const char *id = list->ids[i];
+        if (!finished_status(recorded ? setup_state_status(ctx, id) : setup_step_view_status(ctx, id))) return id;
+    }
     return NULL;
+}
+static const char *first_open_step(struct setup_ctx *ctx, struct step_list *list) { return open_step(ctx, list, false); }
+bool setup_recorded_complete(struct setup_ctx *ctx) {
+    struct step_list list;
+    return !open_step(ctx, &list, true);
 }
 bool setup_first_open(struct setup_ctx *ctx, char step[80]) {
     struct step_list list; const char *open = first_open_step(ctx, &list);
@@ -221,11 +230,13 @@ static json_object *steps_json(struct setup_ctx *ctx) {
     struct step_list list; json_object *rows = json_object_new_array(); size_t i;
     step_list(ctx, &list);
     for (i = 0; i < list.count; i++) {
-        json_object *row = json_object_new_object();
-        const char *summary = f_string(setup_state_detail(ctx, list.ids[i]), "summary");
+        json_object *row = json_object_new_object(), *upgrade = NULL;
+        const char *summary = f_string(setup_state_detail(ctx, list.ids[i]), "summary"), *status = setup_step_view_status(ctx, list.ids[i]);
+        if (!strcmp(status, "upgrade_available") && (upgrade = setup_runtime_upgrade(ctx))) summary = f_string(upgrade, "summary");
         f_string_add(row, "id", list.ids[i]);
-        f_string_add(row, "status", setup_state_status(ctx, list.ids[i]));
+        f_string_add(row, "status", status);
         f_string_add(row, "detail", summary ? summary : "");
+        json_object_put(upgrade);
         add_step_error(ctx, row, list.ids[i]);
         json_object_array_add(rows, row);
     }
@@ -233,7 +244,7 @@ static json_object *steps_json(struct setup_ctx *ctx) {
 }
 /* Adds the shared setup view to every envelope produced with open state. */
 static void decorate(struct setup_ctx *ctx, json_object *result) {
-    json_object *data = f_field(result, "data");
+    json_object *data = f_field(result, "data"), *upgrade;
     f_string_add(result, "command", ctx->command);
     if (!ctx->state) return;
     if (!json_object_is_type(data, json_type_object)) {
@@ -246,6 +257,8 @@ static void decorate(struct setup_ctx *ctx, json_object *result) {
     f_string_add(data, "name", ctx->name);
     f_string_add(data, "destination", ctx->remote.target);
     json_object_object_add(data, "steps", steps_json(ctx));
+    /* A provision result carries its own upgrade record; the view goes elsewhere. */
+    if (!f_field(data, "upgrade") && (upgrade = setup_runtime_upgrade(ctx))) json_object_object_add(data, "upgrade", upgrade);
     if (!f_field(data, "next")) json_object_object_add(data, "next", setup_next_json(ctx));
 }
 
@@ -255,16 +268,18 @@ static json_object *run_agent_step(struct setup_ctx *ctx, const char *step) {
     if (!strncmp(step, "sign_in:", 8)) return setup_step_sign_in(ctx, agent);
     return setup_step_install_agent(ctx, agent, NULL);
 }
-/* Upgrade: the install behind the alias already is this version. */
+/* Upgrade: the install behind the alias already is this version (a snapshot
+ * that an older Hydra recorded as reusable is not). */
 static bool reusable_install(struct setup_ctx *ctx) {
     json_object *found = f_field(setup_state_detail(ctx, "preflight"), "alias_hydra");
-    const char *path = f_string(setup_upgrade(ctx), "hydra"), *checked = f_string(found, "path");
-    return path && checked && !strcmp(path, checked) && json_object_get_boolean(f_field(found, "reusable"));
+    const char *path = f_string(setup_upgrade(ctx), "hydra"), *checked = f_string(found, "path"), *version = f_string(found, "version");
+    return path && checked && !strcmp(path, checked) && json_object_get_boolean(f_field(found, "reusable")) &&
+        version && !strcmp(version, F_VERSION);
 }
 static json_object *reuse_install(struct setup_ctx *ctx) {
     json_object *detail = json_object_new_object();
     const char *path = f_string(setup_upgrade(ctx), "hydra");
-    f_string_add(detail, "hydra", path);
+    f_string_add(detail, "hydra", path); f_string_add(detail, "hydra_version", F_VERSION);
     f_string_add(detail, "summary", "existing Hydra " F_VERSION " behind the alias is reused");
     if (f_copy(ctx->remote.hydra, sizeof(ctx->remote.hydra), path) || setup_state_step(ctx, "provision", "skipped", detail))
         return setup_error(ctx, "state_unavailable", "cannot record setup progress", NULL, NULL);
@@ -348,34 +363,7 @@ static unsigned open_flags(enum setup_kind kind) {
     if (kind == K_SETUP) return SETUP_CREATE;
     return kind == K_STATUS ? SETUP_READONLY : 0U;
 }
-/* ---- Upgrade mode: an enrolled alias without setup state ---- */
-static json_object *upgrade_conflict(struct setup_ctx *ctx, const struct f_remote *alias) {
-    char recovery[1024];
-    snprintf(recovery, sizeof(recovery),
-             "alias %s already points at %s and setup never re-points an alias; rerun hydra remote setup %s without DEST or "
-             "--ssh-config to upgrade it, or choose another NAME", alias->name, alias->target, alias->name);
-    return setup_error(ctx, "alias_conflict", "NAME is an existing alias with a different destination or SSH config", recovery, NULL);
-}
-static void seed_from_alias(struct f_remote *remote, const struct f_remote *alias) {
-    f_copy(remote->home, sizeof(remote->home), alias->home);
-    f_copy(remote->principal, sizeof(remote->principal), alias->principal);
-    f_copy(remote->project, sizeof(remote->project), alias->project);
-    f_copy(remote->accepted_host_key, sizeof(remote->accepted_host_key), alias->accepted_host_key);
-    remote->multiplex = alias->multiplex;
-}
-static json_object *open_upgrade(struct setup_ctx *ctx, const struct setup_options *o, const struct f_remote *alias) {
-    const char *dest = o->positional[1], *config = o->values[OPT_SSH_CONFIG];
-    json_object *result, *upgrade;
-    if ((dest && strcmp(dest, alias->target)) || (config && strcmp(config, alias->ssh_config))) return upgrade_conflict(ctx, alias);
-    result = setup_state_open(ctx, alias->name, alias->target, alias->ssh_config[0] ? alias->ssh_config : NULL, SETUP_CREATE);
-    if (result) return result;
-    seed_from_alias(&ctx->remote, alias);
-    upgrade = json_object_new_object();
-    f_string_add(upgrade, "hydra", alias->hydra); f_string_add(upgrade, "target", alias->target);
-    if (setup_state_set(ctx, "upgrade", upgrade))
-        return setup_error(ctx, "state_unavailable", "cannot record the upgrade in setup state", NULL, NULL);
-    return NULL;
-}
+/* ---- Upgrade mode: an enrolled alias without setup state (upgrade.c) ---- */
 /* Existing setup state always wins; otherwise an enrolled NAME is upgraded. */
 static json_object *open_context(struct setup_ctx *ctx, const struct setup_options *o) {
     const char *name = o->positional[0], *dest = o->positional[1], *config = o->values[OPT_SSH_CONFIG], *code;
@@ -386,7 +374,7 @@ static json_object *open_context(struct setup_ctx *ctx, const struct setup_optio
     if (!code || strcmp(code, "setup_not_started")) return result;
     json_object_put(result);
     setup_state_close(ctx);
-    return open_upgrade(ctx, o, &alias);
+    return setup_open_enrolled(ctx, dest, config, &alias);
 }
 json_object *setup_cli(int argc, char **argv) {
     struct setup_options options; struct setup_ctx ctx; json_object *result;
@@ -418,7 +406,7 @@ static void print_safe(const char *text) {
 static const char *status_mark(const char *status) {
     static const char *const marks[][2] = {
         {"done", "\xe2\x9c\x93"}, {"skipped", "-"}, {"failed", "\xe2\x9c\x97"}, {"outcome_unknown", "?"},
-        {"approval_required", "!"}, {"blocked", "!"}, {"in_progress", "~"}
+        {"approval_required", "!"}, {"blocked", "!"}, {"in_progress", "~"}, {"upgrade_available", "^"}
     };
     size_t i;
     for (i = 0; status && i < sizeof(marks) / sizeof(marks[0]); i++) if (!strcmp(status, marks[i][0])) return marks[i][1];

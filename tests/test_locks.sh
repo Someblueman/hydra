@@ -183,6 +183,27 @@ test_lock_without_home() {
     export HYDRA_HOME
 }
 
+# Test private directory creation with portable chmod/mkdir arguments
+test_private_mkdir() {
+    echo "Testing hydra_private_mkdir..."
+
+    (umask 022; mkdir "$test_home/kept")
+    hydra_private_mkdir "$test_home/kept/a/b" "$test_home/c"
+    assert_success $? "hydra_private_mkdir creates nested directories"
+    assert_equal "" "$(find "$test_home/kept/a" "$test_home/c" ! -perm 700 -print)" \
+        "every directory it creates is mode 700"
+    assert_equal "" "$(find "$test_home/kept" -prune ! -perm 755 -print)" "an existing parent keeps its mode"
+
+    # A relative name that starts with "-" (macOS chmod has no "--").
+    (cd "$test_home" && hydra_private_mkdir -dash/inner)
+    assert_success $? "hydra_private_mkdir creates a relative name that starts with a dash"
+    assert_equal "" "$(find "$test_home/-dash" ! -perm 700 -print)" "the dash-named directories are mode 700"
+
+    : > "$test_home/plain-file"
+    hydra_private_mkdir "$test_home/plain-file" 2>/dev/null
+    assert_failure $? "hydra_private_mkdir refuses a path that is a file"
+}
+
 # Run all tests
 echo "Running locks.sh unit tests..."
 echo "================================"
@@ -194,6 +215,7 @@ test_cleanup_stale_locks
 test_cleanup_dead_local_lock
 test_release_session_lock
 test_lock_without_home
+test_private_mkdir
 
 # Clean up
 cleanup_test_locks

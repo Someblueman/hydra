@@ -163,7 +163,7 @@ struct measure_expectation {
 struct measure_live {
     struct session session;
     struct measure_screen *screen;
-    FILE *raw;
+    FILE *raw, *index;
     const char *directory;
     size_t bytes, raw_written, expectation_count;
     unsigned long sequence;
@@ -377,7 +377,12 @@ static bool measure_receive(struct measure_live *m) {
     if (length<=0) return length==0;
     m->last_read_ns=measure_now_ns();m->bytes+=(size_t)length;m->sequence++;
     if ((size_t)length<=cap-m->raw_written) {
-        if (fwrite(bytes,1,(size_t)length,m->raw)!=(size_t)length) return false;
+        /* The index maps each read to its raw offset and time, so a later
+         * analysis can slice terminal.raw by phase without re-timing it. */
+        if (m->index && (fprintf(m->index,"%lu %llu %zu %zu\n",m->sequence,
+                                 (unsigned long long)m->last_read_ns,m->raw_written,(size_t)length)<0 ||
+                         fflush(m->index))) return false;
+        if (fwrite(bytes,1,(size_t)length,m->raw)!=(size_t)length || fflush(m->raw)) return false;
         m->raw_written+=(size_t)length;
     } else m->overflow=true;
     tv_term_feed(&m->screen->terminal,bytes,(size_t)length);

@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ ATTENTION  5 need you · 0 seen · 1 stale · 1 unknown                        │
+│ 1 failed check or step needs a decision                                     │
+│   WHAT                     TASK                        STATE                │
+│ > Check failed             kill-dry-run · repo-check   NEW                  │
+│     Step repo-check (attempt 1) failed its check; review the log, then      │
+│     send the plan back or retry. It decides req-dry-run-flag,               │
+│     req-no-removal.                                                         │
+│   Approval needed          notes-cleanup · merge-gate  NEW                  │
+│     Step merge-gate (attempt 1) is waiting for your decision; marking it    │
+│     seen does not approve it.                                               │
+│   Result ready for review  kill-dry-run · implement    NEW                  │
+│     Step implement (attempt 1) finished and sealed its output; its result,  │
+│     checks and changes are ready to review.                                 │
+│   Result ready for review  feature-build · verify      NEW                  │
+│     Step verify (attempt 2) finished and sealed its output; its result,     │
+│     checks and changes are ready to review.                                 │
+│   Approval expired         docs-refresh                stale                │
+│     Step release-gate (attempt 1) asked for a decision, but the request     │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  r review  s mark seen  Esc back  ? help  q quit    

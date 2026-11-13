@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Technical details: kill-dry-run-worker ────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ IDENTITY                                                                                                                                │
+│ Head        head_bbbbbbbbbbbbbbbb   instance_bbbbbbbbbbbbbbbb                                                                           │
+│ Session     - (headless)   profile: none                                                                                                │
+│ Group       -   PR: -                                                                                                                   │
+│                                                                                                                                         │
+│ LIFECYCLE                                                                                                                               │
+│ Outcome     declared: none   desired: headless                                                                                          │
+│ Observed    idle (reported)   liveness: unavailable   display: UNAVAILABLE                                                              │
+│ Activity    6 events  0 signals  0 messages  0 gates (0 approved)                                                                       │
+│ Coordinate  0 claims  0 scopes  0 queued  0 resources  1 changed files                                                                  │
+│                                                                                                                                         │
+│ ADAPTER                                                                                                                                 │
+│ Adapter     adapter: none   confidence: exact                                                                                           │
+│                                                                                                                                         │
+│ SOURCES                                                                                                                                 │
+│ Lifecycle   lifecycle source: /tmp/hydra/state/head_worker                                                                              │
+│ Adapter     adapter source: hydra capabilities --json                                                                                   │
+│ Notify      notification source: /tmp/hydra/state/notifications (0 configured; delivery delegated)                                      │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ d close technical details  Esc back  ? help  q quit                                                                                       

@@ -20,6 +20,15 @@ if [ "$code" -eq 0 ]; then
     printf 'PASS %s (%ss)\n' "$name" "$elapsed"
 else
     printf 'FAIL %s (%ss, exit %s): %s\n' "$name" "$elapsed" "$code" "$log" >&2
-    cat "$log" >&2
+    # CI keeps only the job output, so the reason must appear here.
+    lines=$(wc -l < "$log" | tr -d ' ')
+    if [ ! -s "$log" ]; then
+        printf '%s: the case log is empty (it exited without printing anything)\n' "$name" >&2
+    elif [ "$lines" -gt 80 ]; then
+        printf '%s: last 80 of %s log lines:\n' "$name" "$lines" >&2
+        tail -n 80 "$log" >&2
+    else
+        cat "$log" >&2
+    fi
 fi
 exit "$code"

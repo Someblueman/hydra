@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 2.9.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 3.0.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -117,14 +117,14 @@ else
     assert_success 0 "recovery list keeps raw finding kinds out of the primary text"
 fi
 "$tui" --headless-fixture "$fixture" --size 100x28 --view recovery --diagnostics > "$test_root/recovery-detail.out"
-contains "Kind: dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
-contains "Inspect: hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
+contains "Kind        dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
+contains "Inspect     hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
 contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
 { grep -v '^R	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-first.tsv"
 "$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-detail.out"
 contains "Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" \
     "$test_root/orphan-detail.out" "leftover worktree finding names branch, path, size and change state"
-contains "Inspect: hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
+contains "Inspect     hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
 contains "x removes this worktree after confirmation; the branch is kept" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
 "$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 100x28 --view recovery > "$test_root/orphan-list.out"
 contains "x remove" "$test_root/orphan-list.out" "recovery footer offers removal for a clean leftover worktree"
@@ -172,7 +172,7 @@ contains " Work Details Overview Attention Recovery Flows Stats Workspace [Hosts
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination-tabs.out"
 contains "Work Details [Coord] Overview Attention Recovery Flows Stats Workspace Hosts" "$test_root/coordination-tabs.out" "the coordination tab fits every tab at 80 columns"
 "$tui" --fleet --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/fleet-tabs.out"
-contains "Work  Details  Overview  [Hosts]  Attention  Recovery  Stats  Workspace" "$test_root/fleet-tabs.out" "fleet tabs are fully visible at 80 columns"
+contains " Work Details Overview Attention Recovery Flows Stats Workspace [Hosts]" "$test_root/fleet-tabs.out" "the compatibility entry keeps the one tab order at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 100x24 --view hosts > "$test_root/wide-tabs.out"
 contains "Work  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace  [Hosts]" "$test_root/wide-tabs.out" "tabs keep full labels from 100 columns"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
@@ -190,6 +190,12 @@ contains "3.85M in / 23.0k out" "$test_root/stats-usage.out" "the run table show
 assert_success $? "the old truncated resource note is gone"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
 contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
+# Schema 5 remote rows: the scope panel reports what remote task receipts measured
+# and keeps local steps unmeasured; the location filter is visible.
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size 140x40 --view statistics > "$test_root/stats-remote.out"
+contains "Remote CPU 5.5s" "$test_root/stats-remote.out" "remote receipts' CPU is reported with its coverage"
+contains "Location: all" "$test_root/stats-remote.out" "the location filter is shown in the scope panel"
+contains "C cohorts" "$test_root/stats-remote.out" "the cohorts page is announced"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
 contains "[Workspace]" "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
 contains "HYDRA / PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is titled after the reviewed mockup"
@@ -263,14 +269,14 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 3.0.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 3.0.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
@@ -499,10 +505,12 @@ wait "$change_pid"
 assert_equal "20" "$change_index" "changing state remains a complete native/basic snapshot"
 
 "$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v1.tsv" --size 100x24 > "$test_root/fleet.txt"
-contains 'DESIRED' "$test_root/fleet.txt" 'fleet labels durable desired state explicitly'
-contains 'ovh' "$test_root/fleet.txt" 'fleet identifies remote hosts in their own column'
-contains 'feature' "$test_root/fleet.txt" 'fleet identifies the remote branch'
-contains 'a attach  c interrupt' "$test_root/fleet.txt" 'fleet advertises only remote-safe actions'
+contains 'WHERE' "$test_root/fleet.txt" 'the one Work list names where each head runs'
+contains 'ovh/feature' "$test_root/fleet.txt" 'a remote head is named with its host and branch'
+contains 'desired running' "$test_root/fleet.txt" 'a remote head reports its durable desired state explicitly'
+contains 'unknown; no host observation' "$test_root/fleet.txt" 'a version-1 stream without host rows is an unknown observation, not a live one'
+contains 'x interrupt' "$test_root/fleet.txt" 'a remote head offers interrupt in place of removal'
+contains 'Showing remote work' "$test_root/fleet.txt" 'hydra fleet tui opens filtered to remote work'
 
 printf 'HYDRA_FLEET_TUI\t3\nT\tbuild\tresponded\t0\t-\tunreachable\tstale\t123\t4\nO\tbuild\ttask_abc\trun_xyz\tstep\tattempt-1\t/work\tnone\trecorded\tcancelled\tnone\t-\tinspect dependency\t123\t123\tfresh\t1\tready\tintegrity_verified\t0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\tconfirmed_stopped\tmanaged_commands\t123\treq-1\n' > "$test_root/fleet-v3.tsv"
 "$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view hosts --ascii --size 140x30 > "$test_root/fleet-v3-hosts.txt"
@@ -511,9 +519,44 @@ contains 'stale' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders stale freshne
 contains 'task_abc' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders task identity'
 contains 'dependency' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders waiting reason'
 "$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view overview --ascii --size 140x30 > "$test_root/fleet-v3-overview.txt"
-contains 'REMOTE TASKS' "$test_root/fleet-v3-overview.txt" 'fleet overview reserves a task observation panel'
-contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'fleet overview renders the next action'
-contains 'confirmed_stopped' "$test_root/fleet-v3-overview.txt" 'fleet overview renders receiver cancellation acknowledgment'
+contains '> task_abc' "$test_root/fleet-v3-overview.txt" 'a remote task is a row of the one Work list'
+contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'the selected task shows the next action'
+contains 'confirmed_stopped' "$test_root/fleet-v3-overview.txt" 'the selected task shows the receiver cancellation acknowledgment'
+contains 'TASK / receiver-owned observation' "$test_root/fleet-v3-overview.txt" 'a selected remote task gets a full-width panel'
+
+# One workspace (U11): a local and a remote observation compose one list.
+remote_fixture="$repo_root/tests/fixtures/tui/remote-v3.tsv"
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view heads > "$test_root/unified.txt"
+contains 'feature-live' "$test_root/unified.txt" 'local heads stay in the unified list'
+contains 'builder/feature-build' "$test_root/unified.txt" 'a remote head is listed beside local heads'
+contains 'task_build' "$test_root/unified.txt" 'a remote task is listed beside local heads'
+contains 'needs approval' "$test_root/unified.txt" 'a waiting task says what it needs'
+contains 'archive/feature-index' "$test_root/unified.txt" 'a stale host keeps its head listed'
+contains 'Remote / 2 heads, 1 task on 3 hosts (1 disconnected)' "$test_root/unified.txt" 'the header counts remote work and disconnected hosts'
+contains 'Local / 3 heads' "$test_root/unified.txt" 'the header keeps the local counts'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 80x24 --view heads > "$test_root/unified-narrow.txt"
+contains 'builder/feature-build' "$test_root/unified-narrow.txt" 'the unified list fits 80 columns'
+contains '? help' "$test_root/unified-narrow.txt" 'the unified list keeps its hints at 80 columns'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view heads --location builder > "$test_root/location-host.txt"
+contains 'Heads: host builder' "$test_root/location-host.txt" 'a host filter names the host'
+contains 'builder/feature-build' "$test_root/location-host.txt" 'a host filter keeps that host''s head'
+contains 'observation fresh, 3s old' "$test_root/location-host.txt" 'a fresh remote head shows the observation age'
+if grep -Fq 'feature-live' "$test_root/location-host.txt"; then assert_success 1 'a host filter hides local heads'; else assert_success 0 'a host filter hides local heads'; fi
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view heads --location local > "$test_root/location-local.txt"
+contains 'Heads: local work' "$test_root/location-local.txt" 'the local filter is named'
+if grep -Fq 'builder/' "$test_root/location-local.txt"; then assert_success 1 'the local filter hides remote heads'; else assert_success 0 'the local filter hides remote heads'; fi
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x28 --view detail --task archive/feature-index > "$test_root/stale-detail.txt"
+contains 'stale, 300s old' "$test_root/stale-detail.txt" 'a stale remote head shows its observation age'
+contains 'not its current state' "$test_root/stale-detail.txt" 'a stale observation is never presented as current'
+contains 'nothing here completes or stops it' "$test_root/stale-detail.txt" 'a stale observation does not complete or stop work'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view hosts > "$test_root/unified-hosts.txt"
+contains 'offline' "$test_root/unified-hosts.txt" 'a host that did not answer is listed'
+contains 'disconnected' "$test_root/unified-hosts.txt" 'a host that did not answer is disconnected'
+contains 'never observed' "$test_root/unified-hosts.txt" 'a never-observed host says so instead of claiming an age'
+contains 'r retries' "$test_root/unified-hosts.txt" 'hosts offer an explicit retry'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
+contains 'REMOTE' "$test_root/unified-overview.txt" 'overview counts remote work'
+contains '1 disconnected of 3' "$test_root/unified-overview.txt" 'overview names disconnected hosts'
 
 # Runs group the heads they create; headless heads describe their steps.
 runs_heads="$repo_root/tests/fixtures/tui/native-runs.tsv"

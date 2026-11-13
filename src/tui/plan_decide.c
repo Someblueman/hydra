@@ -47,7 +47,7 @@ void native_plan_execute(struct app *app) {
         copy_text(app->notice,sizeof(app->notice),"This revision was already submitted. Open C to inspect its recorded run.");
     else if (p && p->state==PLAN_RETURNED)
         copy_text(app->notice,sizeof(app->notice),"This revision was returned for changes; nothing runs until the agent publishes a revision.");
-    else if (p && p->state==PLAN_READY && !app->fleet) plan_confirm_execution(app);
+    else if (p && p->state==PLAN_READY) plan_confirm_execution(app);
     else copy_text(app->notice,sizeof(app->notice),"Validate a local plan with V and review its full scope before execution approval.");
 }
 
@@ -68,7 +68,7 @@ static void plan_feedback_text(const struct native_plan *p, const char *feedback
 static bool plan_can_return(struct app *app) {
     struct native_plan *p=app->plan;
     const char *refusal=NULL;
-    if (app->fleet || !p || !p->proposal_head[0]) refusal="F returns an agent proposal; review one with P first (I imports files without an agent).";
+    if (!p || !p->proposal_head[0]) refusal="F returns an agent proposal; review one with P first (I imports files without an agent).";
     else if (p->digest[0] && !strcmp(p->digest,p->launched_digest)) refusal="This revision was already submitted; request changes in the agent's conversation.";
     else if (p->state==PLAN_RETURNED) refusal="Already returned for changes; waiting for the agent's revision.";
     else if (p->job.pid) refusal="Validation is running; request changes when it finishes.";

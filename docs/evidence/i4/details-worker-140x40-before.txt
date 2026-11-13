@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: kill-dry-run-worker ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ kill-dry-run-worker                                                                                                                     │
+│ Agent       codex · step implement · succeeded                     Terminal    headless (no terminal)                                   │
+│ Run         plan run kill-dry-run · succeeded                      Role        worker (holds the run's result)                          │
+│ Reported    nothing yet; declared when done: done or blocked       Group       none                                                     │
+│                                                                                                                                         │
+│ AGENT STEP  implement / compose, attempt 1                                                                                              │
+│ State       succeeded                                                                                                                   │
+│ Executable  codex-cli 0.46.0                                                                                                            │
+│ Model       configured default: gpt-6-sol (not observed)                                                                                │
+│ Effort      configured default: xhigh (not observed)                                                                                    │
+│ Configured  /home/fixture/.codex/config.toml, read when the step started; the provider did not report what it used                      │
+│ Tokens      in 24,763  cached 24,448  out 1,122  cost unknown                                                                           │
+│ Duration    1m06s                                                                                                                       │
+│                                                                                                                                         │
+│ CHANGES                                                                                                                                 │
+│ Changed     1 file in the worktree, not yet committed                                                                                   │
+│ Full diff   everything since the branch base: press : and choose diff                                                                   │
+│                                                                                                                                         │
+│ CHECKS                                                                                                                                  │
+│ Approval requests  none                                                                                                                 │
+│ Messages           0 exchanged with other heads                                                                                         │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ p  output of the latest step (read-only)    : more actions (diff, approvals)                                                            │
+│ x  dismiss: removes the worker head, keeps its branch    d  technical details                                                           │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ p step output  x remove  d technical  : more  Esc back  ? help  q quit                                                                    

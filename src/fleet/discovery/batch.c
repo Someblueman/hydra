@@ -1,5 +1,6 @@
 #include "fleet/discovery/discovery.h"
 #include "fleet/enrollment/enrollment.h"
+#include "fleet/revocation/revocation.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
 #include <limits.h>
@@ -7,10 +8,26 @@
 #include <time.h>
 #include <unistd.h>
 
+static bool revoked_row(json_object *row) {
+    const char *status = f_string(row, "status");
+    return status && !strcmp(status, "revoked");
+}
+/* A revoked candidate identity is reported with its provenance and never
+ * resolved, probed or revived by re-import from any source. */
+static void mark_revoked(json_object *rows) {
+    for (size_t i = 0; i < json_object_array_length(rows); i++) {
+        json_object *row = json_object_array_get_idx(rows, i), *record = revocation_find("candidate", f_string(row, "candidate_id"));
+        if (!record) continue;
+        f_string_add(row, "status", "revoked");
+        json_object_object_add(row, "revocation", revocation_detail(record));
+        json_object_put(record);
+    }
+}
 static bool resolve_rows(json_object *rows, const struct hd_options *options, const char *config) {
     bool failed = false;
     for (size_t i = 0; i < json_object_array_length(rows); i++) {
         json_object *row = json_object_array_get_idx(rows, i);
+        if (revoked_row(row)) continue;
         json_object *resolved = f_stopped ? f_error("host-resolve", "cancelled", "selection interrupted before resolution") :
             hd_resolve(f_string(row, "target"), config, options->seconds);
         bool ok = json_object_get_boolean(f_field(resolved, "ok"));
@@ -26,7 +43,7 @@ static int next_row(json_object *rows, const bool visited[HD_HOSTS]) {
     for (size_t i = 0; i < json_object_array_length(rows); i++) {
         json_object *row = json_object_array_get_idx(rows, i);
         int64_t count = json_object_get_int64(f_field(row, "qualification_attempts"));
-        if (visited[i] || !strcmp(f_string(row, "status"), "compatible")) continue;
+        if (visited[i] || !strcmp(f_string(row, "status"), "compatible") || revoked_row(row)) continue;
         if (count < attempts) { best = (int)i; attempts = count; }
     }
     return best;
@@ -55,14 +72,25 @@ static void qualify_row(json_object *row, const struct hd_options *options, cons
     f_string_add(row, "qualification_freshness", "observed_now");
     f_string_add(row, "status", json_object_get_boolean(f_field(probe, "ok")) ? "compatible" : "qualification_failed");
 }
+static const char *failure_code(const struct hd_options *options) {
+    size_t i;
+    if (f_stopped) return "cancelled";
+    for (i = 0; options->live && i < json_object_array_length(options->live); i++)
+        if (!strcmp(f_string(json_object_array_get_idx(options->live, i), "status"), "unavailable")) return "source_unavailable";
+    for (i = 0; options->live && i < json_object_array_length(options->live); i++)
+        if (!strcmp(f_string(json_object_array_get_idx(options->live, i), "status"), "revoked")) return "revoked";
+    return "partial_failure";
+}
 static json_object *summary(const struct hd_options *options, json_object *rows, size_t processed, bool failed) {
-    json_object *data = json_object_new_object(), *result; size_t remaining = 0, pending = 0;
+    json_object *data = json_object_new_object(), *result; size_t remaining = 0, pending = 0, revoked = 0;
     for (size_t i = 0; i < json_object_array_length(rows); i++) {
         const char *status = f_string(json_object_array_get_idx(rows, i), "status");
         if (!strcmp(status, "not_qualified")) pending++;
+        if (!strcmp(status, "revoked")) { revoked++; continue; }
         if (options->probe && strcmp(status, "compatible")) remaining++;
         if (!strcmp(status, "qualification_failed")) failed = true;
     }
+    if (hd_live_failed(options->live)) failed = true;
     json_object_object_add(data, "candidate_schema_version", json_object_new_int(1));
     json_object_object_add(data, "observed_at", json_object_new_int64((int64_t)time(NULL)));
     json_object_object_add(data, "candidates", json_object_get(rows));
@@ -73,7 +101,12 @@ static json_object *summary(const struct hd_options *options, json_object *rows,
     json_object_object_add(data, "complete", json_object_new_boolean(!remaining && !failed));
     json_object_object_add(data, "partial_failure", json_object_new_boolean(failed));
     f_string_add(data, "required_capability", options->probe ? options->capability : "");
-    result = failed ? f_error("fleet-discovery", f_stopped ? "cancelled" : "partial_failure", "one or more selected candidates could not be resolved or qualified") : f_success("fleet-discovery", NULL);
+    json_object_object_add(data, "revoked_count", json_object_new_int64((int64_t)revoked));
+    if (options->live) {
+        json_object_object_add(data, "sources", hd_live_public(options->live, options->diff));
+        json_object_object_add(data, "diff_requested", json_object_new_boolean(options->diff));
+    }
+    result = failed ? f_error("fleet-discovery", failure_code(options), "one or more selected candidates or sources could not be acquired, resolved or qualified; every candidate, source report and revocation is retained") : f_success("fleet-discovery", NULL);
     json_object_object_add(result, "data", data); return result;
 }
 static void cancelled_pending(json_object *rows) {
@@ -109,6 +142,7 @@ json_object *hd_batch(const struct hd_options *options, json_object *rows) {
     json_object *result = NULL; bool failed; size_t processed = 0;
     result = prepare_batch(options, rows, config);
     if (result) goto done;
+    mark_revoked(rows);
     failed = resolve_rows(rows, options, config);
     result = hd_progress_open(&progress, options, rows);
     if (result) goto done;

@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / WORK                                                                  
+ [Work] Details Overview Attention Recovery Flows Stats Workspace Hosts        
+╭─ Heads in this project ─────────────────────────────────────────────────────╮
+│    HEAD                                      STATUS         AGENT           │
+│ >  add-kill                                  running        codex           │
+│      ▸ plan run kill-dry-run                 succeeded      2 heads         │
+│    notes-cleanup                             terminal gone  claude          │
+│ 2 heads you started · 1 in runs  |  Row 1 of 3                              │
+│                                                                             │
+│╭─ add-kill ────────────────────────────────────────────────────────────────╮│
+││ codex · running · 0 changed files                                         ││
+││ Enter details · a talk to the agent · x remove · : more actions           ││
+││                                                                           ││
+│╰───────────────────────────────────────────────────────────────────────────╯│
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  a agent  n new  x remove  L where  ? help  q quit  

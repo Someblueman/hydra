@@ -46,15 +46,32 @@ json_object *agent_excerpt(const char *text, size_t size) {
     free(copy); return excerpt;
 }
 
+/* Why status observations were lost: how many, the last failed ingest, and the
+ * latest provider status that never reached lifecycle state, if any. */
+static json_object *observation_diagnostic(const struct agent_stream *stream) {
+    json_object *observation;
+    bool unrecorded = stream->pending_status[0] && strcmp(stream->pending_status, stream->recorded_status);
+    if (!stream->observation_failures) return NULL;
+    observation = json_object_new_object();
+    json_object_object_add(observation, "failures", json_object_new_int64((int64_t)stream->observation_failures));
+    json_object_object_add(observation, "exit_status", json_object_new_int(stream->observation_exit));
+    json_object_object_add(observation, "timed_out", json_object_new_boolean(stream->observation_timed_out));
+    json_object_object_add(observation, "stderr", json_object_get(stream->observation_error));
+    json_object_object_add(observation, "unrecorded_status", unrecorded ? json_object_new_string(stream->pending_status) : NULL);
+    return observation;
+}
+
 void agent_diagnose(json_object *record, const struct agent_stream *stream, const struct f_capture *cap, int status) {
-    json_object *diagnostic, *out = NULL, *err;
+    json_object *diagnostic, *out = NULL, *err = NULL, *observation = observation_diagnostic(stream);
     size_t from = stream->malformed ? stream->line_start : stream->consumed;
-    if (!status) return;
-    if (strcmp(stream->adapter, "none") && from < cap->out_bytes) out = agent_excerpt(cap->out + from, cap->out_bytes - from);
-    err = agent_excerpt(cap->err, cap->err_bytes);
-    if (!out && !err) return;
+    if (status) {
+        if (strcmp(stream->adapter, "none") && from < cap->out_bytes) out = agent_excerpt(cap->out + from, cap->out_bytes - from);
+        err = agent_excerpt(cap->err, cap->err_bytes);
+    }
+    if (!out && !err && !observation) return;
     diagnostic = json_object_new_object();
     json_object_object_add(diagnostic, "stdout", out);
     json_object_object_add(diagnostic, "stderr", err);
+    if (observation) json_object_object_add(diagnostic, "observation", observation);
     json_object_object_add(record, "diagnostic", diagnostic);
 }

@@ -14,6 +14,8 @@
 #include "fleet/attention_tui.h"
 #include "fleet/review_task.h"
 #include "fleet/retention/retention.h"
+#include "fleet/revocation/revocation.h"
+#include "fleet/placement/placement.h"
 #include "tui/fleet_budget.h"
 #include <stdlib.h>
 #include <string.h>
@@ -164,8 +166,17 @@ static bool domain_cli(int argc, char **argv, json_object **result) {
     else if (!strcmp(argv[0], "auth")) *result = auth_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "task")) *result = task_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "retention")) *result = retention_cli(argc - 1, argv + 1);
+    else if (!strcmp(argv[0], "revoke")) *result = revocation_cli(argc - 1, argv + 1);
+    else if (!strcmp(argv[0], "placement")) *result = placement_cli(argc - 1, argv + 1);
     else return false;
     return true;
+}
+/* Revoked bindings block every new remote operation before any transport. */
+static json_object *revoked_operation(const struct fleet_options *options) {
+    if (options->name && revocation_blocked("transport", options->name)) return revocation_error("fleet", "transport", options->name);
+    if (options->project && revocation_blocked("project", options->project)) return revocation_error("fleet", "project", options->project);
+    if (options->digest && revocation_blocked("package", options->digest)) return revocation_error("fleet", "package", options->digest);
+    return NULL;
 }
 json_object *f_cli(int argc, char **argv) {
     const char *action;
@@ -177,10 +188,12 @@ json_object *f_cli(int argc, char **argv) {
     if (domain_cli(argc, argv, &result)) return result;
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet discover|qualify ...; fleet enroll review --input QUALIFICATION --candidate ID [--candidate ID...] --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet list|overview|attention|doctor|reconcile|watch [--timeout N --jobs N]; fleet package --source ROOT --binary FILE --output NEW [--platform OS-ARCH]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS");
+        f_string_add(data, "usage", "fleet discover|qualify --ssh ALIAS ... [--inventory FILE --select NAME ...] [--source ssh-config[:FILE]|ansible-inventory:FILE|dns-sd[:DOMAIN] ... [--select NAME ...] [--diff]] [--ssh-config FILE] [--timeout 1-30]; fleet enroll review --input QUALIFICATION --candidate ID [--candidate ID...] --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet enroll status --input INTENT; fleet revoke candidate|source|transport|package|project ID --reason TEXT; fleet revoke list [--scope SCOPE]; fleet list|overview|attention|doctor|reconcile|watch [--timeout N --jobs N]; fleet package --source ROOT --binary FILE --output NEW [--platform OS-ARCH]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS; fleet placement explain|replay|withdraw TASK_ID; fleet placement drain|undrain HOST; fleet placement policy");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);
+    if (result) return result;
+    result = revoked_operation(&options);
     if (result) return result;
     if (!strcmp(action, "handshake") && !options.name) return f_handshake();
     if (!strcmp(action, "tui")) return launch_tui();

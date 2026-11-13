@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / STATISTICS                                                           Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Work  Details  Overview  Attention  Recovery  Workflows  [Statistics]  Workspace  Hosts                                                   
+╭─ SCOPE ──────────────╮ ╭─ RUNS ──────────────────╮ ╭─ RUNNING ───────────────╮ ╭─ NEED ATTENTION ────────╮ ╭─ RETRIES ──────────────────╮
+│                      │ │ 1                       │ │ 0                       │ │ 0                       │ │ 0                          │
+│ all recorded         │ │                         │ │                         │ │ failed, blocked or      │ │                            │
+│ T changes the range  │ │ in this scope           │ │ steps right now         │ │ unknown                 │ │ repeated attempts          │
+│                      │ ╰─────────────────────────╯ ╰─────────────────────────╯ ╰─────────────────────────╯ ╰────────────────────────────╯
+│ Workflow: all        │  Latest attempts average 258.7s over 3 timed steps, longest 636s                                                  
+│ [ ] chooses one      │ ╭─ RUN OUTCOMES / recorded ────────────────────────────╮ ╭─ RUN CREATION / 7 x 24h ──────────────────────────────╮
+│ Location: all        │ │                                                      │ │                                                       │
+│ L cycles / C cohorts │ │ Succeeded    1   ██████████████████████████████████  │ │ -6d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│ 0 undated            │ │ Failed       0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -5d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│ 0 outside range      │ │ Running      0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -4d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│ Timing 3/3           │ │ Queued       0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -3d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│ Attempts 3/3         │ │ Blocked      0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -2d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│                      │ │ Cancelled    0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -1d   0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│ Agent tokens         │ │ Unknown      0   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │ -0d   1   ██████████████████████████████████████████  │
+│ in      3.85M        │ ╰──────────────────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────╯
+│ cached  3.74M        │ ╭─ RUNS / newest creation first ─────────────────────────────────────────────────────────────────────────────────╮
+│ out     23.0k        │ │                                                                                                                │
+│ 1 of 1 reported      │ │ > kill-dry-run                              succeeded           09-07 13:30 UTC   3.85M in / 23.0k out         │
+│ cost not reported    │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│ CPU and memory: not  │ │                                                                                                                │
+│ measured for local   │ │                                                                                                                │
+│ steps (no task       │ │                                                                                                                │
+│ receipt); remote task│ │                                                                                                                │
+│ receipts report them │ │                                                                                                                │
+│ (C cohorts).         │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│ 0 resets filters     │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│                      │ │                                                                                                                │
+│ 09-07 14:00 UTC      │ │                                                                                                                │
+│                      │ │ 1/1 / Enter evidence / g graph                                                                                 │
+╰──────────────────────╯ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Recorded workflow runs · all recorded · all work                                                                                          
+ D or Esc back  M metric  C cohorts  L location  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit  

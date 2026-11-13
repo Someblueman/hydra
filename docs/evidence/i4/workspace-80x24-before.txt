@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / PLAN TOGETHER                                                         
+ Work Details Overview Attention Recovery Flows Stats [Workspace] Hosts        
+╭─ PROJECT ──────╮│╭─ SELECTED WORK ──────────────────────────────────────────╮
+│ - This project │││add-kill                                                  │
+│>  - add-kill   │││Session   running                                         │
+│     + plan run │││Agent     codex                                           │
+│   └ notes-clean│││Where     this machine · this project                     │
+│                │││Changes   0 files not yet committed · 0 queued            │
+│                │││Reported  nothing yet                                     │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+│                │││a  talk to the agent here      Enter  full details        │
+│                │││:  more actions                d  technical details       │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+│                │││                                                          │
+╰────────────────╯│╰──────────────────────────────────────────────────────────╯
+ Live                                                                          
+ Tab pane  a agent  B plan review  n new task  ? help  q quit                  

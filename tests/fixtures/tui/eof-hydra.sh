@@ -1,5 +1,7 @@
 #!/bin/sh
-# A child that stops producing output but does not exit.
+# A child that stops producing output but does not exit; every other adapter
+# is simply unavailable.
+case "${1:-}:${2:-}" in tui:--data) ;; *) exit 1 ;; esac
 exec 1>&-
 sleep 30 &
 child=$!

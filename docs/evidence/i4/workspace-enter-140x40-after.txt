@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: add-kill ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ add-kill                                                                                                                                │
+│ Agent       codex                                                  Session     running (the live terminal)                              │
+│ Reported    nothing yet; declared when done: done or blocked       Group       none                                                     │
+│                                                                                                                                         │
+│ PLAN                                                                                                                                    │
+│ Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC · run run_aaaaaaaaaaaaaaaaaaaa · succeeded                                  │
+│ Next        Worker branch kill-dry-run-worker holds the result: review (: diff) · land (hydra land kill-dry-run-worker) · dismiss (x    │
+│             removes the worker head, keeps the branch)                                                                                  │
+│                                                                                                                                         │
+│ CHANGES                                                                                                                                 │
+│ Changed     0 files in the worktree, not yet committed                                                                                  │
+│ Full diff   everything since the branch base: press : and choose diff                                                                   │
+│                                                                                                                                         │
+│ CHECKS                                                                                                                                  │
+│ Approval requests  none                                                                                                                 │
+│ Messages           2 exchanged with other heads                                                                                         │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ a  talk to the agent in the workspace     p  show recent terminal output                                                                │
+│ c  coordination  x  remove this head  :  more actions  d  technical details                                                             │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ a agent  p output  Esc back  ? help  q quit                                                                                               

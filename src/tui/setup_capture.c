@@ -158,6 +158,10 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
     signal(SIGINT, previous_interrupt);
     signal(SIGQUIT, previous_quit);
     if (status) {
+        /* A step that died by signal (ssh -t included) leaves the terminal
+         * as it had set it, often raw: put the control centre's own cooked
+         * modes back so Enter is read as a line end. */
+        (void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         printf("\nHydra: the step ended with exit status %d. Press Enter to return to Hydra.", status);
         fflush(stdout);
         while (getchar() != '\n' && !feof(stdin)) { }

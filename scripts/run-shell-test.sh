@@ -30,6 +30,16 @@ TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
 # A case started from inside tmux must not see (or act on) the caller's server.
 unset TMUX TMUX_PANE
+# Git configuration injected through the environment (some CI and cloud
+# containers export GIT_CONFIG_COUNT/KEY_n/VALUE_n) reaches every fixture
+# repository, and review routes refuse it as a repository redirect by design
+# (git_environment_redirect). Cases build their own repositories and assert
+# that refusal explicitly, so they start without it.
+for case_git_variable in $(env | sed -n 's/^\(GIT_CONFIG_[A-Z0-9_]*\)=.*/\1/p'); do
+    case "$case_git_variable" in
+        GIT_CONFIG_COUNT|GIT_CONFIG_KEY_*|GIT_CONFIG_VALUE_*|GIT_CONFIG_PARAMETERS) unset "$case_git_variable" ;;
+    esac
+done
 
 # Stops an interrupted runner while its PID is still unreaped, and processes
 # a finished case left behind.

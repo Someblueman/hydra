@@ -100,7 +100,7 @@ static json_object *candidate_find(json_object *rows, const char *target) {
     }
     return NULL;
 }
-static json_object *candidate_add(json_object *rows, const char *target) {
+json_object *hd_candidate_add(json_object *rows, const char *target) {
     json_object *row = candidate_find(rows, target); char id[520];
     if (row) return row;
     if (json_object_array_length(rows) == HD_HOSTS) return NULL;
@@ -111,8 +111,8 @@ static json_object *candidate_add(json_object *rows, const char *target) {
     json_object_object_add(row, "verified_identity", NULL);
     json_object_array_add(rows, row); return row;
 }
-static void source_add(json_object *row, const char *kind, const char *locator,
-                       const char *name, int64_t observed, json_object *labels) {
+void hd_source_add(json_object *row, const char *kind, const char *locator,
+                   const char *name, int64_t observed, json_object *labels) {
     json_object *source = json_object_new_object();
     f_string_add(source, "kind", kind); f_string_add(source, "locator", locator); f_string_add(source, "name", name);
     json_object_object_add(source, "observed_at", json_object_new_int64(observed));
@@ -125,8 +125,8 @@ static int add_aliases(json_object *rows, const struct hd_options *options) {
     size_t i;
     for (i = 0; i < options->ssh_count; i++) {
         json_object *row;
-        if (!target_valid(options->ssh[i]) || !(row = candidate_add(rows, options->ssh[i]))) return -1;
-        source_add(row, "ssh-config", options->config ? options->config : "OpenSSH user/system config",
+        if (!target_valid(options->ssh[i]) || !(row = hd_candidate_add(rows, options->ssh[i]))) return -1;
+        hd_source_add(row, "ssh-config", options->config ? options->config : "OpenSSH user/system config",
                    options->ssh[i], (int64_t)time(NULL), NULL);
     }
     return 0;
@@ -163,23 +163,29 @@ static json_object *inventory_record(struct inventory_view *view, const char *na
 static const char *inventory_target(struct inventory_view *view, json_object *record) {
     return record ? (view->snapshot ? snapshot_target(record, view->kind) : f_string(record, "target")) : NULL;
 }
-static bool add_inventory_row(json_object *rows, struct inventory_view *view, const char *name) {
+/* 0 imported, 1 absent from this inventory (a live source may still match), -1 limit. */
+static int add_inventory_row(json_object *rows, struct inventory_view *view, const char *name) {
     json_object *record = inventory_record(view, name), *row; const char *target = inventory_target(view, record);
-    if (!record || !target || !(row = candidate_add(rows, target))) return false;
-    source_add(row, view->kind, view->locator, name, view->observed_at, f_field(record, "labels"));
+    if (!record || !target) return 1;
+    if (!(row = hd_candidate_add(rows, target))) return -1;
+    hd_source_add(row, view->kind, view->locator, name, view->observed_at, f_field(record, "labels"));
     if (view->snapshot) {
         json_object *source = json_object_array_get_idx(f_field(row, "sources"), json_object_array_length(f_field(row, "sources")) - 1);
         f_string_add(source, "scope", f_string(view->snapshot, "scope")); f_string_add(source, "freshness", f_string(view->snapshot, "freshness"));
     }
-    return true;
+    return 0;
 }
-static int add_inventory(json_object *rows, const struct hd_options *options) {
+static int add_inventory(json_object *rows, const struct hd_options *options, bool matched[HD_HOSTS]) {
     json_object *inventory; struct inventory_view view; struct stat st; size_t i; int status = -1;
     if (stat(options->inventory, &st) || !S_ISREG(st.st_mode) || st.st_size > 1024 * 1024) return -1;
     inventory = f_read_json(options->inventory, 1024 * 1024);
     if (!inventory_valid(inventory)) goto done;
     inventory_view_init(&view, inventory, options);
-    for (i = 0; i < options->select_count; i++) if (!add_inventory_row(rows, &view, options->select[i])) goto done;
+    for (i = 0; i < options->select_count; i++) {
+        int added = add_inventory_row(rows, &view, options->select[i]);
+        if (added < 0) goto done;
+        if (!added) matched[i] = true;
+    }
     status = 0;
 done:
     json_object_put(inventory); return status;
@@ -194,10 +200,14 @@ static int source_order(const void *left, const void *right) {
     return order ? order : strcmp(f_string(a, "name"), f_string(b, "name"));
 }
 json_object *hd_sources(const struct hd_options *options) {
-    json_object *rows = json_object_new_array(); size_t i;
-    if (add_aliases(rows, options) || (options->inventory && add_inventory(rows, options))) {
+    json_object *rows = json_object_new_array(); size_t i; bool matched[HD_HOSTS] = {false};
+    /* Every --select must name a record of the inventory or of a live source;
+     * an unmatched, conflicting or revoked selection rejects the whole input. */
+    if (add_aliases(rows, options) || (options->inventory && add_inventory(rows, options, matched)) ||
+        hd_live_import(rows, options, matched)) {
         json_object_put(rows); return NULL;
     }
+    for (i = 0; i < options->select_count; i++) if (!matched[i]) { json_object_put(rows); return NULL; }
     json_object_array_sort(rows, candidate_order);
     for (i = 0; i < json_object_array_length(rows); i++)
         json_object_array_sort(f_field(json_object_array_get_idx(rows, i), "sources"), source_order);

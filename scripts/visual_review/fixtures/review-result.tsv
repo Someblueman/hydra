@@ -1,0 +1,32 @@
+HYDRA_REVIEW	1	workflow records	/project	-	-	R-1	S-1	attempt-1	head-1	instance-1	-	1111111111111111111111111111111111111111	1111111111111111111111111111111111111111111111111111111111111111	1111111111111111111111111111111111111111111111111111111111111111
+TEXT	RESULT  add-kill-dry-run  -  verdict PASS (verified)  -  run succeeded
+TEXT	
+TEXT	WHAT WAS PRODUCED
+TEXT	  Deliverable kill-dry-run: hydra kill --dry-run lists what would be removed and exits 0
+TEXT	  summary: Added the --dry-run flag to lib/cmd_kill.sh and documented it in USAGE.md.
+TEXT	
+TEXT	WHAT WAS CHECKED
+TEXT	  dry-run-flag      PASS  hydra kill --dry-run removes nothing
+TEXT	  help-text         PASS  the flag is documented in hydra help
+TEXT	
+TEXT	HOW IT WAS VERIFIED
+TEXT	  Ran: sh checks/kill-dry-run.sh  (exit 0, 0.8s)
+TEXT	    [PASS] dry run leaves the worktree in place
+TEXT	    [PASS] dry run prints the branch that would be removed
+TEXT	    Full log: press L
+TEXT	
+TEXT	CHANGES ON kill-dry-run-worker  (1 commit, 2 files, +31 -2; the branch as it is now)
+TEXT	  feat(kill): add --dry-run
+TEXT	  file  +27    -2     lib/cmd_kill.sh
+TEXT	  file  +4     -0     docs/USAGE.md
+TEXT	
+TEXT	DIFF  (complete)
+TEXT	    --- a/lib/cmd_kill.sh
+TEXT	    +++ b/lib/cmd_kill.sh
+TEXT	    @@ -12,6 +12,9 @@ cmd_kill() {
+TEXT	    +        --dry-run) _ck_dry_run=1; shift ;;
+TEXT	    +    if [ "$_ck_dry_run" = 1 ]; then
+TEXT	    +        printf 'Would remove %s\n' "$_ck_branch"; return 0
+TEXT	    +    fi
+REF	log	available	/tmp/kill-dry-run-verify.log
+END	29	1	0

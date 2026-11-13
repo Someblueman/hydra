@@ -1,5 +1,6 @@
 #include "fleet/enrollment/enrollment.h"
 #include "fleet/discovery/discovery.h"
+#include "fleet/revocation/revocation.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/transport/remote.h"
@@ -70,6 +71,15 @@ static json_object *review_host(json_object *row, const struct enrollment_option
 bad:
     json_object_put(host); return NULL;
 }
+/* Review refuses a revoked candidate, alias, accepted key, package or
+ * project outright: a revoked identity never enters a new intent. */
+static json_object *review_revoked(json_object *host) {
+    json_object *detail = enrollment_host_revocation(host), *error;
+    if (!detail) return NULL;
+    error = revocation_error("fleet-enrollment-review", f_string(detail, "scope"), f_string(detail, "id"));
+    json_object_object_add(error, "data", detail);
+    return error;
+}
 static bool review_options(const struct enrollment_options *options) {
     size_t i, j;
     if (!options->input || !options->output || !options->count || !enrollment_path(options->project) ||
@@ -95,6 +105,7 @@ json_object *enrollment_review(const struct enrollment_options *options) {
         json_object *host = review_host(selected_candidate(qualification, options->candidates[i]), options, required);
         if (!host) goto invalid;
         json_object_array_add(hosts, host);
+        if ((result = review_revoked(host))) { json_object_put(qualification); json_object_put(intent); return result; }
     }
     if (enrollment_hash(intent, hash)) goto invalid;
     f_string_add(intent, "intent_sha256", hash);

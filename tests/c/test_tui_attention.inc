@@ -9,7 +9,7 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     result(wait_for_marker(&session, "Approval needed", 1000), "attention rows read as sentences");
     result(wait_for_marker(&session, "NEW", 1000), "new attention item is visible");
     write_input(session.master, "\r", 1U);
-    result(wait_for_marker(&session, "Route: workflow-request  navigable=1", 1000),
+    result(wait_for_markers(&session, "Route       workflow-request", "navigable", 1000),
            "attention detail shows exact route kind");
     write_input(session.master, "s", 1U);
     result(wait_for_marker(&session, "Marked seen", 1000), "marking seen gives visible feedback in the detail view");
@@ -133,8 +133,8 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     if (!result(open_session(&right, tui, hydra, fake_bin, 100, 30) == 0, "open second attention client")) { close_session(&left); goto cleanup; }
     result(wait_for_raw(&left) && wait_for_raw(&right), "both attention clients enter raw mode"); write_input(left.master, "I", 1U); write_input(right.master, "I", 1U);
     result(wait_for_marker(&left, "ATTENTION  2 need you", 3000) && wait_for_marker(&right, "ATTENTION  2 need you", 3000), "both clients see two items that need the user");
-    write_input(left.master, "s", 1U); result(wait_for_markers(&left, "seen, still needs a decision", "ATTENTION  2 need you", 1500), "a seen approval stays listed and counted until decided"); result(wait_for_marker(&right, "ATTENTION  2 need you", 1500), "second client is unchanged until it refreshes");
-    drain_output(&left); unlink(done); write_reordered_fixture(path, reordered); write_input(left.master, "I", 1U); result(wait_for_attention_order(&left), "pure reorder applies with unchanged count"); write_input(left.master, "\r", 1U); result(wait_for_marker(&left, "Task: T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "k", 1U); result(wait_for_marker(&left, "Task: T-2", 1000), "pure reorder applies new row order"); write_input(left.master, "\r", 1U);
+    write_input(left.master, "s", 1U); result(wait_for_markers(&left, "seen, needs decision", "ATTENTION  2 need you", 1500), "a seen approval stays listed and counted until decided"); result(wait_for_marker(&right, "ATTENTION  2 need you", 1500), "second client is unchanged until it refreshes");
+    drain_output(&left); unlink(done); write_reordered_fixture(path, reordered); write_input(left.master, "I", 1U); result(wait_for_attention_order(&left), "pure reorder applies with unchanged count"); write_input(left.master, "\r", 1U); result(wait_for_marker(&left, "Task        T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "k", 1U); result(wait_for_marker(&left, "Task        T-2", 1000), "pure reorder applies new row order"); write_input(left.master, "\r", 1U);
     drain_output(&left); unlink(done); write_attention_fixture(path, mutated); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "revision-mutated", 3000) && wait_for_marker(&left, "NEW", 1000), "semantic revision mutation is unseen in applied refresh");
     write_attention_fixture(path, "HYDRA_ATTENTION\t1\nITEM\tbroken\n"); drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "malformed refresh preserves last good snapshot");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\n", "missing END rejects atomically");
@@ -144,6 +144,7 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t1\n", "contradictory END flags reject atomically");
     attention_capacity_cases(&left, path);
     drain_output(&left); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  0 need you", "Nothing needs your attention", 3000), "empty complete snapshot is accepted");
+    result(wait_for_markers(&left, "what needs a decision", "approval request", 2000), "empty attention explains what the view lists and when it helps");
     write_attention_fixture(path, initial); file = fopen(fail, "w"); if (file) fclose(file); drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "failed reconnect is explicit unavailable"); unlink(fail);
     result(refresh_until(&right, "ATTENTION  2 need you", NULL, 8000), "second client recovers the restored snapshot at count two");
     drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "verification-ready", 3000), "successful LEFT reconnect keeps the seen approval listed");
@@ -174,16 +175,16 @@ static void test_attention_failure(const char *tui, const char *hydra, const cha
     result(wait_for_markers(&session, "ATTENTION  2 need you", "1 failed check or step needs a decision", 3000),
            "a failed check counts as needing the user and is counted in the header");
     result(wait_for_markers(&session, "> Check failed", "repo-check", 1000), "the failed check leads the list and names its step");
-    result(wait_for_markers(&session, "req-a, req-b; review the log", "send the plan back or retry", 1000),
+    result(wait_for_markers(&session, "req-a, req-b.", "send the plan back or retry", 1000),
            "the failure names its requirements and what the user can do");
-    result(wait_for_marker(&session, "failed its check. Press r to see the failed requirement", 1000),
+    result(wait_for_marker(&session, "failed its check; review the log", 1000),
            "the failure explains itself in plain language");
     write_input(session.master, "s", 1U);
     result(wait_for_markers(&session, "Marked seen", "ATTENTION  2 need you", 1500), "a seen failure stays listed and counted");
     write_input(session.master, "\r", 1U);
-    result(wait_for_markers(&session, "until the run is resolved", "Next: r reviews the failed requirement", 1000),
+    result(wait_for_markers(&session, "until the run is resolved", "r reviews the failed requirement", 1000),
            "the detail says a seen failure still needs a decision and names the next actions");
-    result(wait_for_marker(&session, "Route: workflow-evidence  navigable=1", 1000), "a failure routes to its evidence review");
+    result(wait_for_marker(&session, "Route       workflow-evidence", 1000), "a failure routes to its evidence review");
     write_input(session.master, "\033", 1U);
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "failure attention exits with terminal restored");

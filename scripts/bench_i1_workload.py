@@ -11,28 +11,41 @@ from bench_i1_fixture import Fixture, json_lines
 
 
 def phase_proof(
-    fixture: Fixture, case: str, start_ns: int, duration_ns: int
+    fixture: Fixture,
+    case: str,
+    start_ns: int,
+    duration_ns: int,
+    phase: str = "trial",
+    interval_ns: int | None = None,
+    changing: set[int] | None = None,
 ) -> list[dict[str, Any]]:
+    """Validate one phase; later phases of the same worker are scoped by their arm receipt."""
     proofs = []
-    interval = (
+    interval = interval_ns or (
         31_250_000 if case in ("sustained-output", "result-output") else 2_000_000_000
     )
     count = (duration_ns + interval - 1) // interval
     for index, worker in enumerate(fixture.workers):
         records = json_lines(Path(worker["receipt"]))
-        armed = [row for row in records if row["event"] == "phase-armed"]
+        armed = [
+            row
+            for row in records
+            if row["event"] == "phase-armed" and row["phase"] == phase
+        ]
+        if len(armed) != 1:
+            raise RuntimeError("worker lacks one exact arm receipt for the phase")
+        records = [row for row in records if row["monotonic_ns"] >= armed[0]["monotonic_ns"]]
         stopped = [row for row in records if row["event"] == "generation-stopped"]
-        if len(armed) != 1 or len(stopped) != 1:
-            raise RuntimeError("worker lacks one exact arm and generation-stop receipt")
+        if len(stopped) != 1 or stopped[0]["phase"] != phase:
+            raise RuntimeError("worker lacks one exact generation-stop receipt for the phase")
         arm, stop = armed[0], stopped[0]
         if (
-            arm["phase"] != "trial"
-            or arm["case"] != case
+            arm["case"] != case
             or arm["start_ns"] != start_ns
             or arm["duration_ns"] != duration_ns
             or arm["interval_ns"] != interval
             or arm["monotonic_ns"] > start_ns
-            or stop["phase"] != "trial"
+            or stop["phase"] != phase
             or stop["scheduled_events"] != count
             or stop["monotonic_ns"] < start_ns + duration_ns
         ):
@@ -41,11 +54,12 @@ def phase_proof(
             )
         changes = [row for row in records if row["event"] == "repository-change"]
         output = [row for row in records if row["event"] == "output-scheduled"]
-        expected_changes = (
-            count
-            if case == "all-changing" or case == "one-changing" and index == 0
-            else 0
+        changes_expected = (
+            index in changing
+            if changing is not None
+            else case == "all-changing" or case == "one-changing" and index == 0
         )
+        expected_changes = count if changes_expected else 0
         expected_output = count if case in ("sustained-output", "result-output") else 0
         if len(changes) != expected_changes or len(output) != expected_output:
             raise RuntimeError(
@@ -54,7 +68,7 @@ def phase_proof(
         file_hashes = {}
         for sequence, row in enumerate(changes):
             path = Path(worker["worktree"]) / f"data-{sequence:03d}.txt"
-            expected = f"{worker['token']}:trial:{sequence}\n".encode()
+            expected = f"{worker['token']}:{phase}:{sequence}\n".encode()
             if (
                 row["scheduled_ns"] != start_ns + sequence * interval
                 or row["monotonic_ns"] < row["scheduled_ns"]

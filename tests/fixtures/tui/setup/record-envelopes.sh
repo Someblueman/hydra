@@ -189,6 +189,17 @@ record status-signed.json 0 setup status ovh --json
 record done.json 0 setup ovh --json
 record status-done.json 0 setup status ovh --json
 record list-done.json 0 setup list --json
+# The same finished setup as an older Hydra recorded it: version 2.9.0 at an
+# older pin, which the alias uses. Status and list offer the upgrade and
+# provisioning plans it; nothing here contacts the remote.
+old_digest="$(sed -n 's/.*"package_sha256":"\([0-9a-f]\{64\}\)".*/\1/p' "$HYDRA_HOME/fleet/setup/ovh.json")"
+for file in "$HYDRA_HOME/fleet/setup/ovh.json" "$HYDRA_HOME/fleet/remotes/ovh.json"; do
+    sed -e "s/\"hydra_version\":\"$version\"/\"hydra_version\":\"2.9.0\"/g" -e "s/Hydra $version /Hydra 2.9.0 /g" -e "s/$old_digest/$(printf '%064d' 29)/g" "$file" > "$work/older.json"
+    cat "$work/older.json" > "$file"
+done
+record status-upgrade.json 0 setup status ovh --json
+record list-upgrade.json 0 setup list --json
+record provision-upgrade-approval.json 3 provision ovh --json
 
 # A lost install response, and an unpinned helper when no release row matches.
 host unknown

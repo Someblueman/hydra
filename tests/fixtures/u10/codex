@@ -1,0 +1,39 @@
+#!/bin/sh
+# Deterministic `codex` for the U10 loopback acceptance. The private recipe
+# installs it into the throwaway account's ~/.local/bin (with provider.py from
+# tests/fixtures/usability beside it), so "install agent", "sign in" and the
+# launched task go through Hydra's real recipe, inventory and spawn paths
+# without a network or a provider login. It never claims live-model coverage.
+#
+#   --version       the version the install probe records
+#   login           the recipe's sign-in: waits while @STAGE@/hold exists, so
+#                   a sign-in can be interrupted mid-way, and logs start/done
+#   auth status     the recipe's verify step: exit 0 only after two completed
+#                   logins, so the first completed sign-in fails verification
+#   anything else   the usability provider fixture (interactive conversation,
+#                   `exec --json` worker, `exec --help` probe)
+here="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+stage='@STAGE@'
+record="$HOME/.codex"
+case "${1:-}" in
+    --version)
+        printf 'codex-cli 0.0.0-u10-fixture\n'
+        exit 0
+        ;;
+    login)
+        mkdir -p "$record"
+        printf 'start\n' >> "$record/login.log"
+        printf 'U10 FIXTURE SIGN-IN: device code 0000-0000 (fixture, nothing to open)\n'
+        while [ -e "$stage/hold" ]; do sleep 0.2; done
+        printf 'done\n' >> "$record/login.log"
+        printf 'U10 FIXTURE SIGN-IN: finished\n'
+        exit 0
+        ;;
+    auth)
+        completed=0
+        if [ -f "$record/login.log" ]; then completed="$(grep -c '^done$' "$record/login.log" || true)"; fi
+        [ "${completed:-0}" -ge 2 ] && exit 0
+        exit 1
+        ;;
+esac
+exec python3 "$here/provider.py" "$@"

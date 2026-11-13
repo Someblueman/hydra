@@ -4,7 +4,6 @@
 
 static void plan_load_dialog(struct app *app) {
     char path[4096], policy[4096];
-    if (app->fleet) return;
     if (prompt_text(app, "Draft JSON path: ", path, sizeof(path)) || !path[0]) return;
     if (prompt_text(app, "Policy JSON path: ", policy, sizeof(policy)) || !policy[0]) return;
     (void)native_plan_load(app, path, policy);
@@ -26,7 +25,7 @@ static void plan_agent_proposal(struct app *app) {
     struct head *head = selected_head(app);
     char answer[TEXT] = "", output[12288], branch[TEXT], prompt[512];
     char *fields[3], *line, *end;
-    if (app->fleet || !head) {
+    if (!head || head_remote(head)) {
         copy_text(app->notice, sizeof(app->notice), "Select a local agent conversation first; n starts one");
         return;
     }

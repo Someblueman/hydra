@@ -27,7 +27,7 @@ _hydra_completion() {
         fi
     fi
 
-    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue pool schedule"
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == remote && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
         case ${COMP_WORDS[2]:-} in
@@ -40,9 +40,33 @@ _hydra_completion() {
             sign-in) COMPREPLY=($(compgen -W "--agent --timeout --json" -- "${cur}")); return 0 ;;
         esac
     fi
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && ${COMP_WORDS[3]:-} == submit && ${prev} == --placement ]]; then
+        COMPREPLY=($(compgen -W "auto" -- "${cur}")); return 0
+    fi
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == placement && $COMP_CWORD -ge 4 ]]; then
+        COMPREPLY=($(compgen -W "--json --timeout" -- "${cur}")); return 0
+    if [[ ${COMP_WORDS[1]:-} == pool && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
+        case ${COMP_WORDS[2]:-} in
+            create) COMPREPLY=($(compgen -W "--max-tasks --max-outstanding --max-expansions --max-artifact-bytes --max-repair-rounds --lease --retry --json" -- "${cur}")); return 0 ;;
+            add) COMPREPLY=($(compgen -W "--workflow --exec --id --idempotent --retry --seal --json" -- "${cur}")); return 0 ;;
+            claim) COMPREPLY=($(compgen -W "--worker --owner-pid --lease --json" -- "${cur}")); return 0 ;;
+            complete) COMPREPLY=($(compgen -W "--token --by --outcome --run --json" -- "${cur}")); return 0 ;;
+            run) COMPREPLY=($(compgen -W "--worker --max --lease --json" -- "${cur}")); return 0 ;;
+            seal|cancel|status|list) COMPREPLY=($(compgen -W "--json" -- "${cur}")); return 0 ;;
+        esac
+    fi
+    if [[ ${COMP_WORDS[1]:-} == schedule && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
+        case ${COMP_WORDS[2]:-} in
+            add) COMPREPLY=($(compgen -W "--every --workflow --pool --missed --catch-up-limit --reboot-recovery --format --json" -- "${cur}")); return 0 ;;
+            run-now) COMPREPLY=($(compgen -W "--token --json" -- "${cur}")); return 0 ;;
+            status) COMPREPLY=($(compgen -W "--format --json" -- "${cur}")); return 0 ;;
+            list|remove) COMPREPLY=($(compgen -W "--json" -- "${cur}")); return 0 ;;
+        esac
+    fi
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
-            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
+            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec --placement --separate-from" -- "${cur}")); return 0 ;;
+            withdraw) COMPREPLY=($(compgen -W "--id --timeout" -- "${cur}")); return 0 ;;
             decide) COMPREPLY=($(compgen -W "--id --trust-spec --request --decision --by" -- "${cur}")); return 0 ;;
             start|resume) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
             collect) COMPREPLY=($(compgen -W "--id --input --into --timeout" -- "${cur}")); return 0 ;;
@@ -72,19 +96,31 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth placement init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         discover|qualify)
-            COMPREPLY=($(compgen -W "--ssh --inventory --select --ssh-config --timeout --require --json" -- "${cur}"))
+            COMPREPLY=($(compgen -W "--ssh --inventory --select --source --diff --ssh-config --timeout --require --progress --json" -- "${cur}"))
             return 0
             ;;
         auth)
             COMPREPLY=($(compgen -W "status preview copy login help --agent --provider --source --approve --executable" -- "${cur}"))
             return 0
             ;;
+        enroll)
+            COMPREPLY=($(compgen -W "review apply status --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
+            return 0
+            ;;
+        revoke)
+            COMPREPLY=($(compgen -W "candidate source transport package project list --reason --scope --json" -- "${cur}"))
+            return 0
+            ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect announce submit start resume requests decide status observe cancel withdraw logs result inspect-result collect collected help" -- "${cur}"))
+            return 0
+            ;;
+        placement)
+            COMPREPLY=($(compgen -W "explain replay withdraw drain undrain policy help" -- "${cur}"))
             return 0
             ;;
         prepare)
@@ -122,6 +158,8 @@ _hydra_completion() {
         gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
         workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan" -- ${cur})); return 0 ;;
+        pool) COMPREPLY=($(compgen -W "create add seal claim complete cancel status list run --json" -- ${cur})); return 0 ;;
+        schedule) COMPREPLY=($(compgen -W "add list remove run-now status --json" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
@@ -240,8 +278,8 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ workflow ]]; then
-        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema propose proposal validate compile show obligations checks explain compare run result" -- "${cur}")); return 0; fi
-        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json --branch --local-policy --return --asset --assets-dir" -- "${cur}")); return 0; fi
+        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema propose proposal validate compile show obligations checks explain compare evaluate observed decision expand run result" -- "${cur}")); return 0; fi
+        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json --branch --local-policy --return --asset --assets-dir --run --proposal" -- "${cur}")); return 0; fi
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ integrate ]]; then

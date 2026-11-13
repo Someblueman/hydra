@@ -1,6 +1,8 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
+#include "fleet/plan/plan_inspect.h"
+#include "fleet/plan/plan_expansion.h"
 #include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
@@ -299,6 +301,13 @@ static json_object *inspect_command(char **argv, bool *printed) {
     return plan_inspect_cli(argc, argv);
 }
 
+/* The recorded-duration estimates document itself, ready to save as a file. */
+static json_object *observed_command(char **argv, bool *printed) {
+    json_object *document = plan_observed(argv[1]);
+    if (!document) return f_error("workflow plan observed", "no_recorded_durations", "the run has no supported compiled plan or no step with a recorded completed attempt");
+    printf("%s\n", json_object_to_json_string_ext(document, JSON_C_TO_STRING_PLAIN));
+    json_object_put(document); *printed = true; return NULL;
+}
 static json_object *proposal_command(char **argv, bool *printed) {
     (void)printed;
     return plan_proposal_copy(argv[1], argv[2], argv[3]);
@@ -319,6 +328,20 @@ static json_object *compile_dispatch(int argc, char **argv, bool *matched) {
     return compile_command(argv[1], argv[2], argv[3], compile ? argv[4] : NULL, assets);
 }
 
+/* Failed operations without their own data carry the generic recovery advice. */
+static json_object *with_recovery(json_object *result) {
+    if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
+    if (f_field(result, "error") && !f_field(result, "data"))
+        f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
+    return result;
+}
+/* Decision and expansion operations own their argv shapes. */
+static bool prefixed_command(int argc, char **argv, bool *printed, json_object **result) {
+    if (argc < 2) return false;
+    if (!strncmp(argv[0], "decision-", 9)) { *result = plan_decision_cli(argc, argv, printed); return true; }
+    if (!strncmp(argv[0], "expansion-", 10)) { *result = plan_expansion_cli(argc, argv, printed); return true; }
+    return false;
+}
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -339,6 +362,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"explain", 4, inspect_command},
         {"compare", 3, inspect_command},
         {"compare", 5, inspect_command},
+        {"evaluate", 3, inspect_command},
+        {"evaluate", 5, inspect_command},
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
@@ -353,20 +378,18 @@ json_object *plan_cli(int argc, char **argv) {
         {"step-check", 3, step_check_command},
         {"repair", 2, repair_command},
         {"repair-resume", 2, repair_command},
+        {"observed", 2, observed_command},
     };
     json_object *result = NULL;
     bool printed = false, compile = false;
     if (argc == 1 && !strcmp(argv[0], "schema")) return schema_command();
     if (argc >= 1) result = compile_dispatch(argc, argv, &compile);
     if (compile) return result ? result : f_error("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>");
+    if (prefixed_command(argc, argv, &printed, &result)) return printed ? NULL : result;
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (argc != commands[i].argc || strcmp(argv[0], commands[i].name)) continue;
         result = commands[i].call(argv, &printed);
         break;
     }
-    if (printed) return NULL;
-    if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
-    if (f_field(result, "error") && !f_field(result, "data"))
-        f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
-    return result;
+    return printed ? NULL : with_recovery(result);
 }

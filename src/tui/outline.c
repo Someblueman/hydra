@@ -25,7 +25,7 @@ size_t head_owner_run(const struct app *app, const struct head *h, size_t *recor
     const struct workflow_model *m = app->workflows;
     size_t i, run = SIZE_MAX;
     if (record) *record = SIZE_MAX;
-    if (!m || app->fleet || !h) return SIZE_MAX;
+    if (!m || !h || head_remote(h)) return SIZE_MAX;
     for (i = 0; i < m->head_count; i++) {
         if (strcmp(m->heads[i].branch, h->branch)) continue;
         if (run != SIZE_MAX && !run_newer(&m->runs[m->heads[i].run], &m->runs[run])) continue;
@@ -58,7 +58,7 @@ const struct workflow_node *head_step(const struct app *app, const struct head *
     const struct workflow_model *m = app->workflows;
     const struct workflow_node *best = NULL;
     size_t i;
-    if (!m || !h || app->fleet) return NULL;
+    if (!m || !h || head_remote(h)) return NULL;
     for (i = 0; i < m->node_count; i++) {
         const struct workflow_node *n = &m->nodes[i];
         if (!strcmp(n->kind, "spawn") || strcmp(n->head, h->branch) || (!n->attempts && !step_active(n->state))) continue;
@@ -76,7 +76,9 @@ static bool step_needs_user(const char *state) {
  * never needs attention merely because it has no terminal session. */
 bool head_needs_attention(const struct app *app, const struct head *h) {
     const struct workflow_node *step;
-    if (app->fleet) return false;
+    /* Remote liveness is unobserved; remote attention comes from the host's
+     * own attention items, never from a desired state. */
+    if (head_remote(h)) return false;
     if (h->gates > h->approved) return true;
     if (!head_headless(h)) return strcmp(display_status(h), "LIVE") != 0;
     step = head_step(app, h);
@@ -118,6 +120,7 @@ bool run_needs_attention(const struct app *app, size_t run) {
  * inside their run. */
 static void work_count_head(const struct app *app, const struct head *h, struct work_counts *n) {
     const struct workflow_node *step;
+    if (head_remote(h)) { n->remote++; return; }
     if (head_owner_run(app, h, NULL) != SIZE_MAX) { n->run_heads++; return; }
     n->heads++;
     step = head_headless(h) ? head_step(app, h) : NULL;
@@ -129,7 +132,7 @@ void work_counts(const struct app *app, struct work_counts *n) {
     size_t i;
     memset(n, 0, sizeof(*n));
     for (i = 0; i < app->model.head_count; i++) work_count_head(app, &app->model.heads[i], n);
-    if (!app->workflows || app->fleet) return;
+    if (!app->workflows) return;
     for (i = 0; i < app->workflows->run_count; i++) {
         const char *state = app->workflows->runs[i].state;
         if (!strcmp(state, "running") || !strcmp(state, "waiting-approval")) n->runs_active++;
@@ -140,7 +143,6 @@ void work_counts(const struct app *app, struct work_counts *n) {
 
 size_t attention_count(const struct app *app) {
     struct work_counts n;
-    if (app->fleet) return 0;
     work_counts(app, &n);
     return n.attention;
 }
@@ -181,7 +183,7 @@ static bool run_member_matches(const struct outline_build *b, size_t run) {
     const struct app *app = b->app;
     size_t i;
     for (i = 0; i < app->model.head_count; i++)
-        if (b->owner[i] == run && head_matches(&app->model.heads[i], app->search)) return true;
+        if (b->owner[i] == run && head_visible(app, &app->model.heads[i])) return true;
     return false;
 }
 
@@ -199,7 +201,7 @@ static void outline_members(struct outline_build *b, size_t run, int depth) {
     const struct workflow_model *m = app->workflows;
     size_t i;
     for (i = 0; i < app->model.head_count; i++)
-        if (b->owner[i] == run && head_matches(&app->model.heads[i], app->search))
+        if (b->owner[i] == run && head_visible(app, &app->model.heads[i]))
             outline_add(b, OUTLINE_HEAD, i, run, SIZE_MAX, depth);
     if (app->search[0]) return;
     for (i = 0; i < m->head_count; i++)
@@ -234,7 +236,7 @@ static bool head_runs_match(const struct outline_build *b, size_t head) {
 
 static void outline_user_head(struct outline_build *b, size_t head) {
     struct app *app = b->app;
-    bool matches = head_matches(&app->model.heads[head], app->search);
+    bool matches = head_visible(app, &app->model.heads[head]);
     size_t r;
     if (!matches && !head_runs_match(b, head)) return;
     outline_add(b, OUTLINE_HEAD, head, SIZE_MAX, SIZE_MAX, 0);
@@ -249,7 +251,10 @@ size_t outline_build(struct app *app, struct outline_row *rows, size_t capacity)
     for (i = 0; i < app->model.head_count && i < MAX_HEADS; i++) b.owner[i] = head_owner_run(app, &app->model.heads[i], NULL);
     for (i = 0; i < WF_RUNS; i++) b.run_owner[i] = run_owner_head(app, i);
     for (i = 0; i < app->model.head_count; i++) if (b.owner[i] == SIZE_MAX) outline_user_head(&b, i);
-    for (i = 0; app->workflows && !app->fleet && i < app->workflows->run_count; i++)
+    /* Remote tasks (receiver-owned, no head here) follow the heads. */
+    for (i = 0; i < app->model.task_count; i++)
+        if (task_visible(app, &app->model.tasks[i])) outline_add(&b, OUTLINE_TASK, SIZE_MAX, SIZE_MAX, i, 0);
+    for (i = 0; app->workflows && i < app->workflows->run_count; i++)
         if (b.run_owner[i] == SIZE_MAX && run_has_heads(&b, i)) outline_run(&b, i, 0, false);
     return b.count;
 }
@@ -259,6 +264,7 @@ size_t outline_position(const struct app *app, const struct outline_row *rows, s
     size_t i;
     for (i = 0; i < count; i++) {
         if (app->run_row ? rows[i].kind == OUTLINE_RUN && rows[i].run == app->workflow_run :
+            app->task_row ? rows[i].kind == OUTLINE_TASK && rows[i].record == app->task_selected :
             rows[i].kind == OUTLINE_HEAD && rows[i].head == app->selected) return i;
     }
     return count;
@@ -267,14 +273,23 @@ size_t outline_position(const struct app *app, const struct outline_row *rows, s
 void outline_select(struct app *app, const struct outline_row *row) {
     if (row->kind == OUTLINE_RUN) {
         if (app->workflow_run != row->run) app->workflow_node = 0;
-        app->run_row = true; app->workflow_run = row->run;
+        app->run_row = true; app->task_row = false; app->workflow_run = row->run;
     } else if (row->kind == OUTLINE_HEAD) {
-        app->run_row = false; app->selected = row->head;
+        app->run_row = false; app->task_row = false; app->selected = row->head;
+    } else if (row->kind == OUTLINE_TASK) {
+        app->run_row = false; app->task_row = true; app->task_selected = row->record;
     }
 }
 
 static bool outline_skip(const struct outline_row *row, bool heads_only) {
     return row->kind == OUTLINE_RETIRED || (heads_only && row->kind != OUTLINE_HEAD);
+}
+
+/* Leaving for a view about one head: a selected remote task is released. */
+void outline_release_task(struct app *app) {
+    if (!app->task_row) return;
+    app->task_row = false;
+    retarget_selection(app);
 }
 
 /* The next selectable row from position in direction, or count. */
@@ -309,7 +324,7 @@ bool outline_toggle(struct app *app, int direction) {
         run_set_expanded(app, app->workflow_run, direction ? direction > 0 : !open);
         return true;
     }
-    if (direction >= 0 || app->selected >= app->model.head_count) return false;
+    if (direction >= 0 || app->task_row || app->selected >= app->model.head_count) return false;
     run = head_owner_run(app, &app->model.heads[app->selected], NULL);
     if (run == SIZE_MAX) return false;
     run_set_expanded(app, run, false);

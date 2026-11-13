@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / selected identity                                            │
+│ n/N section  L log  space/b page  f refs  i IDs  Esc back                   │
+│ Source: workflow records                                                    │
+│ Kind: result                                                                │
+│ Project: project_7f3a                                                       │
+│ Host: -                                                                     │
+│ Task: -                                                                     │
+│ Run: run_2cdf8bbe1a4e                                                       │
+│ Step: implement                                                             │
+│ Attempt: attempt-1                                                          │
+│ Head: head_b2c4d6e8                                                         │
+│ Instance: instance_b2c4d6e8                                                 │
+│ Request: -                                                                  │
+│ Binding: -                                                                  │
+│ Requested revision SHA256: 555555555555555555555555555555555555555555555555 │
+│     5555555555555555                                                        │
+│ Identity SHA256: 6666666666666666666666666666666666666666666666666666666666 │
+│     666666                                                                  │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit  

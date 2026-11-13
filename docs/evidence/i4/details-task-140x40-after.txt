@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS       Local · 3 heads · 1 running · 3 need attention · 5 to repair · Remote · 2 heads, 1 task on 3 hosts (1 disconnected) 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: task task_build on builder ───────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ task task_build on builder                                                                                                              │
+│ This is the receiver's last observation, not its current state; controls stay disabled until a fresh one arrives. r retries the host.   │
+│ Where        builder                                                                                                                    │
+│ Workspace    /work/project                                                                                                              │
+│ State        needs approval · owner recorded                                                                                            │
+│ Observation  fresh · receiver observed 2026-10-17T10:00:00Z · confirmed 2026-10-17T10:00:00Z                                            │
+│ Connection   reachable · fresh · 3s old                                                                                                 │
+│ Confirmed    2026-10-17T10:00:00Z                                                                                                       │
+│ Agent        codex  step implement                                                                                                      │
+│ Waiting      approval: Review the plan                                                                                                  │
+│ Next         decide                                                                                                                     │
+│ Result       unavailable · verification unavailable                                                                                     │
+│ Cancel       - · scope - · requested -                                                                                                  │
+│                                                                                                                                         │
+│ IDENTITY                                                                                                                                │
+│ Request      req-1                                                                                                                      │
+│ Spec         0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef                                                           │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ Y approve  N reject  R resume  X cancel   (each confirmed; fresh evidence only)                                                         │
+│ r  retry the host    I  attention items for this task                                                                                   │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live · Remote live                                                                                                                        
+ Y approve  N reject  R resume  X cancel  r retry host  Esc back  ? help  q quit                                                           

@@ -1,5 +1,6 @@
 #include "fleet/enrollment/enrollment.h"
 #include "fleet/discovery/discovery.h"
+#include "fleet/revocation/revocation.h"
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/support/process.h"
@@ -41,7 +42,20 @@ static bool local_policy(json_object *host, unsigned seconds) {
     valid = json_object_get_boolean(f_field(resolution, "ok")) && json_object_equal(f_field(resolution, "data"), f_field(host, "resolution"));
     json_object_put(resolution); return valid;
 }
-static const char *authenticate(json_object *host, struct f_remote *remote, unsigned seconds) {
+/* The reviewed and the presented key are both shown with where each was
+ * observed; acceptance stays with the operator's OpenSSH process and needs
+ * a fresh review. Hydra changes neither known_hosts nor the alias. */
+static void key_changed(json_object *host, json_object *row, const char *peer) {
+    json_object *detail = json_object_new_object(), *revoked = revocation_find_key(peer);
+    f_string_add(detail, "reviewed_fingerprint", f_string(host, "fingerprint"));
+    f_string_add(detail, "reviewed_source", "enrollment intent (qualification peer_fingerprint)");
+    f_string_add(detail, "presented_fingerprint", peer);
+    f_string_add(detail, "observation", "authenticated strict SSH master (-vv Server host key) opened for this apply");
+    if (revoked) { json_object_object_add(detail, "presented_key_revoked", revocation_detail(revoked)); json_object_put(revoked); }
+    f_string_add(detail, "acceptance", "verify the key out of band; if expected, update known_hosts yourself (ssh-keygen -R), re-qualify and review a fresh intent");
+    json_object_object_add(row, "host_key", detail);
+}
+static const char *authenticate(json_object *host, json_object *row, struct f_remote *remote, unsigned seconds) {
     char *peer; bool matches;
     if (!host_shape(host) || !local_policy(host, seconds)) return "review_required";
     if (f_copy(remote->target, sizeof(remote->target), f_string(host, "target")) ||
@@ -50,8 +64,28 @@ static const char *authenticate(json_object *host, struct f_remote *remote, unsi
         f_copy(remote->hydra, sizeof(remote->hydra), "hydra") || hd_config(remote->ssh_config, f_string(host, "ssh_config"))) return "invalid_intent";
     remote->multiplex = true; peer = f_peer_fingerprint(remote, seconds);
     if (!peer) return "outcome_unknown";
-    matches = !strcmp(peer, f_string(host, "fingerprint")); free(peer);
+    matches = !strcmp(peer, f_string(host, "fingerprint"));
+    if (!matches) key_changed(host, row, peer);
+    free(peer);
     return matches ? NULL : "host_key_changed";
+}
+/* A reviewed host whose candidate, alias, accepted key, package or project
+ * was revoked after review: the pending intent is invalid for it. Returns
+ * the revocation detail (caller-owned) or NULL. */
+json_object *enrollment_host_revocation(json_object *host) {
+    const struct { const char *scope, *id; } checks[] = {
+        {"candidate", f_string(host, "candidate_id")}, {"transport", f_string(host, "alias")},
+        {"package", f_string(host, "package_sha256")}, {"project", f_string(host, "project")}
+    };
+    json_object *record, *detail; size_t i;
+    for (i = 0; i < sizeof(checks) / sizeof(checks[0]); i++) {
+        if (!checks[i].id || !(record = revocation_find(checks[i].scope, checks[i].id))) continue;
+        detail = revocation_detail(record); json_object_put(record); return detail;
+    }
+    record = revocation_find_key(f_string(host, "fingerprint"));
+    if (!record) return NULL;
+    detail = revocation_detail(record); f_string_add(detail, "matched", "reviewed fingerprint equals a revoked transport's accepted host key");
+    json_object_put(record); return detail;
 }
 /* Older compatible receivers can be upgraded by an explicitly pinned package.
  * Inspect their project through the existing authenticated SSH channel first;
@@ -137,7 +171,7 @@ static const char *alias_check(json_object *host, const struct f_remote *remote,
 }
 json_object *enrollment_host_apply(json_object *host, json_object *row, json_object *progress, const char *path, unsigned seconds) {
     struct f_remote remote = {0}; char config[F_PATH] = ""; const char *status;
-    status = authenticate(host, &remote, seconds); f_copy(config, sizeof(config), remote.ssh_config);
+    status = authenticate(host, row, &remote, seconds); f_copy(config, sizeof(config), remote.ssh_config);
     if (!status) status = alias_check(host, &remote, false);
     if (!status) status = preflight(host, &remote, row, seconds, !f_string(host, "package"));
     if (!status) status = install_package(host, &remote, row, progress, path, seconds);

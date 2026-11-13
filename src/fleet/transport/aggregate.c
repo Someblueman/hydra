@@ -3,6 +3,7 @@
 #include "fleet/transport/remote.h"
 #include "fleet/support/process.h"
 #include "fleet/fleet.h"
+#include "fleet/revocation/revocation.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +36,8 @@ json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs) {
             if (workers[i].pid == 0) {
                 struct f_remote remote; json_object *row; const char *text;
                 const char *name = json_object_get_string(json_object_array_get_idx(names, workers[i].index));
-                row = f_remote_load(name, &remote) ? f_error("fleet", "invalid_alias", name) : f_observe(&remote, action, seconds);
+                row = revocation_blocked("transport", name) ? revocation_error("fleet", "transport", name) :
+                    f_remote_load(name, &remote) ? f_error("fleet", "invalid_alias", name) : f_observe(&remote, action, seconds);
                 f_string_add(row, "host", name);
                 text = json_object_to_json_string_ext(row, JSON_C_TO_STRING_PLAIN);
                 _exit(f_write(workers[i].path, text, strlen(text), false) ? 1 : 0);

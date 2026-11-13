@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / selected identity                                                                                                        │
+│ kill-dry-run · implement                                                                                                                │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                   │
+│                                                                                                                                         │
+│ SELECTED IDENTITY                                                                                                                       │
+│ Bound subject; a changed revision invalidates this review.                                                                              │
+│ Source      workflow records                                                                                                            │
+│ Kind        result                                                                                                                      │
+│ Project     project_7f3a                                                                                                                │
+│ Host        -                                                                                                                           │
+│ Task        -                                                                                                                           │
+│ Run         run_2cdf8bbe1a4e                                                                                                            │
+│ Step        implement                                                                                                                   │
+│ Attempt     attempt-1                                                                                                                   │
+│ Head        head_b2c4d6e8                                                                                                               │
+│ Instance    instance_b2c4d6e8                                                                                                           │
+│ Request     -                                                                                                                           │
+│ Binding     -                                                                                                                           │
+│ Revision   5555555555555555555555555555555555555555555555555555555555555555                                                             │
+│ Identity   6666666666666666666666666666666666666666666666666666666666666666                                                             │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k scroll  i back to evidence  f references  Esc back  ? help  q quit                                                                    

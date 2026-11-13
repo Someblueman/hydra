@@ -24,17 +24,18 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.9.0** adds guided remote setup: give Hydra an SSH destination, from the
-command line (`hydra remote setup`) or the control centre's Hosts tab, and it
-checks the host, installs a pinned Hydra runtime from the release's static
-helpers, finds or installs your agents and guides sign-in, showing a plan for
-every change and never accepting a changed host key. Hydra's own state now stays
-private under a group-writable umask such as Ubuntu's default, and
-`hydra doctor --fix-permissions` repairs older state.
+**v3.0.0** makes the control centre one workspace for local and remote work:
+`hydra tui` shows the heads and tasks of your registered hosts beside local work,
+with their host and how fresh each observation is, and attaches, interrupts and
+answers remote work with the same keys. Remote tasks can be placed automatically
+on an eligible host, task pools and host-timer schedules run work through the
+same commands, and onboarding many hosts gains live inventory sources, revocation
+and an operator view. This is a major release: see the changelog's compatibility
+notes before upgrading scripts or fleet hosts.
 Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
-[the roadmap](docs/ROADMAP.md#next-target-guided-remote-onboarding)
+[the roadmap](docs/ROADMAP.md#next-target-live-and-human-acceptance)
 and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
@@ -166,11 +167,23 @@ hydra fleet spawn build --project /srv/project -- feature/search --profile codex
 hydra fleet tui
 ```
 
-The native fleet view shows heads by host and supports attach and confirmed
-interrupts. Agent executables and repositories live on the host that runs the work.
-See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
-workflows, and recovery behavior.
-
+Remote heads and tasks then appear in `hydra tui` beside local work, with their
+host and observation age; `L` filters by location, `a` attaches and `x`
+interrupts through the fleet commands, and `hydra fleet tui` opens the same
+control centre filtered to remote work. Agent executables and repositories live
+on the host that runs the work. See [fleet setup](docs/FLEET.md) for pinned
+bootstrap, host requirements, remote workflows, and recovery behavior.
+`hydra fleet discover --source ssh-config|
+ansible-inventory:FILE|dns-sd` lists candidates from your own inventories with a
+diff against the previous snapshot, and `hydra fleet revoke` records a final,
+local revocation of a candidate, source, alias, package or project decision.
+`O` on the control centre's Hosts tab reviews those candidates, their
+qualification and per-host enrollment progress, and runs `hydra fleet enroll
+apply` only after you type the reviewed intent's digest.
+New remote tasks can be placed automatically across eligible hosts
+(`hydra fleet task submit --placement auto`), with every decision recorded and
+replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
+default. 
 ## Plan an objective
 
 The optional native helper supports `hydra workflow plan`: discover the JSON
@@ -180,6 +193,13 @@ verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
 require bound validation, hand off collected Git commits, and support bounded
 candidate repair.
 Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
+`hydra workflow plan evaluate` compares two compiled alternatives by decomposition,
+fixed-graph scheduling and placement with ranges and explicit unknowns, `plan
+decision` records why one was selected and replays that comparison from its
+recorded inputs, and `make test-plan-eval` measures held-out planning quality.
+`hydra workflow plan expand` admits a bounded expansion of a finished run as a
+new version compiled under the same policy, with retries kept apart from new
+claims and every round run with its own exact digest.
 Planning does not call a model itself; an ordinary agent authors the proposal
 through the CLI. Plans carry their own inline agent prompts and proposal assets,
 bound by the acceptance digest, so planning never commits to your checkout. See the
@@ -194,6 +214,7 @@ the [planning examples](examples/planning/README.md).
 | Agent profiles and prompts | [Usage: agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
 | Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
+| Task pools and host-timer schedules | [Workflows: pools and schedules](docs/workflows.md#pools-and-schedules) |
 | State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
 | Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 

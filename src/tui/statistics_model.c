@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "internal.h"
+#include "statistics_cohorts.h"
 /* View state is caller-owned and independent of head/graph selection. */
 
 
@@ -81,7 +81,7 @@ int refresh_statistics(struct app *app, const char *fixture) {
 void statistics_move(struct app *app, int direction) {
     struct statistics_view *v = app->statistics;
     if (!v) return;
-    if (v->detail) {
+    if (v->detail || (!app->fleet && v->metric_page == STATISTICS_COHORT_PAGE)) {
         if (direction > 0 && v->step_scroll < HS_STEPS - 1) v->step_scroll++;
         if (direction < 0 && v->step_scroll) v->step_scroll--;
     } else {

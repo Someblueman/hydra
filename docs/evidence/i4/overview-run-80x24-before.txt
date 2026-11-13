@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / OVERVIEW                                                              
+ Work Details [Overview] Attention Recovery Flows Stats Workspace Hosts        
+╭─ Overview ──────────────────────────────────────────────────────────────────╮
+│  1 running / 1 need attention / 0 active runs / 1 to repair / 0 remote      │
+│                                                                             │
+│ ╭─ WORK / what you started, local and remote ─────────────────────────────╮ │
+│ │                                                                         │ │
+│ │ > add-kill                                             running          │ │
+│ │     ▸ plan run kill-dry-run                            succeeded        │ │
+│ │   notes-cleanup                                        terminal gone    │ │
+│ │ 2 heads you started / Enter opens or expands                            │ │
+│ ╰─────────────────────────────────────────────────────────────────────────╯ │
+│ ╭─ RUN / plan run kill-dry-run · succeeded · 2 heads · from add-kill ─────╮ │
+│ │ STEP            STATE         TIME          HEAD                        │ │
+│ │ spawn-worker    succeeded     5s            kill-dry-run-worker         │ │
+│ │ implement       succeeded     1m06s         kill-dry-run-worker         │ │
+│ │ spawn-check     succeeded     5s            kill-dry-run-check (retired │ │
+│ │ verify          succeeded     3s            kill-dry-run-check (retired │ │
+│ │ Next  Worker branch kill-dry-run-worker holds the result: review (:     │ │
+│ │       diff) · land (hydra land kill-dry-run-worker) · dismiss (x        │ │
+│ ╰─────────────────────────────────────────────────────────────────────────╯ │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit  

@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                                                                                        │
+│ Result ready for review · kill-dry-run · implement                                                                                      │
+│ Status      New: not marked seen yet.                                                                                                   │
+│ Why         Step implement (attempt 1) finished and sealed its output; its result, checks and changes are ready to review.              │
+│ Next        r reviews what was produced, how it was checked and the changes on the worker branch; s marks the item seen once you have.  │
+│                                                                                                                                         │
+│ IDENTITY                                                                                                                                │
+│ Kind        result · result_ready                                  Source      workflow records                                         │
+│ Project     project_7f3a                                           Host        -                                                        │
+│ Task        -                                                      Run         run_2cdf8bbe1a4e                                         │
+│ Step        implement                                              Attempt     attempt-1                                                │
+│ Head        head_b2c4d6e8                                          Instance    instance_b2c4d6e8                                        │
+│ Request     -                                                      Binding     -                                                        │
+│ Freshness   fresh                                                                                                                       │
+│ Route       workflow-evidence · navigable                                                                                               │
+│ Revision   5555555555555555555555555555555555555555555555555555555555555555                                                             │
+│ Identity   6666666666666666666666666666666666666666666666666666666666666666                                                             │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ r review  s mark seen / new again  Space/b scroll  Esc back to the list  ? help  q quit                                                   

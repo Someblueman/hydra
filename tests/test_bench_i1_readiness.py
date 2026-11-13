@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sys
 import threading
@@ -20,6 +21,9 @@ def retained_screen_controls(root: Path, output: Path) -> None:
         screen = (root / f"tests/fixtures/tui/item10-ready-{count}.txt").read_text()
         branches = {f"i10-h{index:02d}" for index in range(count)}
         assert owned_heads_visible(screen, True, branches), count
+        # The 3.0 Work list adds a WHERE (location) column; readiness must not depend on it.
+        located = re.sub(r"(\|\s+HEAD\s+STATUS\s+AGENT)", r"\1  WHERE", screen, count=1)
+        assert located != screen and owned_heads_visible(located, True, branches), count
         screens[count] = screen
     screen = screens[50]
     branches = {f"i10-h{index:02d}" for index in range(50)}

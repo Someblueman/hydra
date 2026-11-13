@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / selected identity                                            │
+│ kill-dry-run · implement                                                    │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                       │
+│                                                                             │
+│ SELECTED IDENTITY                                                           │
+│ Bound subject; a changed revision invalidates this review.                  │
+│ Source      workflow records                                                │
+│ Kind        result                                                          │
+│ Project     project_7f3a                                                    │
+│ Host        -                                                               │
+│ Task        -                                                               │
+│ Run         run_2cdf8bbe1a4e                                                │
+│ Step        implement                                                       │
+│ Attempt     attempt-1                                                       │
+│ Head        head_b2c4d6e8                                                   │
+│ Instance    instance_b2c4d6e8                                               │
+│ Request     -                                                               │
+│ Binding     -                                                               │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k scroll  i back to evidence  f references  Esc back  ? help  q quit        

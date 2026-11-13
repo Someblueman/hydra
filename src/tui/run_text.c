@@ -147,7 +147,7 @@ static size_t latest_run_where(const struct app *app, size_t owner, bool active)
 size_t overview_run(struct app *app) {
     const struct head *h = selected_head(app);
     size_t run;
-    if (!app->workflows || app->fleet || !app->workflows->run_count) return SIZE_MAX;
+    if (!app->workflows || !app->workflows->run_count) return SIZE_MAX;
     if (app->run_row && app->workflow_run < app->workflows->run_count) return app->workflow_run;
     if (h && (run = head_owner_run(app, h, NULL)) != SIZE_MAX) return run;
     if (h && (run = latest_run_where(app, (size_t)(h - app->model.heads), false)) != SIZE_MAX) return run;
@@ -167,7 +167,8 @@ static const char *step_state_word(const char *state) {
  * for an interactive agent. */
 void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size) {
     const struct workflow_node *step;
-    if (app->fleet || !head_headless(h)) { snprintf(out, size, "%s", native_agent_name(h)); return; }
+    if (head_remote(h)) { snprintf(out, size, "%s", remote_agent_name(h)); return; }
+    if (!head_headless(h)) { snprintf(out, size, "%s", native_agent_name(h)); return; }
     step = head_step(app, h);
     if (!step) { snprintf(out, size, "no agent step yet"); return; }
     snprintf(out, size, "%s%sstep %s%s%s", step->profile[0] ? step->profile : "command", dot(app), step->id, dot(app), step->state);
@@ -175,7 +176,8 @@ void head_agent_text(const struct app *app, const struct head *h, char *out, siz
 
 const char *head_list_status(const struct app *app, const struct head *h) {
     const struct workflow_node *step;
-    if (app->fleet || !head_headless(h)) return app->fleet ? h->desired : status_label(h);
+    if (head_remote(h)) return remote_head_status(app, h);
+    if (!head_headless(h)) return status_label(h);
     step = head_step(app, h);
     if (!step) return "headless";
     if (!strcmp(step->state, "running")) return "running";
@@ -184,7 +186,7 @@ const char *head_list_status(const struct app *app, const struct head *h) {
 
 enum tv_style head_list_tone(const struct app *app, const struct head *h) {
     const struct workflow_node *step;
-    if (app->fleet) return TV_BASE;
+    if (head_remote(h)) return remote_head_tone(app, h);
     if (!head_headless(h)) return status_tone(h);
     step = head_step(app, h);
     if (step && !strcmp(step->state, "running")) return TV_SUCCESS;
@@ -263,7 +265,7 @@ void plan_approval_text(const struct app *app, size_t run, char *out, size_t siz
  * step a headless head last ran ("command" for a plain command step). */
 const char *head_agent_short(const struct app *app, const struct head *head) {
     const struct workflow_node *step;
-    if (app->fleet) return head->remote_host;
+    if (head_remote(head)) return remote_agent_name(head);
     if (!head_headless(head)) return native_agent_name(head);
     step = head_step(app, head);
     return !step ? "none" : step->profile[0] ? step->profile : "command";
@@ -305,17 +307,30 @@ static void outline_head_text(const struct app *app, const struct outline_row *r
     const struct head *head = &app->model.heads[row->head];
     const char *role = head_run_role(app, head);
     if (role) snprintf(t->name, sizeof(t->name), "%*s%-8s %s", row->depth * 2, "", role, head->branch);
-    else snprintf(t->name, sizeof(t->name), "%*s%s", row->depth * 2, "", app->fleet && head->remote_branch[0] ? head->remote_branch : head->branch);
+    else snprintf(t->name, sizeof(t->name), "%*s%s", row->depth * 2, "", head->branch);
     t->status = head_list_status(app, head); t->agent = head_agent_short(app, head);
-    t->reported = head->declared[0] ? head->declared : "-";
+    t->reported = head_remote(head) ? "-" : head->declared[0] ? head->declared : "-";
+    t->where = head_where(head);
     t->tone = head_list_tone(app, head);
+}
+
+/* A remote task: receiver-owned work without a head here. */
+static void outline_task_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
+    const struct task_observation *task = &app->model.tasks[row->record];
+    snprintf(t->name, sizeof(t->name), "%*s%s", row->depth * 2, "", task->task_id);
+    t->status = task_status(app, task);
+    t->agent = task->profile[0] && strcmp(task->profile, "-") ? task->profile : "task";
+    t->reported = task->result_state[0] && strcmp(task->result_state, "unavailable") ? task->result_state : "-";
+    t->where = task->host;
+    t->tone = task_tone(app, task);
 }
 
 void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
     t->name[0] = t->count[0] = '\0';
-    t->status = t->agent = t->reported = "";
+    t->status = t->agent = t->reported = t->where = "";
     t->tone = TV_BASE;
     if (row->kind == OUTLINE_RUN) outline_run_text(app, row, t);
     else if (row->kind == OUTLINE_RETIRED) outline_retired_text(app, row, t);
+    else if (row->kind == OUTLINE_TASK) outline_task_text(app, row, t);
     else outline_head_text(app, row, t);
 }

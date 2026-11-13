@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / OVERVIEW                                                Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  Details  [Overview]  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Overview ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ╭─ RUNNING ────────────────────╮ ╭─ NEED ATTENTION ─────────────╮ ╭─ RUNS ACTIVE ────────────────╮ ╭─ CHANGED FILES ──────────────────╮ │
+│ │ 1                            │ │ 1                            │ │ 0                            │ │ 3                                │ │
+│ │                              │ │ failures, decisions, stopped │ │                              │ │                                  │ │
+│ │ heads and runs working now   │ │ see Recovery too             │ │ 1 recorded in this project   │ │ uncommitted, all heads           │ │
+│ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────────╯ │
+│                                                                                                                                         │
+│ ╭─ WORK / what you started, local and remote ──────────────────────────────────╮ ╭─ SELECTED / what it needs ─────────────────────────╮ │
+│ │                                                                              │ │                                                    │ │
+│ │ > add-kill                                                  running          │ │ add-kill                                           │ │
+│ │     ▸ plan run kill-dry-run                                 succeeded        │ │                                                    │ │
+│ │   notes-cleanup                                             terminal gone    │ │ Agent: codex · local                               │ │
+│ │                                                                              │ │ Session: running                                   │ │
+│ │                                                                              │ │ Changed files 0   Reported: nothing yet            │ │
+│ │                                                                              │ │ No approval requests                               │ │
+│ │ 2 heads you started / Enter opens or expands                                 │ │                                                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────────────╯ │
+│                                                                                                                                         │
+│ ╭─ RUN / plan run kill-dry-run · succeeded · 2 heads · from add-kill ─────────────────────────────────────────────────────────────────╮ │
+│ │ STEP             KIND/ROLE      STATE             TRIES TIME          HEAD                                                          │ │
+│ │ spawn-worker     spawn/work     succeeded         1     5s            kill-dry-run-worker                                           │ │
+│ │ implement        exec/compose   succeeded         1     1m06s         kill-dry-run-worker                                           │ │
+│ │   codex-cli 0.46.0 · gpt-6-sol (configured), effort xhigh (configured) · tokens in 24,763, cached 24,448, out 1,122                 │ │
+│ │ spawn-check      spawn/work     succeeded         1     5s            kill-dry-run-check (retired)                                  │ │
+│ │ verify           exec/verify    succeeded         1     3s            kill-dry-run-check (retired)                                  │ │
+│ │                                                                                                                                     │ │
+│ │ Next  Worker branch kill-dry-run-worker holds the result: review (: diff) · land (hydra land kill-dry-run-worker) · dismiss (x      │ │
+│ │       removes the worker head, keeps the branch)                                                                                    │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit                                                              

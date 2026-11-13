@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                                                                                        │
+│ Needs inspection · index-rebuild · on archive                                                                                           │
+│ This item could not be classified by Hydra (provider_question). Inspect its records before acting.                                      │
+│ Status: New: not marked seen yet.                                                                                                       │
+│ r review  s mark seen  Enter/Esc back                                                                                                   │
+│                                                                                                                                         │
+│ Technical identity  2222222222222222222222222222222222222222222222222222222222222222                                                    │
+│ question  provider_question  Source: fleet overview  Freshness: unknown                                                                 │
+│ Project: project_7f3a  Host: archive                                                                                                    │
+│ Task: task_9e8d7c6b                                                                                                                     │
+│ Run: run_aa11bb22cc33                                                                                                                   │
+│ Step: -                                                                                                                                 │
+│ Attempt: -                                                                                                                              │
+│ Head: head_a7b9c1d3  Instance: instance_a7b9c1d3                                                                                        │
+│ Request: -  Binding: -                                                                                                                  │
+│ Route: unavailable  navigable=0                                                                                                         │
+│ Revision SHA256: 1111111111111111111111111111111111111111111111111111111111111111                                                       │
+│ Identity SHA256: 2222222222222222222222222222222222222222222222222222222222222222                                                       │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit                                                     

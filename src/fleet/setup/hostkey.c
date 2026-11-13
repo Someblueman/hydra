@@ -251,6 +251,12 @@ static json_object *changed(struct setup_ctx *ctx, const struct hostkey *hk, con
     free(host); free(file);
     f_string_add(data, "presented_fingerprint", peer); f_string_add(data, "host", hk->lookup);
     f_string_add(data, "known_hosts", hk->files[0]);
+    /* Old and new side by side, each with its provenance; acceptance stays
+     * the operator's OpenSSH step and a later enrollment review. */
+    if (ctx->remote.accepted_host_key[0]) f_string_add(data, "recorded_fingerprint", ctx->remote.accepted_host_key);
+    f_string_add(data, "recorded_source", ctx->remote.accepted_host_key[0] ? "alias record accepted_host_key" : "known_hosts entry (not read as identity)");
+    f_string_add(data, "observation", "strict OpenSSH probe (ssh -vv) through your configuration; nothing was accepted or written");
+    f_string_add(data, "review", "after the key is replaced through your OpenSSH process, review enrollment or setup again; no alias is re-pointed silently");
     (void)setup_state_step(ctx, "host_key", "blocked", NULL);
     return setup_error(ctx, "host_key_changed", "the host presented a different key than known_hosts or the alias records", recovery, data);
 }

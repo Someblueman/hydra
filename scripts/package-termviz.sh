@@ -10,7 +10,12 @@ _package_dest=$1
 case $_package_dest in /*) ;; *) _package_dest=$PWD/$_package_dest ;; esac
 mkdir "$_package_dest" || exit 1
 mkdir -p "$_package_dest/src/termviz" "$_package_dest/examples" "$_package_dest/tests/c" "$_package_dest/tests/termviz"
-cp "$_package_root"/src/termviz/* "$_package_dest/src/termviz/"
+# Library files only: src/termviz/tools holds Hydra's visual-review helpers,
+# which the standalone Makefile neither builds nor ships.
+for _package_file in "$_package_root"/src/termviz/*; do
+    [ -f "$_package_file" ] || continue
+    cp "$_package_file" "$_package_dest/src/termviz/"
+done
 cp "$_package_root/LICENSE" "$_package_dest/LICENSE"
 cp "$_package_root/scripts/termviz.mk" "$_package_dest/Makefile"
 # The guide is source-relative in Hydra, but the exported copy is rooted above

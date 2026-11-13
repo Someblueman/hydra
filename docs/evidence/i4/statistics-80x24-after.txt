@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / STATISTICS                                                            
+ Work Details Overview Attention Recovery Flows [Stats] Workspace Hosts        
+╭─ RUNS ─────────╮ ╭─ RUNNING ──────╮ ╭─ NEED ATTENTIO─╮ ╭─ RETRIES ──────────╮
+│ 1              │ │ 0              │ │ 0              │ │ 0                  │
+│                │ │ steps right    │ │ failed,        │ │                    │
+│ in this scope  │ │ now            │ │ blocked or...  │ │ repeated attempts  │
+╰────────────────╯ ╰────────────────╯ ╰────────────────╯ ╰────────────────────╯
+ Avg 258.7s over 3 steps, max 636s; tokens in 3.85M, cached 3.74M, out 23.0k   
+╭─ RUNS / newest creation first ──────────────────────────────────────────────╮
+│                                                                             │
+│ > kill-dry-run                     succeeded           09-07 13:30 UTC      │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│ 1/1 / Enter evidence / g graph                                              │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Recorded workflow runs · all recorded · all work                              
+ D back  M metric  C cohorts  L location  T range  / find  ? help  q quit      

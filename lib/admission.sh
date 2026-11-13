@@ -31,13 +31,19 @@ admission_error() {
 
 admission_open() {
     _ad_root="${HYDRA_HOME:-$HOME/.hydra}/admission"
+    _ad_problem='HYDRA_HOME must be owned by you and not group- or world-writable'
     [ "$(find "${HYDRA_HOME:-$HOME/.hydra}" -prune -user "$(id -u)" ! -perm -0020 ! -perm -0002 -exec printf yes \;)" = yes ] || return 1
+    _ad_problem='HYDRA_HOME/admission must be a directory owned by you and not group- or world-writable'
     [ ! -L "$_ad_root" ] || return 1
-    (umask 077; mkdir -p "$_ad_root") || return 1
+    # Explicit 0700: a default ACL on HYDRA_HOME would override the umask.
+    if [ ! -e "$_ad_root" ] && (umask 077; mkdir "$_ad_root") 2>/dev/null; then
+        chmod 700 "$_ad_root" || return 1
+    fi
     [ -d "$_ad_root" ] || return 1
     [ "$(find "$_ad_root" -prune -user "$(id -u)" ! -perm -0020 ! -perm -0002 -exec printf yes \;)" = yes ] || return 1
     # This lock is deliberately not swept by generic stale-lock cleanup. A
     # crashed writer needs inspection; it must never permit concurrent writers.
+    _ad_problem='the admission lock is held'
     _ad_tries=0
     until mkdir "$_ad_root/lock" 2>/dev/null; do
         _ad_tries=$((_ad_tries + 1))
@@ -50,6 +56,7 @@ admission_open() {
     trap 'exit 129' HUP
     _ad_now="$(date +%s)"
     _ad_host_limit=0 _ad_project_limit=0 _ad_disk_floor_kb=0 _ad_queue_limit=128 _ad_host_labels=-
+    _ad_problem='the admission policy is invalid'
     if [ -e "$_ad_root/policy" ] || [ -L "$_ad_root/policy" ]; then
         [ -f "$_ad_root/policy" ] && [ ! -L "$_ad_root/policy" ] || return 1
         _ad_seen=' ' _ad_fields=0
@@ -68,6 +75,7 @@ admission_open() {
         done < "$_ad_root/policy"
         [ "$_ad_fields" -eq 5 ] || return 1
     fi
+    _ad_problem='free disk space is unknown'
     _ad_disk_free_kb="$(LC_ALL=C df -Pk "$_ad_root" | awk 'END {print $4}')"
     admission_number "$_ad_disk_free_kb" || return 1
 }
@@ -159,7 +167,7 @@ cmd_admission() (
             'hydra admission release <id> --confirmed'
         exit 0
     fi
-    admission_open || { admission_error state_unavailable 'Admission storage, policy, or lock is unavailable; inspect before retrying'; exit 1; }
+    admission_open || { admission_error state_unavailable "Admission storage, policy, or lock is unavailable ($_ad_problem); inspect before retrying"; exit 1; }
     _ad_target_project=''
     case "$_ad_action" in
         configure)

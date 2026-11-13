@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / OVERVIEW                                    Local · no agent work yet 
+ Work Details [Overview] Attention Recovery Flows Stats Workspace Hosts        
+╭─ Overview ──────────────────────────────────────────────────────────────────╮
+│                                                                             │
+│  No agent work in this project yet.                                         │
+│                                                                             │
+│  Overview summarises what is running, what needs a decision, what changed   │
+│  Press n to start a task; it appears here as soon as its terminal opens.    │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit  

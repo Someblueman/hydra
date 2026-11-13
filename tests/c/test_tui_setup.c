@@ -495,11 +495,27 @@ static void freshness_cases(struct app *app) {
     check(snapshot_freshness(app, now - 60, false, true, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
           "headless fixtures render deterministically");
     app->fleet = true;
-    check(snapshot_freshness(app, now - 6, false, false, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
-          "fleet mode allows one remote request per refresh");
-    check(snapshot_freshness(app, now - 8, false, false, text, sizeof(text)) == TV_BASE && !strcmp(text, "Updated 8s ago"),
-          "an overdue fleet refresh shows the age");
+    check(snapshot_freshness(app, now - 6, false, false, text, sizeof(text)) == TV_BASE && !strcmp(text, "Updated 6s ago"),
+          "the compatibility entry keeps the local snapshot's own cadence");
     app->fleet = fleet;
+    /* The remote observation has its own age: one request may take the
+     * whole fleet budget, so it is Live for longer and stale only after a
+     * failed attempt (U11). */
+    {
+        enum tv_style tone = TV_BASE;
+        check(!remote_footer_text(app, text, sizeof(text), &tone), "no remote observation yet says nothing");
+        app->remote_known = true; app->model.host_count = 1; app->remote_at = now - 12;
+        check(remote_footer_text(app, text, sizeof(text), &tone) && tone == TV_MUTED && !strcmp(text, "Remote live"),
+              "a remote observation within one fleet budget is live");
+        app->remote_at = now - 30;
+        check(remote_footer_text(app, text, sizeof(text), &tone) && tone == TV_BASE && !strcmp(text, "Remote updated 30s ago"),
+              "an overdue remote observation shows its age");
+        app->remote_stale = true; copy_text(app->remote_error, sizeof(app->remote_error), "remote observation timed out");
+        check(remote_footer_text(app, text, sizeof(text), &tone) && tone == TV_WARNING &&
+              !strcmp(text, "Remote: STALE, last good observation 30s ago; remote observation timed out"),
+              "a failed remote observation is STALE with the last good age and the reason");
+        app->remote_stale = false; app->remote_known = false; app->model.host_count = 0; app->remote_at = 0; app->remote_error[0] = '\0';
+    }
 }
 
 /* The SSH config field takes ~/ paths: only a leading ~ is expanded. */
