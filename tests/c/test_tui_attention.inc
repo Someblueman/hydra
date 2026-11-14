@@ -347,8 +347,18 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     (void)wait_for_model(&session);
     write_input(session.master, "2", 1U);
     result(wait_for_marker(&session, "Ready to land: kill-dry-run-worker", 4000), "a finished plan run's worker is ready to land");
-    for (i = 0; i < 8 && !wait_for_marker(&session, "L Land", 300); i++) { drain_output(&session); write_input(session.master, "j", 1U); }
-    result(wait_for_markers(&session, "L Land", "Worker      kill-dry-run-worker", 1000), "the item offers L to land it");
+    /* Until the user moves, Inbox selects the first unseen item, and the
+     * attention read that brings the decisions can land after the first
+     * frames: wait for it, so the land item is chosen, not a default the
+     * decisions then take over. Each step waits for its frame, so a slow one
+     * is not taken for a miss and moved past; the check reads the screen. */
+    (void)wait_for_marker(&session, "Approve S-1: T-1", 4000);
+    for (i = 0; i < 8 && !wait_for_markers(&session, "L Land", "Worker      kill-dry-run-worker", 1000); i++) {
+        drain_output(&session);
+        write_input(session.master, "j", 1U);
+    }
+    result(session_visible(&session, "L Land") && session_visible(&session, "Worker      kill-dry-run-worker"),
+           "the item offers L to land it");
     write_input(session.master, "L", 1U);
     result(wait_for_markers(&session, "Land result", "Land kill-dry-run-worker?", 1000), "L asks first, naming the worker");
     write_input(session.master, "n", 1U);
