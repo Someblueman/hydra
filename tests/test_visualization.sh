@@ -86,9 +86,11 @@ for viz_size in 40x10 80x24 140x40; do
     viz_cols="${viz_size%x*}" viz_rows="${viz_size#*x}"
     awk -v cols="$viz_cols" -v rows="$viz_rows" 'length >= cols {exit 1} END {if (NR!=rows+1) exit 1}' "$viz_tmp/graph.out"
 done
-grep -q '4 dependency edges' "$viz_tmp/graph.out"
-grep -q 'review' "$viz_tmp/graph.out"
-grep -q 'succeeded' "$viz_tmp/graph.out"
+# The Run page draws the dependencies as connectors and lists every step.
+grep -q -- '-+->|' "$viz_tmp/graph.out"
+for viz_step in prepare build tests review; do
+    grep -Eq "^ .* [> ]$viz_step +\+ succeeded" "$viz_tmp/graph.out"
+done
 mkdir -p "$viz_build/visualization-evidence"
 cp "$viz_tmp/workflows.tsv" "$viz_build/visualization-evidence/real-workflow.tsv"
 cp "$viz_tmp/heads.tsv" "$viz_build/visualization-evidence/real-heads.tsv"
