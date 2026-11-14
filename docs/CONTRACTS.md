@@ -740,6 +740,47 @@ field), taken from the owner's last error. Launching that digest again, which on
 the user's approval does, moves the old record to `<sha256>.failed-*/launch` and
 starts afresh; nothing is retried automatically.
 
+Each `propose` increments `planning/revision` and then checks the draft, under
+the head lock, against the project's plan policy (shape, policy, graph and
+assets; not the source checkout) with `workflow-plan check <draft> <policy>
+[--assets-dir <dir>]`. It prints whether the revision passes or each diagnostic
+as `  <path>: <message>` with its recovery, and exits 0 either way: the draft
+is saved. A tool the policy lacks is named in the diagnostic with the command
+that allows it.
+
+The project's plan policy is `projects/<project>/plan-policy.json`, written
+once with the guided policy above (without an agent profile) the first time a
+planning command needs it. A planning head plans under it plus
+`profile:<name>` for the head's own recorded profile (`workflow-plan
+policy-for`); `proposal --local-policy` now writes exactly that, which equals
+the guided policy until the user edits the project policy. `hydra plan policy`
+shows it in words (`--json` prints the file); `--allow-tool <tool>`,
+`--remove-tool <tool>` and `--reset` edit it.
+
+`hydra plan show [<head>] [--technical | --json]`, `approve [<head>] [--accept
+<sha256>] [--allow-agent-environment]`, `status [<run-id>]` and `review
+[<run-id>] [--json]` need no copied values. Without `<head>` the proposal is
+the current branch's head's, or the only head's that has one; without
+`<run-id>` the run is the most recent plan run. `show` and `approve` compile the
+current revision afresh, against the project policy and the project's checkout
+(`repo-root`), into a private directory under the head's `planning/`.
+`approve` shows the plan and asks `Run revision N of this plan? [y/N]` on a
+terminal; without one it requires `--accept` with the digest `show --json`
+printed and refuses any other. `HYDRA_NONINTERACTIVE` never approves. Before
+launching it refuses if the draft changed or was returned meanwhile, and if
+that digest already has a run receipt. It then starts the launch owner
+detached (ignoring hangups and interrupts, without terminal descriptors) and
+prints the run ID once the receipt exists. `review` prints the result review
+through `workflow-plan review-text <run-dir> <project-dir> [--json]`.
+
+`hydra plan approve`, `hydra workflow plan run` and the launch owner refuse with
+`agent_environment` when `HYDRA_HEAD_ID` or `HYDRA_INSTANCE_ID` is set, as it is
+inside an agent's head, unless `HYDRA_PLAN_ALLOW_AGENT=1` (or `approve
+--allow-agent-environment`). So do the policy edits. This guards against an
+obedient agent approving its own plan; it is not a security boundary, since an
+agent runs as the same user with the same files. The test runner unsets both
+variables for every case.
+
 The private attachment helper accepts an optional absolute tmux socket after the
 head and instance IDs. Nested native clients carry their observed server selection
 explicitly across the PTY boundary. Session, head and instance checks run against

@@ -21,6 +21,87 @@ workflow_plan_local_policy() {
     printf '{"schema_version":1,"envelope":{"hosts":["local"],"tools":[%s],"effects":["execute","worktree"],"writes":["@spawned:*"],"parallelism":1,"timeout_seconds":3600,"artifact_bytes":1048576,"max_heads":4,"disk_mb":1024,"retry_budget":0,"repair_budget":0}}' "$_wplpol_tools"
 }
 
+# Usage: workflow_plan_project_policy
+# Prints the path of the project's plan policy, writing the guided policy there
+# (without an agent profile) the first time. It is the standing default every
+# planning head plans under; hydra plan policy shows and edits it.
+workflow_plan_project_policy() {
+    _wppp_project="$(hydra_get_project_id)" || return 1
+    _wppp_dir="$(state_v2_project_dir "$_wppp_project")" || return 1
+    _wppp_file="$_wppp_dir/plan-policy.json"
+    if [ ! -f "$_wppp_file" ]; then
+        workflow_atomic_scalar "$_wppp_file" "$(workflow_plan_local_policy "")" || return 1
+    fi
+    printf '%s\n' "$_wppp_file"
+}
+
+# Usage: workflow_plan_head_policy <head-dir> <planning-dir>
+# Writes <planning-dir>/policy.json: the project's plan policy, which also
+# authorizes the head's own agent profile when it has one.
+workflow_plan_head_policy() {
+    _wphp_project_policy="$(workflow_plan_project_policy)" || return 1
+    _wphp_profile="$(workflow_plan_local_profile "$1")"
+    _wphp_policy="$(workflow_plan_tool policy-for "$_wphp_project_policy" "${_wphp_profile:--}")" || {
+        echo 'The project plan policy is unreadable; reset it with hydra plan policy --reset.' >&2
+        return 1
+    }
+    workflow_atomic_scalar "$2/policy.json" "$_wphp_policy"
+}
+
+# Usage: workflow_plan_diagnostics < envelope.json
+# Prints each diagnostic of a planning JSON envelope as "  <path>: <message>",
+# with its recovery on the next line when it has one.
+workflow_plan_diagnostics() {
+    awk '
+        function value(text, key,   i, rest, j, c, out) {
+            i = index(text, "\"" key "\":\"")
+            if (!i) return ""
+            rest = substr(text, i + length(key) + 4); out = ""
+            for (j = 1; j <= length(rest); j++) {
+                c = substr(rest, j, 1)
+                if (c == "\"") break
+                if (c == "\\") { j++; c = substr(rest, j, 1); if (c == "n" || c == "t") c = " " }
+                out = out c
+            }
+            return out
+        }
+        {
+            text = $0
+            while ((i = index(text, "{\"path\":\"")) > 0) {
+                text = substr(text, i + 1)
+                end = index(text, "}")
+                item = end ? substr(text, 1, end - 1) : text
+                printf "  %s: %s\n", value(item, "path"), value(item, "message")
+                if (value(item, "recovery") != "") printf "    %s\n", value(item, "recovery")
+                printed++
+            }
+            if (!printed && value($0, "message") != "") {
+                printf "  %s\n", value($0, "message")
+                if (value($0, "recovery") != "") printf "    %s\n", value($0, "recovery")
+            }
+        }'
+}
+
+# Usage: workflow_plan_proposal_check <planning-dir> <scratch-dir> <saved-label>
+# Tells the publishing agent whether its draft passes the project's plan policy
+# and, if not, exactly what to fix. Run under the head lock after publication;
+# PARALLEL_HEAD_DIR names the head. Nothing is validated against the source
+# checkout here: that happens when the user reviews the plan.
+workflow_plan_proposal_check() {
+    if ! workflow_plan_head_policy "$PARALLEL_HEAD_DIR" "$2" >/dev/null 2>&1 ||
+        ! workflow_plan_tool check "$1/draft.json" "$2/policy.json" --assets-dir "$1/assets" > "$2/check.json" 2>/dev/null; then
+        if [ -s "$2/check.json" ] && grep -q '"diagnostics":\[{' "$2/check.json"; then
+            printf 'Proposal saved for %s, but it does not pass the project'"'"'s plan policy yet:\n' "$3"
+            workflow_plan_diagnostics < "$2/check.json"
+            printf 'Fix the plan and publish it again; it cannot be approved as it is. Nothing has run.\n'
+        else
+            printf 'Proposal saved for %s. Hydra could not check it against the project'"'"'s plan policy; the user will see any problem when reviewing it. Nothing has run.\n' "$3"
+        fi
+        return 0
+    fi
+    printf 'Proposal saved for %s; it passes the project'"'"'s plan policy. The user reviews it with hydra plan show and approves it with hydra plan approve, or in the control centre. Nothing has run.\n' "$3"
+}
+
 # Usage: workflow_plan_draft_digest <file>
 workflow_plan_draft_digest() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
@@ -139,9 +220,14 @@ EOF
             # A republished draft answers any earlier request for changes.
             rm -f "$_wpp_dir/returned" "$_wpp_dir/feedback"
             rm -rf "$_wpp_dir/.assets.previous"
-            _wpp_saved="$_wpp_branch"
-            [ "$_wpp_asset_count" -eq 0 ] || _wpp_saved="$_wpp_branch with $_wpp_asset_count asset(s)"
-            printf 'Proposal saved for %s. In Hydra press B, then P to review it. No validation or execution has occurred.\n' "$_wpp_saved"
+            # Each publication is a new revision; approval binds one of them.
+            _wpp_revision="$(sed -n '1p' "$_wpp_dir/revision" 2>/dev/null || true)"
+            case "$_wpp_revision" in ''|*[!0-9]*) _wpp_revision=0 ;; esac
+            _wpp_revision=$((_wpp_revision + 1))
+            workflow_atomic_scalar "$_wpp_dir/revision" "$_wpp_revision" || exit 1
+            _wpp_saved="$_wpp_branch as revision $_wpp_revision"
+            [ "$_wpp_asset_count" -eq 0 ] || _wpp_saved="$_wpp_saved with $_wpp_asset_count asset(s)"
+            workflow_plan_proposal_check "$_wpp_dir" "$_wpp_tmp" "$_wpp_saved"
             exit 0
         fi
         if [ -n "$_wpp_return" ]; then
@@ -153,7 +239,7 @@ EOF
             exit 1
         }
         _wpp_local_profile="$(workflow_plan_local_profile "$PARALLEL_HEAD_DIR")"
-        workflow_atomic_scalar "$_wpp_dir/policy.json" "$(workflow_plan_local_policy "$_wpp_local_profile")" || exit 1
+        workflow_plan_head_policy "$PARALLEL_HEAD_DIR" "$_wpp_dir" || exit 1
         # The versioned projection below is parsed exactly; notes go only to a terminal.
         if [ -z "$_wpp_local_profile" ] && [ -t 2 ]; then
             printf 'Local policy for %s authorizes no agent profile: the head records none. Plans can run sh, git and make only.\n' "$_wpp_branch" >&2

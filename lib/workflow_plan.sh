@@ -8,6 +8,19 @@ workflow_plan_tool() (
     cmd_fleet_dispatch workflow-plan "$@"
 )
 
+# Usage: workflow_plan_agent_guard <command> <action>
+# Refuses to approve or run a plan from inside an agent's head, where Hydra
+# sets HYDRA_HEAD_ID and HYDRA_INSTANCE_ID, unless HYDRA_PLAN_ALLOW_AGENT=1.
+# This guards against an obedient agent approving its own plan; it is not a
+# security boundary, since the agent runs as the same user with the same files.
+workflow_plan_agent_guard() {
+    [ -n "${HYDRA_HEAD_ID:-}${HYDRA_INSTANCE_ID:-}" ] || return 0
+    [ "${HYDRA_PLAN_ALLOW_AGENT:-}" != 1 ] || return 0
+    cli_error "$1" agent_environment "refusing to $2 from inside an agent's head (HYDRA_HEAD_ID or HYDRA_INSTANCE_ID is set): the user approves plans" \
+        "approve it from your own terminal with hydra plan approve, or in the control centre; experts can set HYDRA_PLAN_ALLOW_AGENT=1"
+    return 1
+}
+
 cmd_workflow_plan() (
     _cwp_action="${1:-}"
     case "$_cwp_action" in
@@ -76,6 +89,8 @@ cmd_workflow_plan() (
                 cli_error 'workflow plan' acceptance_required 'run requires <compiled.json> --accept <sha256>' 'review workflow plan show and accept its exact digest'
                 exit 1
             fi
+            # A launch owner was already checked when it started.
+            [ -n "${_workflow_plan_launch:-}" ] || workflow_plan_agent_guard 'workflow plan' 'run a plan' || exit 1
             _cwp_root="$(workflow_repo_root)" || exit 1
             _workflow_plan_stage="$(mktemp -d)" || exit 1
             trap 'rm -rf "$_workflow_plan_stage"' EXIT
@@ -177,7 +192,7 @@ workflow_plan_worktree() {
     _wpw_project="$(sed -n '1p' "$1/project-id")"
     _wpw_head="$(state_v2_find_head_by_branch "$_wpw_project" "$2")" || return 1
     _wpw_dir="$(state_v2_head_dir "$_wpw_project" "$_wpw_head")" || return 1
-    _wpw_tree="$(sed -n '1p' "$_wpw_dir/worktree" 2>/dev/null)"
+    _wpw_tree="$(sed -n '1p' "$_wpw_dir/worktree" 2>/dev/null || true)"
     [ -n "$_wpw_tree" ] && [ -d "$_wpw_tree" ] || return 1
     printf '%s\n' "$_wpw_tree"
 }

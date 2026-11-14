@@ -714,6 +714,9 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(strstr(spawned, "tools sh, git, make and profile:codex;") != NULL &&
            strstr(spawned, "never tell the user to start Hydra from a .hydra-worktrees directory") != NULL,
            "planning handoff matches the guided local policy");
+    result(strstr(spawned, "hydra plan schema") != NULL && strstr(spawned, "hydra plan propose <plan.json>") != NULL &&
+           strstr(spawned, "never approve or run a plan yourself") != NULL && strstr(spawned, "--asset") == NULL,
+           "planning handoff teaches the short plan form, not the expert schema");
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);

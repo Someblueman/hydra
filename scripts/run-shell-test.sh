@@ -28,8 +28,9 @@ case_runner=
 TMPDIR="$case_root/tmp"
 TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
-# A case started from inside tmux must not see (or act on) the caller's server.
-unset TMUX TMUX_PANE
+# A case started from inside tmux must not see (or act on) the caller's server,
+# and one started from an agent's head must not run as that agent.
+unset TMUX TMUX_PANE HYDRA_HEAD_ID HYDRA_INSTANCE_ID
 
 # Stops an interrupted runner while its PID is still unreaped, and processes
 # a finished case left behind.

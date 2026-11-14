@@ -406,6 +406,18 @@ static json_object *compile_dispatch(int argc, char **argv, bool *matched) {
     return compile_command(argv[1], argv[2], argv[3], compile ? argv[4] : NULL, assets);
 }
 
+/* The short planning flow's commands take their own argument counts. */
+typedef json_object *(*flow_call)(int argc, char **argv);
+static flow_call flow_command(const char *name) {
+    static const struct { const char *name; flow_call call; } flows[] = {
+        {"check", plan_check_cli}, {"policy-for", plan_policy_for_cli}, {"policy-tool", plan_policy_tool_cli},
+        {"policy-text", plan_policy_text_cli}, {"review-text", plan_review_text_cli},
+    };
+    for (size_t i = 0; i < sizeof(flows) / sizeof(flows[0]); i++)
+        if (!strcmp(name, flows[i].name)) return flows[i].call;
+    return NULL;
+}
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -447,6 +459,7 @@ json_object *plan_cli(int argc, char **argv) {
     json_object *result = NULL;
     bool printed = false, compile = false;
     if (argc == 1 && !strcmp(argv[0], "schema")) return schema_command();
+    if (argc >= 1 && flow_command(argv[0])) return flow_command(argv[0])(argc, argv);
     if (argc >= 1) result = compile_dispatch(argc, argv, &compile);
     if (compile) return result ? result : plan_failure("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>", "run hydra workflow plan --help");
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {

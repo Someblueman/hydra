@@ -119,6 +119,12 @@ json_object *plan_lowered(json_object *draft, json_object *policy, json_object *
 /* Writes the report of the command check a step owns into attempt/outputs,
  * from the commit the step ran on; refuses when it did not run on its subject. */
 int plan_command_report(const char *run, const char *step, const char *attempt);
+/* The short flow's commands (plan_flow.c); each borrows argv. */
+json_object *plan_check_cli(int argc, char **argv);
+json_object *plan_policy_for_cli(int argc, char **argv);
+json_object *plan_policy_tool_cli(int argc, char **argv);
+json_object *plan_policy_text_cli(int argc, char **argv);
+json_object *plan_review_text_cli(int argc, char **argv);
 /* Prints the run driver's per-step hooks for exec steps on spawned heads. */
 int plan_hooks(json_object *compiled, FILE *out);
 /* The commit the last succeeded agent step on branch recorded: 0 when every

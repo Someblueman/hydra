@@ -97,6 +97,11 @@ workflow_plan_launch_owner() (
     fi
     exec > "$_workflow_plan_launch/owner.log" 2>&1
     workflow_atomic_scalar "$_workflow_plan_launch/state" starting || exit 1
+    if ! workflow_plan_agent_guard 'workflow plan' 'launch a plan'; then
+        workflow_plan_launch_failure "$_workflow_plan_launch"
+        workflow_atomic_scalar "$_workflow_plan_launch/state" failed
+        exit 1
+    fi
     if [ "$#" -eq 3 ] && ! workflow_plan_launch_planning "$_workflow_plan_launch" "$2" "$3"; then
         workflow_plan_launch_failure "$_workflow_plan_launch"
         workflow_atomic_scalar "$_workflow_plan_launch/state" failed
