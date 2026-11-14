@@ -86,6 +86,7 @@ def main() -> int:
     parser.add_argument("--item", action="append", help="run cases that report on this item, e.g. U6")
     parser.add_argument("--columns", type=int, nargs="+", help="restrict to these widths where a case offers them")
     parser.add_argument("--list", action="store_true", help="list cases and exit")
+    parser.add_argument("--prefix", type=Path, help="reuse an installed prefix (development only, never for a report)")
     args = parser.parse_args()
     if not __debug__:
         parser.error("Run without Python optimization so outcome assertions remain enabled")
@@ -107,7 +108,13 @@ def main() -> int:
                         "Screen-only discoverability trial", "Authorized remote host", "macOS terminal apps"],
     }
     try:
-        prefix = install(source, output)
+        if args.prefix:
+            prefix = args.prefix.resolve()
+            if not (prefix / "bin/hydra").exists():
+                raise RuntimeError(f"no installed hydra under {prefix}")
+            result["mode"] += " (reused prefix; not a release report)"
+        else:
+            prefix = install(source, output)
         result["installed_hashes"] = usability.tree(prefix)
         result["source_files"] = {
             str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
