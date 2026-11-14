@@ -61,7 +61,6 @@ static bool move_workspace_selection(struct app *app, int direction) {
 void move_selection(struct app *app, int direction) {
     size_t index;
     if (move_workspace_selection(app, direction)) return;
-    if (app->view == 3) { bounded_selection(&app->recovery_selected, app->model.recovery_count, direction); return; }
     if (app->view <= 4) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
     retarget_selection(app);
     if (selected_head(app) == NULL) return;

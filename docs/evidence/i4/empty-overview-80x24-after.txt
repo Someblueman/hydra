@@ -1,5 +1,5 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details  3 Overview  4 Attention 5 Recovery …      OVERVIEW 
+ ◆ hydra  1 Work 2 Details  3 Overview  4 Inbox · 5 Flows 6 Stats …   OVERVIEW 
                                                      Local · no agent work yet 
  Overview ──────────────────────────────────────────────────────────────────── 
                                                                                

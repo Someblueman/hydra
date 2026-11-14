@@ -1,5 +1,5 @@
 FRAME 1 80x24
- ◆ hydra  1 Work  2 Details  3 Overview 4 Attention 5 Recovery …       DETAILS 
+ ◆ hydra  1 Work  2 Details  3 Overview 4 Inbox 11 5 Flows 6 Stats …   DETAILS 
                   Local · 3 heads · 1 running · 3 need attention · 4 to repair 
  Details: feature-live ─────────────────────────────────────────────────────── 
   feature-live                                                                 

@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  11 5 Flows 6 Stats …     INBOX 
+                  Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Needs you ──────────────────────────────────────────────── 11 · enter opens ──
+ Decisions 3                                                                   
+ ▌◐ Approve publish: docs-sweep                                                
+ ▌  run run_docs · step publish · attempt 1 · new                              
+  ◐ Approval gates: feature-live                                               
+    1 of 2 approved · : approvals lists them                                   
+  ◐ Approval gates: feature-stale                                              
+    0 of 1 approved · : approvals lists them                                   
+ Failed 1                                                                      
+  ✗ Check failed: cache-plan                                                   
+    run run_cache · step test · requirement R2 · attempt 1 · new               
+ Ready for review 1                                                            
+  ✓ Result ready: docs sweep                                                   
+    run run_docs · step write · attempt 1 · new                                
+ Agents 2                                                                      
+  ▲ Terminal stopped: feature-stale                                            
+    worktree and files kept · R restarts it                                    
+  ? State unknown: feature-unavailable                                         
+    Hydra cannot read whether its terminal runs · o opens it                   
+                                                                               
+  ● live   11 items need you · decisions first, then failures                  
+ ↑/↓ select • enter open • Y approve • N reject • r review • ? help • q quit   

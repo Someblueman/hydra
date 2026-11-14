@@ -258,7 +258,7 @@ static void screen_case(struct app *app, const char *label, enum onb_screen scre
     keep(label, cols, rows, frame);
     for (i = 0; i < count; i++) if (!strstr(all, must[i])) { ok = false; fprintf(stderr, "  missing: %s\n", must[i]); }
     snprintf(name, sizeof(name), "%s screen at %dx%d shows what it must and fits", label, cols, rows);
-    check(ok && fits(frame, cols) && strstr(frame, " 9 Hosts "), name);
+    check(ok && fits(frame, cols) && strstr(frame, " 8 Hosts "), name);
 }
 
 static void screens_at(struct app *app, int cols, int rows) {

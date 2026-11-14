@@ -1,20 +1,20 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview   4 Attention   5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts              ATTENTION 
+ ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                INBOX 
                                                                               Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  ATTENTION                                                                                                                                
-  Attention is unavailable right now.                                                                                                      
-  Why         Attention unavailable; no valid snapshot yet                                                                                 
+ Needs you ───────────────────────────────────── 1 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Attention unavailable; no valid snapshot yet                    ▲ Terminal stopped: notes-cleanup                                         
+ Nothing is decided or acknowledged by looking; ctrl+r reads …   worktree and files kept · R restarts it                                   
+ Agents 1                                                                                                                                  
+ ▌▲ Terminal stopped: notes-cleanup                              What happened                                                             
+ ▌  worktree and files kept · R restarts it                      The terminal session for notes-cleanup is no longer running. Its worktree 
+                                                                 and files are kept; nothing was removed from the repository. R restarts   
+                                                                 its terminal and agent in the same worktree (hydra resume --terminal); o  
+                                                                 opens the head in Work.                                                   
                                                                                                                                            
-  Nothing can be listed until a valid attention snapshot is read. Press I to refresh; nothing is decided or acknowledged by looking.       
+                                                                 Head        notes-cleanup                                                 
+                                                                 Agent       claude                                                        
                                                                                                                                            
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                 R Restart terminal    c Run check    o Open in Work                       
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   ● live                                                                                                                                   
- ↑/↓ select • enter details • r review • s mark seen • tab/shift+tab views • : more actions • esc back • ? help • q quit                   
+ ↑/↓ select • enter open • R resume • o open in Work • c run check • tab/shift+tab pane • [/] page • : more actions • ? help • q quit      

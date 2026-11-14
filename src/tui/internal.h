@@ -357,8 +357,6 @@ void action_capture_reap(struct app *app);
 void remove_heads_action(struct app *app);
 void new_task_action(struct app *app);
 void new_task_attach(struct app *app);
-void recovery_check_action(struct app *app);
-void recovery_remove_action(struct app *app);
 void remove_key_action(struct app *app);
 void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
@@ -457,20 +455,25 @@ void native_activity_destroy(struct app *app);
 void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
 void native_attention_read(struct app *app);
+/* Whether a refresh reads attention: always while Inbox is shown, otherwise
+ * every 15 s for its badge, and not when the store says nothing changed. */
+bool native_observations_attention_due(struct app *app, time_t last);
 bool native_attention_run_request(const struct app *app, const char *run, char *request, size_t size,
                                   char *step, size_t step_size);
-bool native_attention_key(struct app *app, char key);
-void render_attention(struct app *app);
 bool native_links_accept(struct app *app, FILE *input);
 bool native_attention_load(struct app *app, const char *path);
 bool native_attention_detail_open(const struct app *app);
 bool native_attention_listed(const struct app *app);
-const char *native_review_hints(const struct app *app, bool narrow);
 bool native_attention_review_load(struct app *app, const char *path);
 /* Headless fixtures replay keys through the interactive dispatcher. */
 void headless_key(struct app *app, char key);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);
+/* Remote task decisions outside Work (Inbox): the refusal reason for key
+ * (Y, N, R or X) on a task, or NULL; and the task as observed now when it is
+ * still exactly the one confirmed, else NULL. */
+const char *native_fleet_task_refusal(const struct app *app, const struct task_observation *task, char key);
+const struct task_observation *native_fleet_task_current(const struct app *app, const struct task_observation *target);
 bool native_fleet_control_submit(struct app *app, const struct task_observation *task,
                                  const char *action, const char *request, const char *trust);
 bool native_fleet_control_key(struct app *app, char key, const char *action);
@@ -495,6 +498,7 @@ void native_plan_execute(struct app *app);
 void native_plan_request_changes(struct app *app);
 void native_plan_import(struct app *app);
 void native_plan_proposal(struct app *app);
+bool native_plan_proposal_load(struct app *app, const char *branch);
 void native_plan_validate(struct app *app);
 /* Planning actions (plan_actions.c): what screens and keys call. */
 void plan_action_load_proposal(struct app *app);
@@ -503,6 +507,18 @@ void plan_action_validate(struct app *app);
 void plan_action_request_changes(struct app *app);
 void plan_action_approve(struct app *app);
 void plan_actions_tick(struct app *app);
+void plan_action_review(struct app *app, const char *run);
+void plan_action_status(struct app *app, const char *run);
+void plan_action_land(struct app *app, const char *worker);
+/* A plan the head's agent published under planning (its draft's stat), not
+ * sent back; Inbox lists it as "Plan ready". */
+bool plan_action_published(const char *planning, struct stat *draft);
+/* Inbox on a published plan: open it under the guided policy and approve
+ * exactly that revision (Y), or send it back with feedback (F). */
+void plan_action_approve_published(struct app *app, const char *branch);
+void plan_action_return_published(struct app *app, const char *branch);
+/* Inbox F on a failure: feedback typed into the planning agent's conversation. */
+void plan_action_return_failure(struct app *app, const char *branch, const char *run, const char *what);
 bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);

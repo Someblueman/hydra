@@ -1,5 +1,5 @@
 FRAME 1 80x24
- ◆ hydra  2 Details 3 Overview 4 Attention 5 Recovery  6 Flows  …    WORKFLOWS 
+ ◆ hydra  1 Work 2 Details 3 Overview 4 Inbox ·  5 Flows  6 Stats    WORKFLOWS 
      Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
  Workflows ─────────────────────────────────────────────────────────────────── 
    kill-dry-run / succeeded / run 1 of 1                                       

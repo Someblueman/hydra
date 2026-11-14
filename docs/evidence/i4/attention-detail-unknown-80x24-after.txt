@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  8 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  ATTENTION DETAIL                                                             
-  Needs inspection · index-rebuild · on archive                                
-  Status      New: not marked seen yet.                                        
-  Why         This item could not be classified by Hydra (provider_question).  
-              Inspect its records before acting.                               
-  Next        r shows the records Hydra could read; inspect them before        
-              acting.                                                          
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ ▲ Needs inspection: index-rebuild                                             
+ run run_aa11bb22cc33 · on archive                                             
                                                                                
-  IDENTITY                                                                     
-  Kind        question · provider_ques Source      fleet overview              
-  Project     project_7f3a             Host        archive                     
-  Task        task_9e8d7c6b            Run         run_aa11bb22cc33            
-  Step        -                        Attempt     -                           
-  Head        head_a7b9c1d3            Instance    instance_a7b9c1d3           
-  Request     -                        Binding     -                           
-  Freshness   unknown                                                          
-  Route       unavailable · not navigable                                      
-  Revision   1111111111111111111111111111111111111111111111111111111111111111  
+ What is waiting                                                               
+ This item could not be classified by Hydra (provider_question). Inspect its   
+ records before acting.                                                        
                                                                                
-  ● live                                                                       
- ↑/↓ select • enter details • r review • s mark seen • ? help • q quit         
+ Run         run_aa11bb22cc33                                                  
+ Task        task_9e8d7c6b                                                     
+ Host        archive                                                           
+ Status      New: not marked seen yet.                                         
+ Next        r shows the records Hydra could read; inspect them before acting. 
+                                                                               
+ r Review    s Seen                                                            
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ select • enter open • r review • s seen • ? help • q quit                 

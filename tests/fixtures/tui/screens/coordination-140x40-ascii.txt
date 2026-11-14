@@ -1,5 +1,5 @@
 FRAME 1 140x40
- # hydra  1 Work 2 Details  3 Coordination  4 Overview 5 Attention 6 Recovery 7 Workflows 8 Statistics 9 Workspace 1 Hos      COORDINATION 
+ # hydra  1 Work  2 Details   3 Coordination   4 Overview  5 Inbox 11  6 Workflows  7 Statistics  8 Workspace  9 Hosts        COORDINATION 
                                                                               Local / 3 heads / 1 running / 3 need attention / 4 to repair 
  Coordination ---------------------------------------------------------------------------------------------------------------------------- 
   COORDINATION  feature-live                                                                                                               

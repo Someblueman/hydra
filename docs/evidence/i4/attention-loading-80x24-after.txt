@@ -1,14 +1,14 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  · 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  ATTENTION                                                                    
-  Loading what needs you...                                                    
+ Needs you ───────────────────────────────────────────────── 1 · enter opens ──
+ ◌ Reading what needs you…                                                     
+ Agents 1                                                                      
+ ▌▲ Terminal stopped: notes-cleanup                                            
+ ▌  worktree and files kept · R restarts it                                    
                                                                                
-  Hydra is reading the approval requests, failed checks and sealed results of  
-  this project's runs and, when hosts are registered, of remote work. The      
-  list appears when the read completes; nothing is decided or acknowledged by  
-  looking.                                                                     
+                                                                               
+                                                                               
                                                                                
                                                                                
                                                                                
@@ -22,4 +22,4 @@ FRAME 1 80x24
                                                                                
                                                                                
   ● live                                                                       
- ↑/↓ select • enter details • r review • s mark seen • ? help • q quit         
+ ↑/↓ select • enter open • R resume • c run check • ? help • q quit            

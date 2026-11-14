@@ -7,8 +7,9 @@
 static bool bound_spec(const char *digest) {
     return strlen(digest) == 64 && strspn(digest, "0123456789abcdef") == 64;
 }
-static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
-    if (app->view != 0 && app->view != 1 && app->view != 4) return "Select a remote task in Work or Overview before using task controls.";
+/* Why a decision or control on this remote task cannot be sent now, or NULL:
+ * only a fresh observation of a task in the matching state authorizes one. */
+const char *native_fleet_task_refusal(const struct app *app, const struct task_observation *task, char key) {
     if (app->remote_stale || task->retained || strcmp(task->freshness, "fresh") || !strcmp(task->state, "outcome_unknown"))
         return "Task evidence is stale or uncertain; inspect and reconcile before mutating.";
     if (key == 'X') {
@@ -23,7 +24,11 @@ static const char *disabled_reason(const struct app *app, const struct task_obse
         return "No current approval request is available; refresh receiver evidence.";
     return NULL;
 }
-static const struct task_observation *current_target(const struct app *app, const struct task_observation *target) {
+static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
+    if (app->view != 0 && app->view != 1 && app->view != 4) return "Select a remote task in Work or Overview before using task controls.";
+    return native_fleet_task_refusal(app, task, key);
+}
+const struct task_observation *native_fleet_task_current(const struct app *app, const struct task_observation *target) {
     for (size_t i = 0; i < app->model.task_count; i++) {
         const struct task_observation *current = &app->model.tasks[i];
         if (strcmp(current->host, target->host) || strcmp(current->task_id, target->task_id)) continue;
@@ -56,7 +61,7 @@ bool native_fleet_control_key(struct app *app, char key, const char *action) {
     const char *reason = disabled_reason(app, &target, key);
     if (reason) { copy_text(app->notice, sizeof(app->notice), reason); return true; }
     if (!fleet_confirmed(app, key, action, &target)) return true;
-    const struct task_observation *current = current_target(app, &target);
+    const struct task_observation *current = native_fleet_task_current(app, &target);
     if (!current || disabled_reason(app, current, key)) {
         copy_text(app->notice, sizeof(app->notice), "Task evidence changed during confirmation; no mutation dispatched."); return true;
     }

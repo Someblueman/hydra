@@ -1,5 +1,5 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview  4 Attention  5 Recovery  6 Workflows   7 Statistics   8 Workspace  9 Hosts             STATISTICS 
+ ◆ hydra  1 Work  2 Details  3 Overview  4 Inbox 1  5 Workflows   6 Statistics   7 Workspace  8 Hosts                           STATISTICS 
                                                                    Local · no agent work yet · Remote · 1 head on 3 hosts (1 disconnected) 
  Hosts ─────────────────────────────────────────────────────────────────────────────────────────────── latest fleet response · all hosts   
                                                                                                                                            

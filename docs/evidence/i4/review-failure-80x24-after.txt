@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  8 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  EXACT REVIEW / evidence                                                      
-  kill-dry-run · repo-check                                                    
-  Failure · run run_2cdf8bbe1a4e · attempt-1 · read-only                       
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ EXACT REVIEW / evidence                                                       
+ kill-dry-run · repo-check                                                     
+ Failure · run run_2cdf8bbe1a4e · attempt-1 · read-only                        
                                                                                
-  RESULT  kill-dry-run  -  verdict FAILED  -  run failed                       
-  Objective: add hydra kill --dry-run so a removal can be previewed without    
-      removing anything                                                        
+ RESULT  kill-dry-run  -  verdict FAILED  -  run failed                        
+ Objective: add hydra kill --dry-run so a removal can be previewed without     
+     removing anything                                                         
                                                                                
-  WHAT WAS PRODUCED                                                            
-    answer - the implementation summary (step implement, available)            
-      388 bytes                                                                
-      | Added --dry-run to hydra kill; the worktree listing is printed before  
-      | the sessions are closed.                                               
+ WHAT WAS PRODUCED                                                             
+   answer - the implementation summary (step implement, available)             
+     388 bytes                                                                 
+     | Added --dry-run to hydra kill; the worktree listing is printed before   
+     | the sessions are closed.                                                
                                                                                
-  WHAT WAS CHECKED                                                             
-    FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it would  
-        remove (check: repo-check)                                             
-    FAIL    req-no-removal - a dry run removes nothing (check: repo-check)     
+ WHAT WAS CHECKED                                                              
+   FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it would   
+       remove (check: repo-check)                                              
+   FAIL    req-no-removal - a dry run removes nothing (check: repo-check)      
                                                                                
-  ● live                                                                       
- ↑/↓ scroll • f references • i IDs • L full log • ? help • q quit              
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ scroll • space/b page • n/N section • L full log • ? help • q quit        

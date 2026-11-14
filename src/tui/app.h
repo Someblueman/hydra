@@ -33,6 +33,7 @@ struct native_evidence;
 struct native_links;
 struct native_attention;
 struct native_review;
+struct native_inbox;
 struct native_setup;
 struct native_snapshot;
 struct native_activity;
@@ -70,6 +71,7 @@ struct app {
     struct native_links *links;
     struct native_attention *attention;
     struct native_review *review;
+    struct native_inbox *inbox;
     /* In-app remote setup (U10); allocated when Hosts is first used. */
     struct native_setup *setup;
     /* Configurable keys; read through native_keys(), which fills the defaults. */
@@ -111,7 +113,7 @@ struct app {
     struct kt_toasts toasts;
     bool dialogs_ready, toasts_ready;
     /* In-app actions that failed this session (actions.c), oldest first. */
-    struct failed_action { char title[TEXT]; char output[4096]; time_t at; } failed[FAILED_ACTIONS];
+    struct failed_action { char title[TEXT]; char output[4096]; time_t at; bool dismissed; } failed[FAILED_ACTIONS];
     size_t failed_count;
     unsigned long long modal_frame_at, clock_timer;
     unsigned service_serial;

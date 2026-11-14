@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "snapshot.h"
+#include "attention.h"
+#include "inbox.h"
 /* Command-line parsing and process entry point. */
 
 static int parse_size(const char *value, int *cols, int *rows) {
@@ -19,7 +21,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
+          "  [--view statistics|workspace|overview|heads|detail|coordination|inbox|workflows|hosts]\n"
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--store|--data]\n"
@@ -33,6 +35,8 @@ static void usage(FILE *out) {
 static int parse_view(const char *name) {
     static const char *names[] = {"heads", "detail", "coordination", "recovery", "overview", "workflows", "hosts", "workspace", "statistics", "attention"};
     size_t i;
+    /* Attention and Recovery are Inbox now; their names still open it. */
+    if (!strcmp(name, "inbox") || !strcmp(name, "recovery")) return 9;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         if (!strcmp(name, names[i])) return (int)i;
     }
@@ -67,6 +71,7 @@ static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
     size_t i;
     /* An unreadable stream is a screen too: unavailable, or stale after a good one. */
     for (i = 0; i < f->attention_count; i++) (void)native_attention_load(app, f->attention[i]);
+    inbox_refresh(app);
     if (app->view == 7 && f->key_count) native_workspace_prepare(app);
     /* The first key string selects the item the review binds to; the second
      * navigates inside the review. */
@@ -108,6 +113,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     free(app->workflows);
     native_review_destroy(app);
     native_attention_destroy(app);
+    inbox_destroy(app);
     native_workspace_destroy(app);
     native_onboarding_destroy(app);
     statistics_destroy(app);
@@ -256,6 +262,7 @@ int main(int argc, char **argv) {
     native_observations_destroy(&app);
     native_activity_destroy(&app);
     native_attention_destroy(&app);
+    inbox_destroy(&app);
     native_plan_destroy(&app);
     native_setup_destroy(&app);
     native_onboarding_destroy(&app);

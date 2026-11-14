@@ -62,7 +62,7 @@ case "${1:-}:${2:-}" in
         ;;
     workflow:tui-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
-        cat "$fixture_dir/workflow-v1.tsv"
+        cat "${HYDRA_TEST_WORKFLOW_FIXTURE:-$fixture_dir/workflow-v1.tsv}"
         ;;
     tui:--remote-data)
         # The remote observation beside the local one; absent unless a test
@@ -74,6 +74,14 @@ case "${1:-}:${2:-}" in
         else
             cat "$HYDRA_TEST_REMOTE_FIXTURE"
         fi
+        ;;
+    workflow:--workspace-control)
+        # Inbox decisions: the exact argv the control owner receives.
+        if [ -n "${HYDRA_TEST_CONTROL_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_CONTROL_ARGV"; fi
+        ;;
+    resume:--terminal)
+        if [ -n "${HYDRA_TEST_RESUME_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_RESUME_ARGV"; fi
+        printf 'Terminal restarted for %s\n' "${3:-}"
         ;;
     workflow:attention-data|fleet:attention-data|tui:--attention-data)
         if [ -n "${HYDRA_TEST_ATTENTION_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_ATTENTION_FAIL_FILE" ]; then exit 1; fi
@@ -133,6 +141,14 @@ case "${1:-}:${2:-}" in
         ;;
     kill:*)
         printf 'FAKE KILL %s\n' "$*"
+        ;;
+    land:*)
+        if [ -n "${HYDRA_TEST_LAND_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_LAND_ARGV"; fi
+        printf 'Landed %s\n' "${2:-}"
+        ;;
+    gate:approve)
+        if [ -n "${HYDRA_TEST_GATE_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_GATE_ARGV"; fi
+        printf 'Gate approved\n'
         ;;
     gc:*)
         printf 'FAKE GC'

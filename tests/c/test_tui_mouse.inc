@@ -36,14 +36,18 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     mouse_input(&session, overlong);
     write_input(session.master, "k", 1U);
     result(wait_for_marker(&session, "\xe2\x96\x8c  feature-live", 1000), "overlong mouse report drains without breaking the next key");
-    mouse_input(&session, "\033[<0;57;1M"); /* the Recovery tab */
-    result(wait_for_marker(&session, "RECOVERY  4", 1000), "click Recovery changes view");
-    mouse_input(&session, "\033[<0;8;6M");
-    result(wait_for_marker(&session, "\xe2\x96\x8c Leftover lock", 1000), "recovery row click selects finding");
-    write_input(session.master, "d", 1U);
-    result(wait_for_marker(&session, "Inspect     hydra", 1000), "clicked recovery finding retains keyboard diagnostics");
+    mouse_input(&session, "\033[<0;44;1M"); /* the Inbox tab */
+    result(wait_for_markers(&session, "Needs you", "Approve S-1: T-1", 3000), "click Inbox changes view");
+    mouse_input(&session, "\033[<0;8;7M"); /* the second item's first line */
+    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "an Inbox row click selects its item");
+    mouse_input(&session, "\033[<0;8;8M"); /* its second line */
+    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "either line of a two-line item selects it");
+    mouse_input(&session, "\033[<65;8;7M");
+    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "wheel down in Inbox has keyboard selection parity");
+    write_input(session.master, "\r", 1U);
+    result(wait_for_marker(&session, "has approval gates", 1000), "Enter opens the clicked item's detail");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "\xe2\x96\x8c Leftover lock", 1000), "Escape closes the finding explanation and stays in Recovery");
+    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "Escape closes the detail and keeps the selection");
     sleep_ms(60);
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "Heads in this project", 1000), "a second Escape returns to Work");

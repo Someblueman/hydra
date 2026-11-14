@@ -1,41 +1,41 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview   4 Attention   5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts              ATTENTION 
+ ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  8  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                INBOX 
                                                                               Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  EXACT REVIEW / evidence                                                                                                                  
-  kill-dry-run · implement                                                                                                                 
-  Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                    
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     EXACT REVIEW / evidence                                                   
+  ◐ Approve merge-gate: notes-cleanup                            kill-dry-run · implement                                                  
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                     
+ Failed 1                                                                                                                                  
+  ✗ Check failed: kill-dry-run                                   RESULT  kill-dry-run  -  verdict PASS  -  run succeeded                   
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    Objective: add hydra kill --dry-run so a removal can be previewed without 
+ Ready for review 3                                                  removing anything                                                     
+ ▌✓ Result ready: kill-dry-run                                                                                                             
+ ▌  run run_2cdf8bbe1a4e · step implement · attempt 1 · new      WHAT WAS PRODUCED                                                         
+  ✓ Result ready: feature-build                                    answer - the implementation summary (step implement, available)         
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…        412 bytes                                                             
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…        | Added --dry-run to hydra kill. It lists the heads, worktrees and    
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new              tmux                                                              
+ Agents 1                                                            | sessions a removal would touch and exits 0 without changing         
+  ▲ Terminal stopped: notes-cleanup                                      anything.                                                         
+    worktree and files kept · R restarts it                                                                                                
+ Repairs 2                                                       WHAT WAS CHECKED                                                          
+  ▲ (stale) Approval expired: docs-refresh                         PASS    req-dry-run-flag - kill accepts --dry-run and lists what it     
+    run run_55aa66bb77cc · step release-gate · attempt 1               would remove (check: dry-run-lists)                                 
+  ▲ Needs inspection: index-rebuild                                PASS    req-no-removal - a dry run removes nothing (check:              
+    run run_aa11bb22cc33 · on archive                                  nothing-removed)                                                    
                                                                                                                                            
-  RESULT  kill-dry-run  -  verdict PASS  -  run succeeded                                                                                  
-  Objective: add hydra kill --dry-run so a removal can be previewed without removing anything                                              
-                                                                                                                                           
-  WHAT WAS PRODUCED                                                                                                                        
-    answer - the implementation summary (step implement, available)                                                                        
-      412 bytes                                                                                                                            
-      | Added --dry-run to hydra kill. It lists the heads, worktrees and tmux                                                              
-      | sessions a removal would touch and exits 0 without changing anything.                                                              
-                                                                                                                                           
-  WHAT WAS CHECKED                                                                                                                         
-    PASS    req-dry-run-flag - kill accepts --dry-run and lists what it would remove (check: dry-run-lists)                                
-    PASS    req-no-removal - a dry run removes nothing (check: nothing-removed)                                                            
-                                                                                                                                           
-  HOW IT WAS VERIFIED                                                                                                                      
-    Check dry-run-lists (command): the kill dry-run test suite                                                                             
-      Ran: sh tests/test_kill_dry_run.sh                                                                                                   
-      On head kill-dry-run-check in step verify, exit code 0                                                                               
-      Report: pass (verified) - 12 cases passed, 0 failed                                                                                  
-      Summary lines from the output:                                                                                                       
-        Tests: 12, Passed: 12, Failed: 0                                                                                                   
-      Full log (18230 bytes): press L - /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/output.log                   
-    Check nothing-removed (command): the worktree list is unchanged after a dry run                                                        
-      Ran: sh tests/test_kill_dry_run.sh --unchanged                                                                                       
-      On head kill-dry-run-check in step verify, exit code 0                                                                               
-      Report: pass (verified) - 1 case passed                                                                                              
-                                                                                                                                           
-  STEPS  (state, duration, attempts)                                                                                                       
-    spawn-worker       spawn  succeeded  5s           attempts 1, head kill-dry-run-worker                                                 
-    implement          exec   succeeded  1m06s        attempts 1, head kill-dry-run-worker                                                 
-        agent codex, version codex-cli 0.46.0, model gpt-6-sol, effort xhigh                                                               
-                                                                                                                                           
-  ● live                                                                                                                                   
- ↑/↓ scroll • n/N section • f references • i IDs • enter open reference • L full log • l–p add log/transcript/PR • ? help • q quit         
+                                                                 HOW IT WAS VERIFIED                                                       
+                                                                   Check dry-run-lists (command): the kill dry-run test suite              
+                                                                     Ran: sh tests/test_kill_dry_run.sh                                    
+                                                                     On head kill-dry-run-check in step verify, exit code 0                
+                                                                     Report: pass (verified) - 12 cases passed, 0 failed                   
+                                                                     Summary lines from the output:                                        
+                                                                       Tests: 12, Passed: 12, Failed: 0                                    
+                                                                     Full log (18230 bytes): press L -                                     
+                                                                         /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attemp
+                                                                         t-1/output.log                                                    
+                                                                   Check nothing-removed (command): the worktree list is unchanged after a 
+                                                                       dry run                                                             
+                                                                     Ran: sh tests/test_kill_dry_run.sh --unchanged                        
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ scroll • space/b page • n/N section • plus add reference • L full log • tab/shift+tab pane • [/] page • ? help • q quit               

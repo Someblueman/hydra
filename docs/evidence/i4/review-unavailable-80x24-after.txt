@@ -1,11 +1,11 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  8 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  EXACT REVIEW / evidence / UNAVAILABLE                                        
-  kill-dry-run · implement                                                     
-  Result · run run_2cdf8bbe1a4e · attempt-1 · not current                      
-  Review unavailable: failed, malformed or identity mismatch                   
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ EXACT REVIEW / evidence / UNAVAILABLE                                         
+ kill-dry-run · implement                                                      
+ Result · run run_2cdf8bbe1a4e · attempt-1 · not current                       
+ Review unavailable: failed, malformed or identity mismatch                    
                                                                                
                                                                                
                                                                                
@@ -21,5 +21,5 @@ FRAME 1 80x24
                                                                                
                                                                                
                                                                                
-  ● live                                                                       
- ↑/↓ scroll • f references • i IDs • L full log • ? help • q quit              
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ scroll • space/b page • n/N section • ? help • q quit                     

@@ -1,25 +1,25 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview  4 Attention   5 Recovery   6 Workflows  7 Statistics  8 Workspace  9 Hosts               RECOVERY 
+ ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                INBOX 
                                                                               Local · 3 heads · 1 running · 3 need attention · 4 to repair 
- Recovery ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  RECOVERY  4 findings                                                                                                                     
-  ▌ Terminal stopped: feature-stale                                                                                    files kept          
-    Leftover lock: state_project_0123456789abcdefabcd.lock                                                             safe to clear       
-    Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted chan…  cleanup preview     
-    Removal did not finish: feature-stale                                                                              finish or keep      
-  1 of 4                                                                                                                                   
-                                                                                                                                           
- Terminal stopped: feature-stale ────────────────────────────────────────────────────────────────────────────────────────────────────────  
-   The terminal session for feature-stale is no longer running. Its worktree and files are kept; nothing was removed from the              
-   repository. Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is           
-   finished.                                                                                                                               
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+ Needs you ───────────────────────────────────── 7 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ ◌ Reading what needs you…                                       ▲ Terminal stopped: feature-stale                                         
+ Decisions 2                                                     worktree and files kept · R restarts it                                   
+  ◐ Approval gates: feature-live                                                                                                           
+    1 of 2 approved · : approvals lists them                     What happened                                                             
+  ◐ Approval gates: feature-stale                                The terminal session for feature-stale is no longer running. Its worktree 
+    0 of 1 approved · : approvals lists them                     and files are kept; nothing was removed from the repository. R restarts   
+ Agents 2                                                        its terminal and agent in the same worktree (hydra resume --terminal); o  
+ ▌▲ Terminal stopped: feature-stale                              opens the head in Work.                                                   
+ ▌  worktree and files kept · R restarts it                                                                                                
+  ? State unknown: feature-unavailable                           Head        feature-stale                                                 
+    Hydra cannot read whether its terminal runs · o opens it     Agent       claude                                                        
+ Repairs 3                                                                                                                                 
+  ▲ Leftover lock: state_project_0123456789abcdefabcd.lock       R Restart terminal    c Run check    o Open in Work                       
+    no work affected; c runs its check                                                                                                     
+  ▲ Leftover worktree from a removed task: feature-old (/tmp…                                                                              
+    x removes it; the branch is kept                                                                                                       
+  ▲ Removal did not finish: feature-stale                                                                                                  
+    c shows what is left                                                                                                                   
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   ● live                                                                                                                                   
- ↑/↓ select • enter run the check • d explain • tab/shift+tab views • : more actions • esc back • ? help • q quit                          
+ ↑/↓ select • enter open • R resume • o open in Work • c run check • tab/shift+tab pane • [/] page • : more actions • ? help • q quit      

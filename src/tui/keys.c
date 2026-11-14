@@ -19,6 +19,8 @@
 #define G_ALL "Everywhere"
 #define G_STATS "Stats"
 #define G_FILTER "Filter"
+#define G_INBOX "Inbox"
+#define G_REVIEW "Review"
 #define ROW(id, key_scope, key_name, text, key_group, rank) \
     [id] = {.name = key_name, .label = text, .action = id, .scope = key_scope, .group = key_group, .priority = rank}
 #define T KEY_SCOPE_TERMINAL
@@ -52,32 +54,36 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_HELP_PAGE_DOWN, KEY_SCOPE_HELP, "help.page-down", "page", "Help", 3),
     ROW(KEY_HELP_CLOSE, KEY_SCOPE_HELP, "help.close", "close help", "Help", 9),
 
-    ROW(KEY_REVIEW_UP, KEY_SCOPE_REVIEW, "review.up", "scroll", "Review", 9),
-    ROW(KEY_REVIEW_DOWN, KEY_SCOPE_REVIEW, "review.down", "scroll", "Review", 9),
-    ROW(KEY_REVIEW_PAGE_DOWN, KEY_SCOPE_REVIEW, "review.page-down", "page", "Review", 2),
-    ROW(KEY_REVIEW_PAGE_UP, KEY_SCOPE_REVIEW, "review.page-up", "page", "Review", 2),
-    ROW(KEY_REVIEW_TOP, KEY_SCOPE_REVIEW, "review.top", "top/end", "Review", -1),
-    ROW(KEY_REVIEW_END, KEY_SCOPE_REVIEW, "review.end", "top/end", "Review", -1),
-    ROW(KEY_REVIEW_NEXT_SECTION, KEY_SCOPE_REVIEW, "review.next-section", "section", "Review", 3),
-    ROW(KEY_REVIEW_PREVIOUS_SECTION, KEY_SCOPE_REVIEW, "review.previous-section", "section", "Review", 3),
-    ROW(KEY_REVIEW_REFERENCES, KEY_SCOPE_REVIEW, "review.references", "references", "Review", 6),
-    ROW(KEY_REVIEW_IDENTITY, KEY_SCOPE_REVIEW, "review.identity", "IDs", "Review", 7),
-    ROW(KEY_REVIEW_OPEN, KEY_SCOPE_REVIEW, "review.open", "open reference", "Review", 4),
-    ROW(KEY_REVIEW_LOG, KEY_SCOPE_REVIEW, "review.log", "full log", "Review", 5),
-    ROW(KEY_REVIEW_SUPPLY_LOG, KEY_SCOPE_REVIEW, "review.supply-log", "add log/transcript/PR", "Review", 5),
-    ROW(KEY_REVIEW_SUPPLY_TRANSCRIPT, KEY_SCOPE_REVIEW, "review.supply-transcript", "add log/transcript/PR", "Review", 5),
-    ROW(KEY_REVIEW_SUPPLY_PR, KEY_SCOPE_REVIEW, "review.supply-pr", "add log/transcript/PR", "Review", 5),
-    ROW(KEY_REVIEW_PREVIOUS_ITEM, KEY_SCOPE_REVIEW, "review.previous-item", "item", "Review", -1),
-    ROW(KEY_REVIEW_NEXT_ITEM, KEY_SCOPE_REVIEW, "review.next-item", "item", "Review", -1),
-    ROW(KEY_REVIEW_RELOAD, KEY_SCOPE_REVIEW, "review.reload", "read again", "Review", -1),
+    ROW(KEY_REVIEW_UP, KEY_SCOPE_REVIEW, "review.up", "scroll", G_REVIEW, 9),
+    ROW(KEY_REVIEW_DOWN, KEY_SCOPE_REVIEW, "review.down", "scroll", G_REVIEW, 9),
+    ROW(KEY_REVIEW_PAGE_DOWN, KEY_SCOPE_REVIEW, "review.page-down", "page", G_REVIEW, 7),
+    ROW(KEY_REVIEW_PAGE_UP, KEY_SCOPE_REVIEW, "review.page-up", "page", G_REVIEW, 7),
+    ROW(KEY_REVIEW_TOP, KEY_SCOPE_REVIEW, "review.top", "top/end", G_REVIEW, -1),
+    ROW(KEY_REVIEW_END, KEY_SCOPE_REVIEW, "review.end", "top/end", G_REVIEW, -1),
+    ROW(KEY_REVIEW_NEXT_SECTION, KEY_SCOPE_REVIEW, "review.next-section", "section", G_REVIEW, 6),
+    ROW(KEY_REVIEW_PREVIOUS_SECTION, KEY_SCOPE_REVIEW, "review.previous-section", "section", G_REVIEW, 6),
+    ROW(KEY_REVIEW_OPEN, KEY_SCOPE_REVIEW, "review.open", "open reference", G_REVIEW, 6),
+    ROW(KEY_REVIEW_REFERENCE, KEY_SCOPE_REVIEW, "review.reference", "add reference", G_REVIEW, 5),
+    ROW(KEY_REVIEW_LOG, KEY_SCOPE_REVIEW, "review.log", "full log", G_REVIEW, 6),
+    ROW(KEY_REVIEW_RELOAD, KEY_SCOPE_REVIEW, "review.reload", "read again", G_REVIEW, -1),
 
-    ROW(KEY_ATTENTION_UP, KEY_SCOPE_ATTENTION, "attention.up", "select", "Attention", 9),
-    ROW(KEY_ATTENTION_DOWN, KEY_SCOPE_ATTENTION, "attention.down", "select", "Attention", 9),
-    ROW(KEY_ATTENTION_OPEN, KEY_SCOPE_ATTENTION, "attention.open", "details", "Attention", 8),
-    ROW(KEY_ATTENTION_REVIEW, KEY_SCOPE_ATTENTION, "attention.review", "review", "Attention", 7),
-    ROW(KEY_ATTENTION_SEEN, KEY_SCOPE_ATTENTION, "attention.seen", "mark seen", "Attention", 6),
-    ROW(KEY_ATTENTION_PAGE_DOWN, KEY_SCOPE_ATTENTION, "attention.page-down", "scroll", "Attention", 4),
-    ROW(KEY_ATTENTION_PAGE_UP, KEY_SCOPE_ATTENTION, "attention.page-up", "scroll", "Attention", 4),
+    ROW(KEY_INBOX_UP, KEY_SCOPE_INBOX, "inbox.up", "select", G_INBOX, 9),
+    ROW(KEY_INBOX_DOWN, KEY_SCOPE_INBOX, "inbox.down", "select", G_INBOX, 9),
+    ROW(KEY_INBOX_OPEN, KEY_SCOPE_INBOX, "inbox.open", "open", G_INBOX, 8),
+    ROW(KEY_INBOX_APPROVE, KEY_SCOPE_INBOX, "inbox.approve", "approve", G_INBOX, 8),
+    ROW(KEY_INBOX_REJECT, KEY_SCOPE_INBOX, "inbox.reject", "reject", G_INBOX, 8),
+    ROW(KEY_INBOX_REVIEW, KEY_SCOPE_INBOX, "inbox.review", "review", G_INBOX, 7),
+    ROW(KEY_INBOX_SEEN, KEY_SCOPE_INBOX, "inbox.seen", "seen", G_INBOX, 7),
+    ROW(KEY_INBOX_RESUME, KEY_SCOPE_INBOX, "inbox.resume", "resume", G_INBOX, 7),
+    ROW(KEY_INBOX_RETURN, KEY_SCOPE_INBOX, "inbox.return", "request changes", G_INBOX, 6),
+    ROW(KEY_INBOX_LAND, KEY_SCOPE_INBOX, "inbox.land", "land", G_INBOX, 6),
+    ROW(KEY_INBOX_GOTO, KEY_SCOPE_INBOX, "inbox.goto", "open in Work", G_INBOX, 5),
+    ROW(KEY_INBOX_CHECK, KEY_SCOPE_INBOX, "inbox.check", "run check", G_INBOX, 7),
+    ROW(KEY_INBOX_REMOVE, KEY_SCOPE_INBOX, "inbox.remove", "remove", G_INBOX, 6),
+    ROW(KEY_INBOX_PANE, KEY_SCOPE_INBOX | KEY_SCOPE_REVIEW, "inbox.pane", "pane", G_INBOX, 3),
+    ROW(KEY_INBOX_PANE_BACK, KEY_SCOPE_INBOX | KEY_SCOPE_REVIEW, "inbox.pane-previous", "pane", G_INBOX, 3),
+    ROW(KEY_INBOX_PAGE_PREVIOUS, KEY_SCOPE_INBOX_PAGES, "inbox.page-previous", "page", G_INBOX, 3),
+    ROW(KEY_INBOX_PAGE_NEXT, KEY_SCOPE_INBOX_PAGES, "inbox.page-next", "page", G_INBOX, 3),
 
     ROW(KEY_STATS_UP, KEY_SCOPE_STATISTICS, "statistics.up", "select", G_STATS, 9),
     ROW(KEY_STATS_DOWN, KEY_SCOPE_STATISTICS, "statistics.down", "select", G_STATS, 9),
@@ -112,12 +118,6 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_HOSTS_REMOVE, KEY_SCOPE_HOSTS, "hosts.remove", "remove", "Hosts", 6),
     ROW(KEY_HOSTS_RETRY, KEY_SCOPE_HOSTS, "hosts.retry", "observe again", "Hosts", 5),
     ROW(KEY_HOSTS_ONBOARDING, KEY_SCOPE_HOSTS, "hosts.onboarding", "onboarding", "Hosts", 5),
-
-    ROW(KEY_RECOVERY_UP, KEY_SCOPE_RECOVERY, "recovery.up", "select", "Recovery", 9),
-    ROW(KEY_RECOVERY_DOWN, KEY_SCOPE_RECOVERY, "recovery.down", "select", "Recovery", 9),
-    ROW(KEY_RECOVERY_CHECK, KEY_SCOPE_RECOVERY, "recovery.check", "run the check", "Recovery", 8),
-    ROW(KEY_RECOVERY_REMOVE, KEY_SCOPE_RECOVERY, "recovery.remove", "remove", "Recovery", 7),
-    ROW(KEY_RECOVERY_EXPLAIN, KEY_SCOPE_RECOVERY, "recovery.explain", "explain", "Recovery", 6),
 
     ROW(KEY_FLOW_UP, KEY_SCOPE_WORKFLOWS, "workflows.up", "step", "Workflows", 9),
     ROW(KEY_FLOW_DOWN, KEY_SCOPE_WORKFLOWS, "workflows.down", "step", "Workflows", 9),
@@ -199,7 +199,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_VIEW_OVERVIEW, KEY_SCOPE_JUMPS, "view.overview", "overview", G_ALL, -1),
     ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_FLOW_JUMP, "view.workflows", "workflows", G_ALL, -1),
     ROW(KEY_VIEW_HOSTS, KEY_SCOPE_JUMPS, "view.hosts", "hosts", G_ALL, -1),
-    ROW(KEY_VIEW_ATTENTION, KEY_SCOPE_JUMPS, "view.attention", "attention", G_ALL, -1),
+    ROW(KEY_VIEW_ATTENTION, KEY_SCOPE_JUMPS, "view.attention", "inbox", G_ALL, -1),
     ROW(KEY_VIEW_STATS, KEY_SCOPE_JUMPS, "view.stats", "statistics", G_ALL, -1),
     ROW(KEY_THEME, KEY_SCOPE_JUMPS, "app.theme", "theme", G_ALL, -1),
     ROW(KEY_PALETTE, KEY_SCOPE_GLOBAL, "app.actions", "more actions", G_ALL, 3),
@@ -218,7 +218,8 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
  * its name, so keys files of earlier versions still load. */
 enum { MODE_BOTH, MODE_LOCAL, MODE_RETIRED };
 static const unsigned char key_modes[KEY_ACTIONS] = {
-    [KEY_REVIEW_SUPPLY_LOG] = MODE_BOTH,
+    [KEY_INBOX_RETURN] = MODE_LOCAL, [KEY_INBOX_REMOVE] = MODE_LOCAL, [KEY_INBOX_LAND] = MODE_LOCAL,
+    [KEY_INBOX_CHECK] = MODE_LOCAL,
     [KEY_STATS_PAGE_PREVIOUS] = MODE_LOCAL, [KEY_STATS_PAGE_NEXT] = MODE_LOCAL, [KEY_STATS_GRAPH] = MODE_LOCAL,
     [KEY_STATS_RANGE] = MODE_LOCAL, [KEY_STATS_METRIC] = MODE_LOCAL, [KEY_STATS_WORKFLOW] = MODE_LOCAL,
     [KEY_STATS_COHORTS] = MODE_LOCAL, [KEY_STATS_LOCATION] = MODE_LOCAL,
@@ -251,11 +252,11 @@ static const char default_keys[] =
     "help.up = up, k\nhelp.down = down, j\nhelp.page-up = pgup, b\nhelp.page-down = pgdn, space\nhelp.close = ?, esc\n"
     "review.up = up, k\nreview.down = down, j\nreview.page-down = space, pgdn\nreview.page-up = b, pgup\n"
     "review.top = g\nreview.end = G\nreview.next-section = n\nreview.previous-section = N\n"
-    "review.references = f\nreview.identity = i\nreview.open = enter, o\nreview.log = L\n"
-    "review.supply-log = l\nreview.supply-transcript = t\nreview.supply-pr = p\n"
-    "review.previous-item = [\nreview.next-item = ]\nreview.reload = r\n"
-    "attention.up = up, k\nattention.down = down, j\nattention.open = enter\nattention.review = r\nattention.seen = s\n"
-    "attention.page-down = space, pgdn\nattention.page-up = b, pgup\n"
+    "review.open = enter\nreview.reference = +\nreview.log = L\nreview.reload = r\n"
+    "inbox.up = up, k\ninbox.down = down, j\ninbox.open = enter\ninbox.approve = Y\ninbox.reject = N\n"
+    "inbox.review = r\ninbox.seen = s\ninbox.resume = R\ninbox.return = F\ninbox.land = L\ninbox.goto = o\n"
+    "inbox.check = c\ninbox.remove = x\ninbox.pane = tab\ninbox.pane-previous = shift+tab\n"
+    "inbox.page-previous = [\ninbox.page-next = ]\n"
     "statistics.up = up, k\nstatistics.down = down, j\nstatistics.open = enter\n"
     "statistics.page-previous = [\nstatistics.page-next = ]\nstatistics.range = T\nstatistics.filter = /\n"
     "statistics.graph = g\nstatistics.pane = tab, shift+tab\nstatistics.workflow = w\nstatistics.metric = M\n"
@@ -266,7 +267,6 @@ static const char default_keys[] =
     "statistics.find = /\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
     "hosts.retry = r\nhosts.onboarding = O\n"
-    "recovery.up = up, k\nrecovery.down = down, j\nrecovery.check = enter\nrecovery.remove = x\nrecovery.explain = d\n"
     "workflows.up = up, k\nworkflows.down = down, j\nworkflows.previous-run = [\nworkflows.next-run = ]\n"
     "workflows.pan-left = left, h\nworkflows.pan-right = right, l\nworkflows.pan-up = K\nworkflows.pan-down = J\n"
     "workflows.follow = enter\n"

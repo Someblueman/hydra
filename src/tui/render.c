@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "fleet_budget.h"
+#include "attention.h"
+#include "inbox.h"
 /* One frame canvas serves every view. Views draw into it; the loop's runtime
  * paints only changed cells, so idle refreshes never clear or flicker the screen.
  * Semantic tones stay restrained: cyan chrome, amber attention, green running. */
@@ -341,11 +343,11 @@ void pair(struct app *app, const char *left_label, const char *left, struct kt_s
 }
 
 /* Shared chrome: title row, tab row, footer rows. Tab hits are recorded for the mouse. */
-static const char *view_titles[] = {"WORK", "DETAILS", "COORDINATION", "RECOVERY", "OVERVIEW", "WORKFLOWS", "HOSTS", "WORKSPACE", "STATISTICS", "ATTENTION"};
-static const char *tab_labels[] = {"Work", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Attention"};
+static const char *view_titles[] = {"WORK", "DETAILS", "COORDINATION", "INBOX", "OVERVIEW", "WORKFLOWS", "HOSTS", "WORKSPACE", "STATISTICS", "INBOX"};
+static const char *tab_labels[] = {"Work", "Details", "Coordination", "Inbox", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Inbox"};
 /* Below TAB_SHORT_BELOW columns the tab bar uses these so every tab, Hosts
  * included, fits at 80 columns; keys and view titles are unchanged. */
-static const char *tab_short[] = {"Work", "Details", "Coord", "Recovery", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Attention"};
+static const char *tab_short[] = {"Work", "Details", "Coord", "Inbox", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Inbox"};
 #define TAB_SHORT_BELOW 140
 
 /* One tab order for local and remote work; Hosts lists the machines, adds
@@ -355,7 +357,7 @@ size_t tab_order(const struct app *app, int *views) {
     views[count++] = 0; views[count++] = 1;
     if (app->view == 2) views[count++] = 2;
     views[count++] = 4;
-    views[count++] = 9; views[count++] = 3;
+    views[count++] = 9;
     views[count++] = 5;
     views[count++] = 8; views[count++] = 7;
     views[count++] = 6;
@@ -368,16 +370,35 @@ static void record_tab(struct app *app, int x, int length, int view) {
     app->tab_view[app->tab_count++] = view;
 }
 
+/* Inbox's tab carries a badge: how many items wait (warning; danger when one
+ * is a failure), or a dot until the first read answered. */
+static int tab_badge(struct app *app, int view, char *out, size_t size, struct kt_style *tone) {
+    size_t count;
+    bool failure, known;
+    out[0] = '\0';
+    if (view != 9) return 0;
+    inbox_badge(app, &count, &failure, &known);
+    if (!known) snprintf(out, size, "%s", app->ascii ? "." : "\xc2\xb7");
+    else if (count) snprintf(out, size, "%zu", count);
+    *tone = KT_STYLE(failure ? KT_COLOR_DANGER : KT_COLOR_WARNING, KT_COLOR_SURFACE, KT_BOLD);
+    return out[0] ? kt_text_width(out) + 1 : 0;
+}
+
 /* A tab is "N Label": its number (the key that opens it) and its label; the
  * active one is a pill with a blank on each side. */
-static int tab_width(const char *const *labels, int view, bool current, int number) {
-    return (int)strlen(labels[view]) + (number < 10 ? 2 : 0) + (current ? 2 : 0);
+static int tab_width(struct app *app, const char *const *labels, int view, bool current, int number) {
+    char badge[24];
+    struct kt_style tone;
+    return (int)strlen(labels[view]) + (number < 10 ? 2 : 0) + (current ? 2 : 0) + tab_badge(app, view, badge, sizeof(badge), &tone);
 }
 
 static void tab_draw(struct app *app, struct kt_canvas *c, int x, int row, int view, bool current, int number,
                      const char *const *labels) {
-    char label[32];
-    int length = tab_width(labels, view, current, number);
+    char label[32], badge[24];
+    struct kt_style tone = KT_WARNING;
+    int length = tab_width(app, labels, view, current, number), extra = tab_badge(app, view, badge, sizeof(badge), &tone);
+    if (extra) kt_text(c, (struct kt_rect){x + length - extra + 1, row, extra - 1, 1}, badge, tone);
+    length -= extra;
     if (current) {
         snprintf(label, sizeof(label), " %d %s ", number, labels[view]);
         /* Without colour the pill is reverse video, as a selection is. */
@@ -388,15 +409,15 @@ static void tab_draw(struct app *app, struct kt_canvas *c, int x, int row, int v
         kt_text(c, (struct kt_rect){x, row, 1, 1}, label, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0));
         kt_text(c, (struct kt_rect){x + 2, row, length - 2, 1}, labels[view], KT_MUTED);
     }
-    record_tab(app, x, length, view);
+    record_tab(app, x, length + extra, view);
 }
 
 /* The first tab drawn, so the active one fits in room columns. */
-static size_t tabs_first(const char *const *labels, const int *views, size_t active, int gap, int room) {
+static size_t tabs_first(struct app *app, const char *const *labels, const int *views, size_t active, int gap, int room) {
     size_t first = 0, i;
     while (first < active) {
         int needed = 0;
-        for (i = first; i <= active; i++) needed += tab_width(labels, views[i], i == active, (int)i + 1) + gap;
+        for (i = first; i <= active; i++) needed += tab_width(app, labels, views[i], i == active, (int)i + 1) + gap;
         if (needed <= room) break;
         first++;
     }
@@ -409,12 +430,12 @@ static int chrome_tabs(struct app *app, struct kt_canvas *c, int row, int x, int
     int views[12], gap = 2, total = 0;
     const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
     size_t count = tab_order(app, views), i, first = 0, active = 0;
-    for (i = 0; i < count; i++) { total += tab_width(labels, views[i], views[i] == app->view, (int)i + 1); if (views[i] == app->view) active = i; }
+    for (i = 0; i < count; i++) { total += tab_width(app, labels, views[i], views[i] == app->view, (int)i + 1); if (views[i] == app->view) active = i; }
     if (total + (int)(count - 1) * gap > width - x) gap = 1;
     app->tab_count = 0;
-    first = tabs_first(labels, views, active, gap, width - x);
+    first = tabs_first(app, labels, views, active, gap, width - x);
     for (i = first; i < count; i++) {
-        int length = tab_width(labels, views[i], views[i] == app->view, (int)i + 1);
+        int length = tab_width(app, labels, views[i], views[i] == app->view, (int)i + 1);
         if (x + length > width) { kt_text(c, (struct kt_rect){x, row, width - x, 1}, app->ascii ? ".." : "\xe2\x80\xa6", KT_MUTED); break; }
         tab_draw(app, c, x, row, views[i], views[i] == app->view, (int)i + 1, labels);
         x += length + gap;
@@ -780,84 +801,6 @@ static void render_coordination(struct app *app) {
     else paragraph(app, "No workflow run is linked to this head. A single conversation does not need one.", KT_BASE);
 }
 
-static void render_recovery_detail(struct app *app) {
-    const struct recovery *item = &app->model.recovery[app->recovery_selected];
-    char title[TEXT + 64], detail[1024];
-    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
-    lead_block(app, "RECOVERY FINDING", title);
-    paragraph(app, detail, KT_BASE);
-    /* The raw kind, source path and confidence are diagnostics; the
-     * account above is what a user needs to decide. */
-    section(app, "DIAGNOSTICS");
-    labelled(app, "Kind", item->kind, KT_MUTED);
-    labelled(app, "Source", item->source, KT_MUTED);
-    labelled(app, "Confidence", item->confidence, KT_MUTED);
-    labelled(app, "Inspect", item->action, KT_BASE);
-    section(app, "NEXT");
-    paragraph(app, "Enter runs the check and shows its output here; d returns to the list", KT_BASE);
-    if (!strcmp(item->kind, "orphan-worktree")) paragraph(app, "x removes this worktree after confirmation; the branch is kept", KT_BASE);
-}
-
-/* What the finding offers, in plain words; the raw kind stays in diagnostics. */
-static const char *recovery_offer(const struct recovery *item) {
-    if (!strcmp(item->kind, "dead-session")) return "files kept";
-    if (!strcmp(item->kind, "stale-lock")) return "safe to clear";
-    if (!strcmp(item->kind, "orphan-worktree")) return "cleanup preview";
-    if (!strcmp(item->kind, "orphan-worktree-dirty")) return "review first";
-    if (!strcmp(item->kind, "teardown-failure")) return "finish or keep";
-    if (!strcmp(item->kind, "malformed-state")) return "check reports";
-    return "d explains";
-}
-
-static void render_recovery_row(struct app *app, size_t index) {
-    const struct recovery *item = &app->model.recovery[index];
-    char title[TEXT + 64], detail[1024], cell[TEXT + 64];
-    bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
-    int width = wide ? app->content_width - 22 : app->content_width - 2;
-    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    record_hit(app, index);
-    if (selected) kt_fill(&app->frame, (struct kt_rect){app->content_x, app->line, app->content_width, 1}, KT_SELECTED);
-    if (selected) column(app, 0, app->content_width, KT_SELECTED, app->ascii ? ">" : "\xe2\x96\x8c");
-    fit_text(app, title, width > 0 ? (size_t)width : 1U, cell, sizeof(cell));
-    column(app, 2, width, selected ? KT_SELECTED : KT_WARNING, cell);
-    if (wide) column(app, app->content_width - 18, 18, selected ? KT_SELECTED : KT_MUTED, recovery_offer(item));
-    app->line++;
-}
-
-/* The selected finding in plain language under the list, with its check. */
-static void render_recovery_summary(struct app *app) {
-    const struct recovery *item = &app->model.recovery[app->recovery_selected];
-    char title[TEXT + 64], detail[1024];
-    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    /* The plain account only, tall enough for all of it where the screen
-     * has room; the check and its diagnostics are in the detail (d). */
-    summary_panel_rows(app, title, detail, NULL,
-                       (int)wrapped_rows(detail, app->content_width > 2 ? (size_t)app->content_width - 2U : 1U) + 2);
-}
-
-static void render_recovery(struct app *app) {
-    size_t index, start;
-    bool summary = app->rows >= 20 && app->cols >= 70;
-    int available = app->limit - app->line - 2;
-    if (summary && available > app->rows / 3) available = app->rows / 3;
-    style(app, TONE_STRONG); linef(app, "RECOVERY  %zu finding%s", app->model.recovery_count, app->model.recovery_count == 1 ? "" : "s"); style(app, TONE_BASE);
-    if (app->model.recovery_count == 0U) {
-        linef(app, "");
-        paragraph(app, "Nothing needs repair. Findings appear here when a terminal stops unexpectedly, a removal does not finish, or saved state cannot be read.", KT_BASE);
-        return;
-    }
-    if (app->recovery_selected >= app->model.recovery_count) app->recovery_selected = 0U;
-    if (app->diagnostics) { render_recovery_detail(app); return; }
-    if (available < 1) available = 1;
-    start = app->recovery_selected >= (size_t)available ? app->recovery_selected - (size_t)available + 1U : 0U;
-    for (index = start; index < app->model.recovery_count && available-- > 0; index++) render_recovery_row(app, index);
-    style(app, TONE_MUTED);
-    linef(app, "%zu of %zu", app->recovery_selected + 1U, app->model.recovery_count);
-    style(app, TONE_BASE);
-    if (summary && app->limit - app->line >= 5) render_recovery_summary(app);
-}
-
 /* The agent-pane commands with the chords bound to them now, and where to
  * change them. A keys file that was not applied as written is named. */
 /* Overlays over the finished view: the help and the output viewer, each a
@@ -955,11 +898,9 @@ static void render_content(struct app *app) {
         case 0: render_list(app); break;
         case 1: render_head_detail(app); break;
         case 2: render_coordination(app); break;
-        case 3: render_recovery(app); break;
         case 4: render_dashboard(app); break;
         case 5: render_workflow_graph(app); break;
         case 6: render_hosts(app); break;
-        case 9: render_attention(app); break;
         default: linef(app, "Workspace needs at least 20 columns and 6 rows"); break;
     }
 }
@@ -1017,6 +958,7 @@ static void status_line(struct app *app, char *out, size_t size, struct kt_style
     if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = KT_BASE; return; }
     if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
     snprintf(out, size, "%s", fresh);
+    if (app->view == 9) inbox_status(app, out, size);
     *tone = fresh_tone;
     /* The remote observation has its own age; a stale one is said beside
      * the local freshness so remote rows are never read as current. */
@@ -1053,7 +995,7 @@ static void detail_title(const struct app *app, const struct head *head, char *o
 }
 
 static const char *panel_title(struct app *app, char *out, size_t size) {
-    static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
+    static const char *names[] = {NULL, NULL, "Coordination", "Inbox", "Overview", "Workflows", "Hosts", NULL, NULL, "Inbox"};
     const struct head *head = selected_head(app);
     if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
     if (app->view == 6 && native_onboarding_active(app)) return native_onboarding_title(app);
@@ -1076,11 +1018,12 @@ void render(struct app *app, unsigned frame, bool headless) {
     if (!frame_begin(app, headless)) return;
     app->limit = app->rows - 3;
     chrome_header(app, &app->frame, view_titles[app->view]);
-    if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4},
+    if (app->view == 9) inbox_render(app);
+    else if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4},
                                   panel_title(app, title, sizeof(title)));
     app->line = 3;
     style(app, TONE_BASE);
-    render_content(app);
+    if (app->view != 9) render_content(app);
     app->limit = app->rows;
     status_line(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));

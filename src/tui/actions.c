@@ -251,72 +251,8 @@ void remove_heads_action(struct app *app) {
 
 void kill_marked_action(struct app *app) { remove_heads_action(app); }
 
-/* Run the recorded inspection command for the selected recovery finding. */
-void recovery_check_action(struct app *app) {
-    const struct recovery *item;
-    char command[TEXT], *argv[16], *save = NULL, *word, output[8192], title[TEXT + 64], detail[1024];
-    size_t count = 0U;
-    int status;
-    if (app->recovery_selected >= app->model.recovery_count) return;
-    item = &app->model.recovery[app->recovery_selected];
-    copy_text(command, sizeof(command), item->action);
-    word = strtok_r(command, " ", &save);
-    if (!word) { copy_text(app->notice, sizeof(app->notice), "No check is recorded for this finding"); return; }
-    argv[count++] = (char *)app->hydra;
-    if (strcmp(word, "hydra") != 0) argv[count++] = word;
-    while ((word = strtok_r(NULL, " ", &save)) != NULL && count < 15U) argv[count++] = word;
-    argv[count] = NULL;
-    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    snprintf(app->notice, sizeof(app->notice), "Running %s...", item->action);
-    status = run_captured(app, argv, output, sizeof(output), 30000L);
-    if (status == 0) snprintf(app->notice, sizeof(app->notice), "Check finished: %s", item->action);
-    else snprintf(app->notice, sizeof(app->notice), "Check failed (exit %d): %s", status, item->action);
-    show_result(app, title, output[0] ? output : "The check produced no output.");
-}
-
-static bool orphan_removal_confirmed(struct app *app, const struct recovery *item) {
-    char body[1024];
-    snprintf(body, sizeof(body), "Remove leftover worktree %.300s?\n\nDeletes only that directory; the branch is kept.", item->label);
-    if (dialog_confirm(app, "Remove leftover worktree", body, "Remove", true)) return true;
-    copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
-    return false;
-}
-
-/* Remove the selected leftover worktree through the shell gc authority, scoped
- * to its path. Worktrees with uncommitted changes are never offered; gc keeps
- * its own dirty refusal and the UI never adds --include-dirty. */
-void recovery_remove_action(struct app *app) {
-    const struct recovery *item;
-    char path[SOURCE_TEXT], output[8192];
-    char *argv[] = {(char *)app->hydra, (char *)"gc", (char *)"--policy", (char *)"orphaned", (char *)"--apply", (char *)"--path", path, NULL};
-    if (app->recovery_selected >= app->model.recovery_count) return;
-    item = &app->model.recovery[app->recovery_selected];
-    if (!strcmp(item->kind, "orphan-worktree-dirty")) {
-        copy_text(app->notice, sizeof(app->notice), "This worktree has uncommitted changes, so Hydra keeps it; review the work there first");
-        return;
-    }
-    if (strcmp(item->kind, "orphan-worktree") != 0 || !item->source[0]) {
-        copy_text(app->notice, sizeof(app->notice), "x removes leftover worktrees only; Enter runs this finding's check");
-        return;
-    }
-    if (!orphan_removal_confirmed(app, item)) return;
-    copy_text(path, sizeof(path), item->source);
-    snprintf(app->notice, sizeof(app->notice), "Removing leftover worktree %.200s...", path);
-    if (run_captured(app, argv, output, sizeof(output), 60000L) == 0 && strstr(output, "removed-orphan\t") != NULL) {
-        snprintf(app->notice, sizeof(app->notice), "Removed leftover worktree %.200s; the branch is kept", path);
-    } else {
-        copy_text(app->notice, sizeof(app->notice), "The worktree was not removed; see output");
-        action_failed(app, "Removing a leftover worktree did not finish", output);
-        show_result(app, "REMOVAL OUTPUT", output[0] ? output : "The removal produced no output.");
-    }
-    native_observations_tick(app, true);
-}
-
-/* x removes heads in the list views and a leftover worktree in Recovery. */
-void remove_key_action(struct app *app) {
-    if (app->view == 3) recovery_remove_action(app);
-    else remove_heads_action(app);
-}
+/* x removes the selected or marked heads; Inbox removes leftover worktrees itself. */
+void remove_key_action(struct app *app) { remove_heads_action(app); }
 
 /* The command palette (:): every binding that applies where the user is,
  * then the CLI commands below, searched by name as one types (kettle's

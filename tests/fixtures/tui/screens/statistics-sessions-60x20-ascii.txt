@@ -1,5 +1,5 @@
 FRAME 1 60x20
- # hydra  5 Recovery 6 Flows  7 Stats  ..       STATISTICS 
+ # hydra  4 Inbox . 5 Flows  6 Stats  ..        STATISTICS 
                                                            
  Sessions  Runs --------------- all recorded / all heads   
  Head sessions ------------------- 1 of 5 / newest first   

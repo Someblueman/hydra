@@ -6,6 +6,8 @@
 #include "fleet_budget.h"
 #include "snapshot.h"
 #include "store.h"
+#include "attention.h"
+#include "inbox.h"
 /* One in-flight read per source. Completed snapshots replace whole models;
  * terminal input and output continue while an adapter runs or times out. */
 
@@ -21,6 +23,7 @@ void native_observations_destroy(struct app *app) {
     size_t i;
     native_evidence_destroy(app);
     native_review_destroy(app);
+    inbox_destroy(app);
     free(app->links); app->links=NULL;
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
@@ -244,6 +247,29 @@ static void remote_source_tick(struct app *app, bool request) {
     }
 }
 
+/* Inbox's badge: attention is read at every refresh while Inbox is shown and
+ * every ATTENTION_BADGE_SECONDS otherwise, once a head snapshot arrived, so
+ * other screens do not start a CLI read per refresh. With the store readable
+ * here, a project without runs is not asked at all off Inbox, nor one whose runs have all ended and whose
+ * records did not change since the last read. */
+#define ATTENTION_BADGE_SECONDS 15
+static unsigned long long attention_stamp;
+bool native_observations_attention_due(struct app *app, time_t last) {
+    const struct store_location *where;
+    struct store_runs runs;
+    if (app->view==9) return true;
+    if (!app->snapshot_at || (last && time(NULL)-last<ATTENTION_BADGE_SECONDS)) return false;
+    if (attention_no_runs(app)) return false;
+    /* Remote items come with the same stream; the local store says nothing about them. */
+    if (app->model.host_count) return true;
+    where=heads_from_store(app) ? snapshot_where(app->snapshot) : NULL;
+    if (!where) return true;
+    store_runs(where,&runs);
+    if (!runs.count || (runs.settled && last && runs.records==attention_stamp)) return false;
+    attention_stamp=runs.records;
+    return true;
+}
+
 void native_observations_tick(struct app *app, bool request) {
     size_t source;
     native_plan_tick(app,request);
@@ -256,5 +282,6 @@ void native_observations_tick(struct app *app, bool request) {
     preview_tick(app);
     native_evidence_tick(app,request);
     native_attention_tick(app,request);
+    if (request) inbox_refresh(app);
     native_review_tick(app);
 }

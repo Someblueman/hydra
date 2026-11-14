@@ -1,5 +1,5 @@
 FRAME 1 140x40
- ◆ hydra   1 Work   2 Details  3 Overview  4 Attention  5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts                   WORK 
+ ◆ hydra   1 Work   2 Details  3 Overview  4 Inbox ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                 WORK 
                                                                  Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
  Heads in this project ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
      HEAD                                                                        STATUS         AGENT           WHERE        REPORTED      

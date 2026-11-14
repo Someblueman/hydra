@@ -1,5 +1,5 @@
 FRAME 1 100x30
- ◆ hydra  1 Work 2 Details 3 Overview 4 Attention 5 Recovery 6 Flows  7 Stats  …        STATISTICS 
+ ◆ hydra  1 Work 2 Details 3 Overview 4 Inbox · 5 Flows  6 Stats  7 Workspace 8 Hosts   STATISTICS 
                                       Local · 3 heads · 1 running · 3 need attention · 4 to repair 
  Sessions  Runs ─────────────────────────────────────────────────────── all recorded · all heads   
                                                                                                    

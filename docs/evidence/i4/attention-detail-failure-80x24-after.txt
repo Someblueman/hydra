@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  8 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  ATTENTION DETAIL                                                             
-  Check failed · kill-dry-run · repo-check                                     
-  Status      New: not marked seen yet; listed until the run is resolved.      
-  Why         Step repo-check (attempt 1) failed its check; review the log,    
-              then send the plan back or retry. It decides req-dry-run-flag,   
-              req-no-removal.                                                  
-  Next        r reviews the failed requirement and its log. To send the plan   
-              back, open its planning conversation from Work: F requests       
-              changes, V validates the revision and E runs it.                 
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ ✗ Check failed: kill-dry-run                                                  
+ run run_2cdf8bbe1a4e · step repo-check · req-dry-run-flag, req-no-removal ·   
+ attempt 1 · new                                                               
                                                                                
-  IDENTITY                                                                     
-  Kind        failure · check_failed   Source      workflow records            
-  Project     project_7f3a             Host        -                           
-  Task        -                        Run         run_2cdf8bbe1a4e            
-  Step        repo-check               Attempt     attempt-1                   
-  Head        head_b2c4d6e8            Instance    instance_b2c4d6e8           
-  Request     -                        Binding     -                           
-  Freshness   fresh                                                            
+ What failed                                                                   
+ Step repo-check (attempt 1) failed its check; review the log, then send the   
+ plan back or retry. It decides req-dry-run-flag, req-no-removal.              
                                                                                
-  ● live                                                                       
- ↑/↓ select • enter details • r review • s mark seen • ? help • q quit         
+ Run         run_2cdf8bbe1a4e                                                  
+ Host        this machine                                                      
+ Status      New: not marked seen yet; listed until the run is resolved.       
+ Next        r reviews the failed requirement and its log.                     
+                                                                               
+ r Review    s Seen                                                            
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ select • enter open • r review • s seen • ? help • q quit                 

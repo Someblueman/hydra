@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  8 5 Flows 6 Stats …      INBOX 
                   Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────── 
-  EXACT REVIEW / selected identity                                             
-  kill-dry-run · implement                                                     
-  Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                        
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ IDENTITY                                                                      
+ Kind        result · result_ready                                             
+ Source      workflow records                                                  
+ Project     project_7f3a                                                      
+ Host        -                                                                 
+ Task        -                                                                 
+ Run         run_2cdf8bbe1a4e                                                  
+ Step        implement                                                         
+ Attempt     attempt-1                                                         
+ Head        head_b2c4d6e8                                                     
+ Instance    instance_b2c4d6e8                                                 
+ Request     -                                                                 
+ Binding     -                                                                 
+ Freshness   fresh                                                             
+ Route       workflow-evidence · navigable                                     
+ Revision   5555555555555555555555555555555555555555555555555555555555555555   
+ Identity   6666666666666666666666666666666666666666666666666666666666666666   
                                                                                
-  SELECTED IDENTITY                                                            
-  Bound subject; a changed revision invalidates this review.                   
-  Source      workflow records                                                 
-  Kind        result                                                           
-  Project     project_7f3a                                                     
-  Host        -                                                                
-  Task        -                                                                
-  Run         run_2cdf8bbe1a4e                                                 
-  Step        implement                                                        
-  Attempt     attempt-1                                                        
-  Head        head_b2c4d6e8                                                    
-  Instance    instance_b2c4d6e8                                                
-  Request     -                                                                
-  Binding     -                                                                
                                                                                
-  ● live                                                                       
- ↑/↓ scroll • f references • i IDs • L full log • ? help • q quit              
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ select • enter open • r review • s seen • ? help • q quit                 

@@ -106,15 +106,19 @@ static void test_recovery_actions(const char *tui, const char *hydra, const char
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open recovery action terminal")) return;
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    write_input(session.master, "\033[<0;57;1M", 10U);
-    (void)wait_for_marker(&session, "RECOVERY  4", 1000);
+    write_input(session.master, "\033[<0;44;1M", 10U);
+    (void)wait_for_markers(&session, "Repairs 4", "Approve S-1: T-1", 3000);
+    write_input(session.master, "jjjjjj", 6U);
+    result(wait_for_selected(&session, "Leftover lock", 1000), "a repair is selectable in Inbox");
+    drain_output(&session);
     write_input(session.master, "x", 1U);
-    result(wait_for_marker(&session, "x removes leftover worktrees only", 1000), "x on a non-worktree finding removes nothing");
-    write_input(session.master, "jj", 2U);
-    result(wait_for_marker(&session, "\xe2\x96\x8c Leftover worktree from a removed task", 1000), "leftover worktree finding is selectable");
-    write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "FAKE GC <gc> <--policy> <orphaned> <--dry-run>", 2000), "Enter runs the read-only gc review");
-    write_input(session.master, "\n", 1U);
+    result(!wait_for_marker(&session, "Remove leftover worktree", 500) && wait_for_selected(&session, "Leftover lock", 500),
+           "x on a non-worktree finding removes nothing");
+    write_input(session.master, "j", 1U);
+    result(wait_for_selected(&session, "Leftover worktree from a removed task", 1000), "leftover worktree finding is selectable");
+    write_input(session.master, "c", 1U);
+    result(wait_for_marker(&session, "FAKE GC <gc> <--policy> <orphaned> <--dry-run>", 2000), "c runs the read-only gc review");
+    write_input(session.master, "\033", 1U);
     (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Remove leftover worktree feature-old", 1000), "worktree removal asks inside the UI");

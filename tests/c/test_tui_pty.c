@@ -47,6 +47,7 @@ static void close_session(struct session *);
 static bool terminal_restored(struct session *);
 static bool wait_for_screen_text(struct session *, const char *, int, int, long);
 static bool wait_for_attention_order(struct session *);
+static bool screen_row_order(struct session *, const char *, const char *);
 static ssize_t read_marker_output(struct session *, char *, size_t);
 static void drain_start_output(struct session *);
 static void session_feed(struct session *, const char *, size_t);
@@ -1093,8 +1094,23 @@ static bool wait_for_screen_text(struct session *session, const char *text, int 
     return found;
 }
 
-/* Count and selected identity are unchanged by a pure reorder. Wait for the
- * applied row positions before sending navigation, so an old frame cannot pass. */
+/* Both texts are on the emulated screen, the first on an earlier row. */
+static bool screen_row_order(struct session *session, const char *first, const char *second) {
+    long long deadline = monotonic_ms() + 1000;
+    while (monotonic_ms() < deadline) {
+        char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (length <= 0) sleep_ms(10);
+        if (session->screen) {
+            int row = screen_text_row(session->screen, first);
+            if (row >= 0 && screen_text_row(session->screen, second) > row) return true;
+        }
+    }
+    return false;
+}
+
+/* Inbox lists by section, so a pure reorder of the snapshot keeps the rows
+ * where they were: the approval in Decisions above the result to review.
+ * Wait for that applied frame before sending navigation. */
 static bool wait_for_attention_order(struct session *session) {
     /* Use the session's persistent emulator: a fresh one would only receive the
      * incremental presenter's changed cells, never the unchanged rows. */
@@ -1103,9 +1119,9 @@ static bool wait_for_attention_order(struct session *session) {
         char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
         if (length <= 0) sleep_ms(10);
         if (session->screen) {
-            int first = screen_text_row(session->screen, "verification-ready");
-            if (first >= 0 && screen_text_row(session->screen, "decision-needed") > first &&
-                screen_text_row(session->screen, "ATTENTION  2 need you") >= 0) return true;
+            int first = screen_text_row(session->screen, "Approve S-1: T-1");
+            if (first >= 0 && screen_text_row(session->screen, "Result ready: T-2") > first &&
+                screen_text_row(session->screen, "Decisions 3") >= 0 && screen_text_row(session->screen, "Repairs 4") >= 0) return true;
         }
     }
     return false;
@@ -1140,6 +1156,7 @@ int main(int argc, char **argv) {
         test_remote_side_by_side(argv[1], argv[2], argv[3]);
         test_remote_actions(argv[1], argv[2], argv[3]);
         test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
+        test_inbox_remote_decision(argv[1], argv[2], argv[3]);
         printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
         return failures ? 1 : 0;
     }
@@ -1159,6 +1176,9 @@ int main(int argc, char **argv) {
     test_attention(argv[1], argv[2], argv[3]);
     test_attention_clients(argv[1], argv[2], argv[3]);
     test_attention_failure(argv[1], argv[2], argv[3]);
+    test_inbox_decisions(argv[1], argv[2], argv[3]);
+    test_inbox_restart(argv[1], argv[2], argv[3]);
+    test_inbox_land(argv[1], argv[2], argv[3]);
     test_help_scroll(argv[1], argv[2], argv[3]);
     test_review_navigation(argv[1], argv[2]);
     test_review_stale(argv[1], argv[2]);
@@ -1168,6 +1188,7 @@ int main(int argc, char **argv) {
     test_remote_side_by_side(argv[1], argv[2], argv[3]);
     test_remote_actions(argv[1], argv[2], argv[3]);
     test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
+    test_inbox_remote_decision(argv[1], argv[2], argv[3]);
     test_workspace_layout(argv[1], argv[2], argv[3]);
     test_workspace_enter(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);

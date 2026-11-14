@@ -28,7 +28,7 @@ struct native_review {
     struct native_review_identity identity;
     struct review_document *document;
     size_t scroll, lines, reference;
-    bool active, references, preview, opening, stale, identity_view, log_view;
+    bool active, references, preview, opening, stale, log_view;
     char notice[TEXT];
     char supplied_reference[8256];
     /* Wrapped row of each section heading from the last frame, for n/N. */
@@ -65,7 +65,7 @@ static void discard_document(struct native_review *review)
     discard_log(review);
     free(review->document); review->document = NULL;
     review->scroll = 0U; review->lines = 0U; review->reference = 0U;
-    review->references = false; review->preview = false; review->opening = false; review->identity_view = false;
+    review->references = false; review->preview = false; review->opening = false;
 }
 
 void native_review_sync(struct app *app, const struct native_review_identity *identity, bool current)
@@ -332,21 +332,40 @@ static void encode_reference(struct native_review *review, const char *kind, con
     memcpy(out + used, "\"}]", 4U);
 }
 
-static void supply_reference(struct app *app, char key)
+/* + : a log, transcript or pull request the producer should consider,
+ * named by an absolute local path or an http(s) URL, then the review is read
+ * again with it. Nothing is opened or fetched here. */
+static bool reference_form(struct app *app, size_t *kind, char *locator, size_t size)
+{
+    static const char *const kinds[] = {"log", "transcript", "PR"};
+    struct kt_textinput input;
+    struct kt_field fields[2];
+    memset(fields, 0, sizeof(fields));
+    kt_textinput_init(&input, locator, size);
+    fields[0].kind = KT_FIELD_CHOICE; fields[0].label = "Kind"; fields[0].options = kinds; fields[0].option_count = 3;
+    fields[1].kind = KT_FIELD_TEXT; fields[1].label = "Where"; fields[1].input = &input;
+    fields[1].hint = "an absolute local path or an http(s) URL";
+    if (dialog_form_body(app, "Add a reference", "The review is read again with this reference; Hydra does not open "
+                         "or fetch it.", fields, 2) || !locator[0]) return false;
+    *kind = fields[0].choice;
+    return true;
+}
+
+static void supply_reference(struct app *app)
 {
     struct native_review *review = app->review;
     struct native_review_identity identity = review->identity;
-    const char *kind = key == 'l' ? "log" : key == 't' ? "transcript" : "pr";
-    char prompt[100], locator[4096];
-    snprintf(prompt, sizeof(prompt), "%s reference: absolute local path or http(s) URL", kind);
-    if (prompt_text(app, prompt, locator, sizeof(locator))) return;
+    static const char *const kinds[] = {"log", "transcript", "pr"};
+    char locator[4096] = "";
+    size_t kind = 0;
+    if (!reference_form(app, &kind, locator, sizeof(locator))) return;
     if (memcmp(&identity, &review->identity, sizeof(identity)) || !review->active || review->stale) {
         copy_text(review->notice, sizeof(review->notice), "Selection changed or stale; reference was not requested"); return;
     }
     if (!reference_locator(locator)) {
         copy_text(review->notice, sizeof(review->notice), "Unsupported reference: use absolute path or http(s)"); return;
     }
-    encode_reference(review, kind, locator);
+    encode_reference(review, kinds[kind < 3 ? kind : 0], locator);
     native_review_open(app, &identity);
     review->references = true;
 }
@@ -354,7 +373,7 @@ static void supply_reference(struct app *app, char key)
 static void jump_section(struct native_review *review, int direction)
 {
     size_t i;
-    if (review->references || review->identity_view || review->log_view) return;
+    if (review->references || review->log_view) return;
     for (i = 0U; direction > 0 && i < review->heading_count; i++)
         if (review->headings[i] > review->scroll) { review->scroll = review->headings[i]; return; }
     for (i = review->heading_count; direction < 0 && i > 0U; i--)
@@ -390,52 +409,82 @@ static bool read_log(struct native_review *review, const char *path)
     return true;
 }
 
-static void open_log(struct native_review *review)
+/* A local log reference whose file can be read opens in full (its last
+ * 1 MiB), read-only; any other reference shows the preview its producer
+ * recorded, or opens in the browser when it is a web reference. */
+static bool open_log(struct native_review *review, const struct review_reference *ref)
+{
+    if (strcmp(ref->kind, "log") || strcmp(ref->state, "available") || ref->locator[0] != '/') return false;
+    discard_log(review);
+    if (!read_log(review, ref->locator)) return false;
+    copy_text(review->log_path, sizeof(review->log_path), ref->locator);
+    review->log_view = true; review->preview = false; review->scroll = 0U;
+    return true;
+}
+
+static void open_selected(struct native_review *review)
+{
+    if (!review->document || review->stale || review->reference >= review->document->ref_count) return;
+    if (!open_log(review, &review->document->refs[review->reference])) open_reference(review);
+}
+
+/* The first local log reference that is recorded as available. */
+static const struct review_reference *first_log(const struct native_review *review)
 {
     size_t i;
-    if (!review->document || review->stale) return;
-    for (i = 0U; i < review->document->ref_count; i++) {
+    for (i = 0U; review->document && i < review->document->ref_count; i++) {
         const struct review_reference *ref = &review->document->refs[i];
-        if (strcmp(ref->kind, "log") || strcmp(ref->state, "available") || ref->locator[0] != '/') continue;
-        discard_log(review);
-        if (!read_log(review, ref->locator)) break;
-        copy_text(review->log_path, sizeof(review->log_path), ref->locator);
-        review->log_view = true; review->references = false; review->identity_view = false; review->scroll = 0U;
-        return;
+        if (!strcmp(ref->kind, "log") && !strcmp(ref->state, "available") && ref->locator[0] == '/') return ref;
     }
-    copy_text(review->notice, sizeof(review->notice), "No readable local log is recorded for this review");
+    return NULL;
 }
 
-static void review_back(struct native_review *review)
+bool native_review_has_log(const struct app *app)
+{ return native_review_active(app) && !app->review->stale && first_log(app->review) != NULL; }
+
+/* L: the check log the review names, in full, from either page; the review
+ * document itself says "press L" where it summarizes a log. */
+static void open_first_log(struct native_review *review)
 {
-    if (review->log_view) { discard_log(review); review->scroll = 0U; }
-    else if (review->preview) { review->preview = false; review->scroll = 0U; }
-    else if (review->references) { review->references = false; review->scroll = 0U; }
-    else if (review->identity_view) { review->identity_view = false; review->scroll = 0U; }
-    else { discard_document(review); review->active = false; }
+    const struct review_reference *ref = review->stale ? NULL : first_log(review);
+    if (!ref || !open_log(review, ref)) copy_text(review->notice, sizeof(review->notice), "No readable local log is recorded for this review");
 }
 
-bool native_review_key(struct app *app, char key)
+bool native_review_back(struct app *app)
 {
     struct native_review *review = app->review;
     if (!native_review_active(app)) return false;
+    if (review->log_view) { discard_log(review); review->scroll = 0U; return true; }
+    if (review->preview) { review->preview = false; review->scroll = 0U; return true; }
+    return false;
+}
+
+/* Switching between the Review and References pages keeps the document; a
+ * preview or log open on one page closes on the other. */
+static void review_page(struct native_review *review, bool references)
+{
+    if (review->references == references) return;
+    review->references = references; review->preview = false; review->scroll = 0U;
+    discard_log(review);
+}
+
+bool native_review_key(struct app *app, char key, bool references)
+{
+    struct native_review *review = app->review;
+    if (!native_review_active(app)) return false;
+    review_page(review, references);
     switch (key) {
         case 'j': scroll_review(review, 1); break;
         case 'k': scroll_review(review, -1); break;
         case 'g': review->scroll = 0U; break;
         case 'G': review->scroll = SIZE_MAX; break;
-        case 'f': review->references = !review->references; review->identity_view = false; review->preview = false; review->scroll = 0U; break;
-        case 'i': review->identity_view = !review->identity_view; review->references = false; review->preview = false; review->scroll = 0U; break;
-        case '\r': case '\n': case 'o': if (review->references) open_reference(review); break;
-        case 'l': case 't': case 'p': supply_reference(app, key); break;
+        case '\r': case '\n': if (review->references && !review->preview && !review->log_view) open_selected(review); break;
+        case '+': supply_reference(app); break;
+        case 'L': open_first_log(review); break;
         case 'n': case 'N': jump_section(review, key == 'n' ? 1 : -1); break;
         case ' ': case 'b': page_review(app, review, key == ' ' ? 1 : -1); break;
-        case 'L': open_log(review); break;
-        case 27: review_back(review); break;
-        case 'r': case 'I': case '[': case ']': return false;
-        default: break;
+        default: return false;
     }
-    /* A review never falls through into an unrelated action or acknowledgement. */
     return true;
 }
 
@@ -564,7 +613,7 @@ static void render_references(struct app *app, struct native_review *review, siz
     struct review_reference *ref;
     char heading[160];
     if (!document->ref_count) {
-        render_text(app, review, "No explicit references recorded for this review.\n\nl, t or p asks the producer to record a log, transcript or pull request reference by absolute path or http(s) URL; Hydra opens nothing by itself.\n", row);
+        render_text(app, review, "No explicit references recorded for this review.\n\n+ asks the producer to record a log, transcript or pull request reference by absolute path or http(s) URL; Hydra opens nothing by itself.\n", row);
         return;
     }
     snprintf(heading, sizeof(heading), "REFERENCES  %zu recorded", document->ref_count);
@@ -581,29 +630,10 @@ static void render_references(struct app *app, struct native_review *review, siz
         return;
     }
     style(app, TONE_MUTED);
-    render_text(app, review, ref->locator[0] == '/' ? "Enter shows the preview the producer recorded (bounded, read-only).\n"
-        : "Enter opens this web reference in your browser; its content is not read or verified by Hydra.\n", row);
+    render_text(app, review, ref->locator[0] != '/' ? "Enter opens this web reference in your browser; its content is not read or verified by Hydra.\n"
+        : !strcmp(ref->kind, "log") && !strcmp(ref->state, "available") ? "Enter opens the full log (read-only); the preview the producer recorded shows when the file cannot be read.\n"
+        : "Enter shows the preview the producer recorded (bounded, read-only).\n", row);
     style(app, TONE_BASE);
-}
-
-static void render_identity(struct app *app, struct native_review *review, size_t *row)
-{
-    const struct native_review_identity *id = &review->identity;
-    const char *labels[] = {"Source", "Kind", "Project", "Host", "Task", "Run", "Step", "Attempt",
-        "Head", "Instance", "Request", "Binding", "Revision", "Identity"};
-    const char *values[] = {id->source, id->kind, id->project, id->host, id->task, id->run, id->step, id->attempt,
-        id->head, id->instance, id->request, id->binding, id->revision, id->identity};
-    style(app, TONE_STRONG); wrapped_line(app, "SELECTED IDENTITY", 17U, row, review->scroll); style(app, TONE_BASE);
-    style(app, TONE_MUTED);
-    render_text(app, review, "Bound subject; a changed revision invalidates this review.\n", row);
-    style(app, TONE_BASE);
-    for (size_t i = 0U; i < 14U; i++) {
-        char line[200];
-        snprintf(line, sizeof(line), "%-*s%s", i >= 12U ? DETAIL_LABEL - 1 : DETAIL_LABEL, labels[i], values[i]);
-        if (i >= 12U) style(app, TONE_MUTED);
-        wrapped_line(app, line, strlen(line), row, review->scroll);
-        style(app, TONE_BASE);
-    }
 }
 
 static void render_log(struct app *app, struct native_review *review, size_t *row)
@@ -619,7 +649,6 @@ static void render_log(struct app *app, struct native_review *review, size_t *ro
 
 static const char *review_mode(const struct native_review *review)
 {
-    if (review->identity_view) return "selected identity";
     if (review->log_view) return "full log";
     return review->references ? "references" : "evidence";
 }
@@ -658,25 +687,6 @@ static void render_lead(struct app *app, struct native_review *review)
     if (app->line < app->limit) linef(app, "");
 }
 
-/* Footer hints follow the view inside the review, so no hint is repeated
- * in the content. */
-const char *native_review_hints(const struct app *app, bool narrow)
-{
-    const struct native_review *review = app->review;
-    if (!native_review_active(app)) return NULL;
-    bool compact = app->cols < 100; /* hints that fit whole; ? lists the rest */
-    if (review->log_view) return narrow ? "j/k scroll  g/G ends  Esc back  q quit" : compact ? "j/k scroll  Space/b page  g/G top/end  Esc back  ? help  q quit"
-                                                                                           : "j/k scroll  Space/b page  g/G top/end  Esc back to the review  ? help  q quit";
-    if (review->identity_view) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  i back to evidence  f references  Esc back  ? help  q quit";
-    if (review->references && review->preview) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  Esc back to the references  ? help  q quit";
-    if (review->references) return narrow ? "j/k select  Enter open  Esc back  q quit" : compact ? "j/k select  Enter open  l/t/p add  i identity  Esc back  ? help  q quit"
-                                                                                           : "j/k select  Enter open  l/t/p add log/transcript/PR  i identity  Esc back  ? help  q quit";
-    if (!review->document) return narrow ? "Esc back  q quit" : "Esc back to the list  ? help  q quit";
-    return narrow ? "j/k scroll  n/N section  Esc back  q quit"
-                  : compact ? "j/k scroll  L full log  f references  i identity  Esc back  ? help  q quit"
-                  : "j/k scroll  n/N section  Space/b page  L full log  f references  i identity  Esc back  ? help  q quit";
-}
-
 static size_t review_body(struct app *app, struct native_review *review)
 {
     size_t row = 0U;
@@ -688,15 +698,15 @@ static size_t review_body(struct app *app, struct native_review *review)
     return row;
 }
 
-bool native_review_render(struct app *app)
+bool native_review_render(struct app *app, bool references)
 {
-    struct native_review *review = app->review; size_t row = 0U;
+    struct native_review *review = app->review;
     int top;
     if (!native_review_active(app)) return false;
+    review_page(review, references);
     render_lead(app, review);
     review->heading_count = 0U;
     transcript_view_reset(app);
-    if (review->identity_view) { render_identity(app, review, &row); review->lines = row; return true; }
     if (!review->document) return true;
     top = app->line;
     review->lines = review_body(app, review);

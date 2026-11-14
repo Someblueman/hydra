@@ -102,3 +102,61 @@ void plan_action_land(struct app *app, const char *worker) {
     }
     show_result(app, "Landed", output);
 }
+
+/* ---- Inbox: plans an agent published ------------------------------------ */
+
+/* The agent published planning/draft.json and the user has not sent that
+ * draft back (planning/returned names the draft it returned). */
+bool plan_action_published(const char *planning, struct stat *draft) {
+    char path[4096];
+    struct stat returned;
+    if (snprintf(path, sizeof(path), "%s/draft.json", planning) >= (int)sizeof(path) || stat(path, draft) || !S_ISREG(draft->st_mode))
+        return false;
+    if (snprintf(path, sizeof(path), "%s/returned", planning) >= (int)sizeof(path)) return false;
+    return stat(path, &returned) != 0;
+}
+
+/* The published plan becomes the plan on screen in Work, its head selected. */
+static bool published_loaded(struct app *app, const char *branch) {
+    const struct head *h = head_for_branch(app, branch);
+    if (app->fleet || !h || !native_workspace_init(app)) return false;
+    app->run_row = false;
+    app->selected = (size_t)(h - app->model.heads);
+    if (app->plan && !strcmp(app->plan->proposal_head, branch) && !native_plan_changed(app->plan)) return true;
+    return native_plan_proposal_load(app, branch);
+}
+
+/* Y on "Plan ready": the plan is read under the guided policy and approved
+ * exactly as plan_action_approve approves it (one confirmation; nothing runs
+ * without it, and a revision that changes first does not run). */
+void plan_action_approve_published(struct app *app, const char *branch) {
+    if (!published_loaded(app, branch)) return;
+    plan_action_approve(app);
+}
+
+/* F on "Plan ready": feedback for that exact revision. */
+void plan_action_return_published(struct app *app, const char *branch) {
+    if (!published_loaded(app, branch)) return;
+    plan_action_request_changes(app);
+}
+
+/* F on a failure: a note to the agent that planned the run, typed into its
+ * conversation (the user presses Enter there). The run is not changed. */
+void plan_action_return_failure(struct app *app, const char *branch, const char *run, const char *what) {
+    struct kt_textinput input;
+    struct kt_field field;
+    struct head *h;
+    char feedback[2048] = "", body[512], text[3072];
+    kt_textinput_init(&input, feedback, sizeof(feedback));
+    memset(&field, 0, sizeof(field));
+    field.kind = KT_FIELD_TEXT; field.label = "What should change"; field.input = &input;
+    snprintf(body, sizeof(body), "%.120s of run %.80s goes back to %.100s with your note. It is typed into that "
+             "conversation; you press Enter there.", what, run, branch);
+    if (dialog_form_body(app, "Request changes", body, &field, 1) || !feedback[0]) return;
+    snprintf(text, sizeof(text), "Hydra: %.200s of run %.100s needs changes: %s Revise the plan and republish it with "
+             "hydra workflow plan propose <draft.json>.", what, run, feedback);
+    h = native_plan_head(app, branch);
+    if (h && native_plan_converse(app, h, text, false, true))
+        snprintf(app->notice, sizeof(app->notice), "Typed into %.100s's conversation; review it and press Enter to send.", branch);
+    else snprintf(app->notice, sizeof(app->notice), "%.100s's conversation could not be opened; nothing was sent.", branch);
+}

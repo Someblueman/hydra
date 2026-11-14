@@ -25,10 +25,34 @@ static void plan_policy_prompt(const char *profile, char *prompt, size_t size) {
     if (n < 0 || (size_t)n >= size) copy_text(prompt, size, "Review with the guided local policy? No execution yet.");
 }
 
+/* Loads the head's published proposal under the guided local policy; false
+ * (with the reason shown) when it is not ready. */
+bool native_plan_proposal_load(struct app *app, const char *head_branch) {
+    char output[12288], branch[TEXT];
+    char *fields[3], *line, *end;
+    char *argv[] = {(char *)app->hydra, "workflow", "plan", "proposal", branch, "--local-policy", NULL};
+    copy_text(branch, sizeof(branch), head_branch);
+    if (run_captured(app, argv, output, sizeof(output), 5000L)) {
+        show_result(app, "Agent proposal is not ready", output);
+        return false;
+    }
+    copy_text(app->notice, sizeof(app->notice), "Agent proposal response is malformed; no plan loaded");
+    line = strchr(output, '\n');
+    if (!line || strncmp(output, "HYDRA_PLAN_PROPOSAL\t1\n", 22)) return false;
+    line++;
+    end = strchr(line, '\n');
+    if (!end || end[1]) return false;
+    *end = '\0';
+    if (split_fields(line, fields, 3) != 3 || strcmp(fields[0], "P")) return false;
+    app->notice[0] = '\0';
+    if (!native_plan_load(app, fields[1], fields[2])) return false;
+    copy_text(app->plan->proposal_head, sizeof(app->plan->proposal_head), branch);
+    return true;
+}
+
 void native_plan_proposal(struct app *app) {
     struct head *head = selected_head(app);
-    char output[12288], branch[TEXT], prompt[512];
-    char *fields[3], *line, *end;
+    char branch[TEXT], prompt[512];
     if (!head || head_remote(head)) {
         copy_text(app->notice, sizeof(app->notice), "Select a local agent conversation first; n starts one");
         return;
@@ -36,22 +60,7 @@ void native_plan_proposal(struct app *app) {
     copy_text(branch, sizeof(branch), head->branch);
     plan_policy_prompt(head->profile, prompt, sizeof(prompt));
     if (!dialog_confirm(app, "Review proposal", prompt, "Review", false)) return;
-    char *argv[] = {(char *)app->hydra, "workflow", "plan", "proposal", branch, "--local-policy", NULL};
-    if (run_captured(app, argv, output, sizeof(output), 5000L)) {
-        show_result(app, "Agent proposal is not ready", output);
-        return;
-    }
-    copy_text(app->notice, sizeof(app->notice), "Agent proposal response is malformed; no plan loaded");
-    line = strchr(output, '\n');
-    if (!line || strncmp(output, "HYDRA_PLAN_PROPOSAL\t1\n", 22)) return;
-    line++;
-    end = strchr(line, '\n');
-    if (!end || end[1]) return;
-    *end = '\0';
-    if (split_fields(line, fields, 3) != 3 || strcmp(fields[0], "P")) return;
-    app->notice[0] = '\0';
-    if (native_plan_load(app, fields[1], fields[2]))
-        copy_text(app->plan->proposal_head, sizeof(app->plan->proposal_head), branch);
+    (void)native_plan_proposal_load(app, branch);
 }
 
 void native_plan_validate(struct app *app) {

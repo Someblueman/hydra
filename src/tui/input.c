@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "fleet_budget.h"
+#include "attention.h"
+#include "inbox.h"
 /* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
  * panes inside the workspace), arrows select, Enter opens, Esc steps back.
  * The loop delivers decoded events; input_event sends each to the layer that
@@ -15,7 +17,10 @@
 
 /* Views that load their own data when opened. */
 static void enter_view_refresh(struct app *app, int view) {
-    if (view == 9) native_attention_tick(app, true);
+    if (view == 9) {
+        native_attention_tick(app, true);
+        if (app->inbox) app->inbox->jumped = false;
+    }
     if (view == 7) (void)native_workspace_init(app);
     if (view == 6) native_setup_hosts_refresh(app);
 }
@@ -23,6 +28,8 @@ static void enter_view_refresh(struct app *app, int view) {
 /* View changes go through here so refreshes and stale flags stay consistent. */
 void enter_view(struct app *app, int view) {
     if (view < 0 || view > 9) return;
+    /* Recovery's findings are listed in Inbox. */
+    if (view == 3) view = 9;
     if (view == 8) { if (app->view != 8) statistics_toggle(app); return; }
     if (app->view == 8 && app->statistics) app->statistics->detail = false;
     if (view != app->view) app->previous_view = app->view;
@@ -65,6 +72,7 @@ static void go_back_view(struct app *app) {
         case 0:
             if (app->search[0]) { app->search[0] = '\0'; retarget_selection(app); }
             else if (app->location[0]) location_set(app, "");
+            else if (app->inbox && app->inbox->jumped) enter_view(app, 9);
             return;
         default: enter_view(app, app->previous_view == 7 ? 7 : 0); return;
     }
@@ -74,11 +82,8 @@ void go_back(struct app *app) {
     app->notice[0] = '\0';
     if (app->result_open) { app->result_open = false; return; }
     if (app->help) { app->help = false; return; }
-    if (app->view == 9) { (void)native_attention_key(app, 27); return; }
+    if (app->view == 9 && inbox_back(app)) return;
     if (statistics_back(app)) return;
-    /* Recovery keeps the finding explanation as an inner Esc layer; Details
-     * closes diagnostics and returns to the list in one step. */
-    if (app->diagnostics && app->view == 3) { app->diagnostics = false; return; }
     if (app->preview) { app->preview = false; return; }
     go_back_view(app);
 }
@@ -96,7 +101,6 @@ static void select_mouse_item(struct app *app, size_t item) {
             else if (item > MAX_HEADS) { app->run_row = true; app->task_row = false; app->workflow_run = item - MAX_HEADS - 1U; }
             else { app->run_row = false; app->task_row = false; app->selected = item; }
             break;
-        case 3: app->recovery_selected = item; break;
         case 5: app->workflow_node = item; app->graph_follow = true; break;
         case 6: app->host_selected = item; break;
         default: break;
@@ -150,6 +154,7 @@ static void handle_mouse(struct app *app, const struct kt_event *e) {
         values[1] > (unsigned)(app->cols - 3)) return;
     for (index = 0U; index < app->hit_count; index++) {
         if (!mouse_hit(app, values, index)) continue;
+        if (app->view == 9) { inbox_click(app, app->hit_items[index], values[0]); return; }
         if (values[0] == 64U || values[0] == 65U) {
             move_selection(app, values[0] == 64U ? -1 : 1);
         } else if (values[0] == 0U) {
@@ -166,13 +171,11 @@ static void horizontal_arrow(struct app *app, int direction) {
     if (app->view == 5) { (void)workflow_key(app, direction > 0 ? 'l' : 'h'); return; }
     select_tab(app, direction);
 }
-/* Up and Down reach Attention and its review as the j / k they mean; the
- * letters A and B are keys of their own, never arrows. */
+/* Up and Down select; Inbox binds them as its own actions. */
 static void selection_arrow(struct app *app, int direction) {
     if (app->result_open) { if (direction < 0 && app->result_scroll) app->result_scroll--; else if (direction > 0) app->result_scroll++; return; }
     if (app->help) { help_scroll(app, direction); return; }
-    if (app->view == 9) (void)native_attention_key(app, direction > 0 ? 'j' : 'k');
-    else move_selection(app, direction);
+    move_selection(app, direction);
 }
 /* PgUp/PgDn page read-only output: the result overlay or the Details
  * transcript (rows back from its newest output). */
@@ -201,9 +204,7 @@ static void interactive_prompt(struct app *app, char prefix) {
 
 static void open_selected(struct app *app) {
     if (app->view == 6) hosts_open_row(app);
-    else if (app->view == 3) {
-        if (app->model.recovery_count) recovery_check_action(app);
-    } else if (app->view == 7) {
+    else if (app->view == 7) {
         /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
     } else if (app->view == 1 || app->view == 2) {
         copy_text(app->notice, sizeof(app->notice), "a talks to the agent, Esc goes back");
@@ -274,8 +275,6 @@ static bool hosts_key(struct app *app, char key) {
 }
 
 static bool view_key(struct app *app, char key) {
-    if (key == 27 && app->view == 9) { go_back(app); return true; }
-    if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
     if (app->view == 7 && workspace_key(app, key)) return true;
     if (app->view == 5 && workflow_key(app, key)) return true;

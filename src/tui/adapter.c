@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "fleet_budget.h"
+#include "attention.h"
+#include "inbox.h"
 void record_snapshot(struct app *app, bool valid) {
     size_t i;
     double queue = 0;
@@ -20,6 +22,8 @@ void record_snapshot(struct app *app, bool valid) {
     app->history_valid[app->history_count++] = valid && known;
     app->snapshot_stale = !valid;
     if (valid) app->snapshot_at = time(NULL);
+    /* Inbox's gates and published plans belong to these heads. */
+    if (valid) inbox_refresh(app);
 }
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;

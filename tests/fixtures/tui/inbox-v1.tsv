@@ -1,0 +1,6 @@
+HYDRA_ATTENTION	3
+ITEM	workflow records	approval	approval_pending	project_1	local	task_1	run_docs	publish	attempt-1	head_1	instance_1	req_7f3a2c	-	1111111111111111111111111111111111111111111111111111111111111111	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	fresh	workflow-request	1	docs-sweep	-
+ITEM	workflow records	failure	check_failed	project_1	local	task_2	run_cache	test	attempt-1	head_2	instance_2	-	-	2222222222222222222222222222222222222222222222222222222222222222	bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	fresh	workflow-evidence	1	cache-plan	requirement R2
+ITEM	workflow records	result	result_ready	project_1	local	task_3	run_docs	write	attempt-1	head_3	instance_3	-	-	3333333333333333333333333333333333333333333333333333333333333333	cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc	fresh	workflow-evidence	1	docs sweep	-
+ITEM	fleet overview	unknown	provider	project_1	remote	T-4	R-4	S-4	1	head-4	instance-4	-	-	4444444444444444444444444444444444444444444444444444444444444444	dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd	unknown	unavailable	0	-	-
+END	4	0	0

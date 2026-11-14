@@ -1,5 +1,5 @@
 FRAME 1 80x24
- # hydra  1 Work 2 Details  3 Coord  4 Overview 5 Attention ..    COORDINATION 
+ # hydra  1 Work 2 Details  3 Coord  4 Overview 5 Inbox 11 ..     COORDINATION 
                   Local / 3 heads / 1 running / 3 need attention / 4 to repair 
  Coordination ---------------------------------------------------------------- 
   COORDINATION  feature-live                                                   

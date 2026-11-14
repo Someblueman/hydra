@@ -1,20 +1,20 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview   4 Attention   5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts              ATTENTION 
+ ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                INBOX 
                                                                               Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  ATTENTION                                                                                                                                
-  Loading what needs you...                                                                                                                
+ Needs you ───────────────────────────────────── 1 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ ◌ Reading what needs you…                                       ▲ Terminal stopped: notes-cleanup                                         
+ Agents 1                                                        worktree and files kept · R restarts it                                   
+ ▌▲ Terminal stopped: notes-cleanup                                                                                                        
+ ▌  worktree and files kept · R restarts it                      What happened                                                             
+                                                                 The terminal session for notes-cleanup is no longer running. Its worktree 
+                                                                 and files are kept; nothing was removed from the repository. R restarts   
+                                                                 its terminal and agent in the same worktree (hydra resume --terminal); o  
+                                                                 opens the head in Work.                                                   
                                                                                                                                            
-  Hydra is reading the approval requests, failed checks and sealed results of this project's runs and, when hosts are registered, of       
-  remote work. The list appears when the read completes; nothing is decided or acknowledged by looking.                                    
+                                                                 Head        notes-cleanup                                                 
+                                                                 Agent       claude                                                        
                                                                                                                                            
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                 R Restart terminal    c Run check    o Open in Work                       
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   ● live                                                                                                                                   
- ↑/↓ select • enter details • r review • s mark seen • tab/shift+tab views • : more actions • esc back • ? help • q quit                   
+ ↑/↓ select • enter open • R resume • o open in Work • c run check • tab/shift+tab pane • [/] page • : more actions • ? help • q quit      

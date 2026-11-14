@@ -76,7 +76,7 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     write_input(session.master, "t", 1U);
     if (!result(wait_for_screen_text(&session, "q quit", 80, 24, 3000), "hints stay visible at 80x24")) remote_dump(&session);
     write_input(session.master, "I", 1U);
-    result(wait_for_marker(&session, "need you", 6000), "attention reads the one local-and-remote stream");
+    result(wait_for_markers(&session, "Needs you", "Approve S-1: T-1", 6000), "Inbox reads the one local-and-remote stream");
     write_input(session.master, "\033", 1U);
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "unified workspace exits and restores the terminal");
@@ -219,5 +219,58 @@ static void test_remote_stale_and_disconnected(const char *tui, const char *hydr
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "stale remote terminal exits and restores the terminal");
     close_session(&session);
     (void)unlink(fail_path); (void)unlink(attach_path); (void)unlink(switch_path);
+    remote_env_clear();
+}
+
+/* Remote decision requests in Inbox: an approval on a host is a Decisions
+ * item naming that host; Y on a fresh observation confirms and decides it
+ * through the host's receiver with the exact task, request and spec; on a
+ * host whose observation is not fresh it is refused with the reason. */
+static void test_inbox_remote_decision(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char fixture[4096], attention[128], task_path[128], captured[1024];
+    FILE *file;
+    remote_fixture_path(fixture, sizeof(fixture), hydra, "remote-v3.tsv");
+    snprintf(attention, sizeof(attention), "/tmp/hydra-u11-attention-%ld", (long)getpid());
+    snprintf(task_path, sizeof(task_path), "/tmp/hydra-u11-inbox-task-%ld", (long)getpid());
+    (void)unlink(task_path);
+    file = fopen(attention, "w");
+    if (!result(file != NULL, "remote attention fixture writes")) return;
+    fputs("HYDRA_ATTENTION\t3\n"
+          "ITEM\tfleet overview\tapproval\tapproval_pending\t/work/project\tbuilder\ttask_build\trun_1\timplement\tattempt-1\thead_r\tinstance_r\treq-1\t-\t1111111111111111111111111111111111111111111111111111111111111111\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\tfresh\ttask-observe\t1\tbuild-plan\t-\n"
+          "ITEM\tfleet overview\tapproval\tapproval_pending\t/srv/archive\tarchive\ttask_index\trun_2\tindex\tattempt-1\thead_s\tinstance_s\treq-2\t-\t2222222222222222222222222222222222222222222222222222222222222222\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\tfresh\ttask-observe\t1\tindex-plan\t-\n"
+          "END\t2\t0\t0\n", file);
+    fclose(file);
+    (void)setenv("HYDRA_TEST_REMOTE_FIXTURE", fixture, 1);
+    (void)setenv("HYDRA_TEST_TASK_ARGV", task_path, 1);
+    (void)setenv("HYDRA_ATTENTION_FIXTURE", attention, 1);
+    if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open remote Inbox terminal")) goto cleanup;
+    (void)wait_for_raw(&session);
+    (void)wait_for_model(&session);
+    result(wait_for_marker(&session, "task_build", 6000), "the remote observation arrives before deciding");
+    write_input(session.master, "I", 1U);
+    result(wait_for_markers(&session, "Approve implement: build-plan", "on builder", 4000), "a remote approval is a decision naming its host");
+    /* The selected item's Summary sits beside the list and names its host. */
+    result(wait_for_marker(&session, "Host        builder", 2000), "the first remote approval is selected");
+    write_input(session.master, "Y", 1U);
+    result(wait_for_markers(&session, "Approve implement on builder?", "Task task_build", 2000), "Y asks to approve, naming the host, task and request");
+    write_input(session.master, "y", 1U);
+    result(wait_for_dispatch(&session, "approve dispatched for task_build", "task:approve task_build", 4000), "a confirmed remote decision is dispatched");
+    sleep_ms(500);
+    result(read_small_file(task_path, captured, sizeof(captured)) &&
+           strstr(captured, "fleet\ntask\ndecide\nbuilder\n--id\ntask_build\n--request\nreq-1\n--decision\napprove\n--trust-spec\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n") != NULL,
+           "the Inbox decision carries the exact task, request and bound spec");
+    (void)unlink(task_path);
+    write_input(session.master, "j", 1U);
+    result(wait_for_marker(&session, "Host        archive", 2000), "the second remote approval can be selected");
+    write_input(session.master, "Y", 1U);
+    result(wait_for_marker(&session, "Not decided on archive", 2000), "a request whose host is not freshly observed is refused with the reason");
+    sleep_ms(300);
+    result(!marker_file_exists(task_path), "a refused remote decision sends nothing");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "remote Inbox terminal restores");
+    close_session(&session);
+cleanup:
+    (void)unlink(attention); (void)unlink(task_path); (void)unsetenv("HYDRA_ATTENTION_FIXTURE");
     remote_env_clear();
 }

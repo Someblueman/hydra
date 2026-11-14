@@ -107,45 +107,118 @@ contains "Approvals   1 of 2 approved" "$test_root/coordination.out" "coordinati
 contains "single agent session" "$test_root/coordination.out" "coordination explains what there is to coordinate"
 "$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-empty.tsv" \
     --size 80x24 --view attention > "$test_root/attention-no-runs.out"
-contains "no workflow runs yet, so nothing is waiting" "$test_root/attention-no-runs.out" \
-    "attention in a project without workflow runs says so"
-if grep -q 'unavailable' "$test_root/attention-no-runs.out"; then
-    assert_success 1 "attention without workflow runs is not reported as unavailable"
+contains "No workflow runs are recorded in this project, so only heads are watched." "$test_root/attention-no-runs.out" \
+    "Inbox in a project without workflow runs says so"
+contains "Terminal stopped: feature-stale" "$test_root/attention-no-runs.out" "Inbox still lists the heads that need the user"
+if grep -qi 'attention unavailable' "$test_root/attention-no-runs.out"; then
+    assert_success 1 "Inbox without workflow runs is not reported as unavailable"
 else
-    assert_success 0 "attention without workflow runs is not reported as unavailable"
+    assert_success 0 "Inbox without workflow runs is not reported as unavailable"
 fi
-"$tui" --headless-fixture "$fixture" --size 54x12 --view recovery > "$test_root/recovery.out"
-contains "RECOVERY  4 findings" "$test_root/recovery.out" "narrow recovery board renders"
+printf 'HYDRA_TUI\t2\n' > "$test_root/nothing.tsv"
+"$tui" --headless-fixture "$test_root/nothing.tsv" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-empty.tsv" \
+    --size 80x24 --view inbox > "$test_root/inbox-empty.out"
+contains "Nothing needs you" "$test_root/inbox-empty.out" "an empty Inbox says nothing needs the user"
+contains "stopped terminals" "$test_root/inbox-empty.out" "an empty Inbox says what would appear there"
+contains "nothing waiting" "$test_root/inbox-empty.out" "the status line says nothing is waiting"
+# A plan run that succeeded with its worker head still listed is ready to land (L).
+"$tui" --headless-fixture "$repo_root/tests/fixtures/tui/native-runs.tsv" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-runs.tsv" \
+    --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" --size 140x40 --view inbox --keys jj > "$test_root/inbox-land.out"
+contains "Ready to land: kill-dry-run-worker" "$test_root/inbox-land.out" "a finished plan run's worker is ready to land"
+contains "L lands it: hydra land merges the commit" "$test_root/inbox-land.out" "the land item says what landing does"
+contains "L Land" "$test_root/inbox-land.out" "the land item offers L"
+contains "L land" "$test_root/inbox-land.out" "the footer names L for the land item"
+# Registered hosts without the fleet helper: only the user can fix that, so
+# the finding is under Your actions, not Repairs.
+{ cat "$fixture"; printf 'R\tfleet-unavailable\t2 registered remote hosts\t/home/u/.hydra/fleet/remotes\texact\tmake build-fleet\n'; } > "$test_root/fleet-unavailable.tsv"
+"$tui" --headless-fixture "$test_root/fleet-unavailable.tsv" --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" \
+    --size 140x40 --view inbox --keys jjjjjjjjjjj > "$test_root/fleet-unavailable.out"
+contains "Your actions 1" "$test_root/fleet-unavailable.out" "the missing fleet helper is one of the user's actions"
+contains "Repairs 4" "$test_root/fleet-unavailable.out" "the missing fleet helper is not counted as a repair"
+contains "Remote hosts cannot be observed: 2 registered remote hosts" "$test_root/fleet-unavailable.out" "the finding names the registered hosts"
+contains "make build-fleet" "$test_root/fleet-unavailable.out" "the finding says what to run"
+if grep -q "c Run check" "$test_root/fleet-unavailable.out"; then
+    assert_success 1 "the missing fleet helper offers no in-app check"
+else
+    assert_success 0 "the missing fleet helper offers no in-app check"
+fi
+# A remote approval is a decision naming its host.
+printf 'HYDRA_ATTENTION\t3\nITEM\tfleet overview\tapproval\tapproval_pending\t/work/project\tbuilder\ttask_build\trun_1\timplement\tattempt-1\thead_r\tinstance_r\treq-1\t-\t%s\t%s\tfresh\ttask-observe\t1\tbuild-plan\t-\nEND\t1\t0\t0\n' \
+    1111111111111111111111111111111111111111111111111111111111111111 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$test_root/remote-approval.tsv"
+"$tui" --headless-fixture "$fixture" --remote-fixture "$repo_root/tests/fixtures/tui/remote-v3.tsv" --attention-fixture "$test_root/remote-approval.tsv" \
+    --size 140x40 --view inbox > "$test_root/remote-approval.out"
+contains "Approve implement: build-plan" "$test_root/remote-approval.out" "a remote approval is listed as a decision"
+contains "on builder" "$test_root/remote-approval.out" "the remote decision names its host"
+contains "Host        builder" "$test_root/remote-approval.out" "the remote decision's Summary names its host"
+contains "rejects it on its host" "$test_root/remote-approval.out" "the remote decision says where it is decided"
+# The recovery findings are Inbox's Repairs; --view recovery opens Inbox.
+"$tui" --headless-fixture "$fixture" --size 54x30 --view recovery > "$test_root/recovery.out"
+contains "INBOX" "$test_root/recovery.out" "the recovery view name opens Inbox"
+contains "Repairs 3" "$test_root/recovery.out" "recovery findings are listed under Repairs"
 contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"
+contains "Agents 2" "$test_root/recovery.out" "a stopped terminal is one Agents item, not also a repair"
 contains "Leftover lock" "$test_root/recovery.out" "stale locks are explained in plain language"
-contains "Leftover worktree from a removed" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
+contains "Leftover worktree from a" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
 contains "Removal did not finish" "$test_root/recovery.out" "teardown failures are explained in plain language"
 if grep -Eq 'dead-session|stale-lock|orphan-worktree|teardown-failure' "$test_root/recovery.out"; then
-    assert_success 1 "recovery list keeps raw finding kinds out of the primary text"
+    assert_success 1 "Inbox keeps raw finding kinds out of the primary text"
 else
-    assert_success 0 "recovery list keeps raw finding kinds out of the primary text"
+    assert_success 0 "Inbox keeps raw finding kinds out of the primary text"
 fi
-"$tui" --headless-fixture "$fixture" --size 100x28 --view recovery --diagnostics > "$test_root/recovery-detail.out"
-contains "Kind        dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
-contains "Inspect     hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
-contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
-{ grep -v '^R	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-first.tsv"
-"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-detail.out"
-contains "Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" \
-    "$test_root/orphan-detail.out" "leftover worktree finding names branch, path, size and change state"
-contains "Inspect     hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
-contains "x removes this worktree after confirmation; the branch is kept" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
-"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 100x28 --view recovery > "$test_root/orphan-list.out"
-contains "x remove" "$test_root/orphan-list.out" "recovery footer offers removal for a clean leftover worktree"
-sed 's/^R	orphan-worktree	/R	orphan-worktree-dirty	/' "$test_root/orphan-first.tsv" > "$test_root/orphan-dirty.tsv"
-"$tui" --headless-fixture "$test_root/orphan-dirty.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-dirty.out"
+# A finding's Technical page keeps the raw kind and the inspection command.
+{ grep -v '^R	' "$fixture"; grep '^R	stale-lock	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/lock-first.tsv"
+"$tui" --headless-fixture "$test_root/lock-first.tsv" --size 140x28 --view inbox > "$test_root/recovery-detail.out"
+contains "Approval gates: feature-live" "$test_root/recovery-detail.out" "a head's pending approval gates are a decision"
+contains "1 of 2 approved" "$test_root/recovery-detail.out" "the gate item says how many are approved"
+awk 'BEGIN {FS = OFS = "\t"} $1 == "H" {$21 = 0; $22 = 0} $1 != "H" || $2 == "feature-stale" {print}' "$fixture" > "$test_root/stopped-only.tsv"
+"$tui" --headless-fixture "$test_root/stopped-only.tsv" --size 140x28 --view inbox --diagnostics > "$test_root/stopped-technical.out"
+contains "Summary  Review  References  Technical" "$test_root/stopped-technical.out" "diagnostics open the Technical page"
+contains "Kind        dead-session" "$test_root/stopped-technical.out" "the Technical page keeps the raw finding kind"
+contains "Inspect     hydra doctor" "$test_root/stopped-technical.out" "the Technical page keeps the inspection command"
+"$tui" --headless-fixture "$test_root/stopped-only.tsv" --size 140x28 --view inbox > "$test_root/stopped.out"
+contains "and files are kept; nothing was removed" "$test_root/stopped.out" "a stopped terminal's Summary says what is kept"
+contains "R Restart terminal" "$test_root/stopped.out" "a stopped terminal offers R to restart it"
+sed 's/	dead	stopped	/	running	live	/' "$test_root/stopped-only.tsv" > "$test_root/repairs-only.tsv"
+"$tui" --headless-fixture "$test_root/repairs-only.tsv" --size 140x28 --view inbox > "$test_root/repairs.out"
+contains "Terminal stopped: feature-stale" "$test_root/repairs.out" "a dead-session finding of a live head stays a repair"
+{ grep -v '^R	' "$test_root/repairs-only.tsv"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-only.tsv"
+"$tui" --headless-fixture "$test_root/orphan-only.tsv" --size 140x28 --view inbox > "$test_root/orphan-detail.out"
+contains "Leftover worktree from a removed task: feature-old" "$test_root/orphan-detail.out" "leftover worktree finding names its branch"
+contains "(/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" "$test_root/orphan-detail.out" \
+    "leftover worktree finding names path, size and change state"
+contains "Check       hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
+contains "x removes only this" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
+contains "x remove" "$test_root/orphan-detail.out" "Inbox footer offers removal for a clean leftover worktree"
+contains "c run check" "$test_root/orphan-detail.out" "Inbox footer offers the finding's check"
+sed 's/^R	orphan-worktree	/R	orphan-worktree-dirty	/' "$test_root/orphan-only.tsv" > "$test_root/orphan-dirty.tsv"
+"$tui" --headless-fixture "$test_root/orphan-dirty.tsv" --size 140x28 --view inbox > "$test_root/orphan-dirty.out"
 contains "has uncommitted changes" "$test_root/orphan-dirty.out" "dirty leftover worktree says it has uncommitted changes"
 if grep -q "x remove" "$test_root/orphan-dirty.out"; then
     assert_success 1 "dirty leftover worktree is never offered for in-app removal"
 else
     assert_success 0 "dirty leftover worktree is never offered for in-app removal"
 fi
-for view in heads detail coordination recovery; do
+# Attention items: sections in order (decisions first, repairs last), the
+# selected item's Summary beside the list, and the badge on the tab.
+"$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" \
+    --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" --size 140x40 --view inbox > "$test_root/inbox.out"
+awk '/^ Decisions /{d=NR} /^ Failed /{f=NR} /^ Ready for review /{r=NR} /^ Agents /{a=NR} /^ Repairs /{p=NR}
+END { exit !(d && d < f && f < r && r < a && a < p) }' "$test_root/inbox.out"
+assert_success $? "Inbox sections run decisions, failures, results, agents, then repairs"
+contains "Approve publish: docs-sweep" "$test_root/inbox.out" "an approval names its step and plan"
+contains "Check failed: cache-plan" "$test_root/inbox.out" "a failed check names its plan"
+contains "requirement R2" "$test_root/inbox.out" "a failed check names the requirement it decides"
+contains "Result ready: docs sweep" "$test_root/inbox.out" "a sealed result is ready for review"
+contains "Needs inspection: T-4" "$test_root/inbox.out" "an item Hydra cannot classify is a repair to inspect"
+contains "Request     req_7f3a2c" "$test_root/inbox.out" "the Summary names the exact request"
+contains "Y Approve    N Reject    r Review    s Seen" "$test_root/inbox.out" "the Summary lists the keys that act on the item"
+contains "Summary  Review  References  Technical" "$test_root/inbox.out" "the detail names its pages"
+contains " 4 Inbox  11" "$test_root/inbox.out" "the Inbox tab carries the count of waiting items"
+contains "11 items need you" "$test_root/inbox.out" "the status line counts the waiting items"
+"$tui" --headless-fixture "$fixture" --size 100x30 --view inbox > "$test_root/inbox-loading.out"
+contains "Reading what needs you" "$test_root/inbox-loading.out" "Inbox says it is still reading attention"
+contains "$(printf ' 4 Inbox  \302\267')" "$test_root/inbox-loading.out" "the badge is a dot until the first read"
+for view in heads detail coordination inbox; do
     "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
     assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"
     "$tui" --ascii --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded-ascii.out"
@@ -184,15 +257,15 @@ fi
 contains " 1 Work  2 Details 3 Overview" "$test_root/tabs.out" "the first tabs are visible at 80 columns with short labels and the active one is a pill"
 contains "WORK" "$test_root/tabs.out" "the view title stays at the right of the top bar at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/hosts-tabs.out"
-contains " 9 Hosts " "$test_root/hosts-tabs.out" "the Hosts tab stays in view at 80 columns"
+contains " 8 Hosts " "$test_root/hosts-tabs.out" "the Hosts tab stays in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination-tabs.out"
 contains " 3 Coord " "$test_root/coordination-tabs.out" "the coordination tab is shown, short, at 80 columns"
 "$tui" --fleet --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/fleet-tabs.out"
-contains "5 Recovery 6 Flows 7 Stats 8 Workspace  9 Hosts " "$test_root/fleet-tabs.out" "the compatibility entry keeps the one numbered tab order, Hosts in view at 80 columns"
+contains "5 Flows 6 Stats 7 Workspace  8 Hosts " "$test_root/fleet-tabs.out" "the compatibility entry keeps the one numbered tab order, Hosts in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 100x24 --view hosts > "$test_root/wide-tabs.out"
-contains " 9 Hosts " "$test_root/wide-tabs.out" "the active tab is a pill at 100 columns"
+contains " 8 Hosts " "$test_root/wide-tabs.out" "the active tab is a pill at 100 columns"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
-contains " 7 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
+contains " 6 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
 contains "STATISTICS" "$test_root/stats-tabs.out" "statistics names itself in the top bar"
 # Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
@@ -237,13 +310,14 @@ assert_success $? "an empty sample draws no tiles"
 # Golden frames of every view at 140x40 and 80x24, in Unicode and ASCII: the
 # frame (top bar, titled rules, status chip, generated footer) is pinned.
 # Regenerate with the same command when a change to a screen is intended.
-for golden_view in heads detail coordination recovery overview workflows hosts workspace attention statistics; do
+for golden_view in heads detail coordination overview workflows hosts workspace inbox statistics; do
     for golden_size in 140x40 80x24; do
         for golden_mode in plain ascii; do
             golden_flag=
             [ "$golden_mode" = ascii ] && golden_flag=--ascii
             "$tui" $golden_flag --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" \
-                --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" --size "$golden_size" --view "$golden_view" \
+                --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" \
+                --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" --size "$golden_size" --view "$golden_view" \
                 > "$test_root/golden.out"
             cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/$golden_view-$golden_size-$golden_mode.txt"
             assert_success $? "golden frame $golden_view at $golden_size ($golden_mode)"
@@ -302,7 +376,7 @@ assert_success $? "no location chip while every location is shown"
 ! grep -Fq "Cohorts" "$test_root/stats-local.out"
 assert_success $? "a sample without remote steps has no cohorts page"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
-contains " 8 Workspace " "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
+contains " 7 Workspace " "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
 contains "PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is named in the top bar"
 if grep -q "Tab to focus / scroll" "$test_root/workspace-tabs.out"; then
     assert_success 1 "workspace panes do not repeat focus hints"

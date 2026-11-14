@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  11  5 Workflows  6 Statistics  7 Workspace  8 Hosts                               INBOX 
+                                                                              Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Needs you ──────────────────────────────────── 11 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 3                                                     ◐ Approve publish: docs-sweep                                             
+ ▌◐ Approve publish: docs-sweep                                  run run_docs · step publish · attempt 1 · new                             
+ ▌  run run_docs · step publish · attempt 1 · new                                                                                          
+  ◐ Approval gates: feature-live                                 What is waiting                                                           
+    1 of 2 approved · : approvals lists them                     Step publish (attempt 1) is waiting for your decision; marking it seen    
+  ◐ Approval gates: feature-stale                                does not approve it.                                                      
+    0 of 1 approved · : approvals lists them                                                                                               
+ Failed 1                                                        Request     req_7f3a2c · step publish                                     
+  ✗ Check failed: cache-plan                                     Run         run_docs                                                      
+    run run_cache · step test · requirement R2 · attempt 1 ·…    Task        task_1                                                        
+ Ready for review 1                                              Host        this machine                                                  
+  ✓ Result ready: docs sweep                                     Status      New: not marked seen yet.                                     
+    run run_docs · step write · attempt 1 · new                  Next        r reviews the request and its evidence. Y approves and N      
+ Agents 2                                                                    rejects it, after a confirmation; a decision alone never      
+  ▲ Terminal stopped: feature-stale                                          resumes a run.                                                
+    worktree and files kept · R restarts it                                                                                                
+  ? State unknown: feature-unavailable                           Y Approve    N Reject    r Review    s Seen                               
+    Hydra cannot read whether its terminal runs · o opens it                                                                               
+ Repairs 4                                                                                                                                 
+  ▲ Leftover lock: state_project_0123456789abcdefabcd.lock                                                                                 
+    no work affected; c runs its check                                                                                                     
+  ▲ Leftover worktree from a removed task: feature-old (/tmp…                                                                              
+    x removes it; the branch is kept                                                                                                       
+  ▲ Removal did not finish: feature-stale                                                                                                  
+    c shows what is left                                                                                                                   
+  ▲ Needs inspection: T-4                                                                                                                  
+    run R-4 · step S-4 · attempt 1 · on remote                                                                                             
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   11 items need you · decisions first, then failures                                                                              
+ ↑/↓ select • enter open • Y approve • N reject • r review • s seen • tab/shift+tab pane • [/] page • : more actions • ? help • q quit     

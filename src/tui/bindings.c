@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "../kettle/components.h"
+#include "attention.h"
+#include "inbox.h"
 /* Scope chains, key dispatch, the footer and help, all read from the one
  * binding table in keys.c. What a footer offers is what its keys do because
  * both come from the same row; within one chain no key has two meanings,
@@ -18,15 +20,14 @@ const uint32_t key_chains[KEY_CHAINS] = {
     [KEY_CHAIN_HEADS] = CHAIN_VIEW | KEY_SCOPE_HEADS,
     [KEY_CHAIN_DETAIL] = CHAIN_VIEW | KEY_SCOPE_DETAIL,
     [KEY_CHAIN_OVERVIEW] = CHAIN_VIEW | KEY_SCOPE_OVERVIEW,
-    [KEY_CHAIN_RECOVERY] = CHAIN_VIEW | KEY_SCOPE_RECOVERY,
     [KEY_CHAIN_WORKFLOWS] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_WORKFLOWS,
     [KEY_CHAIN_HOSTS] = CHAIN_VIEW | KEY_SCOPE_HOSTS,
     [KEY_CHAIN_WORKSPACE] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_WORKSPACE,
     [KEY_CHAIN_MONITOR] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_WORKSPACE | KEY_SCOPE_MONITOR,
     /* Stats: Tab moves between its panes and w is its workflow filter. */
     [KEY_CHAIN_STATISTICS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEW_ARROWS | KEY_SCOPE_STATISTICS,
-    [KEY_CHAIN_ATTENTION] = CHAIN_VIEW | KEY_SCOPE_ATTENTION,
-    [KEY_CHAIN_REVIEW] = CHAIN_BASE | KEY_SCOPE_REVIEW,
+    [KEY_CHAIN_INBOX] = CHAIN_BASE | KEY_SCOPE_INBOX | KEY_SCOPE_INBOX_PAGES,
+    [KEY_CHAIN_REVIEW] = CHAIN_BASE | KEY_SCOPE_REVIEW | KEY_SCOPE_INBOX_PAGES,
     [KEY_CHAIN_HELP] = KEY_SCOPE_TERMINAL | KEY_SCOPE_HELP,
     [KEY_CHAIN_RESULT] = KEY_SCOPE_TERMINAL | KEY_SCOPE_RESULT,
     [KEY_CHAIN_STATS_FILTER] = KEY_SCOPE_TERMINAL | KEY_SCOPE_STATS_FILTER,
@@ -34,11 +35,11 @@ const uint32_t key_chains[KEY_CHAINS] = {
 
 static enum key_chain_id view_chain(const struct app *app) {
     static const enum key_chain_id views[] = {
-        KEY_CHAIN_HEADS, KEY_CHAIN_DETAIL, KEY_CHAIN_DETAIL, KEY_CHAIN_RECOVERY, KEY_CHAIN_OVERVIEW,
-        KEY_CHAIN_WORKFLOWS, KEY_CHAIN_HOSTS, KEY_CHAIN_WORKSPACE, KEY_CHAIN_STATISTICS, KEY_CHAIN_ATTENTION};
+        KEY_CHAIN_HEADS, KEY_CHAIN_DETAIL, KEY_CHAIN_DETAIL, KEY_CHAIN_INBOX, KEY_CHAIN_OVERVIEW,
+        KEY_CHAIN_WORKFLOWS, KEY_CHAIN_HOSTS, KEY_CHAIN_WORKSPACE, KEY_CHAIN_STATISTICS, KEY_CHAIN_INBOX};
     if (app->view < 0 || app->view > 9) return KEY_CHAIN_HEADS;
     if (app->view == 7 && native_workspace_monitoring((struct app *)app)) return KEY_CHAIN_MONITOR;
-    if (app->view == 9 && native_review_active(app)) return KEY_CHAIN_REVIEW;
+    if (app->view == 9) return inbox_chain(app);
     if (app->view == 8 && statistics_typing(app)) return KEY_CHAIN_STATS_FILTER;
     return views[app->view];
 }
@@ -121,11 +122,6 @@ static bool workspace_applies(const struct app *app, enum key_action action) {
     }
 }
 
-static bool recovery_removable(const struct app *app) {
-    return app->recovery_selected < app->model.recovery_count &&
-        !strcmp(app->model.recovery[app->recovery_selected].kind, "orphan-worktree");
-}
-
 static bool heads_applies(const struct app *app, enum key_action action) {
     bool list = app->view == 0 || app->view == 4;
     switch (action) {
@@ -146,21 +142,25 @@ static bool location_applies(const struct app *app, enum key_action action) {
     return app->view == 0 || app->view == 4;
 }
 
+/* Inbox and the workspace decide their own rows; false when action is not one of theirs. */
+static bool owner_applies(const struct app *app, enum key_action action, bool *applies) {
+    if (action >= KEY_REVIEW_UP && action <= KEY_INBOX_LAST) *applies = inbox_applies(app, action);
+    else if (action >= KEY_PLAN_PROPOSAL && action <= KEY_PLAN_EXECUTE) *applies = plan_applies(app, action);
+    else if (action >= KEY_WS_UP && action <= KEY_RUN_CANCEL) *applies = workspace_applies(app, action);
+    else return false;
+    return true;
+}
+
 bool key_applies(const struct app *app, enum key_action action) {
     size_t record;
-    if (action >= KEY_WS_UP && action <= KEY_RUN_CANCEL) {
-        if (action >= KEY_PLAN_PROPOSAL && action <= KEY_PLAN_EXECUTE) return plan_applies(app, action);
-        return workspace_applies(app, action);
-    }
+    bool applies;
+    if (owner_applies(app, action, &applies)) return applies;
     if ((action >= KEY_HEADS_COLLAPSE && action <= KEY_HEAD_TECHNICAL) && action != KEY_TASK_NEW)
         return heads_applies(app, action);
     if ((action >= KEY_REMOTE_APPROVE && action <= KEY_REMOTE_CANCEL) || action == KEY_HEADS_RETRY)
         return remote_applies(app, action);
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) return statistics_applies(app, action);
     switch (action) {
-    case KEY_RECOVERY_REMOVE: return recovery_removable(app);
-    case KEY_ATTENTION_PAGE_DOWN: case KEY_ATTENTION_PAGE_UP: return native_attention_detail_open(app);
-    case KEY_RECOVERY_CHECK: case KEY_RECOVERY_EXPLAIN: return app->model.recovery_count > 0;
     case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return hosts_setup_selected(app, &record);
     case KEY_HOSTS_RETRY: case KEY_HEADS_LOCATION: return location_applies(app, action);
     case KEY_BACK: return app->view != 0 || app->search[0] || app->location[0] || app->preview || app->diagnostics;
@@ -179,18 +179,8 @@ static uint32_t action_key(enum key_action action) {
         [KEY_RESULT_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_RESULT_CLOSE] = 27, [KEY_RESULT_QUIT] = 'q',
         [KEY_HELP_UP] = 'k', [KEY_HELP_DOWN] = 'j', [KEY_HELP_PAGE_UP] = KT_KEY_PAGE_UP,
         [KEY_HELP_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_HELP_CLOSE] = 27,
-        [KEY_REVIEW_UP] = 'k', [KEY_REVIEW_DOWN] = 'j', [KEY_REVIEW_PAGE_DOWN] = ' ', [KEY_REVIEW_PAGE_UP] = 'b',
-        [KEY_REVIEW_TOP] = 'g', [KEY_REVIEW_END] = 'G', [KEY_REVIEW_NEXT_SECTION] = 'n',
-        [KEY_REVIEW_PREVIOUS_SECTION] = 'N', [KEY_REVIEW_REFERENCES] = 'f', [KEY_REVIEW_IDENTITY] = 'i',
-        [KEY_REVIEW_OPEN] = '\r', [KEY_REVIEW_LOG] = 'L', [KEY_REVIEW_SUPPLY_LOG] = 'l',
-        [KEY_REVIEW_SUPPLY_TRANSCRIPT] = 't', [KEY_REVIEW_SUPPLY_PR] = 'p', [KEY_REVIEW_PREVIOUS_ITEM] = '[',
-        [KEY_REVIEW_NEXT_ITEM] = ']', [KEY_REVIEW_RELOAD] = 'r',
-        [KEY_ATTENTION_UP] = 'k', [KEY_ATTENTION_DOWN] = 'j', [KEY_ATTENTION_OPEN] = '\r',
-        [KEY_ATTENTION_REVIEW] = 'r', [KEY_ATTENTION_SEEN] = 's', [KEY_ATTENTION_PAGE_DOWN] = ' ', [KEY_ATTENTION_PAGE_UP] = 'b',
         [KEY_HOSTS_UP] = 'k', [KEY_HOSTS_DOWN] = 'j', [KEY_HOSTS_OPEN] = '\r', [KEY_HOSTS_ADD] = 'A',
         [KEY_HOSTS_EDIT] = 'e', [KEY_HOSTS_REMOVE] = 'x', [KEY_HOSTS_RETRY] = 'r', [KEY_HOSTS_ONBOARDING] = 'O',
-        [KEY_RECOVERY_UP] = 'k', [KEY_RECOVERY_DOWN] = 'j', [KEY_RECOVERY_CHECK] = '\r',
-        [KEY_RECOVERY_REMOVE] = 'x', [KEY_RECOVERY_EXPLAIN] = 'd',
         [KEY_FLOW_UP] = 'k', [KEY_FLOW_DOWN] = 'j', [KEY_FLOW_PREVIOUS_RUN] = '[', [KEY_FLOW_NEXT_RUN] = ']',
         [KEY_FLOW_LEFT] = 'h', [KEY_FLOW_RIGHT] = 'l', [KEY_FLOW_PAN_UP] = 'K', [KEY_FLOW_PAN_DOWN] = 'J',
         [KEY_FLOW_FOLLOW] = '\r',
@@ -234,6 +224,7 @@ void key_perform(struct app *app, enum key_action action) {
     if (action == KEY_REFRESH) { refresh_all(app); return; }
     if (action == KEY_PALETTE) { palette_open(app); return; }
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) { statistics_perform(app, action); return; }
+    if (inbox_perform(app, action)) return;
     if (key == SHIFT_TAB) input_named(app, KT_KEY_TAB, KT_MOD_SHIFT);
     else if (key >= KT_KEY_UP) input_named(app, key, 0);
     else if (key) input_character(app, (char)key);
