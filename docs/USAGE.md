@@ -559,10 +559,11 @@ agent input; the other commands follow `Ctrl-\`:
 | `terminal.live` | `ctrl+\ ]` | Back to live output |
 | `terminal.literal` | `ctrl+\ ctrl+\`, `ctrl+\ ctrl+]` | Send the chord's last key to the agent |
 | `app.quit` | `ctrl+\ q` | Quit Hydra; agents keep running |
-| `view.statistics` | `ctrl+\ D` | Statistics |
-| `workspace.layout.conversation` | `ctrl+\ A` | Conversation layout |
-| `workspace.layout.plan` | `ctrl+\ B` | Plan overview layout |
-| `workspace.layout.monitor` | `ctrl+\ C` | Monitoring layout |
+| `screen.work` ... `screen.stats` | `ctrl+\ 1` ... `ctrl+\ 4` | Work, Inbox, Hosts, Stats |
+| `view.statistics` | `ctrl+\ D` | Stats |
+| `workspace.layout.conversation` | `ctrl+\ A` | Work's Details page |
+| `workspace.layout.plan` | `ctrl+\ B` | Work's Plan page |
+| `workspace.layout.monitor` | `ctrl+\ C` | Work's Run page |
 | `workspace.zoom` | `ctrl+\ z` | Zoom the focused pane |
 | `workspace.split` | `ctrl+\ S` | Two agents side by side |
 
@@ -624,6 +625,10 @@ workspace.layout.plan = ctrl+b B
 workspace.layout.monitor = ctrl+b C
 workspace.zoom = ctrl+b z
 workspace.split = ctrl+b S
+screen.work = ctrl+b 1
+screen.inbox = ctrl+b 2
+screen.hosts = ctrl+b 3
+screen.stats = ctrl+b 4
 ```
 
 With it `Ctrl-B` is Hydra's again: the agent's tmux receives its prefix only through
@@ -729,10 +734,14 @@ hydra tui                  # native mission control
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
-Every native screen shares one frame: a title row (`HYDRA / WORK`, `HYDRA / PLAN
-TOGETHER`, ...), a tab bar, one content panel and a two-line footer with the current
-status and the keys that apply. Below 100 columns the tab bar uses short labels
-(`Coord`, `Flows`, `Stats`) so every tab stays visible at 80 columns. Only changed cells are repainted, so idle refreshes
+Every native screen shares one frame: a header with the four screens (`1 Work`,
+`2 Inbox` with how many items need you, `3 Hosts`, `4 Stats`) and a summary of the
+project at the right, the screen itself, and a two-line footer with the current
+status and the keys that apply. `--view` names a screen (`work`, `inbox`, `hosts`,
+`stats`); the names of earlier releases still work and open the page that replaced
+them (`heads` and `workspace` Work, `detail` and `coordination` Work's Details page,
+`overview` and `workflows` its Run page, `attention` and `recovery` Inbox,
+`statistics` Stats). Only changed cells are repainted, so idle refreshes
 do not flicker. Session states use plain words: `running`, `terminal gone`,
 `stopped` and `unknown`; internal tokens stay behind `d` (technical details).
 Statistics (`D`) reads recorded workflow runs: `M` cycles the metric pages, `C`
@@ -746,30 +755,35 @@ One interaction model applies everywhere:
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift-Tab` | Next / previous tab; inside Workspace, next / previous pane |
-| `Left` / `Right`, `1`-`9` | Previous / next tab, or jump to a tab |
+| `1`-`4` | Work, Inbox, Hosts, Stats (`I`, `H`, `W`, `D` jump there too, and Esc comes back) |
+| `Tab` / `Shift-Tab` | Next / previous pane in Work (list, conversation, side pane); next / previous tab elsewhere |
+| `[` / `]` | Previous / next page of Work's side pane: Details, Plan, Run (and Conversation below 120 columns) |
 | `Up` / `Down`, `j` / `k` | Select |
-| `Enter` | Open the selection (details, a host's heads, a recovery check); expand or collapse a run |
-| `l` / `h` | Expand / collapse the selected run in Work and Overview |
-| `Esc` | One step back: details to the list, close help, clear the search |
-| `n` | Start a new task (branch, worktree, terminal and agent) |
-| `a` | Talk to the selected agent inside Workspace (a remote head attaches through `hydra fleet attach`) |
+| `Enter`, `a` | Talk to the selected agent in the conversation (a remote head attaches through `hydra fleet attach`); on a run, expand or collapse it |
+| `l` / `h` | Expand / collapse the selected run in Work |
+| `Esc` | One step back: the filter, the location, the zoom, then focus back to the list |
+| `n` | Start a new task (branch, worktree, terminal and agent); choose "Plan first" or "Just do it" |
 | `x` | Remove the selected or marked heads after an in-app confirmation; on a remote head, interrupt its agent |
 | `L`, `r` | Location filter (all, local, remote, each host); observe a remote host again |
 | `Y` / `N` / `R` / `X` | On a remote task row: approve, reject, resume, cancel, each confirmed |
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
-| `/`, `:` | Search heads, search explicit actions |
-| `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
+| `/`, `:` | Filter heads, search explicit actions |
+| `d` | Technical details on the Details page |
 | `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup, `O` opens onboarding |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
 
 Work lists the heads you started. Heads a workflow run created sit inside their
 run, and a run launched from a planning conversation sits inside that planning
-head; runs start collapsed and the header counts their heads separately. A headless
-head is described by the step that runs on it (agent, model and effort, tokens,
-duration) rather than by a terminal, and `p` shows that step's live output.
-Overview centres on the selected or active run: its steps, where each ran, and
-what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
+head; runs start collapsed and the header counts their heads separately. Beside
+the list the conversation shows the selected head's latest output, read-only,
+until you talk to it; the side pane shows the selection's Details, its Plan (a
+head whose agent published a plan, or a plan imported with `:`) with `E` approve,
+`F` request changes, `L` land the finished worker, `r` result review and `s` run
+status, and its Run (the run's graph, its steps and the selected step's
+evidence; `Y`, `N`, `R`, `X` act on it). A headless head is described by the step
+that runs on it (agent, model and effort, tokens, duration) rather than by a
+terminal, and the conversation shows that step's live output. See
+[workflows](workflows.md#heads-a-plan-run-creates).
 
 Statistics (`D`) has up to three pages, Sessions, Runs and Cohorts; `[` and `]`
 go between them. Head sessions lists
@@ -825,20 +839,18 @@ is always skipped. Recovery findings are explained in plain language; `Enter` ru
 the recorded check and shows its output in place, and `d` keeps the raw kind,
 source and confidence available.
 
-Inside Workspace, `A` / `B` / `C` switch between the conversation, plan-overview and
-monitoring layouts, `z` zooms the focused pane and `S` shows two agents side by side.
+In Work, `z` zooms the focused pane and `S` shows two agents side by side.
 While typing to an attached agent, Esc, Tab and `Ctrl-B` go to the agent; `Ctrl-]` leaves
 input (keys go to Hydra, the view stays open), `Ctrl-\ x` closes the view while the
 agent keeps running in its tmux session (`a` reopens it), `Ctrl-\ n` switches agent
 and `Ctrl-\ [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
 that disconnects never holds input; `a` or `Ctrl-\ r` reattaches. After `Ctrl-\` the
 status line lists what may follow. These chords are yours to change: see
-[TUI keys](#tui-keys). `p` shows a
-read-only transcript of the agent's terminal with its colors and wrapped long lines
-(PgUp/PgDn scroll it); key hints printed by the agent there only work in live
-input. The action
+[TUI keys](#tui-keys). The conversation's read-only output keeps the agent's colors
+and wraps long lines (PgUp/PgDn scroll it once the conversation has focus); key
+hints printed by the agent there only work in live input. The action
 palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
-to the shell CLI with argument-vector execution. Press `I` for the attention view;
+to the shell CLI with argument-vector execution. Press `2` (or `I`) for Inbox;
 `j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision
 seen for this client, and `r` opens the exact read-only review. In review, `j`/`k`
 scroll, `i` shows the full identity, `f` shows supplied references, `o` follows a
