@@ -14,11 +14,11 @@ from pathlib import Path
 # Per theme: token -> 256-colour palette entry. A token a theme leaves out is
 # the terminal's default colour (None in a capture).
 THEMES = {
-    "terminal": {"border": 6, "accent": 6, "success": 2, "warning": 3},
+    "terminal": {"border": 6, "accent": 6, "on_accent": 0, "success": 2, "warning": 3},
     "dark": {"text": 252, "muted": 245, "surface": 234, "selection": 117, "on_selection": 16,
-             "border": 66, "accent": 117, "success": 114, "warning": 214},
+             "border": 66, "accent": 117, "on_accent": 16, "success": 114, "warning": 214},
     "light": {"text": 16, "muted": 245, "surface": 255, "selection": 24, "on_selection": 231,
-              "border": 67, "accent": 24, "success": 28, "warning": 130},
+              "border": 67, "accent": 24, "on_accent": 231, "success": 28, "warning": 130},
 }
 
 SIXTEEN = [

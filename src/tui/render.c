@@ -34,6 +34,7 @@ static const struct kt_theme themes[3] = {
         [KT_TOKEN_ON_SELECTION] = {KT_DEFAULT, 0, 0, KT_BOLD, 0},
         [KT_TOKEN_BORDER] = {KT_INDEX(6), 0, 0, 0, 0},
         [KT_TOKEN_ACCENT] = {KT_INDEX(6), 0, 0, 0, 0},
+        [KT_TOKEN_ON_ACCENT] = {KT_INDEX(0), 0, 0, 0, 0},
         [KT_TOKEN_SUCCESS] = {KT_INDEX(2), 0, 0, 0, 0},
         [KT_TOKEN_WARNING] = {KT_INDEX(3), 0, 0, 0, 0}}},
     {"dark", {
@@ -44,6 +45,7 @@ static const struct kt_theme themes[3] = {
         [KT_TOKEN_ON_SELECTION] = {KT_INDEX(16), 0, 0, 0, KT_BOLD},
         [KT_TOKEN_BORDER] = {KT_INDEX(66), 0, KT_INDEX(6), 0, 0},
         [KT_TOKEN_ACCENT] = {KT_INDEX(117), 0, KT_INDEX(14), 0, 0},
+        [KT_TOKEN_ON_ACCENT] = {KT_INDEX(16), 0, KT_INDEX(0), 0, 0},
         [KT_TOKEN_SUCCESS] = {KT_INDEX(114), 0, KT_INDEX(10), 0, 0},
         [KT_TOKEN_WARNING] = {KT_INDEX(214), 0, 0, 0, 0}}},
     {"light", {
@@ -54,6 +56,7 @@ static const struct kt_theme themes[3] = {
         [KT_TOKEN_ON_SELECTION] = {KT_INDEX(231), 0, 0, KT_BOLD, 0},
         [KT_TOKEN_BORDER] = {KT_INDEX(67), 0, KT_INDEX(4), 0, 0},
         [KT_TOKEN_ACCENT] = {KT_INDEX(24), 0, KT_INDEX(4), 0, 0},
+        [KT_TOKEN_ON_ACCENT] = {KT_INDEX(231), 0, KT_INDEX(15), 0, 0},
         [KT_TOKEN_SUCCESS] = {KT_INDEX(28), 0, 0, 0, 0},
         [KT_TOKEN_WARNING] = {KT_INDEX(130), 0, KT_INDEX(3), 0, 0}}}
 };
