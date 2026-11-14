@@ -37,7 +37,9 @@ IDENTIFIER = re.compile(r"\b(?:run|head|task|instance|project)_[0-9a-f]{4,}\b|\b
 HINT = re.compile(r"(?:^|(?<=\s\s)|(?<=[·│|] ))((?:Enter|Esc|Tab|Space|[a-zA-Z?/:]|Ctrl-B [a-z])  ?[a-z][a-z-]+(?: [a-z-]+)?)(?=\s{2,}|\s*[·|│]|\s*$)")
 NEGATIVE_WORDS = ("failed", "blocked", "terminal gone", "stale", "need attention", "needs you", "outcome unknown", "cancelled")
 POSITIVE_WORDS = ("succeeded", "running", "done", "ready", "PASS", "verified")
+QUALIFIERS = ("stale", "unknown", "desired", "unavailable")
 ALNUM = re.compile(r"[A-Za-z0-9]")
+SELECTION_BAR = "\u258c"
 
 
 def luminance(colour: str) -> float:
@@ -124,13 +126,20 @@ class Lint:
         next_text = following.lstrip(" │|")
         next_start = len(following) - len(next_text)
         tabular = re.search(r"\S {3,}\S", inner.strip(" │|")) is not None
+        if fragment[:1] in BORDER_VERTICAL:
+            return False  # the rest lies under a dialog's edge: covered, not cut
         if fragment.count("(") > fragment.count(")"):
             return True
         if re.fullmatch(r"[0-9a-f]{32,}", fragment) or len(re.sub(r"[^0-9A-Za-z]", "", fragment)) >= 16:
             return not re.match(r"[0-9A-Za-z]", next_text)
         if next_text.strip() and next_start >= start and not tabular:
             return False  # prose wrapped onto the next row
+        columns = [start, *(m.end() for m in re.finditer(r" {3,}", line[: x + 1]))]
+        if any(following[c:c + 1].strip() and not following[c - 1:c].strip() for c in columns if c > 0):
+            return False  # a value wrapped under itself in a label/value row
         word = re.sub(r"[^A-Za-z]", "", fragment)
+        if word.isupper() and len(word) <= 4:
+            return False  # an acronym such as SSH or PR
         return len(word) >= 3 and not fragment.endswith((")", ".", ":", "…")) and word.lower() not in COMPLETE_WORDS
 
     # -- panels that intersect, or text drawn over a panel border --
@@ -139,8 +148,8 @@ class Lint:
         found = []
         for y in range(s.rows):
             for x in range(s.columns):
-                if s.glyph(x, y) not in TOP_LEFT:
-                    continue
+                if s.glyph(x, y) not in TOP_LEFT or s.glyph(x + 1, y) not in BORDER_HORIZONTAL:
+                    continue  # a corner starts a rule ("ctrl+]" in a help row is no panel)
                 for x2 in range(x + 2, s.columns):
                     if s.glyph(x2, y) in TOP_RIGHT and all(
                         s.glyph(i, y) in BORDER_HORIZONTAL or s.glyph(i, y) not in (TOP_LEFT | TOP_RIGHT) for i in range(x + 1, x2)
@@ -186,13 +195,32 @@ class Lint:
                     return
         if s.cursor["visible"] and s.cursor["x"] < s.columns - 1:
             return
-        if s.theme == "nocolor" and len(s.text) > 1 and re.search(r"\[[A-Za-z]+\]", s.text[1]):
-            return  # the active tab is the textual focus indicator without colour
+        if any(SELECTION_BAR in line for line in s.text):
+            return  # the selection bar marks the selected row in every theme, colour or not
+        if self.focused_rule():
+            return
         if any(re.match(r"^[│|]?\s{0,3}>\s", line) or " > " in line[:6] for line in s.text):
             return
         if any(re.search(r"\b(y approve|Type yes|Enter (continues|checks|signs|hands|reconciles|tries)|Press Enter)\b", line) for line in s.text):
             return
         self.finding("focus", 0, "no selection marker, focused field, cursor or action prompt is visible")
+
+    def focused_rule(self) -> bool:
+        """A pane title rule drawn as focused: in the accent tone, or bold
+        where there is no colour (a pane shown alone, such as a detail page
+        at 80 columns, has no selection row)."""
+        s = self.s
+        accent = s.tones["title"]["fg"]
+        for y in range(s.rows):
+            run = 0
+            for x in range(s.columns):
+                fg, _, attrs = s.colours(x, y)
+                rule = s.glyph(x, y) in BORDER_HORIZONTAL and (
+                    attrs & 1 if s.theme == "nocolor" else fg == accent)
+                run = run + 1 if rule else 0
+                if run >= 8:
+                    return True
+        return False
 
     # -- only the theme's declared colours; status words in fitting tones --
     def palette(self) -> None:
@@ -222,8 +250,28 @@ class Lint:
             for word in POSITIVE_WORDS:
                 for match in re.finditer(r"\b" + re.escape(word) + r"\b", line):
                     fg = s.colours(match.start(), y)[0]
-                    if fg == warning:
+                    # "STALE EVIDENCE / running" or "unknown · desired running":
+                    # the warning belongs to the qualifier painted with the word.
+                    around = self.run_text(match.start(), y)
+                    if y and around.strip().startswith(word):
+                        around += " " + self.run_text(match.start(), y - 1, fg)  # wrapped from the row above
+                    qualified = any(q in around.lower() for q in QUALIFIERS)
+                    if fg == warning and not qualified:
                         self.finding("status-tone", y, f"{word!r} is painted in the warning tone")
+
+    def run_text(self, x: int, y: int, fg: str | None = None) -> str:
+        """The text around column x painted in the same foreground (``fg``,
+        or the one at x)."""
+        s = self.s
+        fg = s.colours(x, y)[0] if fg is None else fg
+        if s.colours(x, y)[0] != fg:
+            return ""
+        left = right = x
+        while left > 0 and s.colours(left - 1, y)[0] == fg:
+            left -= 1
+        while right < s.columns - 1 and s.colours(right + 1, y)[0] == fg:
+            right += 1
+        return s.text[y][left:right + 1]
 
     # -- raw identifiers --
     def identifiers(self) -> None:

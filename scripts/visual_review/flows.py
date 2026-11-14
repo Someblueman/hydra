@@ -20,7 +20,7 @@ FIXTURES = ROOT / "tests/fixtures/tui"
 LOCAL = Path(__file__).resolve().parent / "fixtures"
 
 ESC = "\x1b"
-BACK = ESC + ESC  # back to the Work tab from any view
+CTRL_R = "\x12"  # read everything again
 
 
 class Session:
@@ -34,6 +34,13 @@ class Session:
 
     def keys(self, text: str) -> None:
         self.driver.send(text)
+
+    def escape(self) -> None:
+        """One Esc on its own: an Esc followed at once by another key reads
+        as that key with Alt held."""
+        self.driver.pump(0.2)
+        self.driver.send(ESC)
+        self.driver.pump(0.3)
 
     def fixture(self, kind: str, path: Path) -> None:
         """Serve ``path`` for the next ``hydra ... <kind>-data`` call."""
@@ -51,6 +58,29 @@ class Session:
         self.record(self.flow, name, group, list(markers), note)
         return screen
 
+    def page(self, key: str, *markers: str, presses: int = 5) -> str:
+        """Press ``key`` (a page key) until every marker is on screen."""
+        for _ in range(presses):
+            try:
+                return self.driver.wait_for(*markers, timeout=1.0)
+            except TimeoutError:
+                self.keys(key)
+        return self.driver.wait_for(*markers, timeout=2.0)
+
+    def select(self, text: str, presses: int = 8) -> None:
+        """Move a list's selection (the row with the bar) to the row showing
+        ``text``: up to the top first, then down."""
+        def selected() -> bool:
+            self.driver.settle()
+            return any(line.lstrip().startswith("\u258c") and text in line
+                       for line in self.driver.text().splitlines())
+        for key in ("k", "j"):
+            for _ in range(presses):
+                if selected():
+                    return
+                self.keys(key)
+        raise TimeoutError(f"no list row showing {text!r} could be selected")
+
     def refresh(self, key: str, *markers: str, timeout: float = 15.0) -> str:
         """Press ``key`` until every marker is on screen (fixture reloads)."""
         deadline = time.monotonic() + timeout
@@ -64,61 +94,80 @@ class Session:
 
 
 def work(s: Session) -> None:
-    """Planning, running, finished and failed work; details; attention; review."""
-    s.state("workspace-planning", "PLAN TOGETHER", "SELECTED WORK",
-            note="the default Workspace view with a live planning head selected")
-    s.state("work-list", "Heads in this project", "plan run kill-dry-run", keys="1")
-    s.state("work-run-expanded", "worker   kill-dry-run-worker", keys="jl")
-    s.state("overview-running", "RUN / plan run kill-dry-run", "Running step implement", keys="o")
+    """Work, its Run and Details pages, Inbox with its pages and review,
+    Stats, help, the palette and the confirmation dialogs."""
+    s.state("work-list", "Heads", "add-kill", "plan run kill",
+            note="the default Work screen: a live planning head selected, its latest output beside the list")
+    s.state("work-run-expanded", "worker kill-d", "Running step implement", keys="jl",
+            note="a run expanded under its planning head; the side pane shows its Run page (graph, steps, evidence)")
     s.fixture("workflow", FIXTURES / "workflow-runs.tsv")
-    s.state("overview-finished", "holds the result", timeout=20,
+    s.state("run-finished", "succeeded · plan run kill-dry-run", "Worker branch", "holds", timeout=20,
             note="the same run after it succeeded (fixture switched; the TUI refreshed)")
     s.fixture("workflow", LOCAL / "workflow-runs-failed.tsv")
-    s.state("overview-failed", "Step verify failed on kill-dry-run-check", timeout=20)
+    s.state("run-failed", "failed · plan run kill-dry-run", "Step verify failed on", timeout=20)
     s.fixture("workflow", FIXTURES / "workflow-runs.tsv")
-    s.state("worker-details", "Details: kill-dry-run-worker", "headless", keys="1kkkjlj\r", timeout=20, group="detail")
-    s.state("technical-details", "Technical details", "IDENTITY", keys="d", group="diagnostic")
+    s.keys("j")
+    s.page("]", "succeeded · plan run kill-dry-run", "kill-dry-run-worker")
+    s.state("run-head", "succeeded · plan run kill-dry-run", "kill-dry-run-worker",
+            note="a head the run created, on its Run page")
+    s.page("]", "AGENT STEP", "headless")
+    s.state("worker-details", "AGENT STEP", "headless", group="detail")
+    s.state("technical-details", "IDENTITY", "LIFECYCLE", keys="d", group="diagnostic")
     s.keys("d")
-    s.state("details-terminal-gone", "Details: notes-cleanup", "terminal gone", keys=ESC + "jjjj\r", group="detail")
-    s.state("coordination", "COORDINATION", keys="c")
-    s.state("recovery", "RECOVERY", "Terminal stopped", keys=BACK + "5")
-    s.state("recovery-finding", "DIAGNOSTICS", "kept", keys="d", group="diagnostic")
-    s.keys("d")
-    s.state("workflows", "HYDRA / WORKFLOWS", "kill-dry-run", keys="w")
-    s.state("statistics", "HYDRA / STATISTICS", "RUNS", keys=BACK + "7")
-    s.state("attention-queue", "ATTENTION  2 need you", "Approval needed", keys="I",
-            note="an approval waiting for the user: the waiting-for-input state")
-    s.state("attention-detail", "ATTENTION DETAIL", "Approval needed", keys="\r")
-    s.keys(ESC)
+    s.keys("jj")
+    s.page("]", "The terminal is gone", "files are kept")
+    s.state("details-terminal-gone", "The terminal is gone", "files are kept", group="detail")
+    s.state("remove-confirm", "Remove notes-cleanup?", "branch", keys="x", note="the destructive confirm dialog")
+    s.escape()
+    s.state("palette", "Commands", "type to filter", keys=":")
+    s.escape()
+    s.state("inbox", "Needs you", "Approve S-1: T-1", "Terminal stopped: notes-cleanup", keys="2",
+            note="decisions first, then results, stopped terminals and repairs")
+    s.state("inbox-detail", "What is waiting", "Y Approve", keys="\r")
+    s.state("approve-confirm", "Approve S-1?", "y approve", keys="Y",
+            note="approval is a dialog naming the request; nothing is typed")
+    s.escape()
+    s.escape()
+    s.select("Terminal stopped: notes-cleanup")
+    s.state("inbox-terminal-stopped", "is no longer running", "R Restart terminal", keys="\r",
+            note="a stopped terminal: what happened, what is kept, and the actions")
+    s.page("[", "DIAGNOSTICS", "dead-session")
+    s.state("inbox-technical", "DIAGNOSTICS", "dead-session", group="diagnostic")
+    s.escape()
     s.fixture("attention", LOCAL / "attention-failure.tsv")
-    s.refresh("I", "Check failed", "repo-check")
-    s.state("attention-failure", "Check failed", "repo-check", note="a failed check leads the queue")
+    s.refresh(CTRL_R, "Check failed", "repo-check")
+    s.state("inbox-failure", "Check failed", "repo-check", note="a failed check leads the list")
     s.fixture("attention", LOCAL / "attention-review-ready.tsv")
     s.fixture("review", LOCAL / "review-result.tsv")
-    s.refresh("I", "review-ready")
+    s.refresh(CTRL_R, "Result ready: R-1")
+    s.select("Result ready: R-1")
     s.state("review-result", "RESULT  add-kill-dry-run", "verdict PASS", keys="r")
     s.state("review-verified", "HOW IT WAS VERIFIED", "Full log: press L", keys="nn")
     s.state("review-changes", "CHANGES ON kill-dry-run-worker", keys="n")
-    s.state("review-identity", "SELECTED IDENTITY", "workflow records", keys="i", group="detail")
-    s.keys("i")
+    s.page("]", "IDENTITY", "Request")
+    s.state("review-identity", "IDENTITY", "Request", group="detail")
     s.fixture("review", FIXTURES / "review-v1.tsv")
-    s.keys(ESC)
-    s.refresh("I", "review-ready")
+    s.escape()
+    s.refresh(CTRL_R, "Result ready: R-1")
+    s.select("Result ready: R-1")
     s.state("review-evidence", "EXACT REVIEW / evidence", "readiness: ready", keys="r",
             note="the bounded evidence document with references")
-    s.state("help", "KEYBOARD HELP", keys=BACK + ESC + "?")
+    s.escape()
+    s.state("statistics", "Workflow runs", "kill-dry-run", keys="4")
+    s.state("help", "KEYBOARD HELP", keys="?")
     s.keys("?")
-    s.state("hosts-hub", "REMOTE HOSTS", "+ Add a host", keys="H")
+    s.state("hosts-hub", "This machine", "+ Add a host", keys="3")
 
 
 def fleet(s: Session) -> None:
-    """Fleet navigation: remote heads, overview, hosts, recovery, attention."""
-    s.state("fleet-workspace", "HYDRA /", "[Workspace]")
-    s.state("fleet-heads", "Heads: remote work", "feature-build", keys="1")
-    s.state("fleet-overview", "HYDRA / OVERVIEW", "builder/feature-build", keys="o")
-    s.state("fleet-hosts", "Observed", "builder", keys="3")
-    s.state("fleet-recovery", "RECOVERY", keys=BACK + "5", note="one tab bar for local and remote work: Recovery is 5")
-    s.state("fleet-attention", "ATTENTION", "need you", keys="I")
+    """Fleet mode: remote heads, their details, hosts, Inbox and Stats."""
+    s.state("fleet-work", "Heads · remote work", "builder/feature-bui")
+    s.page("]", "Where", "Liveness")
+    s.state("fleet-details", "Where", "Liveness", note="a remote head's Details page")
+    s.state("fleet-hosts", "Observed 3", "builder", keys="3")
+    s.state("fleet-inbox", "Repairs", "fleet: offline", "Approve S-1", keys="2",
+            note="one Inbox for remote decisions and host problems")
+    s.state("fleet-stats", "latest fleet response", "offline", keys="4")
 
 
 def hosts(s: Session) -> None:
