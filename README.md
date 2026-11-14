@@ -20,9 +20,12 @@ use ordinary shell sessions alongside agents.
 [![Release](https://img.shields.io/github/v/release/Someblueman/hydra)](https://github.com/Someblueman/hydra/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Hydra: native mission control, real agent output, and remote fleet attach](assets/demos/quick-tour.gif)
+![hydra tui: the Work screen with heads, workflow runs and a remote head beside an agent's live conversation, then talking to the agent, the Plan and Run pages, an Inbox approval dialog, Hosts, Stats and help](assets/demos/quick-tour.gif)
 
-[Demo transcript and recording instructions](assets/demos/README.md)
+A tour of the four screens of `hydra tui`, recorded from this checkout against a
+throwaway repository: real heads, plan and workflow runs, a scripted stand-in for
+the agent and a recorded remote-host observation.
+[What it shows and how to re-record it](assets/demos/README.md)
 
 **v3.0.0** makes the control centre one workspace for local and remote work:
 `hydra tui` shows the heads and tasks of your registered hosts beside local work,
