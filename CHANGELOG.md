@@ -175,6 +175,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `workflow resume` can no longer start a second driver on it.
   `workflow cancel` now signals the driver itself.
 - A failed workflow run no longer prints `find: 'sed' terminated by signal 13`.
+- `hydra workflow plan validate` and `compile` report a draft with missing or
+  wrongly typed members as a validation error instead of aborting (several
+  shapes crashed `hydra-fleet`), and `plan propose` refuses a draft that lacks
+  a member every plan requires.
+- Plan admission names its failure (`digest_mismatch`, `branch_exists`,
+  `source_changed`, `materialize_failed`) instead of one generic
+  `invalid_or_stale_plan`, and every planning error carries recovery text for
+  its own command.
+- A plan launch that started no run says why in the control centre and can
+  be launched again; the planning dependencies pane follows the launched
+  run's state; the plan review shows the text of a script the plan carries.
+- A plan result whose worker left uncommitted or untracked work says it is
+  not landable as is, lists the paths and how to commit them; the review,
+  the Work panel and the docs give one land command, and the suggested
+  cleanup uses `--protect-untracked` so it cannot delete the verified work.
 
 ## [2.9.0] - 2026-09-28
 
