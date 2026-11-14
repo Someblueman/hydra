@@ -148,9 +148,6 @@ bool key_text(struct app *app, enum key_action action, char *out, size_t size);
  * segment naming an unbound action is left out, or replaced by the text after
  * '~' when the segment has one: "a or {terminal.reconnect} reconnect~a reconnect". */
 void key_hint(struct app *app, char *out, size_t size, const char *separator, const char *template_text);
-/* The first template whose text fits width; the last one when none fits. */
-void key_hint_fit(struct app *app, char *out, size_t size, const char *separator,
-                  const char *const templates[], size_t count, int width);
 /* While a chord is partly entered: its keys so far and what may follow, such
  * as "Ctrl-\ ...  x close / n next agent". False when no chord is pending. */
 bool key_pending_text(struct app *app, char *out, size_t size);

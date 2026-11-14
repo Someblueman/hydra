@@ -86,11 +86,9 @@ static bool chords_without_agent(void) {
     return ok;
 }
 
-/* Hint text follows the bindings: a rebound action shows its new chord, an
- * unbound one falls back or is left out, and the first variant that fits wins. */
+/* Hint text follows the bindings: a rebound action shows its new chord, and
+ * an unbound one falls back or is left out. */
 static bool hints_follow_keys(void) {
-    static const char *const variants[] = {
-        "{terminal.leave} leaves input|{terminal.close} closes the view", "{terminal.leave} leave", "L"};
     static const char keys[] = "terminal.leave = f2\nterminal.reconnect = none\n";
     struct app *app = calloc(1U, sizeof(*app));
     char text[256], error[128];
@@ -100,12 +98,6 @@ static bool hints_follow_keys(void) {
     key_hint(app, text, sizeof(text), " / ",
              "A|a or {terminal.reconnect} reconnect~a reconnect|{terminal.close} close|{terminal.reconnect} again|{no.such} key|B");
     ok = ok && !strcmp(text, "A / a reconnect / Ctrl-\\ x close / B");
-    key_hint_fit(app, text, sizeof(text), "  ", variants, 3, 41);
-    ok = ok && !strcmp(text, "F2 leaves input  Ctrl-\\ x closes the view");
-    key_hint_fit(app, text, sizeof(text), "  ", variants, 3, 40);
-    ok = ok && !strcmp(text, "F2 leave");
-    key_hint_fit(app, text, sizeof(text), "  ", variants, 3, 0);
-    ok = ok && !strcmp(text, "L");
     key_hint(app, text, 6, " / ", "{terminal.close} closes");
     ok = ok && strlen(text) == 5;
     ok = ok && key_text(app, KEY_TERMINAL_LEAVE, text, sizeof(text)) && !strcmp(text, "F2");

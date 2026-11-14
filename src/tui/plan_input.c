@@ -68,16 +68,5 @@ void native_plan_validate(struct app *app) {
     if (app->plan && app->plan->state==PLAN_RETURNED && !native_plan_changed(app->plan))
         copy_text(app->notice,sizeof(app->notice),"This revision was returned for changes. Hydra validates the agent's next published revision.");
     else if (!native_plan_compile(app))
-        copy_text(app->notice,sizeof(app->notice),"Review the agent proposal with P (I imports files) before validation; an active compilation must finish first");
-}
-
-/* The planning keys reach their actions through plan_actions.c. */
-bool native_plan_key(struct app *app, char key) {
-    switch (key) {
-        case 'P': plan_action_load_proposal(app); return true;
-        case 'V': plan_action_validate(app); return true;
-        case 'F': plan_action_request_changes(app); return true;
-        case 'E': plan_action_approve(app); return true;
-        default: return false;
-    }
+        copy_text(app->notice,sizeof(app->notice),"Review the agent proposal with P (: imports files) before validation; an active compilation must finish first");
 }

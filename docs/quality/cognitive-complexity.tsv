@@ -186,9 +186,6 @@ src/libhydra.c	hydra_json_write_string	34
 src/libhydra.c	hydra_validate_events	20
 src/libhydra.c	hydra_validate_state	31
 src/libhydra.c	hydra_validate_unique_branches	29
-src/tui/adapter.c	refresh_model	28
-src/tui/attention.c	native_attention_key	24
-src/tui/attention.c	render_title_row	24
 src/tui/capture.c	native_capture_step	26
 src/tui/controls.c	native_controls_tick	27
 src/tui/controls_input.c	native_control_key	31
@@ -216,12 +213,6 @@ src/tui/remote.c	retain_host	19
 src/tui/remote.c	retarget_after_accept	21
 src/tui/remote_text.c	host_state_text	18
 src/tui/remote_text.c	remote_observation_text	18
-src/tui/render.c	head_row	31
-src/tui/render.c	panel_title	19
-src/tui/render.c	render_detail	16
-src/tui/render.c	render_footer	18
-src/tui/render.c	render_header	20
-src/tui/review.c	native_review_hints	26
 src/tui/review.c	render_lead	31
 src/tui/selection.c	move_selection	19
 src/tui/statistics_cohorts.c	statistics_remote_text	16
@@ -231,7 +222,6 @@ src/tui/terminals.c	native_terminals_pump	31
 src/tui/workflow_model.c	accept_workflows	29
 src/tui/workflow_model.c	load_workflows	57
 src/tui/workflow_model.c	workflow_edges	27
-src/tui/workflow_model.c	workflow_key	31
 src/tui/workspace_terminals.c	native_workspace_show_terminal	20
 tests/c/test_agent_auth.c	main	54
 tests/c/test_agent_profile.c	decoders	49

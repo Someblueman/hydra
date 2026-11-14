@@ -598,16 +598,6 @@ void key_hint(struct app *app, char *out, size_t size, const char *separator, co
     }
 }
 
-void key_hint_fit(struct app *app, char *out, size_t size, const char *separator,
-                  const char *const templates[], size_t count, int width) {
-    size_t i;
-    if (size) out[0] = '\0';
-    for (i = 0; i < count; i++) {
-        key_hint(app, out, size, separator, templates[i]);
-        if ((int)strlen(out) <= width) return;
-    }
-}
-
 /* The keys of chord after its first skip, as a chord of their own. */
 static void chord_rest(const struct kt_chord *chord, unsigned skip, struct kt_chord *rest) {
     unsigned i;

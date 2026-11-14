@@ -124,7 +124,7 @@ static void detail_plan(struct app *app, const struct head *head) {
 static void detail_changes(struct app *app, const struct head *head) {
     char changes[96];
     section(app, "CHANGES");
-    if (!head->head_id[0]) { labelled(app, "Changed", "unknown (no head record; see Recovery)", KT_MUTED); return; }
+    if (!head->head_id[0]) { labelled(app, "Changed", "unknown (no head record; see Inbox)", KT_MUTED); return; }
     snprintf(changes, sizeof(changes), "%u %s in the worktree, not yet committed", head->diff, head->diff == 1 ? "file" : "files");
     labelled(app, "Changed", changes, KT_BASE);
     labelled(app, "Full diff", ": diff (everything since the branch base)", KT_MUTED);

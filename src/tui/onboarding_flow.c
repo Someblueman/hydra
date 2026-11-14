@@ -247,10 +247,6 @@ static void close_view(struct app *app, struct native_onboarding *s) {
     if (s->job.active) snprintf(app->notice, sizeof(app->notice), "%s keeps running; O shows its result", s->job_label);
 }
 
-void native_onboarding_close(struct app *app) {
-    if (app->onboarding && app->onboarding->open) close_view(app, app->onboarding);
-}
-
 /* ---- Actions ---- */
 
 static size_t rows_of(const struct native_onboarding *s, struct onb_row *rows) {

@@ -363,7 +363,7 @@ void stats_status(struct app *app, struct kt_canvas *c, const char *page, bool h
      * chip takes; one with more to say (an age, a date) is followed by a dot. */
     word = !strcmp(fresh, "Live") || !strncmp(fresh, "Waiting", 7);
     (void)snprintf(status, sizeof(status), "%s%s%s", fresh, word ? ": " : dot(app), text);
-    chrome_footer(app, c, status, warn ? KT_WARNING : KT_MUTED, NULL);
+    chrome_footer(app, c, status, warn ? KT_WARNING : KT_MUTED);
 }
 
 bool stats_begin(struct app *app, bool headless, struct kt_canvas *c) {

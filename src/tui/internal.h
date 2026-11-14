@@ -34,7 +34,6 @@
 
 #include "app.h"
 #include "review.h"
-#include "process.h"
 #include "terminal.h"
 #include "transcript.h"
 extern char **environ;
@@ -312,12 +311,8 @@ size_t outline_position(const struct app *app, const struct outline_row *rows, s
 void outline_select(struct app *app, const struct outline_row *row);
 void outline_move(struct app *app, int direction, bool heads_only);
 bool outline_toggle(struct app *app, int direction);
-void outline_release_run(struct app *app);
-void outline_release_task(struct app *app);
 bool text_matches(const char *text, const char *search);
 /* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
-struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported, *where; struct kt_style tone; };
-void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
 const char *head_agent_short(const struct app *app, const struct head *head);
 const char *run_head_absence(const struct app *app, const struct workflow_head *r);
 void format_duration(long long seconds, char *out, size_t size);
@@ -328,7 +323,6 @@ void run_next_text(const struct app *app, size_t run, char *out, size_t size);
 size_t overview_run(struct app *app);
 void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size);
 const char *head_list_status(const struct app *app, const struct head *h);
-struct kt_style head_list_tone(const struct app *app, const struct head *h);
 const char *head_run_role(const struct app *app, const struct head *h);
 void exec_model_text(const struct workflow_exec *e, bool running, char *out, size_t size);
 void exec_effort_text(const struct workflow_exec *e, bool running, char *out, size_t size);
@@ -349,11 +343,6 @@ void paragraph_skip(struct app *app, const char *text, struct kt_style tone, siz
 void labelled_pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
                    const char *right_label, const char *right, struct kt_style right_tone);
 void lead_block(struct app *app, const char *eyebrow, const char *title);
-void key_row(struct app *app, const char *key, const char *action);
-const char *fit_hints(const char *hints, size_t width, char *out, size_t size);
-size_t wrapped_rows(const char *text, size_t width);
-void render_help(struct app *app);
-bool help_scroll_key(struct app *app, char key);
 /* Shared text-view helpers (render.c) and the head details view (detail.c). */
 void column(struct app *app, int x, int width, struct kt_style tone, const char *text);
 void paragraph(struct app *app, const char *text, struct kt_style tone);
@@ -387,20 +376,17 @@ bool statistics_typing(const struct app *app);
 bool statistics_filter_event(struct app *app, const struct kt_event *e);
 bool statistics_paste(struct app *app, const char *bytes, size_t length);
 bool statistics_back(struct app *app);
-bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
 /* Dialogs (forms.c): each waits for its answer. A question's default button
  * is Cancel; a form returns 0 when submitted and -1 when cancelled. */
 bool dialog_confirm(struct app *app, const char *title, const char *body, const char *accept, bool destructive);
-int dialog_form(struct app *app, const char *title, struct kt_field *fields, size_t count);
 int dialog_form_body(struct app *app, const char *title, const char *body, struct kt_field *fields, size_t count);
 void dialogs_draw(struct app *app);
 /* Runs a kettle modal until final() accepts its result: that result, or -1
  * when it was closed, cancelled or the program is ending. */
 typedef bool (*dialog_final_fn)(int result);
 int dialog_run(struct app *app, const struct kt_modal *dialog, dialog_final_fn final);
-bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
 /* The head sessions page and what the two pages share (statistics_sessions.c). */
 bool statistics_sessions_shown(const struct app *app);
@@ -478,8 +464,6 @@ void native_onboarding_labels(const struct app *app, struct kt_binding *rows);
 void native_onboarding_back(struct app *app);
 void native_onboarding_tick(struct app *app);
 void native_onboarding_render(struct app *app);
-/* The view closes (Esc on its list, [ or ]); a child that runs keeps running. */
-void native_onboarding_close(struct app *app);
 void native_onboarding_destroy(struct app *app);
 int native_onboarding_fixture(struct app *app, const char *export_file, const char *intent_file, const char *screen);
 void native_onboarding_dump(struct app *app, FILE *out);
@@ -524,8 +508,6 @@ bool native_attention_run_request(const struct app *app, const char *run, char *
                                   char *step, size_t step_size);
 bool native_links_accept(struct app *app, FILE *input);
 bool native_attention_load(struct app *app, const char *path);
-bool native_attention_detail_open(const struct app *app);
-bool native_attention_listed(const struct app *app);
 bool native_attention_review_load(struct app *app, const char *path);
 /* Headless fixtures replay keys through the interactive dispatcher. */
 void headless_key(struct app *app, char key);
@@ -632,11 +614,7 @@ bool terminal_lend(struct app *app, struct terminal_loan *loan, bool shield);
 bool terminal_return(struct app *app, struct terminal_loan *loan);
 void copy_text(char *dst, size_t size, const char *src);
 bool parse_unsigned(const char *value, unsigned *result);
-int output_start(struct output_child *child, char *const argv[], long budget_ms);
-ssize_t output_read(struct output_child *child, char *buffer, size_t size);
-int output_finish(struct output_child *child, bool failed);
 void group_marked_action(struct app *app);
-void kill_marked_action(struct app *app);
 void palette_open(struct app *app);
 void fleet_action(struct app *app);
 void remote_detail(struct app *app, const struct head *head);
@@ -663,13 +641,10 @@ bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
-bool frame_content(struct app *app, struct kt_canvas *out);
 /* The top bar: the brand, the four screens as numbered tabs and the project summary. blank_row: the row under it is left blank, so the summary may not move there. */
 void chrome_header(struct app *app, struct kt_canvas *c, bool blank_row);
-/* A pane's titled rule (render.c), accent when the pane has the focus. */
-void pane_rule(struct kt_canvas *c, struct kt_rect r, const char *title);
 void pane_rule_styled(struct kt_canvas *c, struct kt_rect r, const char *title, bool focused);
-void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone);
 /* The status line alone (its chip and text), and what it says on a screen without its own. */
 void chrome_status(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone);
 void screen_status(struct app *app, char *out, size_t size, struct kt_style *tone, bool headless);

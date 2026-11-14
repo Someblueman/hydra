@@ -198,7 +198,7 @@ static void frame_footer(struct app *app, bool headless, bool typing, bool tight
     struct kt_style tone;
     struct kt_canvas *c = &app->frame;
     work_status(app, status, sizeof(status), &tone, headless);
-    if (!typing) { chrome_footer(app, c, status, tone, NULL); return; }
+    if (!typing) { chrome_footer(app, c, status, tone); return; }
     if (!tight) chrome_status(app, c, status, tone);
     key_terminal_footer(app, c, (struct kt_rect){1, c->height - 1, c->width - 2, 1});
 }

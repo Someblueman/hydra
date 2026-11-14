@@ -11,11 +11,6 @@ struct onb_field *onb_form_fields(struct native_onboarding *s) {
     return s->screen == ONB_SCREEN_REVIEW ? s->review_fields : s->select_fields;
 }
 
-void onb_form_set(struct onb_field *f, const char *text) {
-    copy_text(f->text, sizeof(f->text), text);
-    f->cursor = strlen(f->text);
-}
-
 void onb_form_insert(struct native_onboarding *s, const struct kt_event *e) {
     struct onb_field *f = &onb_form_fields(s)[s->focus];
     size_t length = strlen(f->text), i;

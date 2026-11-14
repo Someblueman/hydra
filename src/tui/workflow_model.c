@@ -245,21 +245,23 @@ void workflow_move(struct app *app, int direction) {
     app->graph_follow = true;
 }
 
+/* Moves a pan offset by step within 0..limit. */
+static int pan(int at, int step, int limit) {
+    at += step;
+    if (at < 0) return 0;
+    return at > limit ? limit : at;
+}
+
+/* The Run page's graph keys: j/k select a step, h/l and J/K pan (the graph
+ * stops following the selection), Enter recentres on the selected step. */
 bool workflow_key(struct app *app, char key) {
-    if (key == 'j' || key == 'k') workflow_move(app, key == 'j' ? 1 : -1);
-    else if (key == '[' || key == ']') {
-        if (app->workflows && app->workflows->run_count) {
-            size_t n = app->workflows->run_count;
-            if (n > 1) app->notice[0] = '\0';
-            app->workflow_run = (app->workflow_run + (key == ']' ? 1 : n - 1)) % n;
-            app->workflow_node = 0; app->graph_x = 0; app->graph_y = 0; app->graph_follow = true;
-        }
-    } else if (key == 'h') { app->graph_x = app->graph_x > 8 ? app->graph_x - 8 : 0; app->graph_follow = false; }
-    else if (key == 'l') { if (app->graph_x < 3500) app->graph_x += 8; app->graph_follow = false; }
-    else if (key == 'J') { if (app->graph_y < 650) app->graph_y += 4; app->graph_follow = false; }
-    else if (key == 'K') { app->graph_y = app->graph_y > 4 ? app->graph_y - 4 : 0; app->graph_follow = false; }
-    else if (key == '\r' || key == '\n') app->graph_follow = true;
-    else if (strchr("/pda cAxG", key)) copy_text(app->notice, sizeof(app->notice), "Workflow view is read-only; j/k nodes, [/] runs, h/l/J/K pan");
-    else return false;
+    switch (key) {
+    case 'j': case 'k': workflow_move(app, key == 'j' ? 1 : -1); return true;
+    case 'h': case 'l': app->graph_x = pan(app->graph_x, key == 'l' ? 8 : -8, 3500); break;
+    case 'J': case 'K': app->graph_y = pan(app->graph_y, key == 'J' ? 4 : -4, 650); break;
+    case '\r': case '\n': app->graph_follow = true; return true;
+    default: return false;
+    }
+    app->graph_follow = false;
     return true;
 }

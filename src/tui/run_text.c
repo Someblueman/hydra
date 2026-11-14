@@ -184,15 +184,6 @@ const char *head_list_status(const struct app *app, const struct head *h) {
     return step_state_word(step->state);
 }
 
-struct kt_style head_list_tone(const struct app *app, const struct head *h) {
-    const struct workflow_node *step;
-    if (head_remote(h)) return remote_head_tone(app, h);
-    if (!head_headless(h)) return status_tone(h);
-    step = head_step(app, h);
-    if (step && !strcmp(step->state, "running")) return KT_SUCCESS;
-    return head_needs_attention(app, h) ? KT_WARNING : KT_BASE;
-}
-
 const char *head_run_role(const struct app *app, const struct head *h) {
     size_t record;
     if (head_owner_run(app, h, &record) == SIZE_MAX || record == SIZE_MAX) return NULL;
@@ -272,20 +263,6 @@ const char *head_agent_short(const struct app *app, const struct head *head) {
     return !step ? "none" : step->profile[0] ? step->profile : "command";
 }
 
-static const char *outline_glyph(const struct app *app, bool open) {
-    if (app->ascii) return open ? "-" : "+";
-    return open ? "\xe2\x96\xbe" : "\xe2\x96\xb8";
-}
-
-static void outline_run_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
-    const struct workflow_run *r = &app->workflows->runs[row->run];
-    size_t heads = run_head_total(app->workflows, row->run);
-    snprintf(t->name, sizeof(t->name), "%*s%s %s %s", row->depth * 2, "", outline_glyph(app, row->open), run_label_kind(r), r->name);
-    if (heads) snprintf(t->count, sizeof(t->count), "%zu head%s", heads, heads == 1 ? "" : "s");
-    t->status = r->state; t->agent = t->count;
-    t->tone = run_needs_attention(app, row->run) ? KT_WARNING : !strcmp(r->state, "running") ? KT_SUCCESS : KT_BASE;
-}
-
 /* A run head that is not active: retired or kept by the run, removed by the
  * user, or not created yet because its spawn step has not run. */
 const char *run_head_absence(const struct app *app, const struct workflow_head *r) {
@@ -295,43 +272,4 @@ const char *run_head_absence(const struct app *app, const struct workflow_head *
     for (i = 0; i < m->node_count; i++)
         if (m->nodes[i].run == r->run && !strcmp(m->nodes[i].id, r->step) && !m->nodes[i].attempts) return "pending";
     return "removed";
-}
-
-static void outline_retired_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
-    const struct workflow_head *r = &app->workflows->heads[row->record];
-    snprintf(t->name, sizeof(t->name), "%*s%-8s %s", row->depth * 2, "", r->role, r->branch);
-    t->status = run_head_absence(app, r);
-    t->tone = KT_MUTED;
-}
-
-static void outline_head_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
-    const struct head *head = &app->model.heads[row->head];
-    const char *role = head_run_role(app, head);
-    if (role) snprintf(t->name, sizeof(t->name), "%*s%-8s %s", row->depth * 2, "", role, head->branch);
-    else snprintf(t->name, sizeof(t->name), "%*s%s", row->depth * 2, "", head->branch);
-    t->status = head_list_status(app, head); t->agent = head_agent_short(app, head);
-    t->reported = head_remote(head) ? "-" : head->declared[0] ? head->declared : "-";
-    t->where = head_where(head);
-    t->tone = head_list_tone(app, head);
-}
-
-/* A remote task: receiver-owned work without a head here. */
-static void outline_task_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
-    const struct task_observation *task = &app->model.tasks[row->record];
-    snprintf(t->name, sizeof(t->name), "%*s%s", row->depth * 2, "", task->task_id);
-    t->status = task_status(app, task);
-    t->agent = task->profile[0] && strcmp(task->profile, "-") ? task->profile : "task";
-    t->reported = task->result_state[0] && strcmp(task->result_state, "unavailable") ? task->result_state : "-";
-    t->where = task->host;
-    t->tone = task_tone(app, task);
-}
-
-void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
-    t->name[0] = t->count[0] = '\0';
-    t->status = t->agent = t->reported = t->where = "";
-    t->tone = KT_BASE;
-    if (row->kind == OUTLINE_RUN) outline_run_text(app, row, t);
-    else if (row->kind == OUTLINE_RETIRED) outline_retired_text(app, row, t);
-    else if (row->kind == OUTLINE_TASK) outline_task_text(app, row, t);
-    else outline_head_text(app, row, t);
 }

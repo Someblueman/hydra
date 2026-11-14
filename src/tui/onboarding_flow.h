@@ -49,7 +49,6 @@ void native_onboarding_dump(struct app *app, FILE *out);
 struct onb_field *onb_form_fields(struct native_onboarding *s);
 bool onb_form_key(struct native_onboarding *s, const struct kt_event *e);
 void onb_form_insert(struct native_onboarding *s, const struct kt_event *e);
-void onb_form_set(struct onb_field *f, const char *text);
 /* The job a screen leads to, for the running label. */
 void onb_job_label(enum onb_job kind, char *out, size_t size);
 /* Opens the detail screen of the selected row (a candidate or a source record). */

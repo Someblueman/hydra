@@ -279,13 +279,6 @@ static bool outline_skip(const struct outline_row *row, bool heads_only) {
     return row->kind == OUTLINE_RETIRED || (heads_only && row->kind != OUTLINE_HEAD);
 }
 
-/* Leaving for a view about one head: a selected remote task is released. */
-void outline_release_task(struct app *app) {
-    if (!app->task_row) return;
-    app->task_row = false;
-    retarget_selection(app);
-}
-
 /* The next selectable row from position in direction, or count. */
 static size_t outline_next(const struct outline_row *rows, size_t count, size_t position, int direction, bool heads_only) {
     size_t next = position;
@@ -324,17 +317,4 @@ bool outline_toggle(struct app *app, int direction) {
     run_set_expanded(app, run, false);
     app->run_row = true; app->workflow_run = run;
     return true;
-}
-
-/* Leaving Work or Overview on a run row: views about one head show the run's
- * first head, or the planning head that launched it. */
-void outline_release_run(struct app *app) {
-    size_t i, owner;
-    if (!app->run_row) return;
-    app->run_row = false;
-    if (!app->workflows || app->workflow_run >= app->workflows->run_count) return;
-    for (i = 0; i < app->model.head_count; i++)
-        if (head_owner_run(app, &app->model.heads[i], NULL) == app->workflow_run) { app->selected = i; return; }
-    owner = run_owner_head(app, app->workflow_run);
-    if (owner != SIZE_MAX) app->selected = owner;
 }

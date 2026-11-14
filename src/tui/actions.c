@@ -249,8 +249,6 @@ void remove_heads_action(struct app *app) {
     retarget_selection(app);
 }
 
-void kill_marked_action(struct app *app) { remove_heads_action(app); }
-
 /* x removes the selected or marked heads; Inbox removes leftover worktrees itself. */
 void remove_key_action(struct app *app) { remove_heads_action(app); }
 

@@ -83,16 +83,6 @@ bool dialog_confirm(struct app *app, const char *title, const char *body, const 
     return dialog_run(app, &modal, question_final) == KT_CONFIRM_ACCEPTED;
 }
 
-/* A decision written as lines: the first is the question, the others the
- * consequences. `choices` names the accepting key; y is the only one used. */
-bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices) {
-    char body[4096] = "";
-    size_t i;
-    (void)choices;
-    for (i = 0; i < count; i++) text_append(body, sizeof(body), "%s%s", i ? "\n" : "", lines[i]);
-    return dialog_confirm(app, title, body, "Confirm", false);
-}
-
 /* ---- forms --------------------------------------------------------------- */
 
 static bool form_final(int result) {
@@ -107,10 +97,6 @@ int dialog_form_body(struct app *app, const char *title, const char *body, struc
     form.body = body;
     modal = kt_form_modal(&form, DIALOG_FORM, width < 30 ? 30 : width);
     return dialog_run(app, &modal, form_final) == KT_FORM_SUBMITTED ? 0 : -1;
-}
-
-int dialog_form(struct app *app, const char *title, struct kt_field *fields, size_t count) {
-    return dialog_form_body(app, title, NULL, fields, count);
 }
 
 /* One text field. A prompt such as "Search heads: " is the dialog's title;

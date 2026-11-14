@@ -135,12 +135,6 @@ bool frame_begin(struct app *app, bool headless) {
 
 static void overlays(struct app *app);
 
-/* A pane's title: a rule on the first row of its area, the title at its
- * left, nothing around the sides. Its content keeps the box's inside. */
-void pane_rule(struct kt_canvas *c, struct kt_rect r, const char *title) {
-    pane_rule_styled(c, r, title, false);
-}
-
 void pane_rule_styled(struct kt_canvas *c, struct kt_rect r, const char *title, bool focused) {
     char text[TEXT + 96];
     if (r.width < 2 || r.height < 1) return;
@@ -157,13 +151,6 @@ void frame_end(struct app *app, unsigned frame, bool headless) {
     printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
     for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL); putchar('\n'); }
     fflush(stdout);
-}
-
-/* A borrowed view of the remaining content rows, for canvas-based views. */
-bool frame_content(struct app *app, struct kt_canvas *out) {
-    struct kt_rect r = {app->content_x, app->line, app->content_width, app->limit - app->line};
-    if (r.height < 1) return false;
-    return kt_canvas_view(out, &app->frame, r);
 }
 
 static void text_at(struct app *app, int x, int width, struct kt_style tone, const char *text) {
@@ -531,22 +518,17 @@ static void status_chip(struct app *app, struct kt_canvas *c, int row, const cha
     kt_text(c, (struct kt_rect){x, row, c->width - x - 1, 1}, status, tone);
 }
 
-/* A partly entered chord takes the status line until it completes: its keys
- * so far and the keys that may follow. */
-void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints) {
+/* The status line and the footer generated from the binding table. A partly
+ * entered chord takes the status line until it completes: its keys so far
+ * and the keys that may follow (the footer's row when there is no status
+ * line). */
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone) {
     char pending[512];
     int height = c->height;
-    if (key_pending_text(app, pending, sizeof(pending))) {
-        status = pending; tone = KT_STRONG;
-        if (height < 3) hints = pending;
-    }
+    bool chord = key_pending_text(app, pending, sizeof(pending));
+    if (chord) { status = pending; tone = KT_STRONG; }
     if (height >= 3) status_chip(app, c, height - 2, status, tone);
-    if (hints && hints[0]) {
-        /* A hand-written hint line drops whole hints from its right to fit. */
-        char fitted[512];
-        kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1},
-                fit_hints(hints, c->width > 2 ? (size_t)(c->width - 2) : 1U, fitted, sizeof(fitted)), KT_MUTED);
-    }
+    if (chord && height < 3) kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, pending, KT_MUTED);
     else key_footer(app, c, (struct kt_rect){1, height - 1, c->width - 2, 1});
 }
 
@@ -731,7 +713,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     else hosts_render(app);
     app->limit = app->rows;
     screen_status(app, status, sizeof(status), &tone, headless);
-    chrome_footer(app, &app->frame, status, tone, NULL);
+    chrome_footer(app, &app->frame, status, tone);
     if (app->view == 6) hosts_overlay(app);
     frame_end(app, frame, headless);
 }
