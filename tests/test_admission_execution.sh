@@ -120,4 +120,19 @@ for record in "$HYDRA_HOME/admission/$run"-*.request; do
     "$CLI" admission unknown "$request" >/dev/null
     "$CLI" admission release "$request" --confirmed >/dev/null
 done
-printf 'Passed real exec admission, release, queue deadlines/cancellation, labels, and lost-owner retention\n'
+
+# An execution owner waits for a busy admission lock up to its queue deadline,
+# while a plain admission command still gives up after about 2 seconds.
+mkdir "$HYDRA_HOME/admission/lock"
+(sleep 6; rmdir "$HYDRA_HOME/admission/lock") &
+holder=$!
+(cd "$fixture/a" && exec "$CLI" exec --branch admission-a --exit-code --json -- touch "$fixture/after-lock") > "$fixture/after-lock.json" &
+waiter=$!
+if "$CLI" admission status --json > "$fixture/busy" 2>&1; then exit 1; fi
+grep -q state_unavailable "$fixture/busy"
+wait "$holder"
+wait "$waiter"
+[ -f "$fixture/after-lock" ]
+"$CLI" admission status --json > "$fixture/status"
+grep -q '"reserved":0,"queued":0' "$fixture/status"
+printf 'Passed real exec admission, release, queue deadlines/cancellation, labels, lock waits, and lost-owner retention\n'

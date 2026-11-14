@@ -176,6 +176,33 @@ assert_failure $? "a failed root fails the fan-out run"
 assert_equal failed "$(sed -n '1p' "$(run_dir_for "$(sed -n '1p' "$test_root/fanout.out")")/state")" "the fan-out run records a terminal failure"
 assert_equal "" "$(cat "$test_root/fanout.err")" "a failed run reports no state-reader errors"
 
+# Sixteen exec steps on one head start together, and each one's admission
+# request and release contend for the host's admission lock. A step waits for
+# the lock instead of failing when it is busy for more than two seconds.
+# Released records of earlier executions stay in the admission directory and
+# lengthen every locked scan; 48 of them stand for a long plan run's history.
+history_sequence=1
+while [ "$history_sequence" -le 48 ]; do
+    printf 'project_history released 1700000000 1700000060 %s - termination_confirmed\n' "$history_sequence" \
+        > "$HYDRA_HOME/admission/history-$history_sequence.request"
+    history_sequence=$((history_sequence + 1))
+done
+{
+    printf 'version: 1\nid: driver-parallel-exec\nparallelism: 16\nresources:\n  disk_mb: 1\n  max_heads: 1\nsteps:\n'
+    for parallel_step in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+        printf '  - id: exec-%s\n    kind: exec\n    needs: []\n    retry: 0\n    idempotent: true\n    args:\n      head: driver-head\n      timeout: 120\n      argv: ["true"]\n' "$parallel_step"
+    done
+} > "$test_root/parallel.yml"
+"$HYDRA_BIN" workflow run "$test_root/parallel.yml" > "$test_root/parallel.out" 2> "$test_root/parallel.err"
+assert_success $? "sixteen parallel exec steps on one head all succeed"
+parallel_dir="$(run_dir_for "$(sed -n '1p' "$test_root/parallel.out")")"
+assert_equal 16 "$(grep -c '"type":"step.succeeded"' "$parallel_dir/events.jsonl")" "every parallel exec step succeeds"
+if grep -q state_unavailable "$parallel_dir"/steps/*/attempt-1/stdout "$parallel_dir"/steps/*/attempt-1/stderr; then parallel_status=1; else parallel_status=0; fi
+assert_success "$parallel_status" "no parallel exec step reports unavailable admission storage"
+"$HYDRA_BIN" admission status --json > "$test_root/admission.json"
+grep -q '"reserved":0,"queued":0' "$test_root/admission.json"
+assert_success $? "every parallel exec step releases its admission reservation"
+
 # A plan run drives in a subshell of the CLI process. The run's recorded owner
 # is that driver, so the run stays owned when the CLI process itself is gone:
 # status does not call it stale and resume does not start a second driver.

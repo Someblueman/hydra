@@ -614,7 +614,11 @@ Admission is enforced by the receiving host's shell authority under one lock. FI
 queue deadlines, host/project limits, labels, disk floors, and retained unknown
 reservations apply to exec, gates, heads, resume, workflows, and remote tasks. A
 capacity snapshot is observational and never grants a slot; a reservation is not an
-execution deduplication lock.
+execution deduplication lock. An execution owner (exec, gates, heads, resume, and
+workflow steps through them) waits for a busy admission lock up to its queue deadline
+(`HYDRA_ADMISSION_QUEUE_SECONDS`, default 60, or the task's queue seconds) for its
+request, claims, and release; other callers, such as `hydra admission status`, give
+up after about 2 seconds with `state_unavailable`.
 
 ## Compatibility and release policy
 
