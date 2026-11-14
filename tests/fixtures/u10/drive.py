@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive the control centre's Hosts tab over a PTY for tests/test_u10_loopback.sh.
+"""Drive the control centre's Hosts screen (3) over a PTY for tests/test_u10_loopback.sh.
 
 The TUI under test runs the real `hydra remote ...` CLI against a private
 loopback sshd; this driver only presses keys, waits for screens and records
@@ -16,6 +16,11 @@ them as evidence. Journeys (one per invocation):
              reviewed again and the identical pin is reused, no agents
   reconnect  open the control centre on remote work (--fleet) and find the
              launched task on its host, then the host connected in Hosts
+
+Every marker is text of the four-screen frame (top bar "1 Work ... 3 Hosts",
+the Hosts list and detail, the setup modals) as the visual review captures
+it (scripts/visual_review/flows.py, hosts and fleet flows); the sign-in
+terminal's lines are the provider fixture's and the setup CLI's own.
 
 Environment: HYDRA_TUI_BIN, HYDRA_CELLS_BIN, U10_EVIDENCE (directory),
 U10_SSH_CONFIG, U10_FINGERPRINT, U10_HOLD (the fixture's hold file),
@@ -117,18 +122,18 @@ def kill_step(pattern: str) -> list[int]:
 
 
 def add_host(j: Journey, destination: str, name: str) -> None:
-    j.see("entry", "press H for Hosts")
-    j.keys("H")
-    j.see("hosts", "+ Add a host")
+    j.see("entry", "1 Work", "3 Hosts")
+    j.keys("3")
+    j.see("hosts", "This machine", "+ Add a host")
     j.keys("A")
-    j.see("form", "ADD A REMOTE HOST")
+    j.see("form", "Add a host", "Hydra connects with your own SSH")
     j.keys(f"{destination}\t{name}\t{os.environ['U10_SSH_CONFIG']}")
     j.see("form-filled", destination, os.environ["U10_SSH_CONFIG"])
     j.keys("\r")
 
 
 def trust_key(j: Journey, name: str) -> None:
-    screen = j.see("trust-key", f"TRUST THE HOST KEY OF {name}", "known_hosts", timeout=60)
+    screen = j.see("trust-key", f"Trust the host key of {name}?", "known_hosts", timeout=60)
     j.check(os.environ["U10_FINGERPRINT"] in screen, "the fingerprint shown is the loopback sshd's own")
     j.keys("no\r")
     j.see("trust-key-wrong-word", "Type yes (the whole word)")
@@ -139,28 +144,31 @@ def onboard() -> int:
     j = Journey("onboard", [])
     add_host(j, "u10", "u10")
     trust_key(j, "u10")
-    screen = j.see("provision-plan", "REVIEW: INSTALL HYDRA ON u10", timeout=120)
-    j.check("Not a release build" in screen and "--binary" in screen,
+    screen = j.see("provision-plan", "Install Hydra on u10", timeout=120)
+    j.check("Not a release build" in screen and "not a Hydra" in screen,
             "the plan says the helper passed with --binary is not a release build")
     j.keys("n")
     j.see("provision-declined", "Not approved: nothing was changed")
     j.keys("\r")
-    j.see("provision-plan-again", "REVIEW: INSTALL HYDRA ON u10", timeout=120)
+    j.see("provision-plan-again", "Install Hydra on u10", timeout=120)
     j.keys("y")
-    j.see("agents", "AGENTS ON u10", "Install codex", timeout=300)
+    j.see("agents", "Agents on u10", "Install codex", timeout=300)
+    # The selected choice is barred: "▌ " in a UTF-8 locale, "> " otherwise.
+    selected = ("\u258c Install codex", "> Install codex")
     for _ in range(12):
         j.keys("j")
         j.driver.settle(quiet=0.2)
-        if "> Install codex" in j.driver.text():
+        if any(text in j.driver.text() for text in selected):
             break
-    j.see("agents-codex-selected", "> Install codex")
+    screen = j.see("agents-codex-selected", "Install codex")
+    j.check(any(text in screen for text in selected), "Install codex is the selected choice")
     j.keys("\r")
-    screen = j.see("install-plan", "REVIEW: INSTALL codex ON u10", timeout=60)
+    screen = j.see("install-plan", "Install codex on u10", timeout=60)
     j.check("Recipe" in screen and "built into" not in screen, "the installer plan comes from the private local recipe")
     j.keys("y")
     j.see("record-location", "Record this location so Hydra uses it?", timeout=120)
     j.keys("y\r")
-    j.see("sign-in-handoff", "SIGN IN TO CODEX ON U10", timeout=120)
+    j.see("sign-in-handoff", "Sign in to codex on u10", timeout=120)
     j.keys("\r")
     j.see("sign-in-terminal", "U10 FIXTURE SIGN-IN: device code", timeout=60)
     time.sleep(0.5)
@@ -190,7 +198,7 @@ def onboard() -> int:
     j.check(login_log() == ["start", "start", "done"], f"the second attempt completed and failed verification: {login_log()}")
     j.keys("\r")
     j.see("sign-in-terminal-3", "U10 FIXTURE SIGN-IN: finished", timeout=60)
-    j.see("done", "u10 IS READY", timeout=180)
+    j.see("done", "u10 is ready", timeout=180)
     j.check(login_log() == ["start", "start", "done", "start", "done"], f"the retry signed in: {login_log()}")
     j.keys("\r")
     j.see("hosts-after", "+ Add a host", timeout=30)
@@ -202,7 +210,7 @@ def missing() -> int:
     j = Journey("missing", [])
     add_host(j, "u10x", "u10x")
     trust_key(j, "u10x")
-    screen = j.see("requirements-blocked", "MISSING REQUIREMENTS ON u10x", "install git", timeout=90)
+    screen = j.see("requirements-blocked", "Missing requirements on u10x", "install git", timeout=90)
     j.check("sudo apt-get install git" in screen, "the missing requirement carries its suggested command")
     j.check("BLOCKS" in screen, "the requirement is marked as blocking")
     (sync / "blocked").write_text("")
@@ -211,7 +219,7 @@ def missing() -> int:
         time.sleep(0.2)
     j.check((sync / "fixed").exists(), "the shell restored git on the remote")
     j.keys("\r")
-    j.see("plan-after-fix", "REVIEW: INSTALL HYDRA ON u10x", timeout=120)
+    j.see("plan-after-fix", "Install Hydra on u10x", timeout=120)
     j.keys("n")
     j.see("declined", "Not approved: nothing was changed")
     return j.quit()
@@ -220,11 +228,11 @@ def missing() -> int:
 def again() -> int:
     j = Journey("again", [])
     add_host(j, "u10", "u10-again")
-    j.see("provision-plan", "REVIEW: INSTALL HYDRA ON u10-again", timeout=120)
+    j.see("provision-plan", "Install Hydra on u10-again", timeout=120)
     j.keys("y")
-    j.see("agents", "AGENTS ON u10-again", timeout=300)
+    j.see("agents", "Agents on u10-again", timeout=300)
     j.keys("\r")
-    j.see("done", "u10-again IS READY", timeout=180)
+    j.see("done", "u10-again is ready", timeout=180)
     j.keys("\r")
     j.see("hosts-after", "+ Add a host", timeout=30)
     return j.quit()
@@ -232,19 +240,20 @@ def again() -> int:
 
 def reconnect() -> int:
     # `hydra tui --fleet` opens the unified control centre filtered to remote
-    # work: the Heads list is titled "Heads: remote work" and a remote head's
-    # row is named host/branch, so the row names both the task and its host.
+    # work: the Heads list is titled "Heads · remote work" and a remote head's
+    # row is named host/branch, with the host in its WHERE column.
     j = Journey("reconnect", ["--fleet"])
-    j.see("fleet-entry", "HYDRA /", timeout=60)
+    j.see("fleet-entry", "1 Work", "3 Hosts", timeout=60)
     j.keys("1")
-    screen = j.see("remote-work", "Heads: remote work", "u10/u10-task", timeout=90)
-    j.check(re.search(r"u10/u10-task\s+\S.*\bu10\b", screen) is not None,
+    screen = j.see("remote-work", "Heads \u00b7 remote work", "u10/u10-task", timeout=90)
+    j.check(re.search(r"u10/u10-task\s+u10\b", screen) is not None,
             "the u10-task row names u10 as where it runs")
-    j.keys("H")
-    screen = j.see("hosts", "HOSTS / latest list response", "u10", timeout=60)
+    j.keys("3")
+    screen = j.see("hosts", "Observed", "List response:", timeout=60)
     # The host answered this client's list request (handshake accepted):
     # connected, not disconnected, with the task's head counted.
-    j.check(re.search(r"\bu10\s+connected\s+1 heads\s+reachable\b", screen) is not None,
+    j.check(re.search(r"\bu10\s+1 head\b", screen) is not None and "List response: responded" in screen
+            and "Connection: reachable" in screen and "disconnected" not in screen,
             "u10 is connected after reconnecting and reports the task's head")
     return j.quit()
 
