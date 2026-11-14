@@ -1,35 +1,32 @@
 FRAME 1 140x40
- # hydra  1 Work  2 Details   3 Overview   4 Inbox 11  5 Workflows  6 Statistics  7 Workspace  8 Hosts                            OVERVIEW 
-                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
- Overview -------------------------------------------------------------------------------------------------------------------------------- 
-  RUNNING -----------------------  NEED ATTENTION ----------------  RUNS ACTIVE -------------------  CHANGED FILES ---------------------   
-    2                                3                                1                                11                                  
-                                     failures, decisions, stopped                                                                          
-    heads and runs working now       see Recovery too                 2 recorded in this project       uncommitted, all heads              
+ # hydra  1 Work   2 Inbox 11   3 Hosts   4 Stats                                                      this machine / 3 heads / 1 running  
                                                                                                                                            
+ Heads ----------------------- 3  Conversation ------------------------ latest output / read-only  Details  Run -------------------------  
+  ~ feature-live       codex      run visualization-proof / running                                * running / step 2 of 4 / run visualiz  
+  ! feature-stale      claude                                                                                                              
+  ? feature-unavail... shell      Running step build; its output is in the conversation            +--------------------+     +---------   
+ >> * run visualiza... 1/4                                                                         | prepare            |--+->| build      
+  > + run second-run   1/1                                                                         | succeeded          |  |  | running    
+                                                                                                   +--------------------+  |  +---------   
+                                                                                                                           |               
+                                                                                                                           |  +---------   
+                                                                                                                           +->| tests      
+                                                                                                                              | failed     
+                                                                                                                              +---------   
                                                                                                                                            
-  WORK / what you started, local and remote -------------------------------------  SELECTED / what it needs ----------------------------   
+                                                                                                    STEP          STATE         TIME       
+                                                                                                   >prepare       + succeeded   -          
+                                                                                                    build         * running     -          
+                                                                                                    tests         x failed      -          
+                                                                                                    review        - queued      -          
                                                                                                                                            
-    > feature-live                                              running              feature-live                                          
-      feature-stale                                             terminal gone                                                              
-      feature-unavailable                                       unknown              Agent: codex / local                                  
-                                                                                     Session: running                                      
-                                                                                     Changed files 4   Reported: done                      
-                                                                                     Approval requests 1 of 2 approved, 1 waiting for y    
-    3 heads you started / Enter opens or expands                                                                                           
+                                                                                                   prepare -------------------- evidence   
+                                                                                                   Head    none                            
+                                                                                                   Kind    spawn, attempt 1                
+                                                                                                   Needs   -                               
                                                                                                                                            
-                                                                                                                                           
-  RUN / run visualization-proof / running ----------------------------------------------------------------------------------------------   
-    STEP             KIND/ROLE      STATE             TRIES TIME          HEAD                                                             
-    prepare          spawn          succeeded         1     -             -                                                                
-    build            exec           running           1     -             -                                                                
-    tests            exec           failed            2     -             -                                                                
-    review           message        queued            0     -             -                                                                
-                                                                                                                                           
-    Next  Running step build; p on that head shows its output                                                                              
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                                                   Next    Running step build; its         
+                                                                                                           output is in the conversation   
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -37,5 +34,8 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
-  * live                                                                                                                                   
- ^/v select | enter details | a talk to agent | n new task | x remove | p output | d technical | L location | / search | ? help | q quit   
+                                                                                                                                           
+                                                                                                                                           
+  3 heads / 3 need you                                                                                                                     
+  * live   run visualization-proof / running                                                                                               
+ ^/v select | enter expand | </> collapse/expand | Y approve | N reject | R resume | X cancel | n new task | / filter | ? help | q quit    

@@ -113,12 +113,19 @@ bool preview_loading(const struct app *app) {
     return app->observations && app->observations->preview.pid != 0;
 }
 
+/* Whether the head the conversation shows has had no read yet: the first
+ * snapshot's selection is read at once rather than at the next refresh. */
+bool preview_unread(struct app *app) {
+    const struct head *h = work_output_head(app);
+    return h && !head_remote(h) && strcmp(app->preview_head, h->branch) != 0 && !preview_loading(app);
+}
+
 void capture_preview(struct app *app) {
     struct native_observations *o = app->observations;
     const struct head *h;
-    if (!app->preview || app->model.head_count == 0U || !o) return;
+    if (!o || !work_preview_wanted(app)) return;
     retarget_selection(app);
-    h = selected_head(app);
+    h = work_output_head(app);
     if (h == NULL || head_remote(h)) return;
     /* Output read for another head is not this head's. */
     if (strcmp(app->preview_head, h->branch)) {
@@ -136,7 +143,7 @@ void preview_tick(struct app *app) {
     bool timed_out, current;
     if (!o || !o->preview.pid || !native_capture_step(&o->preview)) return;
     timed_out = o->preview.timed_out;
-    h = app->preview ? selected_head(app) : NULL;
+    h = work_preview_wanted(app) ? work_output_head(app) : NULL;
     current = h && !strcmp(o->preview_branch, h->branch) && !strcmp(app->preview_head, h->branch) &&
               o->preview_headless == head_headless(h);
     if (current) preview_accept(app, native_capture_take(&o->preview), o->preview_headless, timed_out);

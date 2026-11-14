@@ -259,7 +259,7 @@ void remove_key_action(struct app *app) { remove_heads_action(app); }
  * palette). Read-only commands run captured and open in the output viewer;
  * only switch and dashboard need the terminal, and their labels say so. */
 enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_IMPORT,
-                     ACTION_FAILED, ACTION_THEME, ACTION_LEAVE, ACTION_LEAVE_HEAD, ACTION_INTERRUPT };
+                     ACTION_FAILED, ACTION_THEME, ACTION_LEAVE, ACTION_LEAVE_HEAD, ACTION_INTERRUPT, ACTION_LAND };
 struct palette_command {
     const char *name, *label, *command, *subcommand;
     enum palette_scope scope;
@@ -279,6 +279,7 @@ static const struct palette_command palette_commands[] = {
     {"spawn", "New task (spawn)", NULL, NULL, ACTION_SPAWN},
     {"kill", "Remove heads (kill)", NULL, NULL, ACTION_REMOVE},
     {"import", "Import plan files", NULL, NULL, ACTION_IMPORT},
+    {"land", "Land worker: merge the verified result of the selected head's run", NULL, NULL, ACTION_LAND},
     {"failed", "Your failed actions", NULL, NULL, ACTION_FAILED},
     {"theme", "Theme: terminal, dark, light", NULL, NULL, ACTION_THEME},
     {"switch", "Switch to the selected head (leaves Hydra)", "switch", NULL, ACTION_LEAVE_HEAD},
@@ -314,6 +315,7 @@ static bool palette_local(struct app *app, const struct palette_command *chosen)
     case ACTION_IMPORT: plan_action_import(app); return true;
     case ACTION_FAILED: actions_failed_show(app); return true;
     case ACTION_THEME: palette_theme(app); return true;
+    case ACTION_LAND: work_land(app); return true;
     default: return false;
     }
 }

@@ -15,6 +15,10 @@ static char input_path[4096], draft[4096], run_id[256];
 #define REFUSE(...) hf_run(&f, NULL, -2, (const char *[]){f.hydra, __VA_ARGS__, NULL})
 #define S(keys) kt_send(s, (keys))
 #define U(marker, seconds) kt_until(s, (marker), (seconds))
+/* The Plan page's state line: "READY · revision 1 · awaiting you". */
+#define STATE(word, n) word " \xc2\xb7 revision " #n
+/* Shift-Tab from Work's list: focus goes to the side pane and its Plan page. */
+#define PLAN_PAGE "\033[Z"
 
 /* The fixture plan with the guided policy's disk floor and a given objective. */
 static void write_draft(const char *objective) {
@@ -119,16 +123,19 @@ static bool form_words_whole(struct kt_session *s) {
 static void open_conversation(struct kt_session *s) {
     char command[4200];
     hf_open(&f, s);
-    U("PLAN TOGETHER", 3);
-    U("Session   running", 5);
+    U("Heads \xe2\x94\x80", 3);
+    /* The published proposal makes the planner's side pane its Plan page. */
+    U("Plan ready", 8);
     S("a");
-    U("INPUT TO AGENT", 5);
+    U("typing to ", 5);
     U("shell · session running", 5);
     kt_pump(s, .5);
     kt_format(command, sizeof(command), "/bin/cat > '%s'\r", input_path);
     S(command);
     kt_pump(s, .5);
     S("\035");
+    S(PLAN_PAGE);
+    kt_pump(s, .3);
     S("P");
     U("Review with local policy", 3);
     CHECK(form_words_whole(s), "policy prompt wraps at words (140 columns)");
@@ -138,19 +145,20 @@ static void open_conversation(struct kt_session *s) {
     kt_resize(s, 140, 40);
     U("Review with local policy", 5);
     S("y");
-    U("Revision 1 / DRAFT", 5);
+    U(STATE("DRAFT", 1), 5);
 }
 
 static void request_changes(struct kt_session *s) {
     char text[65536];
     S("V");
-    U("READY / awaiting", 30);
+    U(STATE("READY", 1) " \xc2\xb7 awaiting", 30);
     S("F");
     U("Changes to request from planner", 3);
     S("Split verify into two checks\r");
     U("Returned. Feedback typed into planner", 5);
-    U("RETURNED / changes requested", 3);
-    U("INPUT TO AGENT", 3);
+    U(STATE("RETURNED", 1), 3);
+    /* The feedback waits in the planner's input, which has focus. */
+    U("typing to ", 3);
     kt_pump(s, 1);
     agent_input(text, sizeof(text));
     CHECK(!strstr(text, "Split verify"), "feedback waits for the user to press Enter");
@@ -158,9 +166,9 @@ static void request_changes(struct kt_session *s) {
     agent_until(s, "Hydra: the user requested changes to plan revision 1: Split verify into two checks", 5);
 }
 
-/* Evidence of the conversation layout: at 80x24 the agent keeps the space and
- * the footer names the key that shows the plan review; at 140x40 the review
- * sits beside the agent. */
+/* Evidence of the conversation layout: at 80x24 the agent keeps the shared
+ * pane and the footer names the chord that shows the Plan page there; at
+ * 140x40 the Plan page sits beside the agent. */
 static void capture_layout(struct kt_session *s, int cols, int rows, const char *marker) {
     char dir[4096], path[4200];
     kt_format(dir, sizeof(dir), "%s/plan-conversation-evidence", f.build);
@@ -174,12 +182,14 @@ static void capture_layout(struct kt_session *s, int cols, int rows, const char 
 }
 
 static void capture_layouts(struct kt_session *s) {
-    capture_layout(s, 80, 24, "Ctrl-\\ B plan");
-    capture_layout(s, 140, 40, "RETURNED / changes requested");
+    capture_layout(s, 80, 24, "ctrl+\\ B Plan");
+    capture_layout(s, 140, 40, STATE("RETURNED", 1));
 }
 
 static void returned_is_blocked(struct kt_session *s) {
     S("\035");
+    S(PLAN_PAGE);
+    kt_pump(s, .3);
     S("V");
     U("This revision was returned for changes", 3);
     S("E");
@@ -193,7 +203,7 @@ static void returned_is_blocked(struct kt_session *s) {
 static void approve_revision(struct kt_session *s) {
     char pattern[4096];
     write_draft("Revised after requested changes");
-    U("Revision 2 / DRAFT", 10);
+    U(STATE("DRAFT", 2), 10);
     S("E");
     U("Approve plan", 3);
     U("Approve and run planner revision 2?", 3);
@@ -220,7 +230,7 @@ static void run_reaches_planner(struct kt_session *s) {
     agent_until(s, needle, 90);
     agent_input(text, sizeof(text));
     CHECK(hf_count(text, "started. Follow it") == 1, "the launch message is typed once");
-    /* The dependencies pane follows the revision's recorded run, not the preview. */
+    /* The Plan page's graph follows the revision's recorded run, not the preview. */
     U("plan-fixture / succeeded", 15);
     CHECK(!kt_contains(s, "awaiting-approval"), "the finished run's graph no longer awaits approval");
 }

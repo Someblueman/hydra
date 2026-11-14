@@ -60,7 +60,7 @@ static void detail_attention(struct app *app, const struct head *head) {
     char text[256];
     if (head_headless(head)) {
         if (step && (!strcmp(step->state, "failed") || !strcmp(step->state, "recovery-required"))) {
-            snprintf(text, sizeof(text), "Step %s %s; p shows its output and Attention (I) lists what it decides.", step->id,
+            snprintf(text, sizeof(text), "Step %s %s; its output is in the conversation and Inbox (2) lists what it decides.", step->id,
                      !strcmp(step->state, "failed") ? "failed" : "needs recovery");
             paragraph(app, text, KT_WARNING);
         }
@@ -74,7 +74,7 @@ static void detail_attention(struct app *app, const struct head *head) {
         paragraph(app, "The agent reported a failure and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", KT_WARNING);
     else if (head->head_id[0] && head->gates > head->approved) {
         unsigned pending = head->gates - head->approved;
-        snprintf(text, sizeof(text), "%u approval request%s waiting for your decision; press : and choose approvals.", pending, pending == 1 ? " is" : "s are");
+        snprintf(text, sizeof(text), "%u approval request%s waiting for your decision; Inbox (2) approves it.", pending, pending == 1 ? " is" : "s are");
         paragraph(app, text, KT_WARNING);
     }
 }
@@ -127,76 +127,45 @@ static void detail_changes(struct app *app, const struct head *head) {
     if (!head->head_id[0]) { labelled(app, "Changed", "unknown (no head record; see Recovery)", KT_MUTED); return; }
     snprintf(changes, sizeof(changes), "%u %s in the worktree, not yet committed", head->diff, head->diff == 1 ? "file" : "files");
     labelled(app, "Changed", changes, KT_BASE);
-    labelled(app, "Full diff", "everything since the branch base: press : and choose diff", KT_MUTED);
+    labelled(app, "Full diff", ": diff (everything since the branch base)", KT_MUTED);
 }
 
 /* Gate approval requests for this head; a plan's own approval is shown under
  * PLAN and is not one of them. */
+/* Checks: approvals, messages and coordination with other heads. A narrow
+ * pane keeps the label column of the other rows. */
 static void detail_checks(struct app *app, const struct head *head) {
-    char approvals[128];
+    char text[160];
     unsigned pending;
+    bool narrow = app->content_width < 60;
+    int label = narrow ? DETAIL_LABEL : 19;
+    const char *approvals = narrow ? "Approvals" : "Approval requests";
     section(app, "CHECKS");
-    if (!head->head_id[0]) { labelled_at(app, 19, "Approval requests", "unknown", KT_MUTED); return; }
+    if (!head->head_id[0]) { labelled_at(app, label, approvals, "unknown", KT_MUTED); return; }
     pending = head->gates > head->approved ? head->gates - head->approved : 0;
-    if (!head->gates) snprintf(approvals, sizeof(approvals), "none");
-    else snprintf(approvals, sizeof(approvals), "%u of %u approved%s%s", head->approved, head->gates,
+    if (!head->gates) snprintf(text, sizeof(text), "none");
+    else snprintf(text, sizeof(text), "%u of %u approved%s%s", head->approved, head->gates,
                   pending ? dot(app) : "", pending ? "waiting for your decision" : "");
-    labelled_at(app, 19, "Approval requests", approvals, pending ? KT_WARNING : KT_BASE);
-    snprintf(approvals, sizeof(approvals), "%u exchanged with other heads", head->messages);
-    labelled_at(app, 19, "Messages", approvals, KT_BASE);
+    labelled_at(app, label, approvals, text, pending ? KT_WARNING : KT_BASE);
+    snprintf(text, sizeof(text), "%u exchanged with other heads", head->messages);
+    labelled_at(app, label, "Messages", text, KT_BASE);
+    /* Coordination between heads in one row; : claims, scopes, queue and
+     * resources list each. */
+    snprintf(text, sizeof(text), "%u claims%s%u scopes%s%u queued%s%u resources", head->claims, dot(app), head->scopes,
+             dot(app), head->queue, dot(app), head->resources);
+    labelled_at(app, label, "Coordinate", text, head->claims || head->scopes || head->queue || head->resources ? KT_BASE : KT_MUTED);
+    paragraph(app, "Claims are files a head means to change and scopes the areas it stays within; Hydra flags overlap "
+              "between heads before they conflict.", KT_MUTED);
 }
 
-/* What the transcript is and that keys shown inside it need live input. */
-static void detail_preview_heading(struct app *app, bool headless) {
-    section(app, headless ? "STEP OUTPUT" : "TERMINAL OUTPUT");
-    style(app, TONE_MUTED);
-    if (headless) linef(app, "Read-only view of the latest step on this head; refreshes every 2 seconds.");
-    else if (app->preview_back) linef(app, "Read-only transcript, %zu rows back; PgDn returns to the newest.", app->preview_back);
-    else linef(app, "Read-only transcript; PgUp scrolls, a opens live input, p or Esc closes.");
-    if (app->ascii) linef(app, "ASCII fallback: the locale is not UTF-8, so other characters are approximated.");
-    style(app, TONE_BASE);
-}
-
-/* The newest rows that fit, so a live stream keeps its latest events visible.
- * Long lines wrap with a continuation marker; colors and diffs are kept. */
-static void detail_preview(struct app *app, const struct head *head) {
-    struct transcript_layout layout;
-    bool headless = head_headless(head);
-    const char *text = app->preview_text[0] ? app->preview_text :
-        headless ? "Reading the step output..." : preview_loading(app) ? "Reading the terminal output..." : "No terminal output available.";
-    int top, limit = app->limit;
-    detail_preview_heading(app, headless);
-    top = app->line;
-    memset(&layout, 0, sizeof(layout)); layout.follow = true; layout.back = app->preview_back;
-    app->limit = limit - 1;
-    transcript_view(app, text, strlen(text), &layout);
-    app->limit = limit;
-    if (!layout.hints) {
-        /* Without provider key hints the note row goes back to the output. */
-        app->line = top;
-        memset(&layout, 0, sizeof(layout)); layout.follow = true; layout.back = app->preview_back;
-        transcript_view(app, text, strlen(text), &layout);
-    }
-    app->preview_back = layout.back;
-    if (!layout.hints) return;
-    app->line = limit - 1;
-    style(app, TONE_MUTED);
-    linef(app, "Key hints above belong to the agent's live input, not this view; a opens it.");
-    style(app, TONE_BASE);
-}
-
-static void detail_next(struct app *app, const struct head *head) {
-    const char *role = head_run_role(app, head);
-    section(app, "NEXT");
-    if (head_headless(head)) {
-        linef(app, "p  output of the latest step (read-only)    : more actions (diff, approvals)");
-        linef(app, "%s", role && !strcmp(role, "worker") ? "x  dismiss: removes the worker head, keeps its branch    d  technical details" :
-              "x  remove this head (the branch is kept)    d  technical details");
-        return;
-    }
-    linef(app, "%s", head_terminal_gone(app, head) ? "a  restart its terminal (files are kept)   p  show recent terminal output" :
-          "a  talk to the agent in the workspace     p  show recent terminal output");
-    linef(app, "c  coordination  x  remove this head  :  more actions  d  technical details");
+/* Where the head works: this machine and its worktree. */
+static void detail_where(struct app *app, const struct head *head) {
+    char where[SOURCE_TEXT + 64], path[SOURCE_TEXT];
+    (void)head;
+    if (!app->links || !app->links->root[0]) { labelled(app, "Where", "this machine", KT_BASE); return; }
+    fit_path(app, app->links->root, app->content_width > 30 ? (size_t)app->content_width - 27U : 8U, path, sizeof(path));
+    snprintf(where, sizeof(where), "this machine%s%s", dot(app), path);
+    labelled(app, "Where", where, KT_BASE);
 }
 
 /* Technical details: one group per kind of identity, each row labelled. */
@@ -251,17 +220,16 @@ void render_head_detail(struct app *app) {
         task_detail(app, task);
         return;
     }
-    if (head == NULL) { render_empty_work(app); return; }
+    if (head == NULL) { paragraph(app, app->run_row ? "A run is selected; its steps are on the Run page." : "No head selected.", KT_MUTED); return; }
     if (app->diagnostics) { render_technical(app); return; }
-    paragraph(app, head->branch, KT_STRONG);
+    /* The list's selection and the conversation name the head; the page
+     * starts with what needs the user, then the facts. */
     if (head_remote(head)) { remote_detail(app, head); return; }
     detail_attention(app, head);
     detail_identity(app, head);
-    /* The output view keeps the identity and gives the rest to the output. */
-    if (app->preview) { detail_preview(app, head); return; }
+    detail_where(app, head);
     detail_step(app, head);
     detail_plan(app, head);
     detail_changes(app, head);
     detail_checks(app, head);
-    detail_next(app, head);
 }

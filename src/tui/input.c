@@ -6,40 +6,71 @@
 #include "fleet_budget.h"
 #include "attention.h"
 #include "inbox.h"
-/* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
- * panes inside the workspace), arrows select, Enter opens, Esc steps back.
- * The loop delivers decoded events; input_event sends each to the layer that
- * owns it. Keys for the views go through the binding table (bindings.c):
+/* One interaction model everywhere: 1-4 change screens, Tab moves between
+ * the panes of a screen, arrows select, Enter opens, Esc steps back. The
+ * loop delivers decoded events; input_event sends each to the layer that
+ * owns it. Keys for the screens go through the binding table (bindings.c):
  * a key acts only when the focused chain binds it, and the action reaches
- * the view's handler as the key it stands for (input_character and
- * input_named). */
+ * its handler directly (work_perform, inbox_perform, statistics_perform) or
+ * as the key it stands for (input_character and input_named). */
 
-
-/* Views that load their own data when opened. */
+/* Screens that load their own data when opened. */
 static void enter_view_refresh(struct app *app, int view) {
     if (view == 9) {
         native_attention_tick(app, true);
         if (app->inbox) app->inbox->jumped = false;
     }
-    if (view == 7) (void)native_workspace_init(app);
+    if (view == 7) {
+        (void)native_workspace_init(app);
+        native_observations_request(app, OBSERVE_WORKFLOWS);
+        capture_preview(app);
+    }
     if (view == 6) native_setup_hosts_refresh(app);
 }
 
-/* View changes go through here so refreshes and stale flags stay consistent. */
+/* The views of earlier versions are pages of Work now: Details and
+ * Coordination the Details page, Overview and Workflows the Run page;
+ * Recovery is Inbox. */
+static int view_page(int *view) {
+    static const int pages[] = {-1, WORK_DETAILS, WORK_DETAILS, -1, WORK_RUN, WORK_RUN};
+    int page;
+    if (*view == 3) { *view = 9; return -1; }
+    if (*view < 0 || *view > 5) return -1;
+    page = pages[*view];
+    *view = 7;
+    return page;
+}
+
+/* Screen changes go through here so refreshes and stale flags stay consistent. */
 void enter_view(struct app *app, int view) {
-    if (view < 0 || view > 9) return;
-    /* Recovery's findings are listed in Inbox. */
-    if (view == 3) view = 9;
+    int page = view_page(&view);
+    if (view < 6 || view > 9) return;
     if (view == 8) { if (app->view != 8) statistics_toggle(app); return; }
     if (app->view == 8 && app->statistics) app->statistics->detail = false;
     if (view != app->view) app->previous_view = app->view;
-    if (view != 0 && view != 4 && view != 5) outline_release_run(app);
-    /* Details keeps a selected remote task; views about one head release it. */
-    if (view == 2 || view == 7) outline_release_task(app);
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
-    if (view == 5) { app->graph_follow = true; native_observations_request(app, OBSERVE_WORKFLOWS); }
     enter_view_refresh(app, view);
+    if (page >= 0) {
+        if (page == WORK_RUN && !work_page_available(app, WORK_RUN) && overview_run(app) != SIZE_MAX) { app->run_row = true; app->workflow_run = overview_run(app); }
+        work_set_page(app, page);
+    }
+}
+
+/* The four screens in tab order: Work, Inbox, Hosts, Stats. */
+static const int screens[] = {7, 9, 6, 8};
+
+size_t tab_order(const struct app *app, int *views) {
+    size_t i;
+    (void)app;
+    for (i = 0; i < 4; i++) views[i] = screens[i];
+    return 4;
+}
+
+void enter_screen(struct app *app, int index) {
+    if (index < 0 || index >= 4) return;
+    app->jump_back = 0;
+    enter_view(app, screens[index]);
 }
 
 void select_tab(struct app *app, int direction) {
@@ -51,31 +82,25 @@ void select_tab(struct app *app, int direction) {
     enter_view(app, views[current]);
 }
 
-static void select_tab_index(struct app *app, size_t index) {
-    int views[12];
-    size_t count = tab_order(app, views);
-    if (index < count) enter_view(app, views[index]);
+/* Esc after a screen's own steps: back to the screen a jump came from (o
+ * from Inbox, g from Stats, the letters I, H and W), or nothing. */
+static void jump_return(struct app *app) {
+    int back = app->jump_back - 1;
+    if (app->view == 7 && app->inbox && app->inbox->jumped) { app->inbox->jumped = false; enter_view(app, 9); return; }
+    if (app->view == 7 && app->statistics && (app->statistics->graph_open || app->statistics->head_open)) {
+        app->statistics->graph_open = app->statistics->head_open = false;
+        app->view = 8;
+        return;
+    }
+    app->jump_back = 0;
+    if (back >= 0 && back != app->view) enter_view(app, back);
 }
 
-static void go_back_view(struct app *app) {
-    struct native_workspace *w = app->workspace;
-    switch (app->view) {
-        case 1:
-            app->diagnostics = false;
-            if (app->previous_view != 7) { app->search[0] = '\0'; }
-            enter_view(app, app->previous_view == 7 ? 7 : 0);
-            return;
-        case 2: enter_view(app, 1); return;
-        case 7:
-            if (w && w->layout.focus != 1) { w->layout.focus = 1; return; }
-            enter_view(app, 0); return;
-        case 0:
-            if (app->search[0]) { app->search[0] = '\0'; retarget_selection(app); }
-            else if (app->location[0]) location_set(app, "");
-            else if (app->inbox && app->inbox->jumped) enter_view(app, 9);
-            return;
-        default: enter_view(app, app->previous_view == 7 ? 7 : 0); return;
-    }
+/* A letter that opens a screen is a jump: Esc there comes back. */
+static void jump_to(struct app *app, int view) {
+    if (view == app->view) return;
+    app->jump_back = app->view + 1;
+    enter_view(app, view);
 }
 
 void go_back(struct app *app) {
@@ -84,8 +109,8 @@ void go_back(struct app *app) {
     if (app->help) { app->help = false; return; }
     if (app->view == 9 && inbox_back(app)) return;
     if (statistics_back(app)) return;
-    if (app->preview) { app->preview = false; return; }
-    go_back_view(app);
+    if (app->view == 7 && work_back(app)) return;
+    jump_return(app);
 }
 
 /* SGR mouse reports borrow the last rendered frame's hit map. No mutations. */
@@ -95,16 +120,7 @@ static bool mouse_hit(const struct app *app, const unsigned values[3], size_t in
 }
 
 static void select_mouse_item(struct app *app, size_t item) {
-    switch (app->view) {
-        case 0: case 4:
-            if (item > MAX_HEADS + WF_RUNS) { app->task_row = true; app->run_row = false; app->task_selected = item - MAX_HEADS - 1U - WF_RUNS; }
-            else if (item > MAX_HEADS) { app->run_row = true; app->task_row = false; app->workflow_run = item - MAX_HEADS - 1U; }
-            else { app->run_row = false; app->task_row = false; app->selected = item; }
-            break;
-        case 5: app->workflow_node = item; app->graph_follow = true; break;
-        case 6: app->host_selected = item; break;
-        default: break;
-    }
+    if (app->view == 6) app->host_selected = item;
 }
 
 static void statistics_mouse(struct app *app, const unsigned values[3]) {
@@ -141,8 +157,8 @@ static void handle_mouse(struct app *app, const struct kt_event *e) {
         app->view != app->hit_view || app->cols < 40 || app->rows < 10) return;
     if (values[1] >= (unsigned)app->cols || values[2] > (unsigned)app->rows) return;
     if (!e->release && tab_click(app, values)) return;
-    if (app->view == 7 && !app->help && !app->diagnostics && !app->result_open) {
-        native_workspace_mouse(app, e->button, e->x, e->y, e->release);
+    if (app->view == 7 && !app->help && !app->result_open) {
+        work_mouse(app, e->button, e->x, e->y, e->release);
         return;
     }
     if (e->release) return;
@@ -167,74 +183,42 @@ static void handle_mouse(struct app *app, const struct kt_event *e) {
 
 static void horizontal_arrow(struct app *app, int direction) {
     if (app->result_open || app->help) return;
-    if (app->view == 7) { (void)native_workspace_key(app, direction > 0 ? 'l' : 'h'); return; }
-    if (app->view == 5) { (void)workflow_key(app, direction > 0 ? 'l' : 'h'); return; }
     select_tab(app, direction);
 }
-/* Up and Down select; Inbox binds them as its own actions. */
+/* Up and Down select; Inbox and Work bind them as their own actions. */
 static void selection_arrow(struct app *app, int direction) {
     if (app->result_open) { if (direction < 0 && app->result_scroll) app->result_scroll--; else if (direction > 0) app->result_scroll++; return; }
     if (app->help) { help_scroll(app, direction); return; }
     move_selection(app, direction);
 }
-/* PgUp/PgDn page read-only output: the result overlay or the Details
- * transcript (rows back from its newest output). */
+/* PgUp/PgDn page the output viewer. */
 static void page_output(struct app *app, bool up) {
-    size_t *rows = app->result_open ? &app->result_scroll : app->view == 1 && app->preview ? &app->preview_back : NULL;
     size_t page = app->rows > 12 ? (size_t)app->rows / 2U : 6U;
-    bool back = app->result_open ? !up : up;
     if (app->help) { help_scroll(app, up ? -(int)page : (int)page); return; }
-    if (!rows) return;
-    if (back) *rows += page;
-    else *rows = *rows > page ? *rows - page : 0;
+    if (!app->result_open) return;
+    if (!up) app->result_scroll += page;
+    else app->result_scroll = app->result_scroll > page ? app->result_scroll - page : 0;
 }
 
+/* / filters the Work list as you type. */
 static void interactive_prompt(struct app *app, char prefix) {
     char query[TEXT];
-    if (prompt_text(app, prefix == '/' ? "Search heads: " : "Action search: ", query, sizeof(query)) != 0) return;
-    if (prefix == '/') {
-        app->notice[0] = '\0';
-        copy_text(app->search, sizeof(app->search), query);
-        /* A heads search filters the list; show it rather than a stale detail. */
-        if (app->view == 1 || app->view == 2) app->view = 0;
-        retarget_selection(app);
-    }
-    else palette_open(app);
-}
-
-static void open_selected(struct app *app) {
-    if (app->view == 6) hosts_open_row(app);
-    else if (app->view == 7) {
-        /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
-    } else if (app->view == 1 || app->view == 2) {
-        copy_text(app->notice, sizeof(app->notice), "a talks to the agent, Esc goes back");
-    } else if (app->run_row && (app->view == 0 || app->view == 4)) (void)outline_toggle(app, 0);
-    else if (selected_head(app) != NULL || selected_task(app) != NULL) enter_view(app, 1);
-    else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
-}
-
-static bool workspace_key(struct app *app, char key) {
-    if (native_plan_key(app, key)) return true;
-    if (native_control_key(app, key)) return true;
-    if (native_workspace_key(app, key)) return true;
-    if (key != 'a') return false;
-    if (native_terminal_attach(app)) native_workspace_show_terminal(app, true);
-    return true;
+    if (prefix != '/') { palette_open(app); return; }
+    if (prompt_text(app, "Filter heads: ", query, sizeof(query)) != 0) return;
+    app->notice[0] = '\0';
+    copy_text(app->search, sizeof(app->search), query);
+    retarget_selection(app);
+    work_selection_changed(app);
 }
 
 static bool select_view(struct app *app, char key) {
     switch (key) {
-        case 'v': select_tab(app, 1); return true;
-        case '\t': if (app->view != 7) { select_tab(app, 1); return true; } return false;
-        case 'I': enter_view(app, 9); return true;
-        case 'W': enter_view(app, 7); return true;
-        case 'o': enter_view(app, 4); return true;
-        case 'H': enter_view(app, 6); return true;
-        case 'w': enter_view(app, 5); return true;
-        default: break;
+        case '\t': if (app->view == 6) { select_tab(app, 1); return true; } return false;
+        case 'I': jump_to(app, 9); return true;
+        case 'W': jump_to(app, 7); return true;
+        case 'H': jump_to(app, 6); return true;
+        default: return false;
     }
-    if (key >= '1' && key <= '9') { select_tab_index(app, (size_t)(key - '1')); return true; }
-    return false;
 }
 
 static void result_key(struct app *app, char key) {
@@ -276,31 +260,15 @@ static bool hosts_key(struct app *app, char key) {
 
 static bool view_key(struct app *app, char key) {
     if (key == 'D') { statistics_toggle(app); return true; }
-    if (app->view == 7 && workspace_key(app, key)) return true;
-    if (app->view == 5 && workflow_key(app, key)) return true;
     if (select_view(app, key)) return true;
     return app->view == 6 && hosts_key(app, key);
-}
-
-static void attach_selected(struct app *app) {
-    char refusal[TEXT];
-    if (selected_task(app)) { copy_text(app->notice, sizeof(app->notice), "A remote task has no terminal here; Enter shows its details, Y/N/R/X are its controls"); return; }
-    /* A remote head whose observation cannot authorize an attachment is
-     * refused here, before the view changes. */
-    if (selected_head(app) && remote_action_refusal(app, selected_head(app), refusal, sizeof(refusal))) {
-        copy_text(app->notice, sizeof(app->notice), refusal); return;
-    }
-    if (native_workspace_init(app) && selected_head(app)) {
-        enter_view(app, 7);
-        if (native_terminal_attach(app)) native_workspace_show_terminal(app, true);
-    } else copy_text(app->notice, sizeof(app->notice), "Select a head first");
 }
 
 /* x: a local head is removed; a remote head's agent is interrupted on its host. */
 static void remove_or_interrupt(struct app *app) {
     const struct head *head = selected_head(app);
-    if (app->view != 3 && head && head_remote(head)) { fleet_action(app); return; }
-    if (app->view != 3 && selected_task(app)) { copy_text(app->notice, sizeof(app->notice), "Remote task: X cancels it through its receiver; x applies to heads"); return; }
+    if (head && head_remote(head)) { fleet_action(app); return; }
+    if (selected_task(app)) { copy_text(app->notice, sizeof(app->notice), "Remote task: X cancels it through its receiver; x applies to heads"); return; }
     remove_key_action(app);
 }
 
@@ -324,27 +292,23 @@ static void cycle_theme(struct app *app) {
     snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
 }
 
-/* Keys that act on the selected or marked heads in the list views. */
+/* d: the technical details of the selected head, on the Details page. */
+static void technical(struct app *app) {
+    app->diagnostics = !app->diagnostics;
+    if (app->diagnostics) work_set_page(app, WORK_DETAILS);
+}
+
+/* Keys that act on the selected or marked heads in Work. */
 static void head_key(struct app *app, char key) {
     switch (key) {
         case 'j': move_selection(app, 1); break;
         case 'k': move_selection(app, -1); break;
-        case 'l': case 'h':
-            if ((app->view == 0 || app->view == 4) && !outline_toggle(app, key == 'l' ? 1 : -1))
-                copy_text(app->notice, sizeof(app->notice), "h and l collapse and expand a run; select a run row first");
-            break;
-        case '\r': case '\n': open_selected(app); break;
+        case '\r': case '\n': if (app->view == 6) hosts_open_row(app); break;
         case '/': case ':': interactive_prompt(app, key); break;
         case 'n': new_task_action(app); break;
-        case 'a': attach_selected(app); break;
-        case 'L': location_cycle(app); break;
+        case 'L': location_cycle(app); work_selection_changed(app); break;
         case 'r': retry_selected(app); break;
-        case 'Y': case 'N': case 'R': case 'X':
-            if (!native_control_key(app, key)) copy_text(app->notice, sizeof(app->notice), "Y/N/R/X control a selected remote task, or a run in the workspace monitor");
-            break;
-        case 'c': if (app->view == 1 && selected_head(app)) enter_view(app, 2); break;
-        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; app->preview_back = 0; capture_preview(app); break;
-        case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
+        case 'd': technical(app); break;
         case ' ': toggle_mark(app); break;
         case 'A': select_all_visible(app); break;
         case 'x': remove_or_interrupt(app); break;
@@ -401,10 +365,8 @@ void input_named(struct app *app, uint32_t key, unsigned mods) {
     if (overlay_takes(app, &e)) return;
     /* The statistics view drops its notice on any key, these included. */
     if (app->view == 8 && app->statistics && !app->result_open) app->notice[0] = '\0';
-    if (kt_event_is(&e, KT_KEY_TAB, KT_MOD_SHIFT)) {
-        if (app->view == 7) native_workspace_focus_previous(app);
-        else select_tab(app, -1);
-    } else if (!mods) arrow_key(app, key);
+    if (kt_event_is(&e, KT_KEY_TAB, KT_MOD_SHIFT)) select_tab(app, -1);
+    else if (!mods) arrow_key(app, key);
 }
 
 /* One key for the binding table: a single character as itself, Escape as

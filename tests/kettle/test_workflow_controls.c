@@ -91,6 +91,23 @@ static bool lines_subset(const char *before, const char *after) {
     }
     return true;
 }
+/* Pages the Run page's evidence from its start until text shows. */
+static bool page_until(struct kt_session *s, const char *text, double seconds) {
+    double end = kt_now() + seconds;
+    while (kt_now() < end) {
+        int i;
+        kt_repeat(s, "\033[5~", 60);
+        kt_pump(s, .2);
+        for (i = 0; i < 80 && !kt_contains(s, text); i++) {
+            kt_send(s, "\033[6~");
+            kt_pump(s, .05);
+        }
+        if (kt_contains(s, text)) return true;
+    }
+    fprintf(stderr, "The evidence lacks %s:\n%s\n", text, kt_text(s));
+    return false;
+}
+
 /* Asks for a control and waits for its confirmation. The monitor reads the
  * requests waiting on its runs when it opens; until that read is in, the
  * control says so and reads again, so the key is pressed again. */
@@ -166,19 +183,21 @@ int main(void) {
         hf_trim(request);
         kt_format(decision, sizeof(decision), "%s/approvals/%s/decision/action", run_dir, request);
         hf_open(&f, &s);
-        U("PLAN TOGETHER", 3);
-        U("Session   running", 3);
-        S("Ca");
-        U("INPUT TO AGENT", 3);
+        U("Heads \xe2\x94\x80", 3);
+        U("Session     running", 3);
+        S("a");
+        U("typing to ", 3);
         kt_pump(&s, .3);
         if (i == 0)
             S("printf unsubmitted > unsent-control-proof");
-        S("\035\033[Zz"); /* leave input (navigation), back to the evidence pane, zoom */
-        U("OBSERVED EVIDENCE", 15);
-        kt_repeat(&s, "]", run_index(H("workflow", "tui-data"), run_id));
+        /* Leave input, select the run's row (the runs follow the head) and
+         * give its Run page focus (Shift-Tab from the list). */
+        S("\035");
+        U("run workspace-c", 15);
+        kt_repeat(&s, "j", 1 + run_index(H("workflow", "tui-data"), run_id));
+        S("\033[Z");
         U(run_id, 15);
-        kt_repeat(&s, "j", 200);
-        U("Review operator evidence before continuing", 15);
+        CHECK(page_until(&s, "Message: Review operator evidence", 15), "the request is in the evidence");
         kt_format(text, sizeof(text), "waiting-%s", action);
         save(&s, text, 140, 40);
         if (i == 0) {
@@ -206,7 +225,7 @@ int main(void) {
             S("y");
         }
         if (i == 0) {
-            U("OBSERVED EVIDENCE / run running", 10);
+            U("OBSERVED / running", 10);
             for (j = 0; j < 3; j++) {
                 kt_resize(&s, sizes[j][0], sizes[j][1]);
                 kt_pump(&s, .3);
@@ -226,9 +245,9 @@ int main(void) {
         CHECK(state_is(run_dir, terminal), "workflow terminal outcome");
         if (!s.closed) {
             U(i == 1 ? "Control failed" : "Control completed", 15);
-            kt_repeat(&s, "k", 200);
-            kt_format(text, sizeof(text), "Workflow %s: %s", run_id, terminal);
+            kt_format(text, sizeof(text), "%s \xc2\xb7 run workspace-control", terminal);
             U(text, 15);
+            CHECK(page_until(&s, run_id, 15), "the evidence names the run");
             for (j = 0; j < 3; j++) {
                 kt_resize(&s, sizes[j][0], sizes[j][1]);
                 kt_pump(&s, .3);
@@ -238,11 +257,11 @@ int main(void) {
             /* R acts on the run list's recorded state, which can refresh after the
              * evidence text above; wait until the header (drawn from that list)
              * shows the terminal state before asking for a control. */
-            kt_format(text, sizeof(text), " / run %s / ", terminal);
+            kt_format(text, sizeof(text), " / %s / ", terminal);
             U(text, 15);
             S("R");
             U("Terminal run: no resume or cancel", 10);
-            S("]");
+            S("\033k"); /* back to the list, another row */
             CHECK(until_absent(&s, "Terminal run: no resume or cancel", 10),
                   "changing selection clears footer");
             kt_close(&s, "q", 0, 0);

@@ -1,25 +1,25 @@
 FRAME 1 80x24
- # hydra  1 Work 2 Details  3 Overview  4 Inbox 11 5 Flows 6 Stats    OVERVIEW 
-                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
- Overview -------------------------------------------------------------------- 
-   2 running / 3 need attention / 1 active run / 4 to repair / 0 remote        
+ # hydra  1 Work  2 Inbox 11  3 Hosts  4 Stats            3 heads / 1 running  
+ Heads --------------- 3  Conversation  Details  Run ------------------------  
+  ~ feature-live          * running / step 2 of 4 / run visualization-proof    
+  ! feature-stale                                                              
+  ? feature-unavailable   +--------------------+     +--------------------+    
+ >> * run visualizati...  | prepare            |--+->| build              |-   
+  > + run second-run      | succeeded          |  |  | running            |    
+                          +--------------------+  |  +--------------------+    
+                                                  |                            
                                                                                
-  WORK / what you started, local and remote --------------------------------   
+                           STEP          STATE               TIME              
+                          >prepare       + succeeded         -                 
+                           build         * running           -                 
+                           tests         x failed            -                 
+                           review        - queued            -                 
                                                                                
-    > feature-live                                         running             
-      feature-stale                                        terminal gone       
-      feature-unavailable                                  unknown             
-    3 heads you started / Enter opens or expands                               
+                          prepare --------------------------------- evidence   
+                          Head    none                                         
+                          Kind    spawn, attempt 1                             
+                          Needs   -                                            
                                                                                
-  RUN / run visualization-proof / running ----------------------------------   
-    STEP            STATE         TIME          HEAD                           
-    prepare         succeeded     -             -                              
-    build           running       -             -                              
-    tests           failed        -             -                              
-    review          queued        -             -                              
-    Next  Running step build; p on that head shows its output                  
-                                                                               
-                                                                               
-                                                                               
-  * live                                                                       
- ^/v select | enter details | a talk to agent | n new task | ? help | q quit   
+  3 heads / 3 need you    Next    Running step build; its output is in the     
+  * live   run visualization-proof / running                                   
+ ^/v select | enter expand | Y approve | N reject | R resume | ? help | q quit 

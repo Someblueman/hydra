@@ -87,7 +87,7 @@ void hosts_open_row(struct app *app) {
     else {
         /* Follow this host's work beside everything else, filtered to it. */
         location_set(app, app->model.hosts[row->index].name);
-        enter_view(app, 0);
+        enter_view(app, 7);
     }
 }
 

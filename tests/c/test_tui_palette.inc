@@ -83,9 +83,9 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     sleep_ms(60); /* Escape stands alone after 20 ms; a key sooner would make it Alt */
     (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads", 1000);
+    (void)wait_for_marker(&session, "Filter heads", 1000);
     write_input(session.master, "no-match\n", 9U);
-    (void)wait_for_marker(&session, "Search: no-match", 1000);
+    (void)wait_for_marker(&session, "No heads match", 1000);
     palette_query(&session, "switch");
     result(wait_for_marker(&session, "a head for that command", 1000), "palette requires a visible selected head");
     palette_query(&session, "collisions");
@@ -106,7 +106,7 @@ static void test_recovery_actions(const char *tui, const char *hydra, const char
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open recovery action terminal")) return;
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    write_input(session.master, "\033[<0;44;1M", 10U);
+    write_input(session.master, "\033[<0;20;1M", 10U);
     (void)wait_for_markers(&session, "Repairs 4", "Approve S-1: T-1", 3000);
     write_input(session.master, "jjjjjj", 6U);
     result(wait_for_selected(&session, "Leftover lock", 1000), "a repair is selectable in Inbox");

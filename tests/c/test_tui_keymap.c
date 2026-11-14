@@ -158,8 +158,8 @@ static bool stats_keys_owned(void) {
     struct app *app = app_new(false);
     uint32_t chain = key_chains[KEY_CHAIN_STATISTICS];
     char shown[64], text[1024] = "";
-    bool ok = !(chain & KEY_SCOPE_FLOW_JUMP) && !(chain & KEY_SCOPE_VIEWS) && (chain & KEY_SCOPE_JUMPS) &&
-        (key_chains[KEY_CHAIN_HEADS] & KEY_SCOPE_FLOW_JUMP);
+    bool ok = !native_keys(app)->bindings[KEY_VIEW_WORKFLOWS].scope && !(chain & KEY_SCOPE_VIEWS) && (chain & KEY_SCOPE_JUMPS) &&
+        !(key_chains[KEY_CHAIN_WORK_LIST] & KEY_SCOPE_VIEWS);
     ok = ok && key_text(app, KEY_STATS_WORKFLOW, shown, sizeof(shown)) && !strcmp(shown, "w");
     ok = ok && key_text(app, KEY_STATS_PANE, shown, sizeof(shown)) && !strcmp(shown, "Tab");
     ok = ok && key_text(app, KEY_STATS_PAGE_PREVIOUS, shown, sizeof(shown)) && !strcmp(shown, "[");

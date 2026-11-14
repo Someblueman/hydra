@@ -76,10 +76,11 @@ bool native_control_key(struct app *app, char key) {
     const char *action=key=='R' ? "resume" : key=='X' ? "cancel" : key=='Y' ? "approve" : key=='N' ? "reject" : NULL;
     char run[80],request[80]="-",step[80]="-",body[1024],accept[16];
     if (!action) return false;
-    /* A selected remote task takes the receiver controls; a local run the
-     * workflow controls of the monitor layout. */
-    if (selected_task(app) || (app->task_row && app->view != 7)) return native_fleet_control_key(app, key, action);
-    if (!native_workspace_monitoring(app)) return false;
+    /* A selected remote task takes the receiver controls; a run (its row, or
+     * a head it created) the workflow controls. */
+    if (selected_task(app) || app->task_row) return native_fleet_control_key(app, key, action);
+    if (work_run(app) == SIZE_MAX) return false;
+    app->workflow_run = work_run(app);
     if (!app->workflows || app->workflow_run>=app->workflows->run_count) {
         copy_text(app->notice,sizeof(app->notice),"Select a local recorded run before using workflow controls."); return true;
     }

@@ -33,7 +33,7 @@ static bool row_has(struct kt_session *s, const char *marker, const char *also) 
 #define PHAS(marker) kt_contains(p, (marker))
 
 static void runs_overview(struct kt_session *p) {
-    PU("STATISTICS");
+    PU("Workflow runs");
     PU("Latest attempts average 95.0s over 6 timed steps, longest 120s");
     CHECK(PHAS("Attempts 8/11") && PHAS("Run outcomes") && PHAS("Runs created, last 7 days"), "attempt coverage and charts");
     CHECK(!PHAS("Sessions  Runs"), "a sample without sessions has no sessions page");
@@ -77,21 +77,22 @@ static void runs_filter_evidence(struct kt_session *p) {
     CHECK(!PHAS("Run evidence"), "the second Esc closes the evidence");
 }
 
-/* D leaves and comes back with the workspace as it was; g opens the run's
- * graph and Esc comes back; a click selects a row. */
+/* D leaves and comes back with Work as it was (the selection and the
+ * focused pane); g opens the run's Run page in Work and Esc comes back; a
+ * click selects a row. */
 static void runs_jumps(struct kt_session *p) {
     PS("D");
-    PU("PLAN TOGETHER");
-    CHECK(PHAS("scroll 2") && PHAS("scroll 3"), "preserved workspace scroll");
+    PU("Heads \xe2\x94\x80");
+    CHECK(PHAS("feature-stale \xe2\x94\x80") && PHAS("esc back"), "Work keeps its selection and focus");
     PS("D");
     PU("Workflow runs");
     PS("0/visualization\r");
     PU("1 of 1" DOT "newest first");
     PS("g");
-    PU("WORKFLOWS");
+    PU("STEP");
     PU("prepare");
     PS("\033");
-    PU("STATISTICS");
+    PU("Workflow runs");
     PU("/visualization" DOT "1 of 1");
     PS("0");
     PU("1 of 8" DOT "newest first");
@@ -120,7 +121,7 @@ static void runs_sizes(struct kt_session *p) {
     size_t i;
     for (i = 0; i < 3; i++) {
         kt_resize(p, sizes[i][0], sizes[i][1]);
-        PU("STATISTICS");
+        PU("Workflow runs");
         PU("q quit");
         CHECK(!p->screen.overflow, "statistics resize overflow");
         CHECK(p->screen.repaints >= 1 && !p->screen.clears, "resize repaints every cell without erasing the display");
@@ -138,11 +139,11 @@ static void local_statistics(void) {
     kt_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("PLAN TOGETHER");
-    /* Tab order: selected work, dependencies, then activity. */
-    S("j\tjj\t\tjjj");
+    U("Heads \xe2\x94\x80");
+    /* The second head, its side pane focused and scrolled (Shift-Tab). */
+    S("j\033[Zjj");
     kt_pump(&s, .2);
-    CHECK(HAS("scroll 2") && HAS("scroll 3"), "workspace scroll setup");
+    CHECK(HAS("feature-stale \xe2\x94\x80") && HAS("esc back"), "Work selection and focus setup");
     S("D");
     runs_overview(&s);
     runs_filter_evidence(&s);
@@ -153,7 +154,7 @@ static void local_statistics(void) {
     CHECK(!unsetenv("HYDRA_TEST_STATS_FAIL_FILE"), "reset failure environment");
     CHECK(!rmdir(base), "remove owned stats fixture");
     puts("PASS statistics: notes/range, filter as you type, evidence beside the list, pane focus, Esc ladder, "
-         "graph, preserved scroll, mouse, stale recovery, sizes, termios");
+         "graph, preserved Work selection, mouse, stale recovery, sizes, termios");
 }
 /* w cycles the workflow filter over the recorded workflows and back to all;
  * filters reach the tiles and charts as well as the list. */
@@ -222,13 +223,22 @@ static void metric_pages(void) {
     S("\r");
     U("failed / 2");
     S("D");
-    U("PLAN TOGETHER");
+    U("Heads \xe2\x94\x80");
     S("D");
     U("Owner recoveries");
     U("known 2/2");
     kt_close(&s, "q", 0, 0);
     puts("PASS metrics: four pages, coverage, percentiles, freshness, filters, evidence, three "
          "sizes");
+}
+/* Hosts says the same of each host: the failed one has unknown heads (--),
+ * the empty one that responded has 0. */
+static void hosts_heads(struct kt_session *p) {
+    PS("H");
+    PU("HOSTS / latest list response");
+    PU("3 hosts / Enter follows its work");
+    CHECK(row_has(p, "offline", "disconnected") && row_has(p, "offline", "-- heads"), "a failed host has unknown heads");
+    CHECK(row_has(p, "empty   ", " 0 heads"), "empty distinct from unknown");
 }
 static void fleet_statistics(void) {
     struct kt_session s;
@@ -262,13 +272,7 @@ static void fleet_statistics(void) {
     S("\r");
     U("No head evidence");
     kt_resize(&s, 140, 40);
-    S("W");
-    U("Hosts: 3 observed");
-    S("\t\tz");
-    U("offline · failed · unknown heads");
-    CHECK(HAS("empty · responded · 0 heads"), "empty distinct from unknown");
-    S("H");
-    U("HOSTS / latest list response");
+    hosts_heads(&s);
     kt_close(&s, "q", 0, 0);
     puts("PASS fleet statistics: responded/failed/empty, known counts, filters, drill-down");
 }
@@ -360,7 +364,7 @@ static void session_statistics(void) {
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-sessions.tsv", 1), "session fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("PLAN TOGETHER");
+    U("Heads \xe2\x94\x80");
     S("D");
     session_overview(&s);
     session_filters(&s);
@@ -369,7 +373,7 @@ static void session_statistics(void) {
     kt_close(&s, "q", 0, 0);
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6.tsv", 1), "mixed fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("PLAN TOGETHER");
+    U("Heads \xe2\x94\x80");
     S("D");
     U("Workflow runs");
     U("[/] sessions/runs");
@@ -382,20 +386,22 @@ static void session_statistics(void) {
     CHECK(!unsetenv("HYDRA_TEST_STATS_FIXTURE"), "session fixture environment cleared");
     puts("PASS session statistics: default page, coverage, filters, evidence, unknowns, pages, strip click, sizes");
 }
-/* g on a session shows its head in Details and Esc comes back to the same
- * place in Stats; a head that is gone is said so and nothing moves. */
+/* g on a session shows its head in Work (its Details page) and Esc comes
+ * back to the same place in Stats; a head that is gone is said so and
+ * nothing moves. */
 static void session_jump(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-heads.tsv", 1), "head sessions fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("PLAN TOGETHER");
+    U("Heads \xe2\x94\x80");
     S("D");
     U(BAR "feature-live");
     S("\r");
     U("Session evidence");
     S("g");
-    U("Details: feature-live");
+    U("feature-live \xe2\x94\x80");
+    U("Session     running");
     S("\033");
     U("Head sessions");
     U("Session evidence");
@@ -404,10 +410,10 @@ static void session_jump(void) {
     U("retired-branch is not a head in this project any more");
     CHECK(HAS("Head sessions"), "a gone head leaves Stats as it was");
     S("\033\033");
-    U("PLAN TOGETHER");
+    U("Heads \xe2\x94\x80");
     kt_close(&s, "q", 0, 0);
     CHECK(!unsetenv("HYDRA_TEST_STATS_FIXTURE"), "head sessions fixture cleared");
-    puts("PASS session jump: g opens the head in Details, Esc returns, a gone head is named");
+    puts("PASS session jump: g opens the head in Work's Details page, Esc returns, a gone head is named");
 }
 /* Mixed local and remote runs (schema 5): the runs page says what remote
  * task receipts measured; the Cohorts page (C, or [ ]) and the location

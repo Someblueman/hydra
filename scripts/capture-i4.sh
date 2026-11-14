@@ -78,6 +78,7 @@ shot overview-run --workflow-fixture "$f/workflow-runs.tsv" --view overview
 shot overview-run-live --workflow-fixture "$f/workflow-runs-running.tsv" --view overview
 shot overview-empty-run --view overview
 shot workflows --workflow-fixture "$f/workflow-runs.tsv" --view workflows
+shot work-plan --workflow-fixture "$f/workflow-runs.tsv" --view workspace
 shot workspace --workflow-fixture "$f/workflow-runs.tsv" --view workspace
 shot workspace-enter --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys "$tab$enter"
 shot workspace-monitor --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys C

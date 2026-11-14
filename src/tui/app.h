@@ -94,6 +94,9 @@ struct app {
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
+    /* The screen a jump came from, plus one (0: none): Esc returns there once
+     * the screen has nothing of its own left to undo. */
+    int jump_back;
     int hit_rows[MAX_HEADS], hit_cols, hit_height, hit_view;
     int hit_left[MAX_HEADS], hit_right[MAX_HEADS], hit_bottom[MAX_HEADS];
     size_t hit_items[MAX_HEADS], hit_count;
@@ -147,6 +150,9 @@ struct app {
     size_t preview_back;
     /* The head whose output preview_text holds, or is being read for. */
     char preview_head[TEXT];
+    /* Whether the last poll wanted the preview: the conversation going back
+     * to the latest output (a view closed, Work shown again) reads it now. */
+    bool preview_wanted;
     /* Work outline: runs the user expanded, and whether a run row rather
      * than a head is selected in Work or Overview (workflow_run names it). */
     char expanded_runs[WF_RUNS][80];

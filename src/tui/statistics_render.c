@@ -320,12 +320,12 @@ void stats_empty(struct app *app, struct kt_canvas *c, struct kt_rect area, cons
     if (area.height < 2) return;
     if (recorded) {
         (void)snprintf(text, sizeof(text), "Nothing matches the filters%s0 resets them", dot(app));
-        dashboard_text(c, x, area.y + 1, width, KT_WARNING, "%s", text);
+        canvas_text(c, x, area.y + 1, width, KT_WARNING, "%s", text);
         if (area.height > 3)
-            dashboard_text(c, x, area.y + 2, width, KT_MUTED, "%zu recorded; the filters hide them all.", recorded);
+            canvas_text(c, x, area.y + 2, width, KT_MUTED, "%zu recorded; the filters hide them all.", recorded);
         return;
     }
-    dashboard_text(c, x, area.y + 1, width, KT_STRONG, "%s", nothing);
+    canvas_text(c, x, area.y + 1, width, KT_STRONG, "%s", nothing);
     if (area.height > 5 && how) (void)kt_paragraph(c, (struct kt_rect){x, area.y + 3, width, area.height - 3}, how, KT_MUTED);
 }
 
@@ -371,7 +371,7 @@ bool stats_begin(struct app *app, bool headless, struct kt_canvas *c) {
     *c = app->frame;
     if (c->width < 19 || c->height < 6) return false;
     statistics_visible(app);
-    chrome_header(app, c, "STATISTICS");
+    chrome_header(app, c, true);
     return true;
 }
 
@@ -491,8 +491,8 @@ static void outcome_row(struct kt_canvas *c, int x, int y, int width, enum hs_st
     static const char *names[] = {"Succeeded", "Failed", "Running", "Queued", "Blocked", "Cancelled", "Unknown"};
     size_t count = s->run_states[state];
     bool warn = count && (state == HS_FAILED || state == HS_BLOCKED);
-    dashboard_text(c, x, y, 12, warn ? KT_WARNING : KT_BASE, "%s", names[state]);
-    dashboard_text(c, x + 12, y, 5, KT_MUTED, "%3zu", count);
+    canvas_text(c, x, y, 12, warn ? KT_WARNING : KT_BASE, "%s", names[state]);
+    canvas_text(c, x + 12, y, 5, KT_MUTED, "%3zu", count);
     if (count && width > 30)
         stats_fraction(c, (struct kt_rect){x + 18, y, width - 18 < 40 ? width - 18 : 40, 1},
                        (double)count / (double)(s->runs ? s->runs : 1));
@@ -569,7 +569,7 @@ static void stats_loading(struct app *app, struct kt_canvas *c) {
     struct stats_frame f;
     stats_layout(app, c, 0, false, &f);
     stats_rule(c, (struct kt_rect){0, f.strip, f.width + 1, 1}, "Stats", NULL, false);
-    dashboard_text(c, 2, f.top, f.width - 2, KT_STRONG, "%s",
+    canvas_text(c, 2, f.top, f.width - 2, KT_STRONG, "%s",
                    native_observations_loading(app, OBSERVE_STATISTICS) ? "Loading statistics..." : "No statistics yet");
     if (c->height > 12)
         (void)kt_paragraph(c, (struct kt_rect){2, f.top + 2, f.width - 4 < 76 ? f.width - 4 : 76, 4},
@@ -638,14 +638,14 @@ static void host_evidence(struct app *app, struct kt_canvas *c, struct kt_rect r
     size_t i, ordinal = 0;
     int row = r.y + 1, x = r.x + 2, width = r.width - 3;
     stats_rule(c, (struct kt_rect){r.x, r.y, r.width, 1}, "Host evidence", "heads it reported", stats_evidence_focused(app));
-    if (!v->count) { dashboard_text(c, x, row, width, KT_WARNING, "Selected host no longer matches"); return; }
+    if (!v->count) { canvas_text(c, x, row, width, KT_WARNING, "Selected host no longer matches"); return; }
     host = app->model.hosts[v->visible[v->selected]].name;
     for (i = 0; i < app->model.head_count && row < r.y + r.height; i++) {
         const struct head *h = &app->model.heads[i];
         if (strcmp(h->remote_host, host) || ordinal++ < v->step_scroll) continue;
-        dashboard_text(c, x, row++, width, KT_BASE, "%s / %s / %s", h->remote_project, h->branch, h->desired);
+        canvas_text(c, x, row++, width, KT_BASE, "%s / %s / %s", h->remote_project, h->branch, h->desired);
     }
-    if (row == r.y + 1) dashboard_text(c, x, row, width, KT_WARNING, "No head evidence for %s here; inspect the host's state", host);
+    if (row == r.y + 1) canvas_text(c, x, row, width, KT_WARNING, "No head evidence for %s here; inspect the host's state", host);
 }
 
 void stats_fleet_page(struct app *app, struct kt_canvas *c) {

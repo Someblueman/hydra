@@ -39,7 +39,7 @@ void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t
     if (!e || !e->run[0]) { kt_text(c,(struct kt_rect){0,0,c->width,1},"No selected recorded run",KT_WARNING); return; }
     if (app->workflows) for (i=0;i<app->workflows->run_count;i++)
         if (!strcmp(app->workflows->runs[i].id,e->run)) { state=app->workflows->runs[i].state; break; }
-    dashboard_text(c,0,0,c->width,e->stale || e->verdict==3 ? KT_WARNING : KT_STRONG,"%s / %s%s / %s",
+    canvas_text(c,0,0,c->width,e->stale || e->verdict==3 ? KT_WARNING : KT_STRONG,"%s / %s%s / %s",
         e->stale ? "STALE EVIDENCE" : !e->text ? "LOADING EVIDENCE" : e->verdict==2 ? "VERIFIED ARTIFACTS" :
         e->verdict==3 ? "ARTIFACTS REFUSED" : c->width<60 ? "OBSERVED" : "OBSERVED EVIDENCE",
         c->width<60 ? "" : "run ",state,e->step);
@@ -47,37 +47,6 @@ void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t
     else kt_text(c,(struct kt_rect){0,1,c->width,1},e->stale ? "Complete evidence unavailable" : "Reading run, output and artifact records",KT_WARNING);
 }
 
-void native_workspace_plan_text(struct app *app, struct kt_canvas *c, size_t *scroll) {
-    struct native_plan *p=app->plan;
-    const char *text, *state, *owner;
-    size_t length;
-    static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID / F request changes","READY / awaiting approval",
-        "VIEW UNAVAILABLE","RETURNED / changes requested"};
-    static const char empty[]="A proposal is the agent's suggested plan for the task.\n"
-        "It runs nothing until V validates it and you approve\n"
-        "that exact revision with E; the approved plan then runs\n"
-        "as a workflow you can follow in Overview. For example:\n"
-        "the agent proposes implement, test, then review; you\n"
-        "read the policy and approve.\n\n"
-        "P reviews the agent's proposal; I imports draft and\n"
-        "policy files. Then V validates it, F requests changes\n"
-        "from the agent and E executes the validated revision.";
-    if (!p) {
-        kt_text(c,(struct kt_rect){0,0,c->width,1},"No proposal loaded",KT_WARNING);
-        native_workspace_text(c,empty,sizeof(empty)-1,scroll);
-        return;
-    }
-    state=p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
-        (p->launched_run[0] ? "RUN RECORDED / C monitor" : native_plan_launch_failed(p) ? "LAUNCH FAILED / nothing ran; E launches again" :
-         "LAUNCH REQUESTED / awaiting run receipt") : states[p->state];
-    owner=p->proposal_head[0] ? p->proposal_head : "Imported plan";
-    /* A narrow review keeps the revision and state; the head names the agent pane. */
-    if ((int)(strlen(owner)+strlen(state)+18)>c->width) dashboard_text(c,0,0,c->width,KT_STRONG,"Revision %u / %s",p->revision,state);
-    else dashboard_text(c,0,0,c->width,KT_STRONG,"%s / Revision %u / %s",owner,p->revision,state);
-    text=p->state==PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;
-    length=p->state==PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
-    native_workspace_text(c,text,length,scroll);
-}
 /* The planning graph is the compiled preview ("awaiting-approval"); once the
  * revision on screen has a recorded run in the workflow snapshot, the run and
  * its steps show their live states instead. */
@@ -126,11 +95,11 @@ void native_workspace_graph(struct app *app, struct kt_canvas *c, bool planning)
     n=workflow_nodes(m,run,indices);
     if (!n || !workflow_edges(m,indices,n,edges,&count) || !kt_graph_layout(edges,count,n,&layout)) return;
     if (*selected>=n) *selected=0;
-    dashboard_text(c,0,0,c->width,KT_STRONG,"%s / %s",m->runs[run].name,live ? live->runs[live_run].state : m->runs[run].state);
+    canvas_text(c,0,0,c->width,KT_STRONG,"%s / %s",m->runs[run].name,live ? live->runs[live_run].state : m->runs[run].state);
     if (c->width<26 || c->height<7) {
         const struct workflow_node *node=&m->nodes[indices[*selected]];
-        dashboard_text(c,0,1,c->width,KT_BASE,"%zu/%zu %s [%s]",*selected+1,n,node->id,live_state(live,live_run,node));
-        dashboard_text(c,0,2,c->width,KT_BASE,"Needs: %s",node->needs); return;
+        canvas_text(c,0,1,c->width,KT_BASE,"%zu/%zu %s [%s]",*selected+1,n,node->id,live_state(live,live_run,node));
+        canvas_text(c,0,2,c->width,KT_BASE,"Needs: %s",node->needs); return;
     }
     graph_nodes(m,indices,n,live,live_run,nodes);
     sx=layout.x[*selected]-(c->width-22)/2; sy=layout.y[*selected]-(c->height-5)/2;

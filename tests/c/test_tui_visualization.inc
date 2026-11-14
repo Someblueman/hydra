@@ -1,4 +1,8 @@
 /* User-level input probes. Coordinates are taken from the rendered layout. */
+/* --view overview opens Work on the Run page of the active run: its graph,
+ * its steps and the selected step's evidence; runs are rows of the list. At
+ * 140x40 the list's rows start on row 4 of the terminal: feature-stale is
+ * row 5 and the run visualization-proof row 7. */
 static void test_visualization(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     struct winsize size;
@@ -6,29 +10,31 @@ static void test_visualization(const char *tui, const char *hydra, const char *f
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open visualization terminal");
     unsetenv("HYDRA_TEST_OVERVIEW");
     (void)wait_for_model(&session);
-    result(wait_for_marker(&session, "QUEUE DEPTH", 1000), "overview lays out real snapshot statistics");
-    mouse_input(&session, "\033[<0;10;13M");
-    result(wait_for_marker(&session, "Session: terminal gone", 1000), "overview mouse selects the head row");
+    result(wait_for_markers(&session, "run visualization-proof   running", "STEP", 6000),
+           "the overview view name opens the active run's Run page");
+    mouse_input(&session, "\033[<0;10;5M");
+    result(wait_for_marker(&session, "feature-stale   terminal gone", 1000), "a click selects the head row");
     mouse_input(&session, "\033[<0;110;12M");
-    result(wait_for_marker(&session, "Session: terminal gone", 1000), "detail panel click cannot retarget the head table");
-    write_input(session.master, "w", 1);
-    result(wait_for_marker(&session, "4 dependency edges", 1500), "workflow view consumes the read adapter");
+    result(wait_for_marker(&session, "Session     terminal gone", 1000) && wait_for_marker(&session, "feature-stale   terminal gone", 300),
+           "a click in the side pane focuses it and cannot retarget the list");
+    mouse_input(&session, "\033[<0;10;7M");
+    result(wait_for_marker(&session, "STEP", 1000), "a click on a run row shows its Run page");
+    write_input(session.master, "\t\tj", 3);
+    result(wait_for_marker(&session, "Kind    exec, attempt 1", 1000), "j on the Run page selects a step and shows its evidence");
     write_input(session.master, "j", 1);
-    result(wait_for_marker(&session, "build [exec] / running / attempts 1", 1000), "keyboard selects graph nodes and exposes recorded details");
-    mouse_input(&session, "\033[<0;34;16M");
-    result(wait_for_marker(&session, "tests [exec] / failed / attempts 2", 1000), "click selects a dependency graph node");
-    write_input(session.master, "]", 1);
-    result(wait_for_marker(&session, "second-run", 1000), "run navigation reaches another recorded workflow");
-    write_input(session.master, "[", 1);
-    (void)wait_for_marker(&session, "visualization-proof", 1000);
+    result(wait_for_marker(&session, "Kind    exec, attempt 2", 1000), "the next step's attempts are its own");
+    write_input(session.master, "\033j", 2);
+    result(wait_for_marker(&session, "run second-run", 1000), "another recorded run is a row of the list");
+    write_input(session.master, "k", 1);
+    (void)wait_for_marker(&session, "run visualization-proof   running", 1000);
     memset(&size, 0, sizeof(size)); size.ws_col = 40; size.ws_row = 10;
-    result(ioctl(session.master, TIOCSWINSZ, &size) == 0, "resize graph to a narrow terminal");
-    write_input(session.master, "j", 1);
-    result(wait_for_marker(&session, "2/4 build [running]", 1000), "narrow graph becomes navigable step detail");
+    result(ioctl(session.master, TIOCSWINSZ, &size) == 0, "resize the Run page to a narrow terminal");
+    write_input(session.master, "\t", 1);
+    result(wait_for_marker(&session, "STEP", 1000), "one pane at a time: Tab shows the run's steps at 40x10");
     size.ws_col = 140; size.ws_row = 40;
     (void)ioctl(session.master, TIOCSWINSZ, &size);
-    write_input(session.master, "llll\r", 5);
-    result(wait_for_marker(&session, "build [exec] / running", 1000), "Enter refocuses the selected node after panning and resize");
+    write_input(session.master, "\tllll\r", 7);
+    result(wait_for_marker(&session, "Kind    exec", 1000) && still_running(&session), "panning and Enter keep the selected step after resize");
     write_input(session.master, "q", 1);
     result(wait_for_exit(&session) == 0, "visualization exits normally");
     result(terminal_restored(&session), "visualization preserves exact terminal settings");
@@ -46,7 +52,7 @@ static void test_visualization_refresh(const char *tui, const char *hydra, const
     setenv("HYDRA_TEST_OVERVIEW", "1", 1);
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open refresh visualization terminal");
     unsetenv("HYDRA_TEST_FAIL_FILE"); unsetenv("HYDRA_TEST_OVERVIEW");
-    (void)wait_for_marker(&session, "QUEUE DEPTH", 1000);
+    (void)wait_for_marker(&session, "STEP", 1000);
     fd = open(marker, O_WRONLY | O_CREAT | O_EXCL, 0600);
     result(fd >= 0, "inject a failed subsequent observation");
     if (fd >= 0) close(fd);
@@ -69,9 +75,9 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "CPU / memory / load: unavailable", 1000), "host detail distinguishes missing telemetry");
     write_input(session.master, "j\r", 2);
     result(wait_for_marker(&session, "Showing host empty", 1000), "Enter follows an empty host's work, filtered to that host");
-    result(wait_for_marker(&session, "No host empty to show.", 1000), "empty host does not borrow another host's head");
+    result(wait_for_marker(&session, "No host empty to show", 1000), "empty host does not borrow another host's head");
     write_input(session.master, "\033", 1);
-    (void)wait_for_marker(&session, "Heads in this project", 2000);
+    (void)wait_for_marker(&session, "Heads  ", 2000);
     write_input(session.master, "H", 1);
     result(wait_for_marker(&session, "HOST DETAIL", 2000), "return to hosts after clearing its head filter");
     mouse_input(&session, "\033[<0;10;8M");

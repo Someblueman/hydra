@@ -192,11 +192,6 @@ src/tui/attention.c	render_title_row	24
 src/tui/capture.c	native_capture_step	26
 src/tui/controls.c	native_controls_tick	27
 src/tui/controls_input.c	native_control_key	31
-src/tui/dashboard.c	dashboard_cards	24
-src/tui/dashboard.c	dashboard_distribution	34
-src/tui/dashboard.c	dashboard_heads	26
-src/tui/dashboard.c	render_dashboard	49
-src/tui/dashboard.c	run_panel_next	16
 src/tui/detail.c	detail_attention	22
 src/tui/detail_remote.c	task_detail	20
 src/tui/evidence.c	native_evidence_tick	22
@@ -232,8 +227,6 @@ src/tui/render.c	panel_title	19
 src/tui/render.c	render_detail	16
 src/tui/render.c	render_footer	18
 src/tui/render.c	render_header	20
-src/tui/render.c	render_list	38
-src/tui/render.c	status_line	27
 src/tui/review.c	native_review_hints	26
 src/tui/review.c	render_lead	31
 src/tui/selection.c	move_selection	19
@@ -245,15 +238,6 @@ src/tui/workflow_model.c	accept_workflows	29
 src/tui/workflow_model.c	load_workflows	57
 src/tui/workflow_model.c	workflow_edges	27
 src/tui/workflow_model.c	workflow_key	31
-src/tui/workflow_render.c	render_workflow_graph	46
-src/tui/workspace.c	details_line	24
-src/tui/workspace.c	native_workspace_activity	77
-src/tui/workspace.c	native_workspace_details	64
-src/tui/workspace.c	native_workspace_key	50
-src/tui/workspace.c	native_workspace_mouse	19
-src/tui/workspace.c	native_workspace_move	33
-src/tui/workspace.c	native_workspace_tree	75
-src/tui/workspace.c	render_native_workspace	202
 src/tui/workspace_terminals.c	native_workspace_show_terminal	20
 tests/c/test_agent_auth.c	main	54
 tests/c/test_agent_profile.c	decoders	49

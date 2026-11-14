@@ -221,15 +221,6 @@ struct kt_style status_tone(const struct head *head) {
 }
 
 
-static void record_hit(struct app *app, size_t index) {
-    if (app->line >= app->limit || app->hit_count >= MAX_HEADS) return;
-    app->hit_rows[app->hit_count] = app->line + 1;
-    app->hit_bottom[app->hit_count] = app->line + 1;
-    app->hit_left[app->hit_count] = 3;
-    app->hit_right[app->hit_count] = app->cols - 3;
-    app->hit_items[app->hit_count++] = index;
-}
-
 /* Recovery findings in plain language. Raw kinds stay in diagnostics. */
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size) {
     /* Detail formats consume the head label exactly once ("%.0s" when unused). */
@@ -342,26 +333,15 @@ void pair(struct app *app, const char *left_label, const char *left, struct kt_s
     }
 }
 
-/* Shared chrome: title row, tab row, footer rows. Tab hits are recorded for the mouse. */
-static const char *view_titles[] = {"WORK", "DETAILS", "COORDINATION", "INBOX", "OVERVIEW", "WORKFLOWS", "HOSTS", "WORKSPACE", "STATISTICS", "INBOX"};
-static const char *tab_labels[] = {"Work", "Details", "Coordination", "Inbox", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Inbox"};
-/* Below TAB_SHORT_BELOW columns the tab bar uses these so every tab, Hosts
- * included, fits at 80 columns; keys and view titles are unchanged. */
-static const char *tab_short[] = {"Work", "Details", "Coord", "Inbox", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Inbox"};
-#define TAB_SHORT_BELOW 140
-
-/* One tab order for local and remote work; Hosts lists the machines, adds
- * one and continues its setup. */
-size_t tab_order(const struct app *app, int *views) {
-    size_t count = 0;
-    views[count++] = 0; views[count++] = 1;
-    if (app->view == 2) views[count++] = 2;
-    views[count++] = 4;
-    views[count++] = 9;
-    views[count++] = 5;
-    views[count++] = 8; views[count++] = 7;
-    views[count++] = 6;
-    return count;
+/* Shared chrome: the top bar with the four screens, the status line and
+ * the footer. Tab hits are recorded for the mouse. */
+static const char *tab_label(int view) {
+    switch (view) {
+    case 9: return "Inbox";
+    case 6: return "Hosts";
+    case 8: return "Stats";
+    default: return "Work";
+    }
 }
 
 static void record_tab(struct app *app, int x, int length, int view) {
@@ -384,60 +364,41 @@ static int tab_badge(struct app *app, int view, char *out, size_t size, struct k
     return out[0] ? kt_text_width(out) + 1 : 0;
 }
 
-/* A tab is "N Label": its number (the key that opens it) and its label; the
- * active one is a pill with a blank on each side. */
-static int tab_width(struct app *app, const char *const *labels, int view, bool current, int number) {
+/* A tab is " N Label ": its number (the key that opens it) and its label
+ * with a blank on each side, then Inbox's badge; the active one is a pill. */
+static int tab_width(struct app *app, int view) {
     char badge[24];
     struct kt_style tone;
-    return (int)strlen(labels[view]) + (number < 10 ? 2 : 0) + (current ? 2 : 0) + tab_badge(app, view, badge, sizeof(badge), &tone);
+    return (int)strlen(tab_label(view)) + 4 + tab_badge(app, view, badge, sizeof(badge), &tone);
 }
 
-static void tab_draw(struct app *app, struct kt_canvas *c, int x, int row, int view, bool current, int number,
-                     const char *const *labels) {
+static void tab_draw(struct app *app, struct kt_canvas *c, int x, int view, bool current, int number) {
     char label[32], badge[24];
     struct kt_style tone = KT_WARNING;
-    int length = tab_width(app, labels, view, current, number), extra = tab_badge(app, view, badge, sizeof(badge), &tone);
-    if (extra) kt_text(c, (struct kt_rect){x + length - extra + 1, row, extra - 1, 1}, badge, tone);
-    length -= extra;
+    int core = (int)strlen(tab_label(view)) + 2, extra = tab_badge(app, view, badge, sizeof(badge), &tone);
     if (current) {
-        snprintf(label, sizeof(label), " %d %s ", number, labels[view]);
+        snprintf(label, sizeof(label), " %d %s ", number, tab_label(view));
         /* Without colour the pill is reverse video, as a selection is. */
-        kt_text(c, (struct kt_rect){x, row, length, 1}, label, app->no_color ?
+        kt_text(c, (struct kt_rect){x, 0, core + 2, 1}, label, app->no_color ?
                 KT_STYLE(KT_COLOR_ON_SELECTION, KT_COLOR_SELECTION, KT_BOLD) : KT_STYLE(KT_COLOR_ON_ACCENT, KT_COLOR_ACCENT, KT_BOLD));
     } else {
         snprintf(label, sizeof(label), "%d", number);
-        kt_text(c, (struct kt_rect){x, row, 1, 1}, label, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0));
-        kt_text(c, (struct kt_rect){x + 2, row, length - 2, 1}, labels[view], KT_MUTED);
+        kt_text(c, (struct kt_rect){x + 1, 0, 1, 1}, label, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0));
+        kt_text(c, (struct kt_rect){x + 3, 0, core - 2, 1}, tab_label(view), KT_MUTED);
     }
-    record_tab(app, x, length + extra, view);
+    if (extra) kt_text(c, (struct kt_rect){x + core + 2, 0, extra - 1, 1}, badge, tone);
+    record_tab(app, x, core + 2 + extra, view);
 }
 
-/* The first tab drawn, so the active one fits in room columns. */
-static size_t tabs_first(struct app *app, const char *const *labels, const int *views, size_t active, int gap, int room) {
-    size_t first = 0, i;
-    while (first < active) {
-        int needed = 0;
-        for (i = first; i <= active; i++) needed += tab_width(app, labels, views[i], i == active, (int)i + 1) + gap;
-        if (needed <= room) break;
-        first++;
-    }
-    return first;
-}
-
-/* The tabs after the brand; they give up their gap, then their long labels,
- * then the tabs far from the active one, before the active tab would go. */
-static int chrome_tabs(struct app *app, struct kt_canvas *c, int row, int x, int width) {
-    int views[12], gap = 2, total = 0;
-    const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
-    size_t count = tab_order(app, views), i, first = 0, active = 0;
-    for (i = 0; i < count; i++) { total += tab_width(app, labels, views[i], views[i] == app->view, (int)i + 1); if (views[i] == app->view) active = i; }
-    if (total + (int)(count - 1) * gap > width - x) gap = 1;
+/* The four tabs after the brand; wide screens set them a blank apart. */
+static int chrome_tabs(struct app *app, struct kt_canvas *c, int x, int width) {
+    int views[12], gap = app->cols >= 100 ? 1 : 0;
+    size_t count = tab_order(app, views), i;
     app->tab_count = 0;
-    first = tabs_first(app, labels, views, active, gap, width - x);
-    for (i = first; i < count; i++) {
-        int length = tab_width(app, labels, views[i], views[i] == app->view, (int)i + 1);
-        if (x + length > width) { kt_text(c, (struct kt_rect){x, row, width - x, 1}, app->ascii ? ".." : "\xe2\x80\xa6", KT_MUTED); break; }
-        tab_draw(app, c, x, row, views[i], views[i] == app->view, (int)i + 1, labels);
+    for (i = 0; i < count; i++) {
+        int length = tab_width(app, views[i]);
+        if (x + length > width) break;
+        tab_draw(app, c, x, views[i], views[i] == app->view, (int)i + 1);
         x += length + gap;
     }
     return x;
@@ -448,34 +409,46 @@ static void header_project(const struct app *app, char *project, size_t size) {
     project[0] = '\0';
     if (!app->links || !app->links->root[0]) return;
     name = strrchr(app->links->root, '/');
-    snprintf(project, size, "%.60s%s", name && name[1] ? name + 1 : app->links->root, dot(app));
+    snprintf(project, size, "%.60s", name && name[1] ? name + 1 : app->links->root);
 }
 
-/* Counts describe tasks the user started; heads a run created are counted
- * once, inside their run. */
-static void header_remote(const struct app *app, char *right, size_t size) {
-    const char *sep = dot(app);
-    struct remote_counts r;
-    remote_counts(app, &r);
-    if (!r.hosts && !r.heads && !r.tasks) return;
-    text_append(right, size, "%sRemote%s%zu head%s", sep, sep, r.heads, r.heads == 1 ? "" : "s");
-    if (r.tasks) text_append(right, size, ", %zu task%s", r.tasks, r.tasks == 1 ? "" : "s");
-    if (r.hosts) text_append(right, size, " on %zu host%s", r.hosts, r.hosts == 1 ? "" : "s");
-    if (app->remote_stale) text_append(right, size, " (stale)");
-    else if (r.hosts_down) text_append(right, size, " (%zu disconnected)", r.hosts_down);
+/* The summary's parts in the order shown, each with a rank: as the width
+ * shrinks the lowest rank goes first ("shop-api · 3 running" at 80
+ * columns). Counts describe tasks the user started; heads a run created are
+ * counted once, inside their run. With remote hosts the machines are
+ * counted apart: "3 local · 2 remote". */
+struct summary { char part[6][128]; int rank[6]; size_t count; };
+
+static void summary_add(struct summary *s, int rank, const char *format, ...) {
+    va_list args;
+    if (s->count >= 6) return;
+    va_start(args, format);
+    vsnprintf(s->part[s->count], sizeof(s->part[0]), format, args);
+    va_end(args);
+    s->rank[s->count++] = rank;
 }
 
-static void header_summary(const struct app *app, const char *project, char *right, size_t size) {
-    const char *sep = dot(app);
+static void header_summary(const struct app *app, struct summary *s) {
     struct work_counts n;
+    struct remote_counts r;
+    char project[128];
+    bool remote;
     work_counts(app, &n);
-    if (!n.heads && !n.run_heads) snprintf(right, size, "%sLocal%sno agent work yet", project, sep);
+    remote_counts(app, &r);
+    remote = r.hosts || r.heads || r.tasks;
+    s->count = 0;
+    header_project(app, project, sizeof(project));
+    if (project[0]) summary_add(s, 9, "%s", project);
+    if (!n.heads && !n.run_heads && !remote) { summary_add(s, 8, "nothing running"); return; }
+    if (remote) summary_add(s, 6, "%zu local%s%zu remote", n.heads, dot(app), r.heads + r.tasks);
     else {
-        snprintf(right, size, "%sLocal%s%zu head%s", project, sep, n.heads, n.heads == 1 ? "" : "s");
-        if (n.run_heads) text_append(right, size, " (+%zu in runs)", n.run_heads);
-        text_append(right, size, "%s%zu running%s%zu need attention%s%zu to repair", sep, n.running, sep, n.attention, sep, app->model.recovery_count);
+        summary_add(s, 2, "this machine");
+        summary_add(s, 5, "%zu head%s", n.heads, n.heads == 1 ? "" : "s");
     }
-    header_remote(app, right, size);
+    if (n.run_heads) summary_add(s, 3, "+%zu in runs", n.run_heads);
+    if (app->remote_stale) summary_add(s, 7, "remote stale %lds", remote_age(app));
+    else if (r.hosts_down) summary_add(s, 7, "%zu of %zu host%s disconnected", r.hosts_down, r.hosts, r.hosts == 1 ? "" : "s");
+    summary_add(s, 8, "%zu running", n.running);
 }
 
 /* Display columns of UTF-8 text counting one per scalar (chrome uses narrow glyphs). */
@@ -486,30 +459,37 @@ static int text_columns(const char *text) {
     return length;
 }
 
-/* The top bar: the brand, the views as numbered tabs (the active one a
- * pill) and at the right what is shown: the view's title, which names the
- * workspace layout, followed by the project's summary when there is room.
- * The title keeps its place; the tabs give way before it. The row under the
- * bar is left blank. */
-void chrome_header(struct app *app, struct kt_canvas *c, const char *title) {
-    char right[384] = "", summary[256] = "", project[128];
-    int width = c->width, length, end, room;
-    kt_text(c, (struct kt_rect){1, 0, 8, 1}, app->ascii ? "# hydra" : "\xe2\x97\x86 hydra", KT_TITLE);
-    length = text_columns(title);
-    room = width - 1 - (length && width - length > 24 ? length + 3 : 0);
-    end = chrome_tabs(app, c, 0, 10, room);
-    header_project(app, project, sizeof(project));
-    header_summary(app, project, summary, sizeof(summary));
-    snprintf(right, sizeof(right), "%s%s%s", title, dot(app), summary);
-    if (end + text_columns(right) + 3 >= width) {
-        /* No room beside the tabs: the summary takes the row under the bar. */
-        snprintf(right, sizeof(right), "%s", title);
-        length = text_columns(summary);
-        if (c->height > 2 && width >= 60 && length + 2 < width)
-            kt_text(c, (struct kt_rect){width - length - 1, 1, length, 1}, summary, KT_MUTED);
+static void summary_join(const struct app *app, const struct summary *s, int floor, char *out, size_t size) {
+    size_t i;
+    out[0] = '\0';
+    for (i = 0; i < s->count; i++) if (s->rank[i] >= floor) text_append(out, size, "%s%s", out[0] ? dot(app) : "", s->part[i]);
+}
+
+/* The parts that fit room columns: the lowest ranks are dropped first. */
+static void summary_fit(const struct app *app, const struct summary *s, int room, char *out, size_t size) {
+    int floor;
+    for (floor = 0; floor <= 10; floor++) {
+        summary_join(app, s, floor, out, size);
+        if (text_columns(out) <= room) return;
     }
-    length = text_columns(right);
-    if (end + length + 2 < width) kt_text(c, (struct kt_rect){width - length - 1, 0, length, 1}, right, KT_MUTED);
+    out[0] = '\0';
+}
+
+/* The top bar: the brand, the four screens as numbered tabs (the active one
+ * a pill, Inbox with its badge) and the project summary at the right, which
+ * drops parts from its end as the width shrinks and is gone below 60. */
+void chrome_header(struct app *app, struct kt_canvas *c, bool blank_row) {
+    struct summary s;
+    char right[512];
+    int width = c->width, end;
+    bool brand = width >= 60;
+    (void)blank_row;
+    kt_text(c, (struct kt_rect){1, 0, brand ? 8 : 2, 1}, app->ascii ? (brand ? "# hydra" : "#") : (brand ? "\xe2\x97\x86 hydra" : "\xe2\x97\x86"), KT_TITLE);
+    end = chrome_tabs(app, c, brand ? 9 : 3, width - 1);
+    if (width < 60) return;
+    header_summary(app, &s);
+    summary_fit(app, &s, width - end - 4, right, sizeof(right));
+    if (right[0]) kt_text(c, (struct kt_rect){width - text_columns(right) - 2, 0, text_columns(right), 1}, right, KT_MUTED);
 }
 
 /* The status line starts with a chip saying how fresh the data is: live,
@@ -532,7 +512,7 @@ static const char *chip_for(const struct app *app, const char **status, struct k
         n = strlen(chips[i].prefix);
         if (strncmp(*status, chips[i].prefix, n)) continue;
         *status += n;
-        while (**status == ' ' || **status == ':' || !strncmp(*status, "\xc2\xb7", 2)) *status += **status == ' ' || **status == ':' ? 1 : 2;
+        while (**status == ' ' || **status == ':' || **status == '/' || !strncmp(*status, "\xc2\xb7", 2)) *status += **status == ' ' || **status == ':' || **status == '/' ? 1 : 2;
         *chip = chip_tone(chips[i].kind);
         return app->ascii ? chips[i].ascii : chips[i].utf8;
     }
@@ -561,7 +541,7 @@ void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, str
         if (height < 3) hints = pending;
     }
     if (height >= 3) status_chip(app, c, height - 2, status, tone);
-    if (hints) {
+    if (hints && hints[0]) {
         /* A hand-written hint line drops whole hints from its right to fit. */
         char fitted[512];
         kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1},
@@ -570,235 +550,11 @@ void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, str
     else key_footer(app, c, (struct kt_rect){1, height - 1, c->width - 2, 1});
 }
 
-/* Columns: HEAD, STATUS, AGENT, then WHERE (the machine) from 95 columns and
- * REPORTED from 110; a remote head's name already carries its host. */
-struct head_columns { int status_x, agent_x, where_x, reported_x, name_width; bool wide, medium, reported; };
-
-static void head_row_layout(int width, struct head_columns *k) {
-    k->wide = width >= 95; k->medium = width >= 65; k->reported = width >= 110;
-    k->reported_x = width - 12;
-    k->where_x = k->reported ? k->reported_x - 13 : width - 12;
-    k->agent_x = k->wide ? k->where_x - 16 : width - 15;
-    k->status_x = (k->wide || k->medium ? k->agent_x : width) - 15;
-    if (k->status_x < 20) k->status_x = 20;
-    k->name_width = k->status_x - 4;
-}
-
-static void outline_heading(const struct app *app, struct outline_text *t) {
-    (void)app;
-    copy_text(t->name, sizeof(t->name), "HEAD");
-    t->status = "STATUS"; t->agent = "AGENT"; t->where = "WHERE";
-    t->reported = "REPORTED"; t->tone = KT_MUTED;
-}
-
-static bool outline_marked(const struct app *app, const struct outline_row *row) {
-    return row && row->kind == OUTLINE_HEAD && marked_index(app, app->model.heads[row->head].branch) < app->marked_count;
-}
-
-static struct kt_style outline_tone(const struct outline_row *row, bool selected) {
-    if (!row || row->kind == OUTLINE_RETIRED) return KT_MUTED;
-    return selected ? KT_SELECTED : KT_BASE;
-}
-
-/* Work list: aligned columns, status tone only on the status cell. A NULL
- * row draws the column headings. */
-static void outline_line(struct app *app, const struct outline_row *row, bool selected) {
-    int width = app->content_width;
-    struct head_columns k;
-    struct outline_text t;
-    char cell[TEXT + 96];
-    struct kt_style row_tone = outline_tone(row, selected);
-    if (app->line >= app->limit) return;
-    head_row_layout(width, &k);
-    if (row) outline_row_text(app, row, &t);
-    else outline_heading(app, &t);
-    snprintf(cell, sizeof(cell), "%s%c %s", selected ? (app->ascii ? ">" : "\xe2\x96\x8c") : " ", outline_marked(app, row) ? '*' : ' ', t.name);
-    /* The selection fills its row; the bar at its left edge marks it too. */
-    if (selected) kt_fill(&app->frame, (struct kt_rect){app->content_x, app->line, width, 1}, KT_SELECTED);
-    column(app, 0, k.name_width + 3, row_tone, cell);
-    column(app, k.status_x, 14, selected ? KT_SELECTED : t.tone, t.status);
-    if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, t.agent);
-    if (k.wide) column(app, k.where_x, 12, row_tone, t.where);
-    if (k.reported) column(app, k.reported_x, 12, row_tone, t.reported);
-    app->line++;
-}
-
-void render_empty_work(struct app *app) {
-    char label[160];
-    linef(app, "");
-    style(app, TONE_STRONG);
-    if (app->search[0]) linef(app, "No heads match the search.");
-    else if (app->location[0]) linef(app, "No %s to show.", location_label(app, label, sizeof(label)));
-    else linef(app, "No agent work in this project yet.");
-    style(app, TONE_BASE);
-    linef(app, "");
-    if (app->search[0]) { paragraph(app, "Esc clears the search.", KT_BASE); return; }
-    if (location_remote_only(app)) {
-        paragraph(app, app->model.host_count ? "Hosts shows each machine's connection and last observation; r there retries a disconnected host. Esc or L shows all work."
-                  : "No remote host is registered yet. Hosts (H) adds a machine over SSH; Esc or L shows all work.", KT_BASE);
-        return;
-    }
-    if (app->location[0]) { paragraph(app, "Esc or L shows all work.", KT_BASE); return; }
-    paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once: for example, one head adds tests while another fixes a bug, each on its own branch.", KT_BASE);
-    linef(app, "");
-    paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", KT_BASE);
-    linef(app, "");
-    paragraph(app, "To run agents on another machine, press H for Hosts and add it there.", KT_MUTED);
-}
-
-/* One-panel summary of the selected head under the list. */
-static void summary_line(struct app *app, const struct head *head, char *line, size_t size) {
-    const char *sep = dot(app);
-    char agent[TEXT + 96];
-    if (head_remote(head)) {
-        char observation[TEXT];
-        remote_observation_text(app, head, observation, sizeof(observation));
-        snprintf(line, size, "On %.100s%s%s%sdesired %.40s%sobservation %s%sproject %.300s", head->remote_host, sep,
-                 remote_head_status(app, head), sep, head->desired, sep, observation, sep, head->remote_project);
-        return;
-    }
-    head_agent_text(app, head, agent, sizeof(agent));
-    if (!head->head_id[0]) {
-        snprintf(line, size, "Agent %s%ssession %s%sno head record; counters unknown", agent, sep, status_label(head), sep);
-        return;
-    }
-    snprintf(line, size, "%s%s%s%s%u changed file%s", agent, sep,
-             head_headless(head) ? "headless (no terminal)" : status_label(head), sep, head->diff, head->diff == 1 ? "" : "s");
-    if (head->gates) text_append(line, size, "%s%u of %u approval requests approved", sep, head->approved, head->gates);
-    if (head->declared[0]) text_append(line, size, "%sreported %.63s", sep, head->declared);
-}
-
-static const char *open_action(const struct app *app, const struct head *head) {
-    return head_terminal_gone(app, head) ? "restart its terminal" : "talk to the agent";
-}
-
-static void summary_actions(struct app *app, const struct head *head, char *line, size_t size) {
-    const char *sep = dot(app);
-    /* A remote head's keys are the footer's; the card says what it cannot. */
-    if (head_remote(head)) snprintf(line, size, "Liveness unobserved: a desired state, not a live process.");
-    else if (!head->head_id[0]) snprintf(line, size, "Enter details%sx remove", sep);
-    else if (head_headless(head)) snprintf(line, size, "Enter details%sp step output%sx %s%s: more actions", sep, sep,
-                                           head_run_role(app, head) && !strcmp(head_run_role(app, head), "worker") ? "dismiss (keeps the branch)" : "remove", sep);
-    else snprintf(line, size, "Enter details%sa %s%sx remove%s: more actions", sep, open_action(app, head), sep, sep);
-}
-
-/* A bordered summary at most max_rows tall (borders included). */
-static void summary_panel_rows(struct app *app, const char *title, const char *first, const char *second, int max_rows) {
-    struct kt_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
-    int limit = app->limit;
-    char heading[TEXT + 64];
-    if (r.height > max_rows) r.height = max_rows;
-    fit_text(app, title, r.width > 6 ? (size_t)r.width - 6U : 1U, heading, sizeof(heading));
-    pane_rule(&app->frame, r, heading);
-    app->line = r.y + 1;
-    app->content_x++; app->content_width -= 2;
-    /* Prose stops above the panel's bottom edge, leaving the last row to second. */
-    app->limit = r.y + r.height - (second ? 2 : 1);
-    paragraph(app, first, KT_BASE);
-    app->limit = r.y + r.height - 1;
-    if (second && app->line < app->limit) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
-    app->limit = limit;
-    app->content_x--; app->content_width += 2;
-    app->line = r.y + r.height;
-}
-
-static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
-    summary_panel_rows(app, title, first, second, 5);
-}
-
-/* The selected remote task: receiver-owned, observed through its host. */
-static void task_summary(struct app *app, const struct task_observation *task, char *first, size_t first_size, char *second, size_t second_size) {
-    const char *sep = dot(app);
-    snprintf(first, first_size, "On %.100s%s%s%sowner %s%sobservation %s%swaiting %s%snext %s", task->host, sep, task_status(app, task), sep,
-             task->owner, sep, task->retained ? "retained; host disconnected" : task->freshness, sep, task->waiting_reason, sep, task->next_action);
-    snprintf(second, second_size, "Enter details%sY approve%sN reject%sR resume%sX cancel%sr retry its host", sep, sep, sep, sep, sep);
-}
-
-static void render_selected_summary(struct app *app) {
-    char first[1024], second[256], title[TEXT + 64];
-    const struct head *head = selected_head(app);
-    const struct task_observation *task = selected_task(app);
-    if (task) {
-        snprintf(title, sizeof(title), "task %.200s on %.40s", task->task_id, task->host);
-        task_summary(app, task, first, sizeof(first), second, sizeof(second));
-        summary_panel(app, title, first, second);
-        return;
-    }
-    if (app->run_row && app->workflows && app->workflow_run < app->workflows->run_count) {
-        run_summary_text(app, app->workflow_run, title, sizeof(title));
-        run_next_text(app, app->workflow_run, first, sizeof(first));
-        snprintf(second, sizeof(second), "Enter %s%sC monitor%sw workflows%so overview",
-                 run_expanded(app, app->workflow_run) ? "collapse" : "expand", dot(app), dot(app), dot(app));
-        summary_panel(app, title, first, second);
-        return;
-    }
-    if (!head) return;
-    summary_line(app, head, first, sizeof(first));
-    summary_actions(app, head, second, sizeof(second));
-    summary_panel(app, head->branch, first, second);
-}
-
-static void list_footer(struct app *app, size_t position, size_t count) {
-    struct work_counts n;
-    work_counts(app, &n);
-    style(app, TONE_MUTED);
-    if (n.remote) linef(app, "%zu heads  |  Row %zu of %zu  |  %zu remote", n.heads + n.remote, position + 1U, count, n.remote);
-    else if (n.run_heads) linef(app, "%zu head%s you started%s%zu in runs  |  Row %zu of %zu", n.heads, n.heads == 1 ? "" : "s", dot(app), n.run_heads, position + 1U, count);
-    else linef(app, "%zu heads  |  Row %zu of %zu", n.heads, position + 1U, count);
-    style(app, TONE_BASE);
-}
-
-static void list_rows(struct app *app, const struct outline_row *rows, size_t count, size_t position, int available) {
-    size_t index, start = position >= (size_t)available ? position - (size_t)available + 1U : 0U;
-    outline_line(app, NULL, false);
-    for (index = start; index < count && available-- > 0; index++) {
-        if (rows[index].kind == OUTLINE_HEAD) record_hit(app, rows[index].head);
-        else if (rows[index].kind == OUTLINE_RUN) record_hit(app, MAX_HEADS + 1U + rows[index].run);
-        else if (rows[index].kind == OUTLINE_TASK) record_hit(app, MAX_HEADS + 1U + WF_RUNS + rows[index].record);
-        outline_line(app, &rows[index], index == position);
-    }
-}
-
-static void render_list(struct app *app) {
-    static struct outline_row rows[OUTLINE_ROWS];
-    size_t count, position;
-    int available = app->limit - app->line - 2;
-    bool summary = app->rows >= 20 && app->cols >= 70;
-    if (summary && available > app->rows / 3) available = app->rows / 3;
-    retarget_selection(app);
-    count = outline_build(app, rows, OUTLINE_ROWS);
-    position = outline_position(app, rows, count);
-    if (position == count && (app->run_row || app->task_row)) { app->run_row = app->task_row = false; retarget_selection(app); position = outline_position(app, rows, count); }
-    if (count == 0U) { render_empty_work(app); return; }
-    list_rows(app, rows, count, position, available < 1 ? 1 : available);
-    list_footer(app, position < count ? position : 0, count);
-    if (summary && app->limit - app->line >= 5) render_selected_summary(app);
-}
-
-static void render_coordination(struct app *app) {
-    const struct head *head = selected_head(app);
-    if (head == NULL) { render_empty_work(app); return; }
-    style(app, TONE_STRONG); linef(app, "COORDINATION  %s", head->branch); style(app, TONE_BASE);
-    if (head_remote(head)) {
-        linef(app, "");
-        paragraph(app, "This head runs on another machine. Claims, scopes, queue and resources are coordinated on that host; hydra fleet workflow inspects assignments there.", KT_BASE);
-        return;
-    }
-    linef(app, "");
-    paragraph(app, "This head is a single agent session. Coordination between heads matters when several heads work in the same project: claims (files a head intends to change), scopes (areas it stays within), a shared work queue and allocated resources let Hydra flag overlap early. For example, two heads that both claim lib/ are reported before they conflict. A workflow adds steps, dependencies and handoffs on top.", KT_BASE);
-    section(app, "THIS HEAD");
-    if (!head->head_id[0]) { linef(app, "Counters unknown: there is no readable head record for this branch."); }
-    else {
-        linef(app, "Claims      %u recorded             : claims", head->claims);
-        linef(app, "Scopes      %u recorded             : scopes", head->scopes);
-        linef(app, "Queue       %u waiting entries      : queue", head->queue);
-        linef(app, "Resources   %u allocated            : resources", head->resources);
-        linef(app, "Approvals   %u of %u approved        : approvals", head->approved, head->gates);
-    }
-    section(app, "WORKFLOW");
-    if (app->workflows && app->workflows->run_count)
-        linef(app, "%zu recorded workflow run(s) in this project; Workflows shows steps and dependencies.", app->workflows->run_count);
-    else paragraph(app, "No workflow run is linked to this head. A single conversation does not need one.", KT_BASE);
+/* The status line without the footer under it (Work while typing to an agent). */
+void chrome_status(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone) {
+    char pending[512];
+    if (key_pending_text(app, pending, sizeof(pending))) { status = pending; tone = KT_STRONG; }
+    if (c->height >= 3) status_chip(app, c, c->height - 2, status, tone);
 }
 
 /* The agent-pane commands with the chords bound to them now, and where to
@@ -892,23 +648,9 @@ static void render_result(struct app *app) {
 }
 
 static void render_content(struct app *app) {
-    if (app->view == 6 && native_setup_active(app)) { native_setup_render(app); return; }
-    if (app->view == 6 && native_onboarding_active(app)) { native_onboarding_render(app); return; }
-    switch (app->view) {
-        case 0: render_list(app); break;
-        case 1: render_head_detail(app); break;
-        case 2: render_coordination(app); break;
-        case 4: render_dashboard(app); break;
-        case 5: render_workflow_graph(app); break;
-        case 6: render_hosts(app); break;
-        default: linef(app, "Workspace needs at least 20 columns and 6 rows"); break;
-    }
-}
-
-static bool render_workspace_view(struct app *app, unsigned frame, bool headless) {
-    if (app->view == 8) return render_statistics(app, frame, headless);
-    if (app->view == 7) return render_native_workspace(app, frame, headless);
-    return false;
+    if (native_setup_active(app)) native_setup_render(app);
+    else if (native_onboarding_active(app)) native_onboarding_render(app);
+    else render_hosts(app);
 }
 
 /* Each successful refresh takes a new snapshot, so while refreshes keep
@@ -941,11 +683,11 @@ static void status_marked(struct app *app, char *out, size_t size) {
              app->notice[0] ? sep : "", app->notice);
 }
 
-static void status_line(struct app *app, char *out, size_t size, struct kt_style *tone, bool headless) {
-    bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
+void screen_status(struct app *app, char *out, size_t size, struct kt_style *tone, bool headless) {
+    bool stale = app->snapshot_stale;
     const char *sep = dot(app);
     char fresh[96];
-    struct kt_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
+    struct kt_style fresh_tone = snapshot_freshness(app, app->snapshot_at, stale, headless, fresh, sizeof(fresh));
     *tone = KT_MUTED;
     if (app->marked_count) { status_marked(app, out, size); *tone = KT_STRONG; return; }
     /* The answer to the user's last action stays visible beside a stale
@@ -956,7 +698,7 @@ static void status_line(struct app *app, char *out, size_t size, struct kt_style
         *tone = KT_WARNING; return;
     }
     if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = KT_BASE; return; }
-    if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
+    if (app->search[0]) { snprintf(out, size, "Filter: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
     snprintf(out, size, "%s", fresh);
     if (app->view == 9) inbox_status(app, out, size);
     *tone = fresh_tone;
@@ -965,7 +707,7 @@ static void status_line(struct app *app, char *out, size_t size, struct kt_style
     {
         char remote[TEXT];
         struct kt_style remote_tone;
-        if (app->view != 5 && remote_footer_text(app, remote, sizeof(remote), &remote_tone)) {
+        if (remote_footer_text(app, remote, sizeof(remote), &remote_tone)) {
             text_append(out, size, "%s%s", sep, remote);
             if (kt_style_equal(remote_tone, KT_WARNING) || kt_style_equal(*tone, KT_MUTED)) *tone = remote_tone;
         }
@@ -985,47 +727,31 @@ static const char *hint_line(struct app *app) {
     return NULL;
 }
 
-static void detail_title(const struct app *app, const struct head *head, char *out, size_t size) {
-    const char *label = app->diagnostics ? "Technical details" : "Details";
-    const struct task_observation *task = selected_task(app);
-    if (task) { snprintf(out, size, "%s: task %.100s on %.40s", label, task->task_id, task->host); return; }
-    if (!head) { snprintf(out, size, "%s", label); return; }
-    if (head_remote(head)) { snprintf(out, size, "%s: %.120s on %.40s", label, head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host); return; }
-    snprintf(out, size, "%s: %.200s", label, head->branch);
+static const char *panel_title(struct app *app) {
+    if (native_setup_active(app)) return native_setup_title(app);
+    if (native_onboarding_active(app)) return native_onboarding_title(app);
+    return "Hosts";
 }
 
-static const char *panel_title(struct app *app, char *out, size_t size) {
-    static const char *names[] = {NULL, NULL, "Coordination", "Inbox", "Overview", "Workflows", "Hosts", NULL, NULL, "Inbox"};
-    const struct head *head = selected_head(app);
-    if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
-    if (app->view == 6 && native_onboarding_active(app)) return native_onboarding_title(app);
-    if (app->view == 0 && !app->location[0]) snprintf(out, size, "%s", "Heads in this project");
-    else if (app->view == 0) { char label[160]; snprintf(out, size, "Heads: %s", location_label(app, label, sizeof(label))); }
-    else if (app->view == 1) detail_title(app, head, out, size);
-    else snprintf(out, size, "%s", names[app->view] ? names[app->view] : tab_labels[app->view]);
-    return out;
-}
-
+/* Work and Stats draw their own frame; Inbox and Hosts draw inside this one. */
 void render(struct app *app, unsigned frame, bool headless) {
-    char status[512], title[TEXT];
+    char status[512];
     struct kt_style tone;
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = true;
-    if (!app->diagnostics) {
-        if (render_workspace_view(app, frame, headless)) return;
-    }
+    if (app->view == 8) { if (render_statistics(app, frame, headless)) return; }
+    else if (app->view != 9 && app->view != 6) { (void)work_render(app, frame, headless); return; }
     if (!frame_begin(app, headless)) return;
     app->limit = app->rows - 3;
-    chrome_header(app, &app->frame, view_titles[app->view]);
+    chrome_header(app, &app->frame, true);
     if (app->view == 9) inbox_render(app);
-    else if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4},
-                                  panel_title(app, title, sizeof(title)));
+    else if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4}, panel_title(app));
     app->line = 3;
     style(app, TONE_BASE);
-    if (app->view != 9) render_content(app);
+    if (app->view == 6) render_content(app);
     app->limit = app->rows;
-    status_line(app, status, sizeof(status), &tone, headless);
+    screen_status(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));
     frame_end(app, frame, headless);
 }

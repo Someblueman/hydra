@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work  2 Details  3 Overview 4 Inbox · 5 Flows 6 Stats …    DETAILS 
-                                                                               
- Details: feature-index on archive ─────────────────────────────────────────── 
-  archive/feature-index                                                        
-  This is the host's last observation, not its current state. Its agent may    
-  still be working; nothing here completes or stops it. r retries the host.    
-  Where        archive                                                         
-  Project      /srv/archive                                                    
-  Status       stale · desired running                                         
-  Observation  stale, 300s old                                                 
-  Connection   reachable · stale · 300s old                                    
-  Confirmed    2026-10-17T09:55:00Z                                            
-  Agent        not observed                                                    
-  Liveness     unobserved: a remote head reports desired state, not a live     
-               process                                                         
-                                                                               
-  NEXT                                                                         
-  a  talk to the agent in its terminal on archive                              
-  x  interrupt the agent (confirmed); the worktree and files stay on the host  
-  r  retry the host    d  technical details    c  coordination                 
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats                       1 running  
+ Heads ─────────────── 6  Conversation  Details ─────────────────────────────  
+  ◐ feature-live          This is the host's last observation, not its         
+  ▲ feature-stale         current state. Its agent may still be working;       
+  ? feature-unavailable   nothing here completes or stops it. r retries the    
+  ● builder/feature-bui…  host.                                                
+ ▌▲ archive/feature-ind…  Where        archive                                 
+  ◐ task_build            Project      /srv/archive                            
+                          Status       stale · desired running                 
+                          Observation  stale, 300s old                         
+                          Connection   reachable · stale · 300s old            
+                          Confirmed    2026-10-17T09:55:00Z                    
+                          Agent        not observed                            
+                          Liveness     unobserved: a remote head reports       
+                                       desired state, not a live process       
                                                                                
                                                                                
-  ● live   Remote live                                                         
- ↑/↓ select • a talk to agent • n new task • x interrupt • ? help • q quit     
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  5 heads · 1 task · 3 ne                                                      
+  ● live   Remote live · archive/feature-index · stale                         
+ ↑/↓ select • enter/a talk • x interrupt • n new task • ? help • q quit        

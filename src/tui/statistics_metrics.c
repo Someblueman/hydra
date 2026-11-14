@@ -33,21 +33,21 @@ static void metric_evidence(struct app *app, struct kt_canvas *c, struct kt_rect
     size_t run, i, ordinal = 0;
     int row = r.y;
     char value[40];
-    if (!v->count) { dashboard_text(c,2,row,r.width-3,KT_WARNING,"Nothing matches the filters / 0 resets them"); return; }
+    if (!v->count) { canvas_text(c,2,row,r.width-3,KT_WARNING,"Nothing matches the filters / 0 resets them"); return; }
     run = v->visible[v->selected];
-    dashboard_text(c,2,row++,r.width-3,KT_SELECTED,"%zu/%zu %s / %s",v->selected+1,v->count,v->detail ? v->model->runs[run].id : v->model->runs[run].name,v->detail ? v->model->runs[run].state : v->model->runs[run].id);
+    canvas_text(c,2,row++,r.width-3,KT_SELECTED,"%zu/%zu %s / %s",v->selected+1,v->count,v->detail ? v->model->runs[run].id : v->model->runs[run].name,v->detail ? v->model->runs[run].state : v->model->runs[run].id);
     if (metric != HS_QUEUE) {
         metric_value(v->model,metric,run,value,sizeof(value));
-        dashboard_text(c,2,row,r.width-3,KT_BASE,"%s / %s",v->model->runs[run].state,value);
+        canvas_text(c,2,row,r.width-3,KT_BASE,"%s / %s",v->model->runs[run].state,value);
         return;
     }
     for (i = 0; i < v->model->step_count && row < r.y+r.height; i++) {
         const struct hs_step *s = &v->model->steps[i];
         if (s->run != run || ordinal++ < v->step_scroll) continue;
         metric_value(v->model,metric,i,value,sizeof(value));
-        dashboard_text(c,2,row++,r.width-3,KT_BASE,"%s / %s / %s",s->id,s->state,value);
+        canvas_text(c,2,row++,r.width-3,KT_BASE,"%s / %s / %s",s->id,s->state,value);
     }
-    if (row == r.y+1) dashboard_text(c,2,row,r.width-3,KT_WARNING,"No step at this offset / k back");
+    if (row == r.y+1) canvas_text(c,2,row,r.width-3,KT_WARNING,"No step at this offset / k back");
 }
 
 static void metric_trend(struct kt_canvas *c, struct kt_rect r, const struct hs_metric_summary *s) {
@@ -66,7 +66,7 @@ static void metric_trend(struct kt_canvas *c, struct kt_rect r, const struct hs_
             value = (double)s->daily_sum[day]/(double)s->daily_known[day];
             snprintf(mean,sizeof(mean),"%.1f",value);
         }
-        dashboard_text(c,1,row,32,KT_BASE,"-%zud %10s / n=%zu",6-day,mean,s->daily_known[day]);
+        canvas_text(c,1,row,32,KT_BASE,"-%zud %10s / n=%zu",6-day,mean,s->daily_known[day]);
         if (value > 0) stats_fraction(c, (struct kt_rect){34,row,r.width-36,1}, value / maximum);
     }
 }
@@ -86,13 +86,13 @@ void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_r
             (unsigned long long)s.p50,(unsigned long long)s.p95,(unsigned long long)s.maximum);
     }
     stats_rule(c,(struct kt_rect){r.x,r.y,r.width,1},metric_name(metric),"M next metric",false);
-    dashboard_text(c,2,r.y+1,r.width-3,KT_BASE,"Mean %s / known %zu/%zu",mean,s.known,s.eligible);
-    dashboard_text(c,2,r.y+2,r.width-3,KT_BASE,"%s",percentiles);
+    canvas_text(c,2,r.y+1,r.width-3,KT_BASE,"Mean %s / known %zu/%zu",mean,s.known,s.eligible);
+    canvas_text(c,2,r.y+2,r.width-3,KT_BASE,"%s",percentiles);
     clock_mark();
-    dashboard_text(c,2,r.y+3,r.width-3,KT_MUTED,"Sample age %llus / -- unknown",(unsigned long long)age);
+    canvas_text(c,2,r.y+3,r.width-3,KT_MUTED,"Sample age %llus / -- unknown",(unsigned long long)age);
     if (r.height>7) {
-        dashboard_text(c,2,r.y+4,r.width-3,KT_MUTED,"%s",metric_boundary(metric));
-        dashboard_text(c,2,r.y+5,r.width-3,KT_MUTED,"%zu unknown / j,k runs / Enter then j,k steps",s.eligible-s.known);
+        canvas_text(c,2,r.y+4,r.width-3,KT_MUTED,"%s",metric_boundary(metric));
+        canvas_text(c,2,r.y+5,r.width-3,KT_MUTED,"%zu unknown / j,k runs / Enter then j,k steps",s.eligible-s.known);
         evidence_row+=2;
     }
     if (r.height>=24 && r.width>=65 && !v->detail) {

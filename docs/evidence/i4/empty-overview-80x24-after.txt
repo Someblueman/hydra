@@ -1,19 +1,19 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details  3 Overview  4 Inbox · 5 Flows 6 Stats …   OVERVIEW 
-                                                     Local · no agent work yet 
- Overview ──────────────────────────────────────────────────────────────────── 
-                                                                               
-   No agent work in this project yet.                                          
-                                                                               
-   Overview summarises what is running, what needs a decision, what changed    
-   Press n to start a task; it appears here as soon as its terminal opens.     
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats                 nothing running  
                                                                                
                                                                                
                                                                                
                                                                                
                                                                                
                                                                                
+                                       ◇                                       
                                                                                
+                       No agent work in this project yet                       
+                                                                               
+       A head is one task: its own branch, worktree, terminal and agent.       
+   Hydra creates them; you talk to each agent here and approve what it does.   
+                                                                               
+             n start a task • 3 add a remote host • : all commands             
                                                                                
                                                                                
                                                                                
@@ -22,4 +22,4 @@ FRAME 1 80x24
                                                                                
                                                                                
   ● live                                                                       
- ↑/↓ select • n new task • L location • / search • ? help • q quit             
+ ↑/↓ select • n new task • / filter • tab/shift+tab pane • ? help • q quit     

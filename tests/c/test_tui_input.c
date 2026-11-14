@@ -20,10 +20,20 @@ static bool fixture_open(struct fixture *f) {
     f->app->hydra = "/nonexistent/hydra";
     f->app->cols = 80; f->app->rows = 24;
     f->app->no_color = true;
+    f->app->view = 7;
     tui_options(f->app, &options);
     f->test = kt_test_new(&tui_app, f->app, 80, 24, &options);
     if (f->test) f->app->program = kt_test_program(f->test);
     return f->test != NULL;
+}
+
+/* Work with its conversation focused: Esc brings focus back to the list. */
+static void focus_conversation(struct app *app) {
+    if (native_workspace_init(app)) app->workspace->layout.focus = WORK_PANE_CONVERSATION;
+}
+
+static bool conversation_focused(const struct app *app) {
+    return app->workspace && app->workspace->layout.focus == WORK_PANE_CONVERSATION;
 }
 
 static void fixture_close(struct fixture *f) {
@@ -124,7 +134,7 @@ static bool oversized_input(bool paste) {
         kt_test_input(f.test, data + offset, piece);
         if (paste) kt_test_advance(f.test, 500);
     }
-    ok = kt_test_running(f.test) && f.app->view == 0 && !f.app->marked_count && !f.app->modal_count;
+    ok = kt_test_running(f.test) && f.app->view == 7 && !f.app->marked_count && !f.app->modal_count;
     if (paste) ok = ok && !strcmp(f.app->notice, "bracketed paste ignored");
     type(&f, "q");
     ok = ok && !kt_test_running(f.test);
@@ -139,16 +149,17 @@ static bool stalled_sequence(void) {
     bool ok = fixture_open(&f);
     if (!ok) { fixture_close(&f); return false; }
     one_head(f.app);
-    f.app->view = 1;
+    focus_conversation(f.app);
     type(&f, "\033[");
     kt_test_advance(f.test, 149);
     type(&f, "B");
-    ok = f.app->view == 1 && !f.app->marked_count;
+    ok = conversation_focused(f.app) && !f.app->marked_count;
     type(&f, "\033[");
     kt_test_advance(f.test, 150);
-    ok = ok && f.app->view == 1;
+    ok = ok && conversation_focused(f.app);
     type(&f, "1;5A");
-    ok = ok && !f.app->marked_count && f.app->view == 1;
+    ok = ok && !f.app->marked_count && conversation_focused(f.app);
+    work_focus_list(f.app);
     type(&f, "A");
     ok = ok && f.app->marked_count == 1;
     fixture_close(&f);
@@ -162,15 +173,15 @@ static bool escape_then_key(void) {
     bool ok = fixture_open(&f);
     if (!ok) { fixture_close(&f); return false; }
     one_head(f.app);
-    f.app->view = 1;
+    focus_conversation(f.app);
     type(&f, "\033");
     kt_test_advance(f.test, 19);
-    ok = f.app->view == 1;
+    ok = conversation_focused(f.app);
     kt_test_advance(f.test, 1);
-    ok = ok && f.app->view == 0;
-    f.app->view = 1;
+    ok = ok && !conversation_focused(f.app);
+    focus_conversation(f.app);
     type(&f, "\033q");
-    ok = ok && f.app->view == 0 && !kt_test_running(f.test);
+    ok = ok && !conversation_focused(f.app) && !kt_test_running(f.test);
     fixture_close(&f);
     return ok;
 }
@@ -187,7 +198,7 @@ static bool keys_over_overlays(void) {
     for (i = 0; i < 100; i++) text_append(text, sizeof(text), "line %d\n", i);
     show_result(f.app, "OUTPUT", text);
     type(&f, "\033[B\033[B\033[A\033[6~");
-    ok = f.app->result_open && f.app->result_scroll == 13 && !f.app->marked_count && f.app->view == 0;
+    ok = f.app->result_open && f.app->result_scroll == 13 && !f.app->marked_count && f.app->view == 7;
     type(&f, "\033");
     kt_test_advance(f.test, 20);
     ok = ok && !f.app->result_open;
@@ -198,7 +209,7 @@ static bool keys_over_overlays(void) {
     ok = ok && f.app->help && f.app->help_scroll == 1;
     type(&f, "\033");
     kt_test_advance(f.test, 20);
-    ok = ok && !f.app->help && !f.app->marked_count && f.app->view == 0;
+    ok = ok && !f.app->help && !f.app->marked_count && f.app->view == 7;
     fixture_close(&f);
     return ok;
 }
@@ -254,7 +265,7 @@ static bool dialogs_default_to_cancel(void) {
     ok = !strcmp(f.app->notice, "Removal cancelled; nothing changed") && !f.app->modal_count && !f.app->dialogs.count;
     type(&f, "/abc\033");
     kt_test_advance(f.test, 20);
-    ok = ok && !f.app->search[0] && f.app->view == 0 && !f.app->dialogs.count && kt_test_running(f.test);
+    ok = ok && !f.app->search[0] && f.app->view == 7 && !f.app->dialogs.count && kt_test_running(f.test);
     fixture_close(&f);
     return ok;
 }

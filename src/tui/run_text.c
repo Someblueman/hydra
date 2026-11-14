@@ -90,13 +90,13 @@ static void run_retirement_note(const struct app *app, size_t run, char *out, si
 static void run_active_next(const struct app *app, size_t run, char *out, size_t size) {
     const struct workflow_model *m = app->workflows;
     const struct workflow_node *n = run_step_in(m, run, "waiting-approval");
-    if (n) { snprintf(out, size, "Needs your decision: step %s waits for approval (C monitor, then Y approve or N reject)", n->id); return; }
+    if (n) { snprintf(out, size, "Needs your decision: step %s waits for approval (Y approves, N rejects; Inbox lists it too)", n->id); return; }
     n = run_step_in(m, run, "running");
     if (!n) { snprintf(out, size, "Waiting for the next step to become ready"); return; }
     snprintf(out, size, "Running step %s", n->id);
     if (n->head[0]) text_append(out, size, " on %s", n->head);
     if (n->profile[0]) text_append(out, size, " (%s)", n->profile);
-    text_append(out, size, "; p on that head shows its output");
+    text_append(out, size, "; its output is in the conversation");
 }
 
 static const struct workflow_node *run_failed_step(const struct workflow_model *m, size_t run) {
@@ -111,13 +111,13 @@ static bool run_state_active(const char *state) {
 static void run_finished_next(const struct app *app, size_t run, char *out, size_t size) {
     const struct workflow_run *r = &app->workflows->runs[run];
     const struct workflow_node *failed = run_failed_step(app->workflows, run);
-    if (!strcmp(r->state, "stale")) { snprintf(out, size, "The run's owner stopped reporting; C monitor, then R resume (hydra workflow resume %s)", r->id); return; }
+    if (!strcmp(r->state, "stale")) { snprintf(out, size, "The run's owner stopped reporting; R resumes it (hydra workflow resume %s)", r->id); return; }
     if (!strcmp(r->state, "recovery-required")) {
         snprintf(out, size, "Needs recovery%s%s: inspect it, then hydra workflow resume %s", failed ? " at step " : "", failed ? failed->id : "", r->id);
         return;
     }
     out[0] = '\0';
-    if (failed) snprintf(out, size, "Step %s failed%s%s; p on that head shows its output. ", failed->id, failed->head[0] ? " on " : "", failed->head);
+    if (failed) snprintf(out, size, "Step %s failed%s%s; its output is in that head's conversation. ", failed->id, failed->head[0] ? " on " : "", failed->head);
     run_result_next(app, run, out + strlen(out), size - strlen(out));
 }
 

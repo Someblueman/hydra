@@ -8,6 +8,14 @@
  * paths that keep their head and tail, and the lead block every screen
  * opens with (what it is, its state, and what the user can do). */
 
+/* One row of formatted text at x, y, clipped to width. */
+void canvas_text(struct kt_canvas *c, int x, int y, int width, struct kt_style tone, const char *format, ...) {
+    char buffer[1024];
+    va_list args;
+    va_start(args, format); vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
+    kt_text(c, (struct kt_rect){x, y, width, 1}, buffer, tone);
+}
+
 static const char *ellipsis(const struct app *app) { return app->ascii ? "..." : "\xe2\x80\xa6"; }
 static size_t ellipsis_columns(const struct app *app) { return app->ascii ? 3U : 1U; }
 

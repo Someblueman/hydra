@@ -1,6 +1,6 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview   4 Inbox  8  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                INBOX 
-                                                                              Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
  Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
  Decisions 1                                                     ▲ Needs inspection: index-rebuild                                         
   ◐ Approve merge-gate: notes-cleanup                            run run_aa11bb22cc33 · on archive                                         
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   ● live   8 items need you · decisions first, then failures                                                                               
- ↑/↓ select • enter open • r review • s seen • tab/shift+tab pane • [/] page • : more actions • esc back • ? help • q quit                 
+ ↑/↓ select • enter open • r review • s seen • tab/shift+tab pane • [/] page • : commands • esc back • ? help • q quit                     

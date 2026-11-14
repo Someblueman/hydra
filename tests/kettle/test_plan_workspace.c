@@ -6,6 +6,22 @@
 #include <string.h>
 static struct hf_fixture f;
 #define U(marker, timeout) kt_until(&s, (marker), (timeout))
+/* The Plan page's state line: "READY · revision 1 · awaiting you". */
+#define STATE(word, n) word " \xc2\xb7 revision " #n
+/* z zooms the Plan page and restores the panes; ] and [ go round the side
+ * pane's pages and back to the plan. */
+static void zoom_and_pages(struct kt_session *s) {
+    kt_send(s, "z");
+    kt_pump(s, .3);
+    CHECK(!kt_contains(s, "Heads \xe2\x94\x80") && kt_contains(s, STATE("READY", 1)), "zoomed plan page");
+    kt_send(s, "z");
+    kt_until(s, "Heads \xe2\x94\x80", 3);
+    kt_send(s, "jjjj]");
+    kt_until(s, "No head selected", 3);
+    kt_send(s, "[");
+    kt_until(s, STATE("READY", 1), 3);
+    CHECK(kt_contains(s, STATE("READY", 1)), "pages retain revision");
+}
 int main(void) {
     struct kt_session s;
     char draft[4096], policy[4096], path[4096], text[8192];
@@ -22,7 +38,8 @@ int main(void) {
     kt_copy(path, policy, false);
     hf_commit_init(&f);
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 3);
+    /* Work is up with nothing in it yet: an imported plan belongs to no head. */
+    U("No agent work in this project yet", 5);
     kt_send(&s, ":import\r");
     U("Draft JSON path", 3);
     kt_send(&s, draft);
@@ -30,27 +47,21 @@ int main(void) {
     U("Policy JSON path", 3);
     kt_send(&s, policy);
     kt_send(&s, "\r");
-    U("Revision 1 / DRAFT", 3);
-    kt_send(&s, "VB");
-    U("READY / awaiting approval", 30);
-    kt_send(&s, "z");
-    U("READY / awaiting approval", 3);
-    CHECK(kt_contains(&s, "Revision 1"), "first revision");
-    kt_send(&s, "jjjjB");
-    U("PLAN TOGETHER", 3);
-    kt_send(&s, "B");
-    U("PLAN OVERVIEW", 3);
-    CHECK(kt_contains(&s, "Revision 1"), "layout retains revision");
+    /* The import opens the Plan page with focus, so V applies at once. */
+    U(STATE("DRAFT", 1), 3);
+    kt_send(&s, "V");
+    U(STATE("READY", 1) " \xc2\xb7 awaiting you", 30);
+    zoom_and_pages(&s);
     changed = json_object_from_file(draft);
     CHECK(changed, "draft JSON");
     json_object_object_add(changed, "objective",
                            json_object_new_string("Revised workspace acceptance objective"));
     CHECK(!json_object_to_file(draft, changed), "write revised draft");
     json_object_put(changed);
-    U("Revision 2 / DRAFT", 8);
-    CHECK(!kt_contains(&s, "READY / awaiting approval"), "revision invalidates approval");
+    U(STATE("DRAFT", 2), 8);
+    CHECK(!kt_contains(&s, STATE("READY", 1)) && !kt_contains(&s, STATE("READY", 2)), "revision invalidates approval");
     kt_send(&s, "V");
-    U("READY / awaiting approval", 30);
+    U(STATE("READY", 2), 30);
     kt_send(&s, "kkkk");
     U("Revised workspace acceptance objective", 3);
     for (i = 0; i < 3; i++) {
@@ -68,14 +79,16 @@ int main(void) {
         CHECK(!s.screen.overflow, "plan resize overflow");
     }
     kt_write(draft, "{\"broken\":");
-    U("Revision 3 / DRAFT", 8);
+    U(STATE("DRAFT", 3), 8);
     kt_send(&s, "V");
     U("INVALID", 30);
-    kt_send(&s, "CA");
-    U("PLAN TOGETHER", 3);
+    /* Esc gives focus back to the list. */
+    kt_send(&s, "\033");
+    kt_pump(&s, .3);
+    CHECK(kt_contains(&s, "Heads \xe2\x94\x80") && kt_contains(&s, "INVALID"), "the list beside the invalid plan");
     kt_close(&s, "q", 0, 0);
     kt_format(text, sizeof(text),
-              "PASS plan workspace: compilation, revised scope, invalid JSON, reversible layouts "
+              "PASS plan workspace: compilation, revised scope, invalid JSON, reversible zoom and pages "
               "and termios (%s)",
               f.base);
     hf_finish(&f);

@@ -1,6 +1,6 @@
 FRAME 1 80x24
- ◆ hydra  1 Work 2 Details 3 Overview  4 Inbox  · 5 Flows 6 Stats …      INBOX 
-                  Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
  Summary  Review  References  Technical  ──────────────────────────────────────
  ▲ Terminal stopped: feature-stale                                             
  worktree and files kept · R restarts it                                       

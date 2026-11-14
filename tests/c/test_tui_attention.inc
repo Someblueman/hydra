@@ -30,7 +30,7 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     write_input(session.master, "\033", 1U);
     sleep_ms(100);
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "Heads in this project", 1000), "Esc leaves the detail, then Inbox for Work");
+    result(wait_for_marker(&session, "Heads  ", 1000), "Esc leaves the detail, then Inbox for Work");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "attention exits with terminal restored");
     close_session(&session);
@@ -263,8 +263,8 @@ static void test_inbox_decisions(const char *tui, const char *hydra, const char 
     setenv("HYDRA_TEST_CONTROL_ARGV", argv_path, 1);
     if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open Inbox decision terminal")) goto cleanup;
     (void)wait_for_raw(&session);
-    write_input(session.master, "4", 1U);
-    result(wait_for_markers(&session, "Approve S-1: T-1", "Request     request-1", 3000), "the 4 tab opens Inbox on the approval and its request");
+    write_input(session.master, "2", 1U);
+    result(wait_for_markers(&session, "Approve S-1: T-1", "Request     request-1", 3000), "the 2 tab opens Inbox on the approval and its request");
     write_input(session.master, "Y", 1U);
     result(wait_for_markers(&session, "Approve request", "Approve S-1?", 1000) && wait_for_markers(&session, "Run R-1", "Request request-1", 1000),
            "Y asks to approve, naming the exact run, step and request");
@@ -303,7 +303,7 @@ static void test_inbox_restart(const char *tui, const char *hydra, const char *f
     setenv("HYDRA_TEST_RESUME_ARGV", argv_path, 1);
     if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open Inbox restart terminal")) goto cleanup;
     (void)wait_for_raw(&session);
-    write_input(session.master, "4", 1U);
+    write_input(session.master, "2", 1U);
     (void)wait_for_marker(&session, "Terminal stopped: feature-stale", 3000);
     for (i = 0; i < 8 && !wait_for_marker(&session, "R Restart terminal", 300); i++) { drain_output(&session); write_input(session.master, "j", 1U); }
     result(wait_for_marker(&session, "R Restart terminal", 1000), "a stopped terminal offers R to restart it");
@@ -340,7 +340,7 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open Inbox land terminal")) goto cleanup;
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    write_input(session.master, "4", 1U);
+    write_input(session.master, "2", 1U);
     result(wait_for_marker(&session, "Ready to land: kill-dry-run-worker", 4000), "a finished plan run's worker is ready to land");
     for (i = 0; i < 8 && !wait_for_marker(&session, "L Land", 300); i++) { drain_output(&session); write_input(session.master, "j", 1U); }
     result(wait_for_markers(&session, "L Land", "Worker      kill-dry-run-worker", 1000), "the item offers L to land it");

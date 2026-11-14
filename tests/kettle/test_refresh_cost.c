@@ -204,7 +204,7 @@ static int logged(const char *prefix, const char *needle) {
     return count;
 }
 
-struct cost { int refreshes, git, tmux, hydra; };
+struct cost { int refreshes, git, tmux, hydra, captures; };
 
 /* Watches whole refreshes: the log is cleared between two of them and read
  * between two later ones. */
@@ -217,14 +217,34 @@ static struct cost watch(struct kt_session *s, double seconds) {
     c.git = logged("git ", "");
     c.tmux = logged("tmux ", "");
     c.hydra = logged("hydra ", "");
+    c.captures = logged("tmux ", "capture-pane");
     return c;
 }
 
+/* Besides the one command that observes every session, a refresh reads the
+ * selected head's latest output for Work's conversation: one capture of that
+ * head, never one per head. */
 static void cost_bounded(const struct cost *c) {
-    CHECK(c->tmux == c->refreshes, "one tmux command per refresh, for every session at once");
+    CHECK(c->tmux - c->captures == c->refreshes, "one tmux command per refresh, for every session at once");
+    CHECK(c->captures <= c->refreshes, "one capture of the selected head per refresh at most");
     CHECK(c->hydra == 0, "the CLI is not started for a refresh");
     CHECK(c->git <= 5 * c->refreshes, "git reads at most the selected worktree and four others per refresh");
     CHECK(c->git + c->tmux < 10 * c->refreshes, "a refresh starts fewer than ten processes");
+}
+
+/* Moving through the list reads the newly selected head's output, not that
+ * of every row passed over: a read in flight is followed by one more for the
+ * newest selection. */
+static void preview_follows(struct kt_session *s) {
+    int moved, captures;
+    kt_pump(s, 1.0);
+    kt_write(calls, "");
+    kt_send(s, "jjjjjjjjjjjjjjjjjjjj");
+    kt_pump(s, 2.5);
+    moved = logged("tmux ", "list-sessions");
+    captures = logged("tmux ", "capture-pane");
+    printf("20 moves and %d refreshes: %d captures\n", moved, captures);
+    CHECK(captures >= 1 && captures <= moved + 3, "the preview follows the selection without a capture per row");
 }
 
 static struct cost steady_cost(const char *name, int heads) {
@@ -233,7 +253,8 @@ static struct cost steady_cost(const char *name, int heads) {
     char project[4096];
     open_project(&s, name, heads, project, sizeof(project));
     c = watch(&s, 6.0);
-    printf("%d heads: %d refreshes started %d git, %d tmux and %d CLI processes\n", heads, c.refreshes, c.git, c.tmux, c.hydra);
+    printf("%d heads: %d refreshes started %d git, %d tmux (%d captures) and %d CLI processes\n", heads, c.refreshes, c.git,
+           c.tmux, c.captures, c.hydra);
     CHECK(c.refreshes >= 2 && c.refreshes <= 4, "the refresh keeps its two-second cadence");
     cost_bounded(&c);
     kt_close(&s, "q", 0, 0);
@@ -275,7 +296,7 @@ static void rationing(void) {
     /* An uncommitted file in the selected worktree shows at the next refresh. */
     kt_format(path, sizeof(path), "%s/trees/1/untracked.txt", project);
     kt_write(path, "new\n");
-    U("1 changed file", 4);
+    U("1 file changed", 4);
     /* Three worktrees whose index changed are all read at the next refresh. */
     kt_pump(&s, 1.0);
     changed_index(project, 20);
@@ -285,6 +306,7 @@ static void rationing(void) {
     kt_pump(&s, 2.6);
     CHECK(tree_reads(project, 20) && tree_reads(project, 21) && tree_reads(project, 22),
           "a worktree whose index changed is read at the next refresh");
+    preview_follows(&s);
     kt_close(&s, "q", 0, 0);
     puts("PASS rationing: selected head every refresh, changed index next refresh, every worktree in turn");
 }
@@ -320,20 +342,19 @@ static void workflow_reads(void) {
     kt_write(calls, "");
     kt_pump(&s, 6.0);
     CHECK(logged("hydra ", "") == 0, "an ended, unchanged run is not asked of the CLI again");
-    /* The workspace reads its links once, then only when a graph changes. */
-    S("W");
-    U("PLAN TOGETHER", 3);
+    /* Work reads its links once, then only when a graph changes. */
     kt_pump(&s, 3.0);
     kt_write(calls, "");
     kt_pump(&s, 6.0);
     CHECK(logged("hydra ", "") == 0, "unchanged workspace links are not asked of the CLI again");
-    S("w");
-    U("release / finished / run 1 of 1", 4);
+    /* The run is a row after the two heads; its Run page names its state. */
+    S("jj");
+    U("finished \xc2\xb7 run release", 4);
     record_run(project, "failed");
-    U("release / failed / run 1 of 1", 5);
+    U("failed \xc2\xb7 run release", 5);
     /* The CLI calls a run without a live owner stale: only it can tell. */
     record_run(project, "running");
-    U("release / stale / run 1 of 1", 5);
+    U("stale \xc2\xb7 run release", 5);
     kt_pump(&s, 1.0);
     kt_write(calls, "");
     kt_pump(&s, 4.6);
@@ -382,7 +403,9 @@ static void activity_steady(struct kt_session *s, const char *project, long long
 
 static void activity_unchanged(struct kt_session *s) {
     struct cost c = watch(s, 6.0);
-    CHECK(c.refreshes >= 2 && c.tmux == c.refreshes, "observing three heads adds no tmux command to a refresh");
+    /* Work's conversation reads the selected head's output (cost_bounded). */
+    CHECK(c.refreshes >= 2 && c.tmux - c.captures == c.refreshes, "observing three heads adds no tmux command to a refresh");
+    CHECK(c.captures <= c.refreshes, "one capture of the selected head per refresh at most");
     CHECK(logged("hydra ", "adapter activity") == 0, "an unchanged head starts no recorder");
     CHECK(c.hydra <= 1 && c.hydra == logged("hydra ", "adapter watch"), "the CLI is started only to note the observer, not per refresh");
 }

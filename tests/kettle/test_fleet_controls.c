@@ -53,12 +53,16 @@ static void launch(struct kt_session *s) {
     kt_send(s, "jj");
     kt_until(s, "req-2", 3);
 }
-/* The control's confirmation names the task; y accepts it. */
+/* The control's confirmation names the task and the control ("Approve
+ * remote task"; Work's conversation says "remote task" of the row itself);
+ * y accepts it. */
 static void confirm(struct kt_session *s, const char *key, const char *word) {
+    char title[64];
+    kt_format(title, sizeof(title), "%s remote task", word[0] == 'a' ? "Approve" : word[0] == 'r' && word[1] == 'e' && word[2] == 'j' ?
+              "Reject" : word[0] == 'r' ? "Resume" : "Cancel");
     kt_send(s, key);
-    kt_until(s, "remote task", 3);
-    CHECK(kt_contains(s, word[0] == 'a' ? "Approve" : word[0] == 'r' && word[1] == 'e' && word[2] == 'j' ? "Reject" :
-                      word[0] == 'r' ? "Resume" : "Cancel"), "the confirmation names the control");
+    kt_until(s, title, 3);
+    CHECK(kt_contains(s, title), "the confirmation names the control");
     kt_send(s, "y");
     kt_pump(s, .5);
 }
@@ -138,7 +142,7 @@ int main(void) {
     CHECK(strstr(lines, expected), "resume exact task/spec");
     mutations(before, sizeof(before));
     kt_send(&s, "Y");
-    kt_until(&s, "remote task", 3);
+    kt_until(&s, "Approve remote task", 3);
     kt_write(mode, "stale");
     kt_sleep(2.2);
     kt_pump(&s, .4);
@@ -151,7 +155,7 @@ int main(void) {
     launch(&s);
     mutations(before, sizeof(before));
     kt_send(&s, "Y");
-    kt_until(&s, "remote task", 3);
+    kt_until(&s, "Approve remote task", 3);
     kt_write(mode, "changed");
     kt_sleep(2.2);
     kt_pump(&s, .4);

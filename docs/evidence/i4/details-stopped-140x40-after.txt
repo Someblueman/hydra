@@ -1,41 +1,41 @@
 FRAME 1 140x40
- ◆ hydra  1 Work   2 Details   3 Overview  4 Inbox ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                              DETAILS 
-                                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Details: notes-cleanup ────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  notes-cleanup                                                                                                                            
-  The terminal is gone; the agent was last seen working. The worktree's files are kept: a restarts the terminal. Check them before         
-  removing it.                                                                                                                             
-  Agent       claude                                                 Session     terminal gone                                             
-  Reported    nothing yet; declared when done: done or blocked       Group       none                                                      
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
                                                                                                                                            
-  CHANGES                                                                                                                                  
-  Changed     2 files in the worktree, not yet committed                                                                                   
-  Full diff   everything since the branch base: press : and choose diff                                                                    
+ Heads ─────────────────────── 3  notes-cleanup ─────────────────── latest output · enter to talk  Details ──────────────────────────────  
+  ● add-kill           codex      ▲ terminal gone · claude · 2 files changed                       The terminal is gone; the agent was     
+    ▸ ✓ plan run kill… 4/4                                                                         last seen working. The worktree's       
+ ▌▲ notes-cleanup      claude     No terminal output yet.                                          files are kept: a restarts the          
+                                                                                                   terminal. Check them before removing    
+                                                                                                   it.                                     
+                                                                                                   Agent       claude                      
+                                                                                                   Session     terminal gone               
+                                                                                                   Reported    nothing yet; declared when  
+                                                                                                               done: done or blocked       
+                                                                                                   Where       this machine                
                                                                                                                                            
-  CHECKS                                                                                                                                   
-  Approval requests  none                                                                                                                  
-  Messages           0 exchanged with other heads                                                                                          
+                                                                                                   CHANGES                                 
+                                                                                                   Changed     2 files in the worktree,    
+                                                                                                               not yet committed           
+                                                                                                   Full diff   : diff (everything since    
+                                                                                                               the branch base)            
                                                                                                                                            
-  NEXT                                                                                                                                     
-  a  restart its terminal (files are kept)   p  show recent terminal output                                                                
-  c  coordination  x  remove this head  :  more actions  d  technical details                                                              
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                                                   CHECKS                                  
+                                                                                                   Approvals   none                        
+                                                                                                   Messages    0 exchanged with other      
+                                                                                                               heads                       
+                                                                                                   Coordinate  0 claims · 0 scopes · 0     
+                                                                                                               queued · 0 resources        
+                                                                                                   Claims are files a head means to        
+                                                                                                   change and scopes the areas it stays    
+                                                                                                   within; Hydra flags overlap between     
+                                                                                                   heads before they conflict.             
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
-  ● live                                                                                                                                   
- ↑/↓ select • a talk to agent • c coordination • n new task • x remove • p output • d technical • / search • ? help • q quit               
+                                                                                                                                           
+  2 heads · 1 needs you                                                                                                                    
+  ● live   notes-cleanup · terminal gone                                                                                                   
+ ↑/↓ select • enter/a talk • x remove • n new task • / filter • L location • tab/shift+tab pane • [/] page • : commands • ? help • q quit  

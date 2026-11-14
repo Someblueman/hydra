@@ -285,12 +285,12 @@ static bool measure_i1_start(struct i1_measurement *measurement, const char *tui
         return false;
     }
     write_input(measurement->session.master, "W", 1U);
-    measurement->workspace_ready = wait_for_marker_capture(&measurement->session, "HYDRA WORKSPACE", 3000,
+    measurement->workspace_ready = wait_for_marker_capture(&measurement->session, "Heads \xe2\x94\x80", 3000,
                                                             measurement->transcript, &measurement->transcript_used);
     if (!measurement->workspace_ready) return true;
     write_input(measurement->session.master, "a", 1U);
     measurement->attached = wait_for_marker_capture(&measurement->session,
-        "INPUT TO AGENT / Ctrl-]", 5000, measurement->transcript,
+        "typing to ", 5000, measurement->transcript,
         &measurement->transcript_used);
     if (measurement->attached && getenv("HYDRA_I1_READY_FILE") != NULL) {
         char ready[128];
@@ -432,7 +432,14 @@ static bool wait_for_raw(struct session *session) {
 /* Raw mode is the startup responsiveness barrier; model-dependent tests use
  * this separate barrier so delayed observations remain genuinely asynchronous. */
 static bool wait_for_model(struct session *session) {
-    return wait_for_marker(session, "heads  |  Row", 12000);
+    /* Work's list ends with its counts ("3 heads · 3 need you", "1 head")
+     * once the first snapshot is drawn. */
+    long long deadline = monotonic_ms() + 12000;
+    while (monotonic_ms() < deadline) {
+        if (wait_for_marker(session, " heads \xc2\xb7", 100) || wait_for_marker(session, " head \xc2\xb7", 1) ||
+            wait_for_marker(session, "1 head ", 1) || wait_for_marker(session, " heads ", 1)) return true;
+    }
+    return false;
 }
 
 static void drain_start_output(struct session *session) {
@@ -624,11 +631,11 @@ static void test_small_list(const char *tui, const char *hydra, const char *fake
     result(wait_for_raw(&session), "small list enters raw mode");
     (void)wait_for_model(&session);
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads", 1000);
+    (void)wait_for_marker(&session, "Filter heads", 1000);
     write_input(session.master, "feature\n", 8U);
-    (void)wait_for_marker(&session, "Search: feature", 1000);
+    (void)wait_for_marker(&session, "Filter: feature", 1000);
     write_input(session.master, "jj", 2U);
-    result(wait_for_marker(&session, "\xe2\x96\x8c  feature-unavail", 1000), "selection scrolls into view in a short filtered list");
+    result(wait_for_selected(&session, "feature-unavail", 1000), "selection scrolls into view in a short filtered list");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "small list exits with exact terminal restoration");
     close_session(&session);
@@ -659,36 +666,37 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     (void)wait_for_model(&session);
-    write_input(session.master, "j\r", 2U);
-    result(wait_for_marker(&session, "Details: feature-stale", 1000),
-           "keyboard navigation opens the selected head detail");
-    write_input(session.master, "\033[A\r", 4U);
-    result(wait_for_marker(&session, "Details: feature-live", 1000),
+    /* ] shows the next page of the shared pane: the selected head's Details. */
+    write_input(session.master, "j]", 2U);
+    result(wait_for_marker(&session, "Session     terminal gone", 1000),
+           "keyboard navigation shows the selected head's details");
+    write_input(session.master, "\033[A]", 4U);
+    result(wait_for_marker(&session, "Session     running", 1000),
            "arrow-key navigation remains bounded and deterministic");
     write_input(session.master, "d", 1U);
-    result(wait_for_marker(&session, "lifecycle source:", 1000), "diagnostics are reachable on demand");
+    result(wait_for_marker(&session, "liveness: live", 1000), "diagnostics are reachable on demand");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "Heads in this project", 1000), "Escape returns to the head list");
+    result(wait_for_marker(&session, "Session     running", 1000), "Escape leaves the technical details");
     write_input(session.master, "/", 1U);
-    result(wait_for_marker(&session, "Search heads", 1000), "keyboard search prompt is reachable");
+    result(wait_for_marker(&session, "Filter heads", 1000), "keyboard filter prompt is reachable");
     write_input(session.master, "FEATURE-STALE\n", 14U);
-    result(wait_for_marker(&session, "Search: FEATURE-STALE", 1000),
-           "keyboard-only search is case-insensitive and returns to raw mode");
-    write_input(session.master, "k\r", 2U);
-    result(wait_for_marker(&session, "Details: feature-stale", 1000),
-           "filtered navigation and detail stay on the visible head");
+    result(wait_for_marker(&session, "Filter: FEATURE-STALE", 1000),
+           "keyboard-only filter is case-insensitive and returns to raw mode");
+    write_input(session.master, "k]", 2U);
+    result(wait_for_marker(&session, "Session     terminal gone", 1000),
+           "filtered navigation and details stay on the visible head");
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads", 1000);
+    (void)wait_for_marker(&session, "Filter heads", 1000);
     write_input(session.master, "does-not-exist\n", 15U);
-    (void)wait_for_marker(&session, "Search: does-not-exist", 1000);
+    (void)wait_for_marker(&session, "No heads match", 1000);
     write_input(session.master, "\r", 1U);
-    result(wait_for_marker(&session, "no matching head selected", 1000),
-           "head actions are disabled when the search has no match");
+    result(wait_for_marker(&session, "Select a head first", 1000),
+           "head actions are disabled when the filter has no match");
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads", 1000);
+    (void)wait_for_marker(&session, "Filter heads", 1000);
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000),
-           "keyboard-only search can be cleared");
+           "keyboard-only filter can be cleared");
     write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
     result(still_running(&session), "bracketed paste cannot inject quit or actions");
@@ -922,7 +930,7 @@ static void test_delayed_initial_snapshot(const char *tui, const char *hydra, co
                    "delayed initial snapshot accepts input while loading");
             write_input(session.master, "?", 1U);
             output[0] = '\0'; used = 0U;
-            result(wait_for_marker_capture(&session, "Row 1 of 3", 15000, output, &used),
+            result(wait_for_marker_capture(&session, "3 heads \xc2\xb7", 15000, output, &used),
                    "delayed initial snapshot eventually renders model data");
             write_input(session.master, "q", 1U);
             result(wait_for_exit(&session) == 0, "delayed initial snapshot quits cleanly");
@@ -1142,6 +1150,28 @@ static int special_test_mode(int argc, char **argv) {
     return -1;
 }
 
+/* The groups HYDRA_TEST_ONLY names; each runs its cases in order. */
+typedef void (*pty_case)(const char *, const char *, const char *);
+static int selected_tests(const char *only, char **argv) {
+    static const struct { const char *name; pty_case cases[3]; } groups[] = {
+        {"layout", {test_workspace_layout, test_workspace_enter, NULL}},
+        {"mouse", {test_mouse, NULL, NULL}},
+        {"visualization", {test_visualization, test_visualization_hosts, NULL}},
+        {"attention", {test_attention, test_inbox_decisions, NULL}},
+        {"interaction", {test_small_list, test_interaction, NULL}},
+        {"themes", {test_themes, NULL, NULL}},
+        {"land", {test_inbox_land, NULL, NULL}},
+        {"remote", {test_remote_side_by_side, test_remote_actions, test_remote_stale_and_disconnected}},
+    };
+    size_t i, j;
+    for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
+        if (strcmp(only, groups[i].name)) continue;
+        for (j = 0; j < 3 && groups[i].cases[j]; j++) groups[i].cases[j](argv[1], argv[2], argv[3]);
+    }
+    printf("Selected tests: %d passed, %d failed\n", tests - failures, failures);
+    return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv) {
     char timeout_pids[128]; int special;
     (void)setvbuf(stdout, NULL, _IOLBF, 0U);
@@ -1160,6 +1190,8 @@ int main(int argc, char **argv) {
         printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
         return failures ? 1 : 0;
     }
+    /* One group of cases by name, for working on it: HYDRA_TEST_ONLY=layout. */
+    if (getenv("HYDRA_TEST_ONLY")) return selected_tests(getenv("HYDRA_TEST_ONLY"), argv);
     if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
         test_review_cancellation(argv[1], argv[2], argv[0]);
         test_fleet_attach(argv[1], argv[2], argv[3]);

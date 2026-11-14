@@ -25,7 +25,7 @@ void statistics_toggle(struct app *app) {
 
 #define GRAPH_LOADING "Opening the graph..."
 
-/* Shows the selected run in the graph view when the retained workflow read
+/* Shows the selected run on the Run page of Work when the retained workflow read
  * includes it. */
 static bool statistics_graph_open(struct app *app) {
     struct statistics_view *v = app->statistics;
@@ -33,7 +33,8 @@ static bool statistics_graph_open(struct app *app) {
     for (i=0;i<app->workflows->run_count;i++) if (!strcmp(app->workflows->runs[i].id,v->selected_id)) break;
     if (i == app->workflows->run_count) return false;
     app->workflow_run=i; app->workflow_node=0; app->graph_x=app->graph_y=0; app->graph_follow=true;
-    app->view=5; v->graph_open=true;
+    app->run_row=true; app->task_row=false; run_set_expanded(app,i,true);
+    work_open(app,WORK_RUN); v->graph_open=true;
     return true;
 }
 
@@ -295,7 +296,5 @@ bool statistics_back(struct app *app) {
     struct statistics_view *v = app->statistics;
     if (!v) return false;
     if (app->view == 8) return stats_back(app);
-    if (app->view == 5 && v->graph_open) { app->view = 8; v->graph_open = false; return true; }
-    if (app->view == 1 && v->head_open && app->previous_view == 8) { app->view = 8; v->head_open = false; return true; }
     return false;
 }

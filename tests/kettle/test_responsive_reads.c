@@ -122,18 +122,18 @@ static int reads_overlapping(const char *source, int *started) {
     return most;
 }
 
+/* Work lists runs once they are read; until then its list says so. */
 static void workflows(void) {
     struct kt_session s;
     open_view(&s, "heads");
     U("feature-live", 5);
-    S("w");
-    U("Loading workflow runs...", PROMPT);
-    keys_answered(&s, "Workflows");
-    CHECK(HAS("Loading workflow runs..."), "the view still says it is loading while the read runs");
-    U("prepare", 6);
-    CHECK(!HAS("Loading workflow runs..."), "the graph replaces the loading line");
+    U("Reading runs", PROMPT);
+    keys_answered(&s, "Work");
+    CHECK(HAS("Reading runs"), "the list still says it is reading runs while the read runs");
+    U("run visualizati", 6);
+    CHECK(!HAS("Reading runs"), "the runs replace the loading line");
     kt_close(&s, "q", 0, 0);
-    puts("PASS workflows: the view opens at once, says it is loading and shows the graph when read");
+    puts("PASS workflows: Work opens at once, says it is reading runs and lists them when read");
 }
 
 static void statistics(void) {
@@ -142,7 +142,6 @@ static void statistics(void) {
     open_view(&s, "heads");
     U("feature-live", 5);
     S("D");
-    U("STATISTICS", PROMPT);
     U("Loading statistics...", PROMPT);
     keys_answered(&s, "Statistics");
     U("Latest attempts average", 6);
@@ -156,20 +155,21 @@ static void statistics(void) {
     printf("statistics reads for 12 refresh keys: %d started, at most %d at a time\n", started, most);
     CHECK(most == 1, "one statistics read in flight at a time");
     CHECK(started >= 1 && started <= 4, "repeated refresh keys do not pile up reads");
-    /* g opens the graph from what is known and asks for a fresh read. */
+    /* g opens the run's Run page in Work from what is known and asks for a
+     * fresh read. */
     S("0g");
-    U("WORKFLOWS", PROMPT);
+    U("STEP", 6);
     keys_answered(&s, "graph");
     kt_close(&s, "q", 0, 0);
     puts("PASS statistics: the view opens at once, ctrl+r and g never wait, refreshes run one at a time");
 }
 
+/* The selected head's latest output is read in the background: the
+ * conversation says so until it arrives. */
 static void preview(void) {
     struct kt_session s;
     open_view(&s, "heads");
     U("feature-live", 5);
-    S("p");
-    U("TERMINAL OUTPUT", PROMPT);
     U("Reading the terminal output...", PROMPT);
     keys_answered(&s, "preview");
     U("pane text", 4);
@@ -178,7 +178,7 @@ static void preview(void) {
     kt_pump(&s, 2.5);
     CHECK(HAS("pane text") && !HAS("Reading the terminal output..."), "a later read keeps what is known on screen");
     kt_close(&s, "q", 0, 0);
-    puts("PASS preview: p opens at once, says it is reading and shows the pane when read");
+    puts("PASS preview: the conversation says it is reading and shows the pane when read");
 }
 
 /* Entering an agent's history asks tmux; the chord that follows it is not
@@ -190,7 +190,7 @@ static void history(void) {
     open_view(&s, "heads");
     U("feature-live", 5);
     S("a");
-    U("INPUT TO AGENT", 5);
+    U("typing to ", 5);
     U("FAKE AGENT PANE", 5);
     sent = kt_now();
     S("\034[\035");

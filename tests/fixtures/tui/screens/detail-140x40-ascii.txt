@@ -1,35 +1,33 @@
 FRAME 1 140x40
- # hydra  1 Work   2 Details   3 Overview  4 Inbox 11  5 Workflows  6 Statistics  7 Workspace  8 Hosts                             DETAILS 
-                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
- Details: feature-live ------------------------------------------------------------------------------------------------------------------- 
-  feature-live                                                                                                                             
-  1 approval request is waiting for your decision; press : and choose approvals.                                                           
-  Agent       codex                                                  Session     running (the live terminal)                               
-  Reported    done                                                   Group       alpha / PR 42                                             
+ # hydra  1 Work   2 Inbox 11   3 Hosts   4 Stats                                                      this machine / 3 heads / 1 running  
                                                                                                                                            
-  CHANGES                                                                                                                                  
-  Changed     4 files in the worktree, not yet committed                                                                                   
-  Full diff   everything since the branch base: press : and choose diff                                                                    
+ Heads ----------------------- 3  feature-live -------------------- latest output / enter to talk  Details ------------------------------  
+ >~ feature-live       codex      ~ needs you / codex / 1 of 2 approvals / 4 files changed / P...  1 approval request is waiting for your  
+  ! feature-stale      claude                                                                      decision; Inbox (2) approves it.        
+  ? feature-unavail... shell      No terminal output yet.                                          Agent       codex                       
+  > * run visualiza... 1/4                                                                         Session     running (the live           
+  > + run second-run   1/1                                                                                     terminal)                   
+                                                                                                   Reported    done                        
+                                                                                                   Group       alpha / PR 42               
+                                                                                                   Where       this machine                
                                                                                                                                            
-  CHECKS                                                                                                                                   
-  Approval requests  1 of 2 approved / waiting for your decision                                                                           
-  Messages           3 exchanged with other heads                                                                                          
+                                                                                                   CHANGES                                 
+                                                                                                   Changed     4 files in the worktree,    
+                                                                                                               not yet committed           
+                                                                                                   Full diff   : diff (everything since    
+                                                                                                               the branch base)            
                                                                                                                                            
-  NEXT                                                                                                                                     
-  a  talk to the agent in the workspace     p  show recent terminal output                                                                 
-  c  coordination  x  remove this head  :  more actions  d  technical details                                                              
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                                                   CHECKS                                  
+                                                                                                   Approvals   1 of 2 approved / waiting   
+                                                                                                               for your decision           
+                                                                                                   Messages    3 exchanged with other      
+                                                                                                               heads                       
+                                                                                                   Coordinate  1 claims / 2 scopes / 0     
+                                                                                                               queued / 1 resources        
+                                                                                                   Claims are files a head means to        
+                                                                                                   change and scopes the areas it stays    
+                                                                                                   within; Hydra flags overlap between     
+                                                                                                   heads before they conflict.             
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -37,5 +35,7 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
-  * live                                                                                                                                   
- ^/v select | a talk to agent | c coordination | n new task | x remove | p output | d technical | / search | ? help | q quit               
+                                                                                                                                           
+  3 heads / 3 need you                                                                                                                     
+  * live   feature-live / running                                                                                                          
+ ^/v select | enter/a talk | x remove | n new task | / filter | L location | tab/shift+tab pane | [/] page | : commands | ? help | q quit  

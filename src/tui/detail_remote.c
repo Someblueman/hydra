@@ -39,10 +39,6 @@ void remote_detail(struct app *app, const struct head *head) {
     remote_host_rows(app, head->remote_host);
     remote_row(app, "Agent", remote_agent_name(head), KT_BASE);
     remote_row(app, "Liveness", "unobserved: a remote head reports desired state, not a live process", KT_MUTED);
-    section(app, "NEXT");
-    linef(app, "a  talk to the agent in its terminal on %s", head->remote_host);
-    linef(app, "x  interrupt the agent (confirmed); the worktree and files stay on the host");
-    linef(app, "r  retry the host    d  technical details    c  coordination");
 }
 
 void remote_technical(struct app *app, const struct head *head) {
@@ -88,7 +84,4 @@ void task_detail(struct app *app, const struct task_observation *task) {
     section(app, "IDENTITY");
     remote_row(app, "Request", task->request_id, KT_MUTED);
     remote_row(app, "Spec", task->spec_sha256, KT_MUTED);
-    section(app, "NEXT");
-    linef(app, "Y approve  N reject  R resume  X cancel   (each confirmed; fresh evidence only)");
-    linef(app, "r  retry the host    I  attention items for this task");
 }

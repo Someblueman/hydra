@@ -84,7 +84,8 @@ run_in_tty() {
         tty_output="$(tmux -L "$tty_server" capture-pane -p -t "$_rit_name" -S - 2>/dev/null || true)"
         case "$tty_output" in *__HYDRA_RC=*__*) break ;; esac
         case "$tty_output" in
-            *"Typing goes to the agent"*)
+            # Work names the agent being typed to in the conversation's rule.
+            *"typing to "*)
                 if [ "$tty_workspace" -eq 0 ]; then
                     tty_workspace=1
                     tmux -L "$tty_server" send-keys -t "$_rit_name" "C-\\" q

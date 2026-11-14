@@ -1,19 +1,11 @@
 FRAME 1 80x24
- ◆ hydra   1 Work  2 Details 3 Overview 4 Inbox · 5 Flows 6 Stats …       WORK 
-     Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Heads in this project ─────────────────────────────────────────────────────── 
-     HEAD                                      STATUS         AGENT            
-     add-kill                                  running        codex            
-       ▾ plan run kill-dry-run                 succeeded      2 heads          
-  ▌      worker   kill-dry-run-worker          done           codex            
-         verifier kill-dry-run-check           retired                         
-     notes-cleanup                             terminal gone  claude           
-  2 heads you started · 1 in runs  |  Row 3 of 5                               
-                                                                               
- kill-dry-run-worker ────────────────────────────────────────────────────────  
-   codex · step implement · succeeded · headless (no terminal) · 1             
-   changed file                                                                
-   Enter details · p step output · x dismiss (keeps the branch) · : more act   
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             2 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details  Run ────────────────────────  
+  ● add-kill              ✓ worker · codex · step implement · succeeded · he…  
+    ▾ ✓ plan run kill-d…                                                       
+ ▌    ✓ worker kill-dry…  Reading the step output...                           
+      ○ verifier kill-d…                                                       
+  ▲ notes-cleanup                                                              
                                                                                
                                                                                
                                                                                
@@ -21,5 +13,13 @@ FRAME 1 80x24
                                                                                
                                                                                
                                                                                
-  ● live                                                                       
- ↑/↓ select • enter details • a talk to agent • n new task • ? help • q quit   
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  2 heads · 1 needs you                                                        
+  ● live   kill-dry-run-worker · done                                          
+ ↑/↓ select • ←/→ collapse/expand • x remove • n new task • ? help • q quit    

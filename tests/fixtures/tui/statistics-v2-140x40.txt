@@ -1,6 +1,6 @@
 FRAME 1 140x40
- # hydra  1 Work  2 Details  3 Overview  4 Inbox .  5 Workflows   6 Statistics   7 Workspace  8 Hosts                           STATISTICS 
-                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                                       this machine / 3 heads / 1 running  
+                                                                                                                                           
  Runs ----------------------------------------------------------------------------------------------------- all recorded / all workflows   
                                                                                                                                            
   Runs                              Running                           Need attention                    Retries                            
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   * live   Workflow runs / all recorded / all workflows                                                                                    
- ^/v select | enter evidence | T range | / filter | g graph | w workflow | M metric | L location | : more actions | ? help | q quit        
+ ^/v select | enter evidence | T range | / filter | g graph | w workflow | M metric | L location | : commands | ? help | q quit            

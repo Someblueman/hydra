@@ -24,6 +24,7 @@ void check_runtime(const char *host, const char *task, const char *key, const ch
 void cleanup(void);
 void open_observer(struct kt_session *s);
 void select_task(struct kt_session *s, const char *task);
+void until_task_listed(struct kt_session *s, const char *task);
 size_t acceptance_count(const char *name);
 json_object *workflow_logs(const char *task, long long offset, const char *kind, int limit);
 void attempt_exact(json_object *rows, const char *state);

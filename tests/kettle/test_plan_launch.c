@@ -12,6 +12,8 @@ static char evidence[4096], snapshot[1048576];
 #define REFUSE(...) hf_run(&f, NULL, -2, (const char *[]){__VA_ARGS__, NULL})
 #define S(keys) kt_send(&s, (keys))
 #define U(marker, seconds) kt_until(&s, (marker), (seconds))
+/* The Plan page's state line: "READY · revision 1 · awaiting you". */
+#define STATE(word, n) word " \xc2\xb7 revision " #n
 static json_object *field(json_object *o, const char *key) {
     json_object *v = NULL;
     CHECK(o && json_object_object_get_ex(o, key, &v), key);
@@ -135,6 +137,100 @@ static void review_approval(struct kt_session *s, const char *digest) {
     CHECK(!kt_contains(s, "Execute plan"), "approval closed");
     CHECK(hf_count(s->raw, "\033[2J") == 1, "a confirmation opens, resizes and closes without erasing the display");
 }
+/* Whether a row of Work's list (its first 32 columns) shows text. */
+static bool listed(struct kt_session *s, const char *text) {
+    char row[512];
+    int y, x;
+    for (y = 0; y < s->screen.rows; y++) {
+        size_t used = 0;
+        for (x = 0; x < 32 && x < s->screen.cols; x++) {
+            const char *cell = s->screen.cells[y * s->screen.cols + x].text;
+            size_t n = strlen(cell);
+            if (used + n + 1 >= sizeof(row)) break;
+            memcpy(row + used, cell, n);
+            used += n;
+        }
+        row[used] = 0;
+        if (strstr(row, text)) return true;
+    }
+    return false;
+}
+/* Pages the Run page's evidence from its start until both texts show. */
+static bool evidence_shows(struct kt_session *s, const char *a, const char *b) {
+    int i;
+    kt_repeat(s, "\033[5~", 60);
+    kt_pump(s, .3);
+    for (i = 0; i < 80 && !(kt_contains(s, a) && kt_contains(s, b)); i++) {
+        kt_send(s, "\033[6~");
+        kt_pump(s, .1);
+    }
+    if (!(kt_contains(s, a) && kt_contains(s, b))) fprintf(stderr, "Evidence lacks %s or %s:\n%s\n", a, b, kt_text(s));
+    return kt_contains(s, a) && kt_contains(s, b);
+}
+/* Head and run snapshots arrive separately: move from the head up to the
+ * run only after both are visible. The worker head is listed under its run
+ * while it is selected; l and h expand and collapse the run. */
+static void run_rows(struct kt_session *s) {
+    double deadline;
+    kt_until(s, "run plan-fixture", 15);
+    kt_until(s, "plan-smoke", 15);
+    deadline = kt_now() + 15;
+    while (!listed(s, "worker plan-sm") && kt_now() < deadline) kt_pump(s, .2);
+    CHECK(listed(s, "worker plan-sm"), "the selected worker head is listed under its run");
+    kt_send(s, "k");
+    kt_until(s, "succeeded \xc2\xb7 plan run plan-fixture", 3); /* the run's Run page */
+    kt_pump(s, .3);
+    CHECK(!listed(s, "worker plan-sm"), "a run collapses when its head is no longer selected");
+    kt_send(s, "l");
+    kt_pump(s, .3);
+    CHECK(listed(s, "worker plan-sm"), "l expands the run");
+    kt_send(s, "h");
+    kt_pump(s, .3);
+    CHECK(!listed(s, "worker plan-sm"), "h collapses it again");
+}
+/* The screen at each size, saved as evidence. */
+static void sizes_saved(struct kt_session *s, const char *name, const char *what) {
+    int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
+    size_t i;
+    for (i = 0; i < 3; i++) {
+        kt_resize(s, sizes[i][0], sizes[i][1]);
+        kt_pump(s, .3);
+        CHECK(!s->screen.overflow, what);
+        save(s, name, sizes[i][0], sizes[i][1]);
+    }
+}
+/* Tab twice: the Run page has focus; its evidence says what the recorded
+ * artifacts are worth, and PgDn pages to the verdict, which follows the
+ * artifact. */
+static void run_verdict(struct kt_session *s, const char *artifact) {
+    kt_send(s, "\t\t");
+    kt_until(s, "VERIFIED ARTIFACTS", 15);
+    CHECK(evidence_shows(s, "VERIFIED: result retrieval", "the sealed artifacts"), "the verdict is reachable");
+    save(s, "verified", 140, 40);
+    kt_write(artifact, "tampered\n");
+    kt_until(s, "VERIFICATION REFUSED", 15);
+    CHECK(kt_contains(s, "ARTIFACTS REFUSED"), "trusted provenance refuses artifact");
+    CHECK(!kt_contains(s, "VERIFIED: result retrieval"), "stale verified claim removed");
+}
+/* j selects the compose step: its own output, which claims verified
+ * artifacts, is shown as output under the refused verdict. */
+static void step_output(struct kt_session *s) {
+    kt_send(s, "j");
+    kt_until(s, "compose \xe2\x94\x80", 5);
+    kt_until(s, "succeeded / compo", 15);
+    CHECK(evidence_shows(s, "Selected step: compose", "Observed state"), "the selected step's evidence");
+    CHECK(evidence_shows(s, "stdout: compose-output-proof", "stdout: VERIFIED ARTIFACTS"), "untrusted output shown separately");
+    CHECK(kt_contains(s, "ARTIFACTS REFUSED"), "untrusted output cannot spoof provenance");
+    CHECK(!kt_contains(s, "Creating worktree for branch"), "selected output provenance");
+}
+/* Work lists the run and its worker; its Run page holds the evidence. */
+static void navigate_run(struct kt_session *s, const char *artifact) {
+    run_rows(s);
+    sizes_saved(s, "navigation", "navigation resize");
+    run_verdict(s, artifact);
+    step_output(s);
+    sizes_saved(s, "verification-refused", "refused artifact resize");
+}
 static void sanitize_path(const char *input, char *output, size_t capacity) {
     size_t i;
     CHECK(strlen(input) < capacity, "path bound");
@@ -146,10 +242,7 @@ int main(void) {
     struct kt_session s;
     char path[4096], draft[4096], policy[4096], compiled[4096], digest[128], pattern[4096],
         receipt[4096], run_id[256], run_dir[4096], artifact[4096], expected[65536], links[65536],
-        moved[65536], project[256], old_repo[4096], new_repo[4096], resolved[4096], sanitized[4096],
-        row[8192];
-    int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
-    size_t i;
+        moved[65536], project[256], old_repo[4096], new_repo[4096], resolved[4096], sanitized[4096];
     double deadline;
     json_object *result;
     kt_init();
@@ -176,7 +269,8 @@ int main(void) {
     kt_copy(path, policy, false);
     hf_commit_init(&f);
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 3);
+    /* Work is up with nothing in it yet: the imported plan belongs to no head. */
+    U("No agent work in this project yet", 5);
     S(":import\r");
     U("Draft JSON path", 3);
     S(draft);
@@ -184,9 +278,10 @@ int main(void) {
     U("Policy JSON path", 3);
     S(policy);
     S("\r");
-    U("Revision 1 / DRAFT", 3);
-    S("VBz");
-    U("READY / awaiting approval", 30);
+    /* The import opens the Plan page with focus, where V, E and F are. */
+    U(STATE("DRAFT", 1), 3);
+    S("V");
+    U(STATE("READY", 1), 30);
     kt_format(pattern, sizeof(pattern), "%s/hydra-ui-plan.*/compiled-1.json", f.base);
     hf_glob_one(pattern, compiled, sizeof(compiled));
     projection_digest(H("workflow", "plan", "tui-data", compiled), digest, sizeof(digest));
@@ -198,10 +293,10 @@ int main(void) {
     CHECK(!hf_glob_count(pattern), "declined approval creates no run");
     refuse_changed(&s, draft, pattern);
     S("V");
-    U("READY / awaiting approval", 30);
+    U(STATE("READY", 2), 30);
     refuse_changed(&s, policy, pattern);
     S("V");
-    U("READY / awaiting approval", 30);
+    U(STATE("READY", 3), 30);
     kt_format(pattern, sizeof(pattern), "%s/hydra-ui-plan.*/compiled-3.json", f.base);
     hf_glob_one(pattern, compiled, sizeof(compiled));
     kt_read(compiled, snapshot, sizeof(snapshot));
@@ -272,7 +367,8 @@ int main(void) {
     CHECK(kt_file_equals(artifact, expected), "exact sealed artifact");
     REFUSE(f.hydra, "workflow", "--workspace-evidence", run_id, "../");
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 3);
+    /* The header names the project, a tab in its name shown as a blank. */
+    U("repo line \xc2\xb7", 5);
     kt_format(links, sizeof(links), "%s", H("workflow", "--workspace-links"));
     CHECK(!strncmp(links, "HYDRA_WORKSPACE_LINKS\t1\n", 24) && strlen(links) >= 2 &&
               !strcmp(links + strlen(links) - 2, "Z\n"),
@@ -294,55 +390,7 @@ int main(void) {
         kt_format(expected, sizeof(expected), "L\t%s\t", run_id);
         CHECK(hf_count(links, expected) == 1, "unique run link");
     }
-    S("z");
-    U("Project: repo line", 3);
-    U("plan-fixture · succeeded", 15);
-    U("plan-smoke", 3);
-    /* Head and run snapshots arrive separately. The imported plan's worker
-     * head belongs to its run: move from the head up to the run only after
-     * both are visible. */
-    U("worker plan-smoke", 15);
-    S("k");
-    U("Recorded branch reference", 3);
-    U("enter open", 3); /* the generated footer: Enter opens the run's evidence */
-    CHECK(!kt_contains(&s, "worker plan-smoke"), "a run collapses when its head is no longer selected");
-    S("kh");
-    kt_pump(&s, 2.5);
-    CHECK(!kt_contains(&s, "plan-fixture · succeeded"), "collapsed historical refs");
-    S("l");
-    U("plan-fixture · succeeded", 3);
-    S("j");
-    U("enter open", 3); /* the generated footer: Enter opens the run's evidence */
-    for (i = 0; i < 3; i++) {
-        kt_resize(&s, sizes[i][0], sizes[i][1]);
-        kt_pump(&s, .3);
-        CHECK(!s.screen.overflow, "navigation resize");
-        save(&s, "navigation", sizes[i][0], sizes[i][1]);
-    }
-    S("\rz");
-    U("VERIFIED ARTIFACTS", 15);
-    kt_repeat(&s, "j", 200);
-    U("VERIFIED: result retrieval", 3);
-    save(&s, "verified", 140, 40);
-    kt_write(artifact, "tampered\n");
-    U("VERIFICATION REFUSED", 15);
-    CHECK(strstr(kt_row(&s, 3, row, sizeof(row)), "ARTIFACTS REFUSED"),
-          "trusted provenance refuses artifact");
-    CHECK(!kt_contains(&s, "VERIFIED: result retrieval"), "stale verified claim removed");
-    S("\t\t\tj\t");
-    U("Selected step: compose", 15);
-    U("compose-output-proof", 3);
-    CHECK(kt_contains(&s, "VERIFIED ARTIFACTS from untrusted output"),
-          "untrusted output shown separately");
-    CHECK(strstr(kt_row(&s, 3, row, sizeof(row)), "ARTIFACTS REFUSED"),
-          "untrusted output cannot spoof provenance");
-    CHECK(!kt_contains(&s, "Creating worktree for branch"), "selected output provenance");
-    for (i = 0; i < 3; i++) {
-        kt_resize(&s, sizes[i][0], sizes[i][1]);
-        kt_pump(&s, .3);
-        CHECK(!s.screen.overflow, "refused artifact resize");
-        save(&s, "verification-refused", sizes[i][0], sizes[i][1]);
-    }
+    navigate_run(&s, artifact);
     kt_close(&s, "q", 0, 0);
     kt_format(old_repo, sizeof(old_repo), "%s", f.repo);
     kt_format(new_repo, sizeof(new_repo), "%s/repo\tline\nbreak", f.base);
@@ -358,10 +406,8 @@ int main(void) {
         CHECK(a && b && !strcmp(a, b), "moving path preserves run links");
     }
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 3);
-    S("z");
-    U("Project: repo line break", 3);
-    U("plan-fixture · succeeded", 15);
+    U("repo line break \xc2\xb7", 5);
+    U("run plan-fixture", 15);
     kt_close(&s, "q", 0, 0);
     CHECK(!rename(new_repo, old_repo), "restore fixture path");
     kt_format(f.repo, sizeof(f.repo), "%s", old_repo);

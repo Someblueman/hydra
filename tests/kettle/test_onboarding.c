@@ -120,7 +120,9 @@ static void launch(struct kt_session *s, int cols, int rows) {
     const char *argv[] = {tui, NULL};
     kt_format(label, sizeof(label), "%dx%d", cols, rows);
     kt_open(s, argv, cols, rows, base);
-    kt_until(s, "press H for Hosts", 8);
+    /* Work is up (its list or its empty state): H jumps to Hosts. */
+    kt_until(s, "4 Stats", 8);
+    kt_pump(s, .3);
     kt_send(s, "H");
     kt_until(s, "+ Add a host", 4);
     kt_send(s, "O");

@@ -1,13 +1,11 @@
 FRAME 1 80x24
- # hydra  2 Details 3 Overview 4 Inbox 11 5 Flows  6 Stats  ..      STATISTICS 
-                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
- Sessions  Runs ------------------------------- all recorded / all workflows   
- 1 run / 3 steps / 0 need attention / tokens in 3.85M / timing 3/3             
-                                                                               
- Workflow runs --------------------------------------- 1 of 1 / newest first   
-  RUN                          STATE                CREATED                    
-> kill-dry-run                 + succeeded          09-07 13:30 UTC            
-                                                                               
+ ◆ hydra  1 Work  2 Inbox 11  3 Hosts  4 Stats            3 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details ─────────────────────────────  
+ ▌◐ feature-live          ◐ needs you · codex · 1 of 2 approvals · 4 files c…  
+  ▲ feature-stale                                                              
+  ? feature-unavailable   No terminal output yet.                              
+  ▸ ● run visualization…                                                       
+  ▸ ✓ run second-run                                                           
                                                                                
                                                                                
                                                                                
@@ -21,5 +19,7 @@ FRAME 1 80x24
                                                                                
                                                                                
                                                                                
-  * live   Workflow runs / all recorded / all workflows                        
- ^/v select | enter evidence | [/] sessions/runs | T range | ? help | q quit   
+                                                                               
+  3 heads · 3 need you                                                         
+  ● live   feature-live · running                                              
+ ↑/↓ select • enter/a talk • x remove • n new task • ? help • q quit           

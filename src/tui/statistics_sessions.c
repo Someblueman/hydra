@@ -221,8 +221,8 @@ static void by_agent(const struct statistics_view *v, struct kt_canvas *c, int x
     kt_text(c, (struct kt_rect){x, y, width, 1}, "By agent", KT_STYLE(KT_COLOR_MUTED, KT_COLOR_SURFACE, KT_BOLD));
     for (i = 0; i < n; i++) {
         stats_seconds(rows[i].active, rows[i].known > 0, active, sizeof(active));
-        dashboard_text(c, x, y + 1 + (int)i, 12, KT_BASE, "%s", rows[i].name);
-        dashboard_text(c, x + 13, y + 1 + (int)i, width - 13, KT_MUTED, "%2zu session%s   active %s", rows[i].sessions,
+        canvas_text(c, x, y + 1 + (int)i, 12, KT_BASE, "%s", rows[i].name);
+        canvas_text(c, x + 13, y + 1 + (int)i, width - 13, KT_MUTED, "%2zu session%s   active %s", rows[i].sessions,
                        rows[i].sessions == 1 ? " " : "s", active);
     }
 }
@@ -307,8 +307,8 @@ static void session_sources(struct kt_canvas *c, struct kt_rect r, const struct 
 
 /* A label in a fixed column, muted, and its value. */
 static void evidence_pair(struct kt_canvas *c, int x, int y, int width, const char *label, const char *value) {
-    dashboard_text(c, x, y, 11, KT_MUTED, "%s", label);
-    dashboard_text(c, x + 11, y, width - 11, KT_BASE, "%s", value);
+    canvas_text(c, x, y, 11, KT_MUTED, "%s", label);
+    canvas_text(c, x + 11, y, width - 11, KT_BASE, "%s", value);
 }
 
 static void session_lines(const struct statistics_view *v, const struct hs_session *s, struct kt_canvas *c, int x, int y, int width) {
@@ -321,9 +321,9 @@ static void session_lines(const struct statistics_view *v, const struct hs_sessi
     stats_seconds(s->quiet, s->quiet_known, quiet, sizeof(quiet));
     stats_seconds(s->unobserved, s->unobserved_known, unobserved, sizeof(unobserved));
     stats_percent(observed_seconds(s), s->unobserved_known ? observed_seconds(s) + s->unobserved : 0, share, sizeof(share));
-    dashboard_text(c, x, y, width, KT_STRONG, "%s / %s", s->branch, state_text(s));
-    dashboard_text(c, x, y + 1, width, KT_MUTED, "%s", s->head);
-    dashboard_text(c, x, y + 2, width, KT_MUTED, "%s", s->instance);
+    canvas_text(c, x, y, width, KT_STRONG, "%s / %s", s->branch, state_text(s));
+    canvas_text(c, x, y + 1, width, KT_MUTED, "%s", s->head);
+    canvas_text(c, x, y + 2, width, KT_MUTED, "%s", s->instance);
     evidence_pair(c, x, y + 4, width, "Agent", s->profile[0] ? s->profile : "not recorded");
     evidence_pair(c, x, y + 5, width, "Terminal", s->headless ? "none (headless)" : "interactive");
     evidence_pair(c, x, y + 6, width, "Outcome", s->outcome[0] ? s->outcome : "not declared");
@@ -342,7 +342,7 @@ static void session_evidence(struct app *app, struct kt_canvas *c, struct kt_rec
     const struct hs_session *s;
     int x = r.x + 2, width = r.width - 3;
     stats_rule(c, (struct kt_rect){r.x, r.y, r.width, 1}, "Session evidence", "one head instance", stats_evidence_focused(app));
-    if (!v->session_count) { dashboard_text(c, x, r.y + 1, width, KT_WARNING, "Selected session no longer matches"); return; }
+    if (!v->session_count) { canvas_text(c, x, r.y + 1, width, KT_WARNING, "Selected session no longer matches"); return; }
     s = &v->model->sessions[v->session_rows[v->session_selected]];
     session_lines(v, s, c, x, r.y + 1, width);
     if (r.height > 15) session_sources(c, (struct kt_rect){x, r.y + 14, width, r.height - 14}, s);

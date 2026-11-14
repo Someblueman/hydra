@@ -74,8 +74,8 @@ static void test_themes(const char *tui, const char *hydra, const char *fake_bin
     (void)wait_for_model(&session);
     result(theme_switch(&session, "\033[0;38;5;16;48;5;255m", "Theme: light"),
            "light theme repaints every cell in one synchronized update without erasing, and names the choice");
-    mouse_input(&session, "j\r");
-    result(wait_for_marker(&session, "Details: feature-stale", 1000), "theme change preserves keyboard navigation and detail");
+    mouse_input(&session, "j]");
+    result(wait_for_marker(&session, "Session     terminal gone", 1000), "theme change preserves keyboard navigation and the Details page");
     result(theme_switch(&session, "\033[0m", "Theme: terminal"),
            "terminal theme repaints every cell with the default background, without erasing, and names the choice");
     write_input(session.master, "q", 1U);
@@ -84,15 +84,16 @@ static void test_themes(const char *tui, const char *hydra, const char *fake_bin
     (void)unsetenv("HYDRA_TEST_COLOR");
     if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open NO_COLOR themed terminal")) goto done;
     /* Without colour the attributes still carry the meaning: the brand is
-     * bold and the active tab is bold reverse video, in every theme. */
-    result(wait_for_markers(&session, "\033[1;1H \033[1m\xe2\x97\x86 hydra", "\033[1;7m 1 Work ", 2000),
+     * bold and the active tab is bold reverse video, in every theme. At 40
+     * columns the brand is its glyph alone. */
+    result(wait_for_markers(&session, "\033[1;1H \033[1m\xe2\x97\x86", "\033[1;7m 1 Work ", 2000),
            "NO_COLOR startup writes attributes only, from the first cell on");
     (void)wait_for_model(&session);
     /* One key at a time, so each row is drawn again as the selection moves. */
     mouse_input(&session, "j");
-    (void)wait_for_marker(&session, "\xe2\x96\x8c  feature-stale", 1000);
+    (void)wait_for_selected(&session, "feature-stale", 1000);
     mouse_input(&session, "k");
-    result(wait_for_marker(&session, "\xe2\x96\x8c  feature-live", 1000), "NO_COLOR retains the selection bar with a configured theme");
+    result(wait_for_selected(&session, "feature-live", 1000), "NO_COLOR retains the selection bar with a configured theme");
     mouse_input(&session, "t");
     result(wait_for_marker(&session, "Theme: light (NO_COLOR)", 1000), "NO_COLOR remains authoritative when cycling themes");
     result(!wait_for_marker(&session, "38;5;", 600) && !wait_for_marker(&session, "48;5;", 100),

@@ -123,8 +123,8 @@ int main(void) {
     }
     kt_format(offline, sizeof(offline), "%s/offline-a", transport);
     open_observer(&s);
-    kt_until(&s, task[0], 15);
-    kt_until(&s, task[1], 15);
+    until_task_listed(&s, task[0]);
+    until_task_listed(&s, task[1]);
     CHECK(kt_contains(&s, "host-a"), "first receiver visible");
     /* The one Work list: host-a's head, then each receiver's task. */
     kt_send(&s, "jj");
@@ -178,8 +178,8 @@ int main(void) {
     kt_close(&s, "q", 0, 0);
     CHECK(!unlink(offline), "restore receiver transport");
     open_observer(&s);
-    kt_until(&s, task[0], 15);
-    kt_until(&s, task[1], 15);
+    until_task_listed(&s, task[0]);
+    until_task_listed(&s, task[1]);
     document = parse(H("fleet", "task", "observe", host[1], "--id", task[1], "--event-limit", "2"));
     first = json_object_get(field(document, "data"));
     json_object_put(document);
@@ -295,14 +295,14 @@ int main(void) {
     save_json("log-before.json", prefix);
     open_observer(&s);
     select_task(&s, wf_id);
-    kt_until(&s, "State: running", 15);
+    kt_until(&s, "running \xc2\xb7 owner", 15);
     check_runtime("host-b", wf_id, "state", "running");
     kt_close(&s, "q", 0, 0);
     check_runtime("host-b", wf_id, "state", "running");
     kt_write(offline, "");
     open_observer(&s);
     select_task(&s, wf_id);
-    kt_until(&s, "State: running", 15);
+    kt_until(&s, "running \xc2\xb7 owner", 15);
     check_runtime("host-b", wf_id, "state", "running");
     kt_format(path, sizeof(path), "%s/host-b/release-workflow", base);
     kt_write(path, "");
@@ -310,9 +310,9 @@ int main(void) {
     CHECK(runtime_is(data, "state", "succeeded") && runtime_is(data, "run_id", run_id),
           "original result after observer restart");
     json_object_put(data);
-    kt_until(&s, "State: succeeded", 15);
-    kt_format(text, sizeof(text), "> %s", wf_id);
-    CHECK(kt_contains(&s, text) && kt_contains(&s, "host host-b"), "selected original task/host");
+    kt_until(&s, "succeeded \xc2\xb7 owner", 15);
+    kt_format(text, sizeof(text), "%.40s", wf_id);
+    CHECK(kt_contains(&s, text) && kt_contains(&s, "host-b"), "selected original task/host");
     kt_format(path, sizeof(path), "%s/observer-after.txt", base);
     kt_write(path, kt_text(&s));
     kt_close(&s, "q", 0, 0);

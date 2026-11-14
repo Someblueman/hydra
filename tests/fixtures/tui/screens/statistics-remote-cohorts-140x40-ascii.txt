@@ -1,6 +1,6 @@
 FRAME 1 140x40
- # hydra  1 Work  2 Details  3 Overview  4 Inbox .  5 Workflows   6 Statistics   7 Workspace  8 Hosts                           STATISTICS 
-                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                                       this machine / 3 heads / 1 running  
+                                                                                                                                           
  Sessions  Runs  Cohorts ---------------------------------------------------------------------------------- all recorded / all workflows   
                                                                                                                                            
   Remote steps                      Wall                              CPU                               Transport                          
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   * live   Remote cohorts / all recorded / all workflows                                                                                   
- ^/v select | [/] pages | T range | / filter | w workflow | C cohorts | L location | ! needs you only | : more actions | ? help | q quit   
+ ^/v select | [/] pages | T range | / filter | w workflow | C cohorts | L location | ! needs you only | : commands | ? help | q quit       

@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work  2 Details  3 Overview 4 Inbox · 5 Flows 6 Stats …    DETAILS 
-     Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Details: kill-dry-run-worker ──────────────────────────────────────────────── 
-  kill-dry-run-worker                                                          
-  Agent       codex · step implement · succeeded                               
-  Terminal    headless (no terminal)                                           
-  Run         plan run kill-dry-run · succeeded                                
-  Role        worker (holds the run's result)                                  
-  Reported    nothing yet; declared when done: done or blocked                 
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             2 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details  Run ────────────────────────  
+  ● add-kill              Agent       codex · step implement · succeeded       
+    ▾ ✓ plan run kill-d…  Terminal    headless (no terminal)                   
+ ▌    ✓ worker kill-dry…  Run         plan run kill-dry-run · succeeded        
+      ○ verifier kill-d…  Role        worker (holds the run's result)          
+  ▲ notes-cleanup         Reported    nothing yet; declared when done: done    
+                                      or blocked                               
+                          Where       this machine                             
                                                                                
-  AGENT STEP  implement / compose, attempt 1                                   
-  State       succeeded                                                        
-  Executable  codex-cli 0.46.0                                                 
-  Model       configured default: gpt-6-sol (not observed)                     
-  Effort      configured default: xhigh (not observed)                         
-  Configured  /home/fixture/.codex/config.toml, read when the step started;    
-              the provider did not report what it used                         
-  Tokens      in 24,763  cached 24,448  out 1,122  cost unknown                
-  Duration    1m06s                                                            
-                                                                               
-  CHANGES                                                                      
-                                                                               
-  ● live                                                                       
- ↑/↓ select • a talk to agent • n new task • x remove • ? help • q quit        
+                          AGENT STEP  implement / compose, attempt 1           
+                          State       succeeded                                
+                          Executable  codex-cli 0.46.0                         
+                          Model       configured default: gpt-6-sol (not       
+                                      observed)                                
+                          Effort      configured default: xhigh (not           
+                                      observed)                                
+                          Configured  /home/fixture/.codex/config.toml, read   
+                                      when the step started; the provider did  
+                                      not report what it used                  
+                          Tokens      in 24,763  cached 24,448  out 1,122      
+  2 heads · 1 needs you               cost unknown                             
+  ● live   kill-dry-run-worker · done                                          
+ ↑/↓ select • ←/→ collapse/expand • x remove • n new task • ? help • q quit    

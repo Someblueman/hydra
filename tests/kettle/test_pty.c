@@ -158,6 +158,9 @@ static void interruption(void) {
     }
     puts("PASS lifecycle: interruption, owned job termination, visible exec failure, termios");
 }
+/* Work at 140x40: the list, the selected head's conversation and its
+ * Details page; moving the selection, dragging the list's divider and
+ * resizing repaint in place. */
 static void hydra(void) {
     struct kt_session s;
     char tui[4096], fake[4096];
@@ -168,55 +171,62 @@ static void hydra(void) {
         const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
         kt_open_terminal(&s, argv, 140, 40, NULL);
     }
-    kt_until(&s, "PLAN TOGETHER", 3);
-    kt_until(&s, "Session   running", 3);
+    kt_until(&s, "Heads \xe2\x94\x80", 3);
+    kt_until(&s, "Session     running", 3);
     before = s.screen.clears;
     kt_send(&s, "j");
-    kt_until(&s, "Session   terminal gone", 3);
-    /* Tab order: selected work, dependencies, then activity. */
-    kt_send(&s, "\tjjj\t\tjj");
+    kt_until(&s, "Session     terminal gone", 3);
+    /* Tab to the conversation and the side pane, scroll each, and back. */
+    kt_send(&s, "\tjjj\tjj\t");
     kt_pump(&s, .2);
-    CHECK(kt_contains(&s, "scroll 3") && kt_contains(&s, "scroll 2"), "Hydra independent scroll");
-    kt_send(&s, "\033[<0;42;4M\033[<32;50;4M\033[<0;50;4m");
+    CHECK(kt_contains(&s, "Session     terminal gone"), "Hydra panes scroll without moving the selection");
+    kt_send(&s, "\033[<0;34;4M\033[<32;40;4M\033[<0;40;4m");
     kt_pump(&s, .3);
     CHECK(s.screen.clears == before, "Hydra incremental drag");
     save(&s, "hydra-140x40.html");
     kt_resize(&s, 80, 24);
-    kt_until(&s, "PROJECT", 3);
+    kt_until(&s, "Conversation  Details", 3);
     CHECK(!s.screen.overflow, "Hydra medium overflow");
     save(&s, "hydra-80x24.html");
     kt_resize(&s, 40, 10);
-    kt_until(&s, "FOCUS", 3);
+    kt_until(&s, "1/2 tab", 3);
     CHECK(kt_contains(&s, "q quit") && !s.screen.overflow, "Hydra small frame");
     save(&s, "hydra-40x10.html");
     kt_close(&s, "q", 0, 0);
-    puts("PASS Hydra: adapter rows, selection, pane scroll, divider, resize and restoration");
+    puts("PASS Hydra: list selection, pane focus and scroll, divider, resize and restoration");
 }
 static void hydra_startup_open(struct kt_session *s, const char *tui, const char *fake) {
     const char *argv[] = {tui, "--hydra", fake, NULL};
     kt_open_terminal(s, argv, 140, 40, NULL);
     kt_until(s, "Loading snapshot...", 3);
     kt_until(s, "visualization-proof", 3);
-    CHECK(kt_contains(s, "No agent work in this project yet"), "workflow arrives before delayed heads");
+    CHECK(kt_contains(s, "0 heads"), "workflow arrives before delayed heads");
 }
+/* The first head is selected once heads arrive; a move selects the next;
+ * when every head goes and comes back, a head is selected again. */
 static void hydra_startup_repopulation(struct kt_session *s, const char *model, const char *data) {
-    kt_send(s, "C");
-    kt_until(s, "Session   running", 3);
-    CHECK(kt_contains(s, "*  └ feature-live"), "first head selected after mode input");
-    kt_send(s, "Aj");
-    kt_until(s, "Session   terminal gone", 3);
-    CHECK(kt_contains(s, ">  └ feature-stale"), "single move selects second head");
+    kt_until(s, "Session     running", 3);
+    CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x97\x90 feature-live"), "first head selected when heads arrive");
+    kt_send(s, "j");
+    kt_until(s, "Session     terminal gone", 3);
+    CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x96\xb2 feature-stale"), "single move selects second head");
     kt_write(model, "HYDRA_TUI\t2\n");
-    kt_until(s, "No agent work in this project yet", 3);
+    kt_until(s, "0 heads", 3);
     kt_write(model, data);
-    kt_until(s, "Session   running", 3);
-    CHECK(kt_contains(s, ">- This project"), "repopulation does not reseed selection");
+    kt_until(s, "3 heads \xc2\xb7", 3);
+    CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x97\x90 feature-live"), "repopulation selects a head again");
 }
 static void hydra_startup_selection(void) {
     struct kt_session s;
     char tui[4096], fake[4096], source[4096], model[4096], data[8192], name[64];
+    /* With no head yet the first run is selected: a move before the heads
+     * arrive chooses a run (k keeps the first, j the next) and it stays
+     * chosen; Enter only expands the run, and the first head is selected
+     * once the heads arrive. */
     const char *keys[] = {"k", "j", "\r"};
-    const char *selected[] = {">- This project", ">  └ run visualiza", ">+ This project"};
+    const char *waits[] = {"STEP", "STEP", "Session     running"};
+    const char *selected[] = {"\xe2\x96\x8c\xe2\x96\xb8 \xe2\x97\x8f run visualizati", "\xe2\x96\x8c\xe2\x96\xb8 \xe2\x9c\x93 run second-run",
+        "\xe2\x96\x8c\xe2\x97\x90 feature-live"};
     size_t i;
     kt_format(tui, sizeof(tui), "%s/hydra-tui", build);
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
@@ -233,15 +243,16 @@ static void hydra_startup_selection(void) {
     for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
         hydra_startup_open(&s, tui, fake);
         kt_send(&s, keys[i]);
-        kt_until(&s, "Session   running", 3);
-        CHECK(kt_contains(&s, selected[i]), "explicit root/run/collapse retained after heads arrive");
+        kt_until(&s, "3 heads \xc2\xb7", 3);
+        kt_until(&s, waits[i], 3);
+        CHECK(kt_contains(&s, selected[i]), "a selection made before the heads arrive is kept");
         kt_format(name, sizeof(name), "startup-selection-%zu.html", i);
         save(&s, name);
         kt_close(&s, "q", 0, 0);
     }
     CHECK(!unsetenv("HYDRA_TEST_TUI_DELAY") && !unsetenv("HYDRA_TUI_FIXTURE"),
           "restore startup fixture environment");
-    puts("PASS Hydra startup: first head, single move, explicit root/run/collapse, repopulation");
+    puts("PASS Hydra startup: first head, single move, a run chosen early, repopulation");
 }
 int main(int argc, char **argv) {
     kt_init();

@@ -91,7 +91,7 @@ static long observation_budget(const struct app *app, size_t source) {
  * good head snapshot. */
 static bool observation_shown(const struct app *app, size_t source) {
     if (source==OBSERVE_HEADS) return true;
-    if (source==OBSERVE_WORKFLOWS) return app->view==5 || app->view==7 || app->snapshot_at;
+    if (source==OBSERVE_WORKFLOWS) return app->view==7 || app->snapshot_at;
     /* The fleet entry's statistics are the hosts' own (D), from the remote stream. */
     if (source==OBSERVE_STATISTICS) return app->view==8 && !app->fleet;
     return source==OBSERVE_LINKS && app->view==7;

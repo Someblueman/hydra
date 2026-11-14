@@ -133,12 +133,14 @@ for size in 80x24 140x40; do
     contains "Nothing needs you" "$i4" "an empty Inbox says so at $size"
     "$tui" --ascii --headless-fixture "$runs_heads" --view attention --size "$size" > "$i4"
     contains "Reading what needs you..." "$i4" "Inbox explains its loading state at $size"
-    "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view workspace --size "$size" --keys "$tab_key$enter_key" > "$i4"
-    contains "Details: add-kill" "$i4" "Enter opens the selected head's details from the selected-work pane at $size"
-    "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view workspace --size "$size" --keys "$enter_key" > "$i4"
-    contains "Details: add-kill" "$i4" "Enter opens the selected head's details from the project pane at $size"
+    # Work: ] shows the next page of the side pane (the shared pane below
+    # 120 columns), which for this planning head is its Details page.
+    "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view workspace --size "$size" --keys "]" > "$i4"
+    contains "Reported    nothing yet" "$i4" "] shows the selected head's details from the list at $size"
+    "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view workspace --size "$size" --keys "$tab_key]" > "$i4"
+    contains "Reported    nothing yet" "$i4" "] shows the selected head's details from the next pane at $size"
     "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view workspace --size "$size" > "$i4"
-    contains "enter details" "$i4" "the workspace footer names Enter for details at $size"
+    contains "enter/a talk" "$i4" "the Work footer names Enter for talking to the agent at $size"
     # Recovery findings are Inbox items: the stopped terminal (after the two
     # approval gates) has a Summary in plain words and a Technical page.
     "$tui" --ascii --headless-fixture "$fixture" --view recovery --size "$size" --keys "jj$enter_key" > "$i4"
@@ -159,12 +161,12 @@ for size in 80x24 140x40; do
     contains "task task_build on builder" "$i4" "a remote task's details lead with the task at $size"
     contains "Request      " "$i4" "a remote task's request identity sits in its identity group at $size"
     "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view detail --task notes-cleanup --size "$size" > "$i4"
-    contains "The terminal is gone; the agent was last seen working. The worktree's files" "$i4" "a stopped terminal's details lead with what is known at $size"
+    contains "The terminal is gone; the agent was" "$i4" "a stopped terminal's details lead with what is known at $size"
     "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --view overview --size "$size" > "$i4"
     fits_width "$i4" "$size" "run panel"
-    contains "RUN / plan run kill-dry-run / succeeded / 2 heads / from add-kill" "$i4" "the run panel leads with the run at $size"
+    contains "+ succeeded / plan run kill-dry-run" "$i4" "the Run page leads with the run's state at $size"
 done
-contains "kill-dry-run-check (reti..." "$test_root/i4-attention-80x24.out" "a run step's head ends in an ellipsis instead of a cut word at 80 columns"
+contains "> + plan run kill..." "$test_root/i4-attention-80x24.out" "a run's name in the list ends in an ellipsis instead of a cut word at 80 columns"
 "$tui" --ascii --headless-fixture "$runs_heads" --attention-fixture "$attention_fx" --view attention --size 80x24 > "$test_root/i4-ellipsis.out"
 contains "Result ready: feature/very-long-task-name-for-the-wrapping-check-of-the..." "$test_root/i4-ellipsis.out" "a title that does not fit ends in an ellipsis"
 "$tui" --ascii --headless-fixture "$runs_heads" --attention-fixture "$attention_fx" --view attention --size 80x24 --keys "j${enter_key}[" > "$test_root/i4-detail-wide.out"

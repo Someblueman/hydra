@@ -10,7 +10,8 @@ void native_plan_import(struct app *app) {
     if (app->view != 7) enter_view(app, 7);
     if (prompt_text(app, "Draft JSON path: ", path, sizeof(path)) || !path[0]) return;
     if (prompt_text(app, "Policy JSON path: ", policy, sizeof(policy)) || !policy[0]) return;
-    (void)native_plan_load(app, path, policy);
+    /* The imported plan opens on the Plan page with focus, where its keys are. */
+    if (native_plan_load(app, path, policy)) work_focus_page(app, WORK_PLAN);
 }
 
 /* Describes the guided policy that `proposal --local-policy` writes for this head. */

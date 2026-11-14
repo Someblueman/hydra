@@ -95,19 +95,19 @@ static void burst(struct kt_session *s) {
 static void prompt(struct kt_session *s) {
     size_t mark = s->raw_size;
     kt_send(s, "/");
-    kt_until(s, "Search heads", 3);
+    kt_until(s, "Filter heads", 3);
     kt_pump(s, .5);
     CHECK(kt_pump(s, 4.5) == 0, "an open, idle prompt writes nothing");
     kt_send(s, "on");
     kt_until(s, "\xe2\x94\x83 on", 3);
     kt_send(s, "\033");
     kt_pump(s, .5);
-    CHECK(!kt_contains(s, "Search heads"), "prompt closed");
+    CHECK(!kt_contains(s, "Filter heads"), "prompt closed");
     CHECK(!strstr(s->raw + mark, ERASE), "a prompt opens and closes without erasing the display");
 }
 
-/* A new size, another theme (dark, the default, to light) and another workspace layout each repaint by
- * overwriting. */
+/* A new size, another theme (dark, the default, to light) and another page of
+ * Work's side pane each repaint by overwriting. */
 static void repaints(struct kt_session *s) {
     size_t mark = s->raw_size;
     kt_send(s, "t");
@@ -116,15 +116,14 @@ static void repaints(struct kt_session *s) {
     kt_until(s, "Theme: light", 3);
     kt_resize(s, 140, 40);
     kt_until(s, "Theme: light", 3);
-    kt_send(s, "W");
-    kt_until(s, "PLAN TOGETHER", 3);
-    kt_send(s, "B");
-    kt_until(s, "PLAN OVERVIEW", 3);
-    kt_send(s, "C");
-    kt_until(s, "MONITOR", 3);
-    kt_send(s, "A");
-    kt_until(s, "PLAN TOGETHER", 3);
-    CHECK(!strstr(s->raw + mark, ERASE), "theme, resize and layout changes never erase the display");
+    kt_send(s, "\t\t");
+    kt_send(s, "\034B");
+    kt_until(s, "No Plan page", 3);
+    kt_send(s, "\034A");
+    kt_until(s, "Session     running", 3);
+    kt_send(s, "\033");
+    kt_pump(s, .3);
+    CHECK(!strstr(s->raw + mark, ERASE), "theme, resize and page changes never erase the display");
 }
 
 /* The time from typing a character to an attached agent until its echo is on
@@ -193,18 +192,18 @@ int main(void) {
     hf_commit_init(&f);
     H("spawn", "one", "--no-agent");
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 5);
-    U("Session   running", 10);
+    U("Heads \xe2\x94\x80", 5);
+    U("Session     running", 10);
     U("\xe2\x97\x8f live", 10);
-    U("repo \xc2\xb7 Local", 10);
+    U("repo \xc2\xb7 this machine", 10);
     idle(&s);
     S("1");
-    U("Heads in this project", 3);
+    U("Heads \xe2\x94\x80", 3);
     burst(&s);
     prompt(&s);
     repaints(&s);
     S("a");
-    U("INPUT TO AGENT", 5);
+    U("typing to ", 5);
     kt_pump(&s, 1);
     latency(&s);
     attached_burst(&s);

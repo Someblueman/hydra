@@ -1,6 +1,6 @@
 FRAME 1 80x24
- # hydra  2 Details 3 Overview 4 Inbox . 5 Flows  6 Stats  ..       STATISTICS 
-                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ # hydra  1 Work  2 Inbox .  3 Hosts  4 Stats             3 heads / 1 running  
+                                                                               
  Sessions  Runs  Cohorts ---------------------- all recorded / all workflows   
  3 runs / 7 steps / 0 need attention / tokens in 3.97M / timing 6/7            
                                                                                

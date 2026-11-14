@@ -28,7 +28,9 @@ static void poll_work(struct app *app, bool request) {
     size_t i;
     if (!app->action_depth) {
         native_observations_tick(app, request);
-        if (request && app->preview && !native_terminal_focused(app)) capture_preview(app);
+        bool wanted = work_preview_wanted(app);
+        if (wanted && (request || !app->preview_wanted || preview_unread(app))) capture_preview(app);
+        app->preview_wanted = wanted;
         native_setup_tick(app);
         native_onboarding_tick(app);
     }

@@ -25,7 +25,7 @@ const char *native_fleet_task_refusal(const struct app *app, const struct task_o
     return NULL;
 }
 static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
-    if (app->view != 0 && app->view != 1 && app->view != 4) return "Select a remote task in Work or Overview before using task controls.";
+    if (app->view != 7) return "Select a remote task in Work before using task controls.";
     return native_fleet_task_refusal(app, task, key);
 }
 const struct task_observation *native_fleet_task_current(const struct app *app, const struct task_observation *target) {
@@ -53,7 +53,7 @@ static bool fleet_confirmed(struct app *app, char key, const char *action, const
 
 bool native_fleet_control_key(struct app *app, char key, const char *action) {
     if (!selected_task(app)) {
-        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; select its row in Work or Overview."); return true;
+        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; select its row in Work."); return true;
     }
     /* prompt_text refreshes the entire model. Keep no borrowed model pointers
      * across the modal; copy the exact receiver-owned binding first. */

@@ -91,7 +91,7 @@ static void launch(struct kt_session *s, int cols, int rows) {
     const char *argv[] = {tui, NULL};
     kt_format(label, sizeof(label), "%dx%d", cols, rows);
     kt_open_terminal(s, argv, cols, rows, base);
-    kt_until(s, "press H for Hosts", 8);
+    kt_until(s, "0 heads", 8);
     capture(s, "01-entry");
 }
 

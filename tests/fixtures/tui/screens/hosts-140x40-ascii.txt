@@ -1,6 +1,6 @@
 FRAME 1 140x40
- # hydra  1 Work  2 Details  3 Overview  4 Inbox 11  5 Workflows  6 Statistics  7 Workspace   8 Hosts                                HOSTS 
-                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ # hydra  1 Work   2 Inbox 11   3 Hosts   4 Stats                                                      this machine / 3 heads / 1 running  
+                                                                                                                                           
  Hosts ----------------------------------------------------------------------------------------------------------------------------------- 
   REMOTE HOSTS                                                                                                                             
   Hydra can run agents on other machines over SSH, for example a build box with more cores or a machine that already has the right         
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   * live                                                                                                                                   
- ^/v select | enter open | A add a host | O onboarding | tab/shift+tab views | : more actions | esc back | ? help | q quit                 
+ ^/v select | enter open | A add a host | O onboarding | tab/shift+tab views | : commands | esc back | ? help | q quit                     

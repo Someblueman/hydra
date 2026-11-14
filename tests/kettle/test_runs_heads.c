@@ -122,6 +122,35 @@ static void prepare(char *hold, size_t hold_size) {
     H("spawn", "planner", "--no-agent");
     write_plan();
 }
+/* Whether a row of Work's list (its first 32 columns) shows text. */
+static bool listed(struct kt_session *s, const char *text) {
+    char row[512];
+    int y, x;
+    for (y = 0; y < s->screen.rows; y++) {
+        size_t used = 0;
+        for (x = 0; x < 32 && x < s->screen.cols; x++) {
+            const char *cell = s->screen.cells[y * s->screen.cols + x].text;
+            size_t n = strlen(cell);
+            if (used + n + 1 >= sizeof(row)) break;
+            memcpy(row + used, cell, n);
+            used += n;
+        }
+        row[used] = 0;
+        if (strstr(row, text)) return true;
+    }
+    return false;
+}
+static void until_listed(struct kt_session *s, const char *text, double seconds) {
+    double deadline = kt_now() + seconds;
+    while (!listed(s, text) && kt_now() < deadline) kt_pump(s, .2);
+    if (!listed(s, text)) fprintf(stderr, "Not listed: %s\n%s\n", text, kt_text(s));
+    CHECK(listed(s, text), "listed in Work");
+}
+/* The side pane shows the Details page (Ctrl-\ A) with focus (Shift-Tab
+ * from the list), zoomed so its rows do not wrap; zoom_out goes back. */
+#define DETAILS_ZOOMED "\034A\033[Zz"
+#define RUN_ZOOMED "\033[Zz"
+#define ZOOM_OUT "z\033"
 static void wait_for_live_stream(struct kt_session *s) {
     char path[4096];
     double deadline = kt_now() + 60;
@@ -137,59 +166,73 @@ int main(void) {
     prepare(hold, sizeof(hold));
 
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 5);
-    S("3");
-    U("No workflow run yet", 5);
-    CHECK(kt_contains(&s, "RUN / no run yet"), "the run panel explains the empty state");
+    U("Heads \xe2\x94\x80", 5);
+    U("Session     running", 5);
+    /* No run yet: the planner has no Run page, and Ctrl-\ C says so. */
+    S("\034C");
+    U("No Run page for this selection", 5);
     both(&s, "overview-no-run");
 
     kt_write(hold, "");
     launch();
     wait_for_live_stream(&s);
     S("1");
-    U("Heads in this project", 5);
+    U("Heads \xe2\x94\x80", 5);
     /* These wait on a real background plan run; sanitizer builds on shared
      * CI runners need far longer than the screen itself. */
-    U("1 head (+1 in runs)", 60);
-    U("plan run runs-demo", 60);
-    CHECK(!kt_contains(&s, "worker   runs-demo-worker"), "run heads start collapsed under their run");
+    U("+1 in runs", 60);
+    U("plan run runs", 60);
+    CHECK(!listed(&s, "worker runs-d"), "run heads start collapsed under their run");
+    /* j selects the run and Enter expands it; its Run page says which step runs. */
     S("j\r");
-    U("worker   runs-demo-worker", 30);
-    U("Running step implement on runs-demo-worker", 30);
+    until_listed(&s, "worker runs-d", 30);
+    U("running \xc2\xb7 step", 30);
     both(&s, "work-grouped-running");
-    S("1j\r");
-    U("Details: runs-demo-worker", 5);
+    /* The worker: the conversation shows its step output (it is headless). */
+    S("j");
+    U("runs-demo-worker \xe2\x94\x80", 5);
+    U("sh -c true -> exit 0", 30);
+    U("Reading the kill command before adding a dry run", 30);
+    both(&s, "worker-live-output");
+    S(DETAILS_ZOOMED);
     U("headless (no terminal)", 5);
     U("step implement", 5);
     U("configured default: fixture-model", 5);
     CHECK(!kt_contains(&s, "Session"), "a headless head is not described as a missing terminal session");
-    S("p");
-    U("STEP OUTPUT", 5);
-    U("sh -c true -> exit 0", 30);
-    U("Reading the kill command before adding a dry run", 30);
-    both(&s, "worker-live-output");
-    S("p3");
-    U("RUN / plan run runs-demo", 5);
+    S(ZOOM_OUT);
+    /* The run again: its Run page lists the steps. */
+    S("k");
+    U("plan run runs-demo", 5);
     U("implement", 5);
     both(&s, "overview-run-running");
 
     CHECK(!unlink(hold), "release the fixture agent");
+    S(RUN_ZOOMED);
     U("Worker branch runs-demo-worker holds the result", 90);
     U("(retired)", 30);
     both(&s, "overview-run-succeeded");
+    S(ZOOM_OUT);
     S("1");
-    U("Heads in this project", 5);
+    U("Heads \xe2\x94\x80", 5);
     U("retired", 5);
     both(&s, "work-grouped-finished");
-    S("\r");
+    /* The worker's Details page counts its tokens. */
+    S("j");
+    U("runs-demo-worker \xe2\x94\x80", 5);
+    S(DETAILS_ZOOMED);
     U("Tokens      in 1,200  cached 800  out 34", 10);
     both(&s, "worker-details-finished");
-    S("1kk\r");
-    U("Details: planner", 5);
+    S(ZOOM_OUT);
+    /* The planner: its plan approved, no approval requests. */
+    S("kk");
+    U("planner \xe2\x94\x80", 5);
+    S(DETAILS_ZOOMED);
     U("approved", 5);
     U("Approval requests  none", 5);
     both(&s, "planner-details");
-    S("d");
+    S(ZOOM_OUT);
+    /* d: the technical details. */
+    S("d" RUN_ZOOMED);
     U("SOURCES", 5);
     both(&s, "technical-details");
     kt_close(&s, "q", 0, 0);

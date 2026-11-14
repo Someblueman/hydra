@@ -1,25 +1,23 @@
 FRAME 1 140x40
- ◆ hydra  1 Work   2 Details   3 Overview  4 Inbox ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                              DETAILS 
-                       Local · 3 heads · 1 running · 3 need attention · 5 to repair · Remote · 2 heads, 1 task on 3 hosts (1 disconnected) 
- Details: feature-index on archive ─────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  archive/feature-index                                                                                                                    
-  This is the host's last observation, not its current state. Its agent may still be working; nothing here completes or stops it. r        
-  retries the host.                                                                                                                        
-  Where        archive                                                                                                                     
-  Project      /srv/archive                                                                                                                
-  Status       stale · desired running                                                                                                     
-  Observation  stale, 300s old                                                                                                             
-  Connection   reachable · stale · 300s old                                                                                                
-  Confirmed    2026-10-17T09:55:00Z                                                                                                        
-  Agent        not observed                                                                                                                
-  Liveness     unobserved: a remote head reports desired state, not a live process                                                         
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                               3 local · 3 remote · 1 of 3 hosts disconnected · 1 running  
                                                                                                                                            
-  NEXT                                                                                                                                     
-  a  talk to the agent in its terminal on archive                                                                                          
-  x  interrupt the agent (confirmed); the worktree and files stay on the host                                                              
-  r  retry the host    d  technical details    c  coordination                                                                             
-                                                                                                                                           
-                                                                                                                                           
+ Heads ─────────────────────────────────── 6  archive/feature-index ─────────────────────────────  Details ──────────────────────────────  
+  ◐ feature-live       local       codex      ▲ stale · on archive · desired running               This is the host's last observation,    
+  ▲ feature-stale      local       claude                                                          not its current state. Its agent may    
+  ? feature-unavailab… local       shell      observation stale, 300s old                          still be working; nothing here          
+  ● builder/feature-b… builder     -                                                               completes or stops it. r retries the    
+ ▌▲ archive/feature-i… archive     -          Remote target is stale or lacks an exact             host.                                   
+  ◐ task_build         builder     codex      interactive identity; refresh first                  Where        archive                    
+                                                                                                   Project      /srv/archive               
+                                                                                                   Status       stale · desired running    
+                                                                                                   Observation  stale, 300s old            
+                                                                                                   Connection   reachable · stale ·        
+                                                                                                                300s old                   
+                                                                                                   Confirmed    2026-10-17T09:55:00Z       
+                                                                                                   Agent        not observed               
+                                                                                                   Liveness     unobserved: a remote head  
+                                                                                                                reports desired state,     
+                                                                                                                not a live process         
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -37,5 +35,7 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
-  ● live   Remote live                                                                                                                     
- ↑/↓ select • a talk to agent • c coordination • n new task • x interrupt • p output • r observe host again • / search • ? help • q quit   
+                                                                                                                                           
+  5 heads · 1 task · 3 need you                                                                                                            
+  ● live   Remote live · archive/feature-index · stale                                                                                     
+ ↑/↓ select • enter/a talk • x interrupt • n new task • / filter • L location • tab/shift+tab pane • [/] page • ? help • q quit            

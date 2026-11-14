@@ -1,41 +1,41 @@
 FRAME 1 140x40
- ◆ hydra  1 Work  2 Details  3 Overview   4 Attention   5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts              ATTENTION 
-                                                                              Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-  EXACT REVIEW / full log                                                                                                                  
-  kill-dry-run · implement                                                                                                                 
-  Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                    
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
                                                                                                                                            
-  FULL LOG  2,663 bytes                                                                                                                    
-  /tmp/hydra-i4-capture.3rIGZH/output.log                                                                                                  
-                                                                                                                                           
-  [PASS] check number 0 of the fixture suite                                                                                               
-  [PASS] check number 1 of the fixture suite                                                                                               
-  [PASS] check number 2 of the fixture suite                                                                                               
-  [PASS] check number 3 of the fixture suite                                                                                               
-  [PASS] check number 4 of the fixture suite                                                                                               
-  [PASS] check number 5 of the fixture suite                                                                                               
-  [PASS] check number 6 of the fixture suite                                                                                               
-  [PASS] check number 7 of the fixture suite                                                                                               
-  [PASS] check number 8 of the fixture suite                                                                                               
-  [PASS] check number 9 of the fixture suite                                                                                               
-  [PASS] check number 10 of the fixture suite                                                                                              
-  [PASS] check number 11 of the fixture suite                                                                                              
-  [PASS] check number 12 of the fixture suite                                                                                              
-  [PASS] check number 13 of the fixture suite                                                                                              
-  [PASS] check number 14 of the fixture suite                                                                                              
-  [PASS] check number 15 of the fixture suite                                                                                              
-  [PASS] check number 16 of the fixture suite                                                                                              
-  [PASS] check number 17 of the fixture suite                                                                                              
-  [PASS] check number 18 of the fixture suite                                                                                              
-  [PASS] check number 19 of the fixture suite                                                                                              
-  [PASS] check number 20 of the fixture suite                                                                                              
-  [PASS] check number 21 of the fixture suite                                                                                              
-  [PASS] check number 22 of the fixture suite                                                                                              
-  [PASS] check number 23 of the fixture suite                                                                                              
-  [PASS] check number 24 of the fixture suite                                                                                              
-  [PASS] check number 25 of the fixture suite                                                                                              
-  [PASS] check number 26 of the fixture suite                                                                                              
-                                                                                                                                           
-  ● live                                                                                                                                   
- ↑/↓ scroll • n/N section • f references • i IDs • enter open reference • L full log • l–p add log/transcript/PR • ? help • q quit         
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     EXACT REVIEW / full log                                                   
+  ◐ Approve merge-gate: notes-cleanup                            kill-dry-run · implement                                                  
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                     
+ Failed 1                                                                                                                                  
+  ✗ Check failed: kill-dry-run                                   FULL LOG  2,663 bytes                                                     
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    /tmp/hydra-i4-capture.hNQ6HP/output.log                                   
+ Ready for review 3                                                                                                                        
+ ▌✓ Result ready: kill-dry-run                                   [PASS] check number 0 of the fixture suite                                
+ ▌  run run_2cdf8bbe1a4e · step implement · attempt 1 · new      [PASS] check number 1 of the fixture suite                                
+  ✓ Result ready: feature-build                                  [PASS] check number 2 of the fixture suite                                
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…    [PASS] check number 3 of the fixture suite                                
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…    [PASS] check number 4 of the fixture suite                                
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new      [PASS] check number 5 of the fixture suite                                
+ Agents 1                                                        [PASS] check number 6 of the fixture suite                                
+  ▲ Terminal stopped: notes-cleanup                              [PASS] check number 7 of the fixture suite                                
+    worktree and files kept · R restarts it                      [PASS] check number 8 of the fixture suite                                
+ Repairs 2                                                       [PASS] check number 9 of the fixture suite                                
+  ▲ (stale) Approval expired: docs-refresh                       [PASS] check number 10 of the fixture suite                               
+    run run_55aa66bb77cc · step release-gate · attempt 1         [PASS] check number 11 of the fixture suite                               
+  ▲ Needs inspection: index-rebuild                              [PASS] check number 12 of the fixture suite                               
+    run run_aa11bb22cc33 · on archive                            [PASS] check number 13 of the fixture suite                               
+                                                                 [PASS] check number 14 of the fixture suite                               
+                                                                 [PASS] check number 15 of the fixture suite                               
+                                                                 [PASS] check number 16 of the fixture suite                               
+                                                                 [PASS] check number 17 of the fixture suite                               
+                                                                 [PASS] check number 18 of the fixture suite                               
+                                                                 [PASS] check number 19 of the fixture suite                               
+                                                                 [PASS] check number 20 of the fixture suite                               
+                                                                 [PASS] check number 21 of the fixture suite                               
+                                                                 [PASS] check number 22 of the fixture suite                               
+                                                                 [PASS] check number 23 of the fixture suite                               
+                                                                 [PASS] check number 24 of the fixture suite                               
+                                                                 [PASS] check number 25 of the fixture suite                               
+                                                                 [PASS] check number 26 of the fixture suite                               
+                                                                 [PASS] check number 27 of the fixture suite                               
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ scroll • space/b page • n/N section • plus add reference • L full log • tab/shift+tab pane • [/] page • : commands • ? help • q quit  

@@ -36,9 +36,9 @@ static void next_agent(struct app *app) {
         size_t next=(set->selected+i)%NATIVE_TERMINALS, head;
         if (!set->slots[next].screen) continue;
         set->selected=next; app->view=7;
-        native_workspace_show_terminal(app,true);
         head=terminal_head_index(app,&set->slots[next]);
-        if (head<app->model.head_count) app->selected=head;
+        if (head<app->model.head_count) { app->run_row=app->task_row=false; app->selected=head; }
+        native_workspace_show_terminal(app,true);
         return;
     }
 }
@@ -49,19 +49,34 @@ static void reconnect(struct app *app, struct native_terminal *t) {
     else copy_text(app->notice,sizeof(app->notice),"Original instance unavailable; select current work explicitly");
 }
 
-/* Leaving input keeps the view open where it is: focus goes back to the
- * navigation, and the narrow arrangement keeps showing the agent beside it
- * (it shows the side that holds focus, and navigation is on neither side).
- * Closing ends only this client's view. */
+/* Leaving input keeps the conversation where it is: focus goes back to the
+ * list, and the conversation stays on screen beside it at every width (the
+ * shared pane of a narrow screen keeps its page). Closing ends only this
+ * client's view. */
 static void leave_input(struct app *app) {
-    app->workspace->layout.focus=1;
+    work_focus_list(app);
     if (!native_terminal_focused(app))
-        copy_text(app->notice,sizeof(app->notice),"Keys go to Hydra; the agent view stays open");
+        copy_text(app->notice,sizeof(app->notice),"Keys go to Hydra; the conversation stays open");
 }
 
 static void close_view(struct app *app, struct native_terminal *t) {
-    native_terminal_close(t); app->workspace->layout.focus=1;
-    copy_text(app->notice,sizeof(app->notice),"View closed; the agent keeps running (a reopens)");
+    native_terminal_close(t); work_focus_list(app);
+    copy_text(app->notice,sizeof(app->notice),"Conversation closed; the agent keeps running (a reopens)");
+}
+
+/* ctrl+\ A, B and C keep their chords: they show the Details, Plan and Run pages. */
+static void show_page(struct app *app, enum key_action action) {
+    static const int pages[] = {WORK_DETAILS, WORK_PLAN, WORK_RUN};
+    int page=pages[action-KEY_LAYOUT_CONVERSATION];
+    enter_view(app,7);
+    if (!work_page_available(app,page)) {
+        snprintf(app->notice,sizeof(app->notice),"No %s page for this selection",page==WORK_PLAN ? "Plan" : page==WORK_RUN ? "Run" : "Details");
+        return;
+    }
+    work_set_page(app,page);
+    /* Beside the conversation the page shows without taking focus, so typing
+     * goes on; a narrow screen shows it in the shared pane instead. */
+    if (app->workspace->merged || app->workspace->compact) app->workspace->layout.focus=WORK_PANE_CONVERSATION;
 }
 
 /* Commands on the selected agent view. The literal command sends the key
@@ -83,13 +98,13 @@ static void view_command(struct app *app, enum key_action action, const struct k
 static void key_command(struct app *app, const struct kt_binding *binding, const struct kt_event *e) {
     enum key_action action=(enum key_action)binding->action;
     if (action==KEY_APP_QUIT) { app->running=false; return; }
-    if (action==KEY_VIEW_STATISTICS) { statistics_toggle(app); return; }
+    if (action==KEY_VIEW_STATISTICS || action==KEY_SCREEN_STATS) { if (app->view!=8) statistics_toggle(app); return; }
+    if (action>=KEY_SCREEN_WORK && action<=KEY_SCREEN_HOSTS) { enter_screen(app,(int)(action-KEY_SCREEN_WORK)); return; }
     if (!native_workspace_init(app)) return;
     switch (action) {
     case KEY_TERMINAL_LEAVE: leave_input(app); break;
-    case KEY_LAYOUT_CONVERSATION: case KEY_LAYOUT_PLAN: case KEY_LAYOUT_MONITOR:
-        native_workspace_mode(app,(int)action-(int)KEY_LAYOUT_CONVERSATION); break;
-    case KEY_WORKSPACE_ZOOM: (void)native_workspace_key(app,'z'); break;
+    case KEY_LAYOUT_CONVERSATION: case KEY_LAYOUT_PLAN: case KEY_LAYOUT_MONITOR: show_page(app,action); break;
+    case KEY_WORKSPACE_ZOOM: enter_view(app,7); app->workspace->zoom=!app->workspace->zoom; break;
     case KEY_WORKSPACE_SPLIT: native_workspace_split_agents(app); break;
     case KEY_TERMINAL_NEXT: next_agent(app); break;
     default: view_command(app,action,e); break;
@@ -99,8 +114,10 @@ static void key_command(struct app *app, const struct kt_binding *binding, const
 /* The part of a pane that shows the agent's screen. */
 static struct kt_rect pane_content(const struct native_workspace *w, int pane) {
     struct kt_rect bounds=w->layout.panes[pane].bounds;
-    int left=w->compact ? 0 : 1, top=w->compact ? 1 : 2, border=w->compact ? 0 : 1;
-    return (struct kt_rect){bounds.x+left,bounds.y+top,bounds.width-left-border,bounds.height-top-border};
+    /* The rule, then the conversation's header line and a blank row; a
+     * split agent pane has only its rule. */
+    int top=w->agents.first ? 1 : 3;
+    return (struct kt_rect){bounds.x,bounds.y+top,bounds.width-1,bounds.height-top};
 }
 
 static bool rect_holds(const struct kt_rect *r, int x, int y) {
@@ -137,7 +154,7 @@ static void terminal_mouse(struct app *app, const struct kt_event *e) {
         if (n>0 && (size_t)n<sizeof(bytes)) native_terminal_send(app,t,bytes,(size_t)n);
         return;
     }
-    native_workspace_mouse(app,e->button,e->x,e->y,e->release);
+    work_mouse(app,e->button,e->x,e->y,e->release);
 }
 
 /* Pasted text is the agent's; the brackets go along when it asked for them.

@@ -52,7 +52,7 @@ int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, stru
             while (space > 0 && text[space] != ' ') space--;
             if (space > 0) take = space;
         }
-        dashboard_text(c, x, y + used++, width, tone, "%.*s", (int)take, text);
+        canvas_text(c, x, y + used++, width, tone, "%.*s", (int)take, text);
         text += take;
         while (*text == ' ') text++;
     }
@@ -100,7 +100,7 @@ void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct 
     uint64_t duration;
     int row = r.y;
     if (hs_duration(m, s, &duration)) (void)snprintf(seconds, sizeof(seconds), "%llus", (unsigned long long)duration);
-    dashboard_text(c, r.x, row++, r.width, KT_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
+    canvas_text(c, r.x, row++, r.width, KT_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
         s->attempts, s->attempts == 1 ? "" : "s");
     if (!u->recorded) {
         statistics_wrap(c, r.x, row, r.width, r.height - 1, KT_MUTED,
@@ -114,7 +114,7 @@ void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct 
                  u->model[0] ? u->model : "not recorded", u->effort[0] ? u->effort : "not recorded") >= (int)sizeof(text))
         text[sizeof(text) - 1] = '\0';
     row += statistics_wrap(c, r.x, row, r.width, r.height - 2, KT_BASE, text);
-    dashboard_text(c, r.x, row, r.width, KT_BASE, "Tokens %s; %s.", tokens, cost);
+    canvas_text(c, r.x, row, r.width, KT_BASE, "Tokens %s; %s.", tokens, cost);
 }
 
 /* ---- run evidence -------------------------------------------------------- */
@@ -126,7 +126,7 @@ static void step_row(struct kt_canvas *c, struct kt_rect r, int row, const struc
     if (hs_duration(m, s, &duration)) (void)snprintf(seconds, sizeof(seconds), "%llu", (unsigned long long)duration);
     if (s->attempts_known) (void)snprintf(attempts, sizeof(attempts), "%u", s->attempts);
     statistics_step_agent(s, compact, agent, sizeof(agent));
-    dashboard_text(c, r.x, row, r.width, hs_state(s->state) == HS_FAILED ? KT_WARNING : KT_BASE,
+    canvas_text(c, r.x, row, r.width, hs_state(s->state) == HS_FAILED ? KT_WARNING : KT_BASE,
         compact ? "%-16.16s %-10.10s %3s %5s  %s" : "%-20.20s %-15.15s %5s %8s  %s", s->id, s->state, attempts, seconds, agent);
 }
 
@@ -138,7 +138,7 @@ static void run_totals(struct kt_canvas *c, struct kt_rect r, int row, const str
     memset(&totals, 0, sizeof(totals));
     for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run_index) hs_usage_add(&totals, &m->steps[i]);
     statistics_scope_tokens(&totals, tokens, sizeof(tokens));
-    dashboard_text(c, r.x, row, r.width, KT_BASE, "Run %s", tokens);
+    canvas_text(c, r.x, row, r.width, KT_BASE, "Run %s", tokens);
 }
 
 /* The steps from the scroll position; the first one shown is detailed below
@@ -153,7 +153,7 @@ static void run_steps(const struct statistics_view *v, struct kt_canvas *c, stru
         if (!first) first = s;
         step_row(c, r, row++, v->model, s);
     }
-    if (row == r.y) dashboard_text(c, r.x, row, r.width, KT_WARNING, "No step evidence at this scroll position");
+    if (row == r.y) canvas_text(c, r.x, row, r.width, KT_WARNING, "No step evidence at this scroll position");
     if (first && r.height > 8) statistics_step_detail(c, (struct kt_rect){r.x, bottom + 1, r.width, 4}, v->model, first);
 }
 
@@ -163,13 +163,13 @@ void stats_run_evidence(struct app *app, struct kt_canvas *c, struct kt_rect r, 
     struct kt_rect inner = {r.x + 2, r.y, r.width - 3, r.height};
     size_t run_index;
     stats_rule(c, (struct kt_rect){r.x, r.y, r.width, 1}, "Run evidence", "latest attempts", focused);
-    if (!v->count) { dashboard_text(c, inner.x, r.y + 1, inner.width, KT_WARNING, "Selected run no longer matches"); return; }
+    if (!v->count) { canvas_text(c, inner.x, r.y + 1, inner.width, KT_WARNING, "Selected run no longer matches"); return; }
     run_index = v->visible[v->selected]; run = &v->model->runs[run_index];
-    dashboard_text(c, inner.x, r.y + 1, inner.width, KT_STRONG, "%s / %s", run->name, run->state);
-    dashboard_text(c, inner.x, r.y + 2, inner.width, KT_MUTED, "%s", run->id);
+    canvas_text(c, inner.x, r.y + 1, inner.width, KT_STRONG, "%s / %s", run->name, run->state);
+    canvas_text(c, inner.x, r.y + 2, inner.width, KT_MUTED, "%s", run->id);
     run_totals(c, inner, r.y + 3, v->model, run_index);
     if (r.height < 7) return;
-    dashboard_text(c, inner.x, r.y + 4, inner.width, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0),
+    canvas_text(c, inner.x, r.y + 4, inner.width, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0),
                    inner.width < 100 ? "STEP             STATE      TRY  SECS  AGENT TOKENS IN/CACHED/OUT"
                                      : "STEP                 STATE           TRIES  SECONDS  AGENT / TOKENS");
     run_steps(v, c, (struct kt_rect){inner.x, r.y + 5, inner.width, r.height - 5}, run_index);

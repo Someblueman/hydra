@@ -51,8 +51,7 @@ static void bounded_selection(size_t *index, size_t count, int direction) {
 static bool move_workspace_selection(struct app *app, int direction) {
     switch (app->view) {
         case 8: statistics_move(app, direction); return true;
-        case 7: native_workspace_move(app, direction); return true;
-        case 5: workflow_move(app, direction); return true;
+        case 7: outline_move(app, direction, false); work_selection_changed(app); return true;
         case 6: bounded_selection(&app->host_selected, hosts_row_count(app), direction); return true;
         default: return false;
     }
@@ -61,7 +60,6 @@ static bool move_workspace_selection(struct app *app, int direction) {
 void move_selection(struct app *app, int direction) {
     size_t index;
     if (move_workspace_selection(app, direction)) return;
-    if (app->view <= 4) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
     retarget_selection(app);
     if (selected_head(app) == NULL) return;
     if (direction > 0) {

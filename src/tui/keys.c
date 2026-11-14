@@ -13,7 +13,7 @@
 
 #define G_AGENT "While typing to an agent"
 #define G_HEADS "Heads"
-#define G_WORKSPACE "Workspace"
+#define G_WORK "Work"
 #define G_PLAN "Planning"
 #define G_RUNS "Runs"
 #define G_ALL "Everywhere"
@@ -24,8 +24,6 @@
 #define ROW(id, key_scope, key_name, text, key_group, rank) \
     [id] = {.name = key_name, .label = text, .action = id, .scope = key_scope, .group = key_group, .priority = rank}
 #define T KEY_SCOPE_TERMINAL
-#define HEADVIEWS (KEY_SCOPE_HEADS | KEY_SCOPE_DETAIL | KEY_SCOPE_OVERVIEW)
-#define WORKVIEWS (HEADVIEWS | KEY_SCOPE_WORKSPACE)
 static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_TERMINAL_LEAVE, T, "terminal.leave", "leave input", G_AGENT, -1),
     ROW(KEY_TERMINAL_CLOSE, T, "terminal.close", "close view", G_AGENT, -1),
@@ -34,13 +32,17 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_TERMINAL_HISTORY, T, "terminal.history", "scroll", G_AGENT, -1),
     ROW(KEY_TERMINAL_LIVE, T, "terminal.live", "live output", G_AGENT, -1),
     ROW(KEY_APP_QUIT, T, "app.quit", "quit", G_AGENT, -1),
-    ROW(KEY_VIEW_STATISTICS, T, "view.statistics", "statistics", G_AGENT, -1),
-    ROW(KEY_LAYOUT_CONVERSATION, T, "workspace.layout.conversation", "conversation", G_AGENT, -1),
-    ROW(KEY_LAYOUT_PLAN, T, "workspace.layout.plan", "plan", G_AGENT, -1),
-    ROW(KEY_LAYOUT_MONITOR, T, "workspace.layout.monitor", "monitor", G_AGENT, -1),
+    ROW(KEY_VIEW_STATISTICS, T, "view.statistics", "Stats", G_AGENT, -1),
+    ROW(KEY_LAYOUT_CONVERSATION, T, "workspace.layout.conversation", "Details page", G_AGENT, -1),
+    ROW(KEY_LAYOUT_PLAN, T, "workspace.layout.plan", "Plan page", G_AGENT, -1),
+    ROW(KEY_LAYOUT_MONITOR, T, "workspace.layout.monitor", "Run page", G_AGENT, -1),
     ROW(KEY_WORKSPACE_ZOOM, T, "workspace.zoom", "zoom", G_AGENT, -1),
     ROW(KEY_WORKSPACE_SPLIT, T, "workspace.split", "two agents", G_AGENT, -1),
     ROW(KEY_TERMINAL_LITERAL, T, "terminal.literal", "send that key to the agent", G_AGENT, -1),
+    ROW(KEY_SCREEN_WORK, T, "screen.work", "Work", G_AGENT, -1),
+    ROW(KEY_SCREEN_INBOX, T, "screen.inbox", "Inbox", G_AGENT, -1),
+    ROW(KEY_SCREEN_HOSTS, T, "screen.hosts", "Hosts", G_AGENT, -1),
+    ROW(KEY_SCREEN_STATS, T, "screen.stats", "Stats", G_AGENT, -1),
 
     ROW(KEY_RESULT_UP, KEY_SCOPE_RESULT, "output.up", "scroll", "Output", 5),
     ROW(KEY_RESULT_DOWN, KEY_SCOPE_RESULT, "output.down", "scroll", "Output", 5),
@@ -119,76 +121,81 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_HOSTS_RETRY, KEY_SCOPE_HOSTS, "hosts.retry", "observe again", "Hosts", 5),
     ROW(KEY_HOSTS_ONBOARDING, KEY_SCOPE_HOSTS, "hosts.onboarding", "onboarding", "Hosts", 5),
 
-    ROW(KEY_FLOW_UP, KEY_SCOPE_WORKFLOWS, "workflows.up", "step", "Workflows", 9),
-    ROW(KEY_FLOW_DOWN, KEY_SCOPE_WORKFLOWS, "workflows.down", "step", "Workflows", 9),
-    ROW(KEY_FLOW_PREVIOUS_RUN, KEY_SCOPE_WORKFLOWS, "workflows.previous-run", "run", "Workflows", 8),
-    ROW(KEY_FLOW_NEXT_RUN, KEY_SCOPE_WORKFLOWS, "workflows.next-run", "run", "Workflows", 8),
-    ROW(KEY_FLOW_LEFT, KEY_SCOPE_WORKFLOWS, "workflows.pan-left", "pan", "Workflows", 6),
-    ROW(KEY_FLOW_RIGHT, KEY_SCOPE_WORKFLOWS, "workflows.pan-right", "pan", "Workflows", 6),
-    ROW(KEY_FLOW_PAN_UP, KEY_SCOPE_WORKFLOWS, "workflows.pan-up", "pan up/down", "Workflows", 5),
-    ROW(KEY_FLOW_PAN_DOWN, KEY_SCOPE_WORKFLOWS, "workflows.pan-down", "pan up/down", "Workflows", 5),
-    ROW(KEY_FLOW_FOLLOW, KEY_SCOPE_WORKFLOWS, "workflows.follow", "recentre", "Workflows", 4),
-
-    ROW(KEY_WS_UP, KEY_SCOPE_WORKSPACE, "workspace.up", "select", G_WORKSPACE, 9),
-    ROW(KEY_WS_DOWN, KEY_SCOPE_WORKSPACE, "workspace.down", "select", G_WORKSPACE, 9),
-    ROW(KEY_WS_COLLAPSE, KEY_SCOPE_WORKSPACE, "workspace.collapse", "collapse/expand", G_WORKSPACE, -1),
-    ROW(KEY_WS_EXPAND, KEY_SCOPE_WORKSPACE, "workspace.expand", "collapse/expand", G_WORKSPACE, -1),
-    ROW(KEY_WS_OPEN, KEY_SCOPE_WORKSPACE, "workspace.open", "open", G_WORKSPACE, 9),
-    ROW(KEY_WS_PANE_NEXT, KEY_SCOPE_WORKSPACE, "workspace.pane-next", "pane", G_WORKSPACE, 10),
-    ROW(KEY_WS_PANE_PREVIOUS, KEY_SCOPE_WORKSPACE, "workspace.pane-previous", "pane", G_WORKSPACE, 10),
-    ROW(KEY_WS_TALK, KEY_SCOPE_WORKSPACE, "workspace.talk", "talk to agent", G_WORKSPACE, 9),
-    ROW(KEY_WS_ATTACH, KEY_SCOPE_WORKSPACE, "workspace.attach", "attach", G_WORKSPACE, 9),
-    ROW(KEY_WS_CONVERSATION, KEY_SCOPE_WORKSPACE, "workspace.conversation", "conversation", G_WORKSPACE, 3),
-    ROW(KEY_WS_PLAN, KEY_SCOPE_WORKSPACE, "workspace.plan", "plan review", G_WORKSPACE, 5),
-    ROW(KEY_WS_MONITOR, KEY_SCOPE_WORKSPACE, "workspace.monitor", "monitor", G_WORKSPACE, 4),
-    ROW(KEY_WS_ZOOM, KEY_SCOPE_WORKSPACE, "workspace.zoom-pane", "zoom", G_WORKSPACE, 2),
-    ROW(KEY_WS_SPLIT, KEY_SCOPE_WORKSPACE, "workspace.two-agents", "two agents", G_WORKSPACE, -1),
-    ROW(KEY_PLAN_PROPOSAL, KEY_SCOPE_WORKSPACE, "plan.proposal", "review proposal", G_PLAN, 7),
-    ROW(KEY_PLAN_VALIDATE, KEY_SCOPE_WORKSPACE, "plan.validate", "validate", G_PLAN, 7),
-    ROW(KEY_PLAN_RETURN, KEY_SCOPE_WORKSPACE, "plan.return", "request changes", G_PLAN, 7),
-    ROW(KEY_PLAN_EXECUTE, KEY_SCOPE_WORKSPACE, "plan.execute", "execute", G_PLAN, 8),
-    ROW(KEY_MONITOR_PREVIOUS_RUN, KEY_SCOPE_MONITOR, "monitor.previous-run", "run", G_RUNS, 6),
-    ROW(KEY_MONITOR_NEXT_RUN, KEY_SCOPE_MONITOR, "monitor.next-run", "run", G_RUNS, 6),
-    ROW(KEY_RUN_APPROVE, KEY_SCOPE_MONITOR, "run.approve", "approve", G_RUNS, 8),
-    ROW(KEY_RUN_REJECT, KEY_SCOPE_MONITOR, "run.reject", "reject", G_RUNS, 8),
-    ROW(KEY_RUN_RESUME, KEY_SCOPE_MONITOR, "run.resume", "resume", G_RUNS, 7),
-    ROW(KEY_RUN_CANCEL, KEY_SCOPE_MONITOR, "run.cancel", "cancel", G_RUNS, 7),
-
-    ROW(KEY_HEADS_UP, HEADVIEWS, "heads.up", "select", G_HEADS, 9),
-    ROW(KEY_HEADS_DOWN, HEADVIEWS, "heads.down", "select", G_HEADS, 9),
-    ROW(KEY_HEADS_COLLAPSE, KEY_SCOPE_HEADS | KEY_SCOPE_OVERVIEW, "heads.collapse", "collapse/expand", G_HEADS, 8),
-    ROW(KEY_HEADS_EXPAND, KEY_SCOPE_HEADS | KEY_SCOPE_OVERVIEW, "heads.expand", "collapse/expand", G_HEADS, 8),
-    ROW(KEY_HEADS_OPEN, HEADVIEWS, "heads.open", "details", G_HEADS, 8),
-    ROW(KEY_HEADS_TALK, HEADVIEWS, "heads.talk", "talk to agent", G_HEADS, 8),
-    ROW(KEY_HEADS_ATTACH, HEADVIEWS, "heads.attach", "attach", G_HEADS, 8),
-    ROW(KEY_HEADS_INTERRUPT, WORKVIEWS, "heads.interrupt", "interrupt", G_HEADS, 7),
-    ROW(KEY_HEADS_COORDINATION, KEY_SCOPE_DETAIL, "heads.coordination", "coordination", G_HEADS, 4),
-    ROW(KEY_HEADS_PAGE_UP, KEY_SCOPE_DETAIL, "heads.page-up", "page output", G_HEADS, -1),
-    ROW(KEY_HEADS_PAGE_DOWN, KEY_SCOPE_DETAIL, "heads.page-down", "page output", G_HEADS, -1),
-    ROW(KEY_TASK_NEW, WORKVIEWS, "task.new", "new task", G_HEADS, 7),
-    ROW(KEY_HEAD_REMOVE, WORKVIEWS, "head.remove", "remove", G_HEADS, 6),
-    ROW(KEY_HEAD_MARK, WORKVIEWS, "head.mark", "mark", G_HEADS, -1),
-    ROW(KEY_HEAD_MARK_ALL, HEADVIEWS, "head.mark-all", "mark all", G_HEADS, -1),
-    ROW(KEY_HEAD_GROUP, WORKVIEWS, "head.group", "group marked", G_HEADS, 5),
-    ROW(KEY_HEAD_OUTPUT, WORKVIEWS, "head.output", "output", G_HEADS, 5),
-    ROW(KEY_HEAD_TECHNICAL, WORKVIEWS, "head.technical", "technical", G_HEADS, 3),
-    ROW(KEY_REMOTE_APPROVE, HEADVIEWS, "remote.approve", "approve task", G_HEADS, 8),
-    ROW(KEY_REMOTE_REJECT, HEADVIEWS, "remote.reject", "reject task", G_HEADS, 8),
-    ROW(KEY_REMOTE_RESUME, HEADVIEWS, "remote.resume", "resume task", G_HEADS, 7),
-    ROW(KEY_REMOTE_CANCEL, HEADVIEWS, "remote.cancel", "cancel task", G_HEADS, 7),
-    ROW(KEY_HEADS_LOCATION, KEY_SCOPE_HEADS | KEY_SCOPE_OVERVIEW, "heads.location", "location", G_HEADS, 5),
-    ROW(KEY_HEADS_RETRY, HEADVIEWS, "heads.retry", "observe host again", G_HEADS, 4),
-    ROW(KEY_HEADS_SEARCH, WORKVIEWS, "heads.search", "search", G_HEADS, 4),
+    ROW(KEY_HEADS_UP, KEY_SCOPE_WORK_LIST, "heads.up", "select", G_HEADS, 9),
+    ROW(KEY_HEADS_DOWN, KEY_SCOPE_WORK_LIST, "heads.down", "select", G_HEADS, 9),
+    ROW(KEY_HEADS_OPEN, KEY_SCOPE_WORK_LIST, "heads.open", "talk", G_HEADS, 9),
+    ROW(KEY_HEADS_TALK, KEY_SCOPE_WORK, "heads.talk", "talk", G_HEADS, 9),
+    ROW(KEY_HEADS_COLLAPSE, KEY_SCOPE_WORK_LIST, "heads.collapse", "collapse/expand", G_HEADS, 6),
+    ROW(KEY_HEADS_EXPAND, KEY_SCOPE_WORK_LIST, "heads.expand", "collapse/expand", G_HEADS, 6),
+    ROW(KEY_WS_UP, KEY_SCOPE_WORK_VIEWPORT, "workspace.up", "scroll", G_WORK, 6),
+    ROW(KEY_WS_DOWN, KEY_SCOPE_WORK_VIEWPORT, "workspace.down", "scroll", G_WORK, 6),
+    ROW(KEY_HEADS_PAGE_UP, KEY_SCOPE_WORK_VIEWPORT, "heads.page-up", "page up/down", G_WORK, -1),
+    ROW(KEY_HEADS_PAGE_DOWN, KEY_SCOPE_WORK_VIEWPORT, "heads.page-down", "page up/down", G_WORK, -1),
+    ROW(KEY_WS_OPEN, KEY_SCOPE_WORK_CONVERSATION, "workspace.open", "talk", G_WORK, 9),
+    ROW(KEY_FLOW_UP, KEY_SCOPE_WORK_RUN, "workflows.up", "step", G_RUNS, 9),
+    ROW(KEY_FLOW_DOWN, KEY_SCOPE_WORK_RUN, "workflows.down", "step", G_RUNS, 9),
+    ROW(KEY_FLOW_LEFT, KEY_SCOPE_WORK_RUN, "workflows.pan-left", "pan", G_RUNS, 4),
+    ROW(KEY_FLOW_RIGHT, KEY_SCOPE_WORK_RUN, "workflows.pan-right", "pan", G_RUNS, 4),
+    ROW(KEY_FLOW_PAN_UP, KEY_SCOPE_WORK_RUN, "workflows.pan-up", "pan up/down", G_RUNS, -1),
+    ROW(KEY_FLOW_PAN_DOWN, KEY_SCOPE_WORK_RUN, "workflows.pan-down", "pan up/down", G_RUNS, -1),
+    ROW(KEY_FLOW_FOLLOW, KEY_SCOPE_WORK_RUN, "workflows.follow", "recentre", G_RUNS, 3),
+    ROW(KEY_FLOW_PAGE_UP, KEY_SCOPE_WORK_RUN, "workflows.page-up", "evidence page", G_RUNS, -1),
+    ROW(KEY_FLOW_PAGE_DOWN, KEY_SCOPE_WORK_RUN, "workflows.page-down", "evidence page", G_RUNS, -1),
+    ROW(KEY_PLAN_PROPOSAL, KEY_SCOPE_WORK_PLAN, "plan.proposal", "review proposal", G_PLAN, 7),
+    ROW(KEY_PLAN_VALIDATE, KEY_SCOPE_WORK_PLAN, "plan.validate", "validate", G_PLAN, 6),
+    ROW(KEY_PLAN_RETURN, KEY_SCOPE_WORK_PLAN, "plan.return", "request changes", G_PLAN, 8),
+    ROW(KEY_PLAN_EXECUTE, KEY_SCOPE_WORK_PLAN, "plan.execute", "approve", G_PLAN, 9),
+    ROW(KEY_PLAN_LAND, KEY_SCOPE_WORK_PLAN, "plan.land", "land worker", G_PLAN, 8),
+    ROW(KEY_PLAN_REVIEW, KEY_SCOPE_WORK_PLAN, "plan.review", "result review", G_PLAN, 5),
+    ROW(KEY_PLAN_STATUS, KEY_SCOPE_WORK_PLAN, "plan.status", "run status", G_PLAN, 4),
+    ROW(KEY_RUN_APPROVE, KEY_SCOPE_WORK, "run.approve", "approve", G_RUNS, 8),
+    ROW(KEY_RUN_REJECT, KEY_SCOPE_WORK, "run.reject", "reject", G_RUNS, 8),
+    ROW(KEY_RUN_RESUME, KEY_SCOPE_WORK, "run.resume", "resume", G_RUNS, 7),
+    ROW(KEY_RUN_CANCEL, KEY_SCOPE_WORK, "run.cancel", "cancel", G_RUNS, 7),
+    ROW(KEY_HEAD_REMOVE, KEY_SCOPE_WORK_LIST, "head.remove", "remove", G_HEADS, 8),
+    ROW(KEY_HEAD_MARK, KEY_SCOPE_WORK_LIST, "head.mark", "mark", G_HEADS, -1),
+    ROW(KEY_HEAD_MARK_ALL, KEY_SCOPE_WORK_LIST, "head.mark-all", "mark all", G_HEADS, -1),
+    ROW(KEY_HEAD_GROUP, KEY_SCOPE_WORK_LIST, "head.group", "group marked", G_HEADS, 5),
+    ROW(KEY_TASK_NEW, KEY_SCOPE_WORK, "task.new", "new task", G_WORK, 7),
+    ROW(KEY_HEADS_SEARCH, KEY_SCOPE_WORK_LIST, "heads.search", "filter", G_HEADS, 6),
+    ROW(KEY_HEADS_LOCATION, KEY_SCOPE_WORK_LIST, "heads.location", "location", G_HEADS, 4),
+    ROW(KEY_HEADS_RETRY, KEY_SCOPE_WORK_LIST, "heads.retry", "observe host again", G_HEADS, 3),
+    ROW(KEY_HEAD_TECHNICAL, KEY_SCOPE_WORK, "head.technical", "technical", G_WORK, -1),
+    ROW(KEY_WS_PANE_NEXT, KEY_SCOPE_WORK, "workspace.pane-next", "pane", G_WORK, 5),
+    ROW(KEY_WS_PANE_PREVIOUS, KEY_SCOPE_WORK, "workspace.pane-previous", "pane", G_WORK, 5),
+    ROW(KEY_WORK_PAGE_PREVIOUS, KEY_SCOPE_WORK, "work.page-previous", "page", G_WORK, 4),
+    ROW(KEY_WORK_PAGE_NEXT, KEY_SCOPE_WORK, "work.page-next", "page", G_WORK, 4),
+    ROW(KEY_WS_ZOOM, KEY_SCOPE_WORK, "workspace.zoom-pane", "zoom", G_WORK, -1),
+    ROW(KEY_WS_SPLIT, KEY_SCOPE_WORK, "workspace.two-agents", "two agents", G_WORK, -1),
+    ROW(KEY_WS_COLLAPSE, 0, "workspace.collapse", "collapse/expand", G_WORK, -1),
+    ROW(KEY_WS_EXPAND, 0, "workspace.expand", "collapse/expand", G_WORK, -1),
+    ROW(KEY_WS_TALK, 0, "workspace.talk", "talk to agent", G_WORK, -1),
+    ROW(KEY_WS_ATTACH, 0, "workspace.attach", "attach", G_WORK, -1),
+    ROW(KEY_WS_CONVERSATION, 0, "workspace.conversation", "conversation", G_WORK, -1),
+    ROW(KEY_WS_PLAN, 0, "workspace.plan", "plan review", G_WORK, -1),
+    ROW(KEY_WS_MONITOR, 0, "workspace.monitor", "monitor", G_WORK, -1),
+    ROW(KEY_MONITOR_PREVIOUS_RUN, 0, "monitor.previous-run", "run", G_RUNS, -1),
+    ROW(KEY_MONITOR_NEXT_RUN, 0, "monitor.next-run", "run", G_RUNS, -1),
+    ROW(KEY_FLOW_PREVIOUS_RUN, 0, "workflows.previous-run", "run", G_RUNS, -1),
+    ROW(KEY_FLOW_NEXT_RUN, 0, "workflows.next-run", "run", G_RUNS, -1),
+    ROW(KEY_HEADS_ATTACH, 0, "heads.attach", "attach", G_HEADS, -1),
+    ROW(KEY_HEADS_INTERRUPT, 0, "heads.interrupt", "interrupt", G_HEADS, -1),
+    ROW(KEY_HEADS_COORDINATION, 0, "heads.coordination", "coordination", G_HEADS, -1),
+    ROW(KEY_HEAD_OUTPUT, 0, "head.output", "output", G_HEADS, -1),
+    ROW(KEY_REMOTE_APPROVE, 0, "remote.approve", "approve task", G_HEADS, -1),
+    ROW(KEY_REMOTE_REJECT, 0, "remote.reject", "reject task", G_HEADS, -1),
+    ROW(KEY_REMOTE_RESUME, 0, "remote.resume", "resume task", G_HEADS, -1),
+    ROW(KEY_REMOTE_CANCEL, 0, "remote.cancel", "cancel task", G_HEADS, -1),
 
     ROW(KEY_VIEWS_NEXT, KEY_SCOPE_VIEWS, "views.next", "views", G_ALL, 2),
     ROW(KEY_VIEWS_PREVIOUS, KEY_SCOPE_VIEWS, "views.previous", "views", G_ALL, 2),
     ROW(KEY_VIEWS_LEFT, KEY_SCOPE_VIEW_ARROWS, "views.left", "previous/next view", G_ALL, -1),
     ROW(KEY_VIEWS_RIGHT, KEY_SCOPE_VIEW_ARROWS, "views.right", "previous/next view", G_ALL, -1),
 
-    ROW(KEY_VIEW_1, KEY_SCOPE_GLOBAL, "view.1", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_2, KEY_SCOPE_GLOBAL, "view.2", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_3, KEY_SCOPE_GLOBAL, "view.3", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_4, KEY_SCOPE_GLOBAL, "view.4", "view by number", G_ALL, -1),
+    ROW(KEY_VIEW_1, KEY_SCOPE_GLOBAL, "view.1", "Work", G_ALL, -1),
+    ROW(KEY_VIEW_2, KEY_SCOPE_GLOBAL, "view.2", "Inbox", G_ALL, -1),
+    ROW(KEY_VIEW_3, KEY_SCOPE_GLOBAL, "view.3", "Hosts", G_ALL, -1),
+    ROW(KEY_VIEW_4, KEY_SCOPE_GLOBAL, "view.4", "Stats", G_ALL, -1),
     ROW(KEY_VIEW_5, KEY_SCOPE_GLOBAL, "view.5", "view by number", G_ALL, -1),
     ROW(KEY_VIEW_6, KEY_SCOPE_GLOBAL, "view.6", "view by number", G_ALL, -1),
     ROW(KEY_VIEW_7, KEY_SCOPE_GLOBAL, "view.7", "view by number", G_ALL, -1),
@@ -197,12 +204,12 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_VIEW_CYCLE, KEY_SCOPE_JUMPS, "view.cycle", "next view", G_ALL, -1),
     ROW(KEY_VIEW_WORKSPACE, KEY_SCOPE_JUMPS, "view.workspace", "workspace", G_ALL, -1),
     ROW(KEY_VIEW_OVERVIEW, KEY_SCOPE_JUMPS, "view.overview", "overview", G_ALL, -1),
-    ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_FLOW_JUMP, "view.workflows", "workflows", G_ALL, -1),
+    ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_JUMPS, "view.workflows", "workflows", G_ALL, -1),
     ROW(KEY_VIEW_HOSTS, KEY_SCOPE_JUMPS, "view.hosts", "hosts", G_ALL, -1),
     ROW(KEY_VIEW_ATTENTION, KEY_SCOPE_JUMPS, "view.attention", "inbox", G_ALL, -1),
     ROW(KEY_VIEW_STATS, KEY_SCOPE_JUMPS, "view.stats", "statistics", G_ALL, -1),
     ROW(KEY_THEME, KEY_SCOPE_JUMPS, "app.theme", "theme", G_ALL, -1),
-    ROW(KEY_PALETTE, KEY_SCOPE_GLOBAL, "app.actions", "more actions", G_ALL, 3),
+    ROW(KEY_PALETTE, KEY_SCOPE_GLOBAL, "app.actions", "commands", G_ALL, 3),
     ROW(KEY_REFRESH, KEY_SCOPE_GLOBAL, "app.refresh", "refresh", G_ALL, -1),
     ROW(KEY_BACK, KEY_SCOPE_GLOBAL, "app.back", "back", G_ALL, 1),
     ROW(KEY_HELP, KEY_SCOPE_GLOBAL, "app.help", "help", G_ALL, 100),
@@ -226,7 +233,24 @@ static const unsigned char key_modes[KEY_ACTIONS] = {
     /* Stats pages are [ ], its filter is typed after /, ctrl+r reads again. */
     [KEY_STATS_PAGE] = MODE_RETIRED, [KEY_STATS_WORKFLOW_PREVIOUS] = MODE_RETIRED, [KEY_STATS_WORKFLOW_NEXT] = MODE_RETIRED,
     [KEY_STATS_FIND] = MODE_RETIRED, [KEY_STATS_REFRESH] = MODE_RETIRED,
-    [KEY_WS_ATTACH] = MODE_RETIRED, [KEY_HEADS_ATTACH] = MODE_RETIRED, [KEY_HEADS_INTERRUPT] = MODE_RETIRED,
+    /* Work: pages replaced the layouts and the run keys of Workflows and the
+     * monitor; a and x took over attach and interrupt; run.* act on a
+     * selected remote task too; the conversation always shows the output. */
+    [KEY_WS_COLLAPSE] = MODE_RETIRED, [KEY_WS_EXPAND] = MODE_RETIRED, [KEY_WS_TALK] = MODE_RETIRED,
+    [KEY_WS_ATTACH] = MODE_RETIRED, [KEY_WS_CONVERSATION] = MODE_RETIRED, [KEY_WS_PLAN] = MODE_RETIRED,
+    [KEY_WS_MONITOR] = MODE_RETIRED, [KEY_MONITOR_PREVIOUS_RUN] = MODE_RETIRED, [KEY_MONITOR_NEXT_RUN] = MODE_RETIRED,
+    [KEY_FLOW_PREVIOUS_RUN] = MODE_RETIRED, [KEY_FLOW_NEXT_RUN] = MODE_RETIRED,
+    [KEY_HEADS_ATTACH] = MODE_RETIRED, [KEY_HEADS_INTERRUPT] = MODE_RETIRED, [KEY_HEADS_COORDINATION] = MODE_RETIRED,
+    [KEY_HEAD_OUTPUT] = MODE_RETIRED, [KEY_REMOTE_APPROVE] = MODE_RETIRED, [KEY_REMOTE_REJECT] = MODE_RETIRED,
+    [KEY_REMOTE_RESUME] = MODE_RETIRED, [KEY_REMOTE_CANCEL] = MODE_RETIRED,
+    [KEY_PLAN_PROPOSAL] = MODE_LOCAL, [KEY_PLAN_VALIDATE] = MODE_LOCAL, [KEY_PLAN_RETURN] = MODE_LOCAL,
+    [KEY_PLAN_EXECUTE] = MODE_LOCAL, [KEY_PLAN_LAND] = MODE_LOCAL, [KEY_PLAN_REVIEW] = MODE_LOCAL,
+    [KEY_PLAN_STATUS] = MODE_LOCAL,
+    /* Four screens: 1 to 4. The next-view, Overview and Workflows letters
+     * are gone with those views. */
+    [KEY_VIEW_5] = MODE_RETIRED, [KEY_VIEW_6] = MODE_RETIRED, [KEY_VIEW_7] = MODE_RETIRED,
+    [KEY_VIEW_8] = MODE_RETIRED, [KEY_VIEW_9] = MODE_RETIRED, [KEY_VIEW_CYCLE] = MODE_RETIRED,
+    [KEY_VIEW_OVERVIEW] = MODE_RETIRED, [KEY_VIEW_WORKFLOWS] = MODE_RETIRED,
 };
 
 /* Ctrl-] alone leaves agent input; every other agent-layer command follows
@@ -247,6 +271,7 @@ static const char default_keys[] =
     "workspace.zoom = ctrl+\\ z\n"
     "workspace.split = ctrl+\\ S\n"
     "terminal.literal = ctrl+\\ ctrl+\\, ctrl+\\ ctrl+]\n"
+    "screen.work = ctrl+\\ 1\nscreen.inbox = ctrl+\\ 2\nscreen.hosts = ctrl+\\ 3\nscreen.stats = ctrl+\\ 4\n"
     "output.up = up, k\noutput.down = down, j\noutput.page-up = pgup\noutput.page-down = pgdn\n"
     "output.close = enter, esc\noutput.quit = q\n"
     "help.up = up, k\nhelp.down = down, j\nhelp.page-up = pgup, b\nhelp.page-down = pgdn, space\nhelp.close = ?, esc\n"
@@ -267,23 +292,25 @@ static const char default_keys[] =
     "statistics.find = /\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
     "hosts.retry = r\nhosts.onboarding = O\n"
-    "workflows.up = up, k\nworkflows.down = down, j\nworkflows.previous-run = [\nworkflows.next-run = ]\n"
-    "workflows.pan-left = left, h\nworkflows.pan-right = right, l\nworkflows.pan-up = K\nworkflows.pan-down = J\n"
-    "workflows.follow = enter\n"
-    "workspace.up = up, k\nworkspace.down = down, j\nworkspace.collapse = left, h\nworkspace.expand = right, l\n"
-    "workspace.open = enter\nworkspace.pane-next = tab\nworkspace.pane-previous = shift+tab\n"
-    "workspace.talk = a\nworkspace.attach = a\nworkspace.conversation = A\nworkspace.plan = B\n"
-    "workspace.monitor = C\nworkspace.zoom-pane = z\nworkspace.two-agents = S\n"
-    "plan.proposal = P\nplan.validate = V\nplan.return = F\nplan.execute = E\n"
-    "monitor.previous-run = [\nmonitor.next-run = ]\n"
+    "heads.up = up, k\nheads.down = down, j\nheads.open = enter\nheads.talk = a\n"
+    "heads.collapse = left, h\nheads.expand = right, l\n"
+    "workspace.up = up, k\nworkspace.down = down, j\nheads.page-up = pgup\nheads.page-down = pgdn, space\n"
+    "workspace.open = enter\n"
+    "workflows.up = up, k\nworkflows.down = down, j\nworkflows.pan-left = left, h\nworkflows.pan-right = right, l\n"
+    "workflows.pan-up = K\nworkflows.pan-down = J\nworkflows.follow = enter\n"
+    "workflows.page-up = pgup\nworkflows.page-down = pgdn\n"
+    "plan.proposal = P\nplan.validate = V\nplan.return = F\nplan.execute = E\nplan.land = L\nplan.review = r\n"
+    "plan.status = s\n"
     "run.approve = Y\nrun.reject = N\nrun.resume = R\nrun.cancel = X\n"
+    "head.remove = x\nhead.mark = space\nhead.mark-all = A\nhead.group = G\ntask.new = n\nheads.search = /\n"
+    "heads.location = L\nheads.retry = r\nhead.technical = d\n"
+    "workspace.pane-next = tab\nworkspace.pane-previous = shift+tab\nwork.page-previous = [\nwork.page-next = ]\n"
+    "workspace.zoom-pane = z\nworkspace.two-agents = S\n"
+    "workspace.collapse = left, h\nworkspace.expand = right, l\nworkspace.talk = a\nworkspace.attach = a\n"
+    "workspace.conversation = A\nworkspace.plan = B\nworkspace.monitor = C\n"
+    "monitor.previous-run = [\nmonitor.next-run = ]\nworkflows.previous-run = [\nworkflows.next-run = ]\n"
+    "heads.attach = a\nheads.interrupt = c\nheads.coordination = c\nhead.output = p\n"
     "remote.approve = Y\nremote.reject = N\nremote.resume = R\nremote.cancel = X\n"
-    "heads.location = L\nheads.retry = r\n"
-    "heads.up = up, k\nheads.down = down, j\nheads.collapse = h\nheads.expand = l\n"
-    "heads.open = enter\nheads.talk = a\nheads.attach = a\nheads.interrupt = c\nheads.coordination = c\n"
-    "heads.page-up = pgup\nheads.page-down = pgdn\n"
-    "task.new = n\nhead.remove = x\nhead.mark = space\nhead.mark-all = A\nhead.group = G\nhead.output = p\n"
-    "head.technical = d\nheads.search = /\n"
     "views.next = tab\nviews.previous = shift+tab\nviews.left = left\nviews.right = right\n"
     "view.1 = 1\nview.2 = 2\nview.3 = 3\nview.4 = 4\nview.5 = 5\nview.6 = 6\nview.7 = 7\nview.8 = 8\nview.9 = 9\n"
     "view.cycle = v\nview.workspace = W\nview.overview = o\nview.workflows = w\nview.hosts = H\n"

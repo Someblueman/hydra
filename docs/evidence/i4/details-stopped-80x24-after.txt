@@ -1,25 +1,25 @@
 FRAME 1 80x24
- ◆ hydra  1 Work  2 Details  3 Overview 4 Inbox · 5 Flows 6 Stats …    DETAILS 
-     Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Details: notes-cleanup ────────────────────────────────────────────────────── 
-  notes-cleanup                                                                
-  The terminal is gone; the agent was last seen working. The worktree's files  
-  are kept: a restarts the terminal. Check them before removing it.            
-  Agent       claude                                                           
-  Session     terminal gone                                                    
-  Reported    nothing yet; declared when done: done or blocked                 
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             2 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details ─────────────────────────────  
+  ● add-kill              The terminal is gone; the agent was last seen        
+    ▸ ✓ plan run kill-d…  working. The worktree's files are kept: a restarts   
+ ▌▲ notes-cleanup         the terminal. Check them before removing it.         
+                          Agent       claude                                   
+                          Session     terminal gone                            
+                          Reported    nothing yet; declared when done: done    
+                                      or blocked                               
+                          Where       this machine                             
                                                                                
-  CHANGES                                                                      
-  Changed     2 files in the worktree, not yet committed                       
-  Full diff   everything since the branch base: press : and choose diff        
+                          CHANGES                                              
+                          Changed     2 files in the worktree, not yet         
+                                      committed                                
+                          Full diff   : diff (everything since the branch      
+                                      base)                                    
                                                                                
-  CHECKS                                                                       
-  Approval requests  none                                                      
-  Messages           0 exchanged with other heads                              
-                                                                               
-  NEXT                                                                         
-  a  restart its terminal (files are kept)   p  show recent terminal output    
-  c  coordination  x  remove this head  :  more actions  d  technical details  
-                                                                               
-  ● live                                                                       
- ↑/↓ select • a talk to agent • n new task • x remove • ? help • q quit        
+                          CHECKS                                               
+                          Approvals   none                                     
+                          Messages    0 exchanged with other heads             
+                          Coordinate  0 claims · 0 scopes · 0 queued · 0       
+  2 heads · 1 needs you               resources                                
+  ● live   notes-cleanup · terminal gone                                       
+ ↑/↓ select • enter/a talk • x remove • n new task • ? help • q quit           

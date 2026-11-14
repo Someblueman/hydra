@@ -66,6 +66,16 @@ struct native_terminal *native_terminal_for_head(struct app *app, const struct h
     return NULL;
 }
 
+struct native_terminal *native_terminal_any_for_head(struct app *app, const struct head *h) {
+    size_t i;
+    if (!app->terminals || !h) return NULL;
+    for (i = 0; i < NATIVE_TERMINALS; i++) {
+        struct native_terminal *t = &app->terminals->slots[i];
+        if (t->screen && terminal_is_head(app, h, t)) return t;
+    }
+    return NULL;
+}
+
 static void outbox_clear(struct native_terminal *t) {
     size_t i;
     for (i=0;i<t->outbox_count;i++) free(t->outbox[i]);
@@ -258,7 +268,7 @@ bool native_terminal_attach_head(struct app *app, const struct head *h) {
     size_t available;
     char refusal[TEXT];
     if (h && head_headless(h)) {
-        copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; p shows its step output in Details"); return false;
+        copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; its step output is in the conversation"); return false;
     }
     if (head_terminal_gone(app, h)) {
         copy_text(app->notice,sizeof(app->notice),"The terminal is gone; open the head from Work (a) to restart it"); return false;

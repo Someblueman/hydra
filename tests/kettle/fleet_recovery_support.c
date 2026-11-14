@@ -142,17 +142,26 @@ void open_observer(struct kt_session *s) {
     const char *args[] = {tui, "--fleet", "--view", "overview", NULL};
     kt_open_terminal(s, args, 140, 40, source);
 }
+/* Work's list shows a task ID cut to its column: its first 16 characters. */
+void until_task_listed(struct kt_session *s, const char *task) {
+    char prefix[32];
+    kt_format(prefix, sizeof(prefix), "%.16s", task);
+    kt_until(s, prefix, 15);
+}
+/* The selected task names the conversation: its ID (cut to the rule) is
+ * its title. */
 void select_task(struct kt_session *s, const char *task) {
     char selected[256];
     int i;
-    kt_until(s, task, 15);
-    kt_format(selected, sizeof(selected), "> %s", task);
+    until_task_listed(s, task);
+    kt_format(selected, sizeof(selected), "%.40s", task);
     for (i = 0; i < 8; i++) {
         if (kt_contains(s, selected))
             return;
         kt_send(s, "j");
         kt_pump(s, .15);
     }
+    fprintf(stderr, "No %s selected:\n%s\n", selected, kt_text(s));
     CHECK(false, "select exact receiver task");
 }
 size_t acceptance_count(const char *name) {

@@ -178,23 +178,84 @@ struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
     size_t selected;
 };
+/* Work (view 7): the list of heads and runs, the selected head's
+ * conversation and a side pane of pages (work.c). The layout's leaves are the
+ * list (pane 1), the conversation (3) and the side pane (4); below 120
+ * columns the conversation's pane shows the side pane's pages too, and below
+ * 70x20 one pane fills the screen. chosen is the page the user picked for
+ * the selection named by chosen_for, or -1 for that selection's default. */
+enum work_page { WORK_CONVERSATION, WORK_DETAILS, WORK_PLAN, WORK_RUN, WORK_PAGES };
+enum { WORK_PANE_LIST = 1, WORK_PANE_CONVERSATION = 3, WORK_PANE_SIDE = 4 };
 struct native_workspace {
     struct kt_workspace layout;
-    struct kt_workspace saved[3];
-    bool saved_zoom[3], initialized[3];
-    int mode;
-    struct kt_tree tree;
-    struct kt_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
-    char run_labels[WF_RUNS][200];
-    char member_labels[MAX_HEADS][TEXT + 16];
-    char project_label[256];
-    char collapsed[MAX_HEADS][TEXT];
-    size_t collapsed_count;
-    bool run_selected, selection_initialized;
-    struct { int first; size_t slots[2]; } agents[3];
+    /* Two agents side by side in the conversation's pane: the first of
+     * the two leaves and the terminal slot each shows. */
+    struct { int first; size_t slots[2]; } agents;
+    int chosen;
+    char chosen_for[TEXT + 32];
+    size_t scroll[WORK_PAGES], list_top;
+    /* Where the last frame drew each page's name, for clicks. */
+    struct work_page_hit { int x, y, width, page; } page_hits[8];
+    size_t page_hit_count;
+    /* Rows of recorded evidence the Run page showed: PgUp/PgDn page by it. */
+    int evidence_rows;
+    /* A run selected only because nothing else was listed: the first head
+     * to arrive takes the selection from it. */
+    bool run_auto;
     int theme;
-    bool root_open, zoom, compact;
+    bool zoom, compact, merged, dragged;
 };
+bool native_workspace_init(struct app *app);
+void native_workspace_destroy(struct app *app);
+bool work_render(struct app *app, unsigned frame, bool headless);
+void work_frame_mode(struct app *app);
+void work_arrange(struct app *app, struct kt_rect area);
+/* The pages: which apply to the selection, the one each pane shows (side:
+ * the side pane, else the shared pane), the user's choice and [ ]. */
+bool work_page_available(const struct app *app, int page);
+int work_page_shown(const struct app *app, bool side);
+int work_page(const struct app *app);
+int work_focused_page(const struct app *app);
+void work_set_page(struct app *app, int page);
+void work_page_step(struct app *app, int direction);
+void work_pane_step(struct app *app, int direction);
+void work_focus_list(struct app *app);
+void work_focus_page(struct app *app, int page);
+/* The selection moved: its pages start at the top and its output is read. */
+void work_selection_changed(struct app *app);
+void work_open(struct app *app, int page);
+bool work_back(struct app *app);
+enum key_chain_id work_chain(const struct app *app);
+bool work_perform(struct app *app, enum key_action action);
+bool work_applies(const struct app *app, enum key_action action, bool *applies);
+const char *work_open_label(const struct app *app);
+void work_mouse(struct app *app, unsigned button, int x, int y, bool release);
+void work_page_hits_clear(struct app *app);
+void work_page_hit(struct app *app, int page, int x, int y, int width);
+bool work_page_click(struct app *app, int x, int y);
+void work_rule(struct app *app, struct kt_rect r, const char *title, bool focused, const char *note);
+/* The list (work_list.c), its glyphs, and whether remote work is listed. */
+void work_list_draw(struct app *app, struct kt_rect r, bool focused);
+const char *work_head_glyph(const struct app *app, const struct head *h, struct kt_style *tone);
+const char *work_state_glyph(const struct app *app, const char *state, struct kt_style *tone);
+const char *work_loading_glyph(const struct app *app);
+bool remote_listed(const struct app *app);
+/* The conversation (work_conversation.c). */
+const struct head *work_output_head(struct app *app);
+struct native_terminal *work_terminal(struct app *app);
+bool work_preview_wanted(struct app *app);
+void work_conversation_note(struct app *app, bool focused, char *out, size_t size);
+void work_conversation_draw(struct app *app, struct kt_rect r, bool focused);
+void work_agent_draw(struct app *app, struct kt_rect r, struct native_terminal *t, bool focused);
+/* The side pane's pages (work_pages.c) and what the Plan and Run pages act on. */
+void work_page_draw(struct app *app, int page, struct kt_rect r, bool focused);
+size_t work_run(const struct app *app);
+bool work_run_shown(const struct app *app);
+bool work_head_plan(const struct app *app, const struct head *h);
+bool work_head_plan_ready(const struct app *app, const struct head *h);
+bool work_land_worker(const struct app *app, char *out, size_t size);
+const char *work_plan_run(const struct app *app);
+void work_land(struct app *app);
 /* Work outline (outline.c): heads the user started, the runs they launched
  * and the heads each run created. */
 enum outline_kind { OUTLINE_HEAD, OUTLINE_RUN, OUTLINE_RETIRED, OUTLINE_TASK };
@@ -300,7 +361,7 @@ size_t transcript_line_view(struct app *app, const char *text, size_t length, st
 void transcript_view_reset(struct app *app);
 void pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
           const char *right_label, const char *right, struct kt_style right_tone);
-void render_empty_work(struct app *app);
+
 void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
 bool native_terminal_focused(struct app *app);
@@ -346,12 +407,12 @@ void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_r
 int native_workspace_agent_index(struct native_workspace *w, int pane);
 struct native_terminal *native_workspace_terminal(struct app *app, int pane);
 void native_workspace_sync_terminal(struct app *app);
-void native_workspace_focus_next(struct app *app);
-void native_workspace_focus_previous(struct app *app);
 void go_back(struct app *app);
 void enter_view(struct app *app, int view);
 size_t tab_order(const struct app *app, int *views);
 void select_tab(struct app *app, int direction);
+/* Opens screen index (0 Work, 1 Inbox, 2 Hosts, 3 Stats). */
+void enter_screen(struct app *app, int index);
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms);
 void action_capture_reap(struct app *app);
 void remove_heads_action(struct app *app);
@@ -360,17 +421,7 @@ void new_task_attach(struct app *app);
 void remove_key_action(struct app *app);
 void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
-bool native_workspace_monitoring(struct app *app);
-void native_workspace_destroy(struct app *app);
-bool native_workspace_init(struct app *app);
-void native_workspace_prepare(struct app *app);
-void native_workspace_mode(struct app *app, int mode);
-void native_workspace_move(struct app *app, int direction);
-bool native_workspace_key(struct app *app, char key);
-void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool release);
-bool render_native_workspace(struct app *app, unsigned frame, bool headless);
 void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t *scroll);
-void native_workspace_plan_text(struct app *app, struct kt_canvas *c, size_t *scroll);
 void native_workspace_graph(struct app *app, struct kt_canvas *c, bool planning);
 void render_hosts(struct app *app);
 /* Remote setup (U10): setup_flow.c, setup_hosts.c, setup_render.c and
@@ -418,15 +469,11 @@ size_t hosts_row_count(const struct app *app);
 void hosts_open_row(struct app *app);
 void hosts_retry_row(struct app *app);
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
-void render_workflow_graph(struct app *app);
-void dashboard_text(struct kt_canvas *c, int x, int y, int width,
-                           struct kt_style tone, const char *format, ...);
-void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
-                           size_t count, const char *caption, struct kt_style tone);
-void render_dashboard(struct app *app);
 struct native_terminal *native_terminal_selected(struct app *app);
 void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
 struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h);
+/* The client attached to the head, connected or not; NULL when none is. */
+struct native_terminal *native_terminal_any_for_head(struct app *app, const struct head *h);
 bool native_terminal_attach_head(struct app *app, const struct head *h);
 bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
 const char *native_agent_name(const struct head *h);
@@ -602,11 +649,16 @@ void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
 bool frame_content(struct app *app, struct kt_canvas *out);
-void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
+/* The top bar: the brand, the four screens as numbered tabs and the project summary. blank_row: the row under it is left blank, so the summary may not move there. */
+void chrome_header(struct app *app, struct kt_canvas *c, bool blank_row);
 /* A pane's titled rule (render.c), accent when the pane has the focus. */
 void pane_rule(struct kt_canvas *c, struct kt_rect r, const char *title);
 void pane_rule_styled(struct kt_canvas *c, struct kt_rect r, const char *title, bool focused);
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
+/* The status line alone (its chip and text), and what it says on a screen without its own. */
+void chrome_status(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone);
+void screen_status(struct app *app, char *out, size_t size, struct kt_style *tone, bool headless);
+void canvas_text(struct kt_canvas *c, int x, int y, int width, struct kt_style tone, const char *format, ...);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);
 /* Outcomes of in-app actions (actions.c): a toast for one that finished, the
@@ -631,6 +683,7 @@ void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
 void preview_tick(struct app *app);
 bool preview_loading(const struct app *app);
+bool preview_unread(struct app *app);
 bool head_stale(const struct app *app, const struct head *h);
 size_t split_fields(char *line, char **fields, size_t capacity);
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size);

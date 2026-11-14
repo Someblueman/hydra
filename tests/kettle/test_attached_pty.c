@@ -158,10 +158,10 @@ int main(void) {
         const char *argv[] = {f.tui, "--hydra", adapter, NULL};
         kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
-    U("PLAN TOGETHER", 3);
-    U("Session   running", 3);
+    U("Heads \xe2\x94\x80", 3);
+    U("Session     running", 3);
     S("a");
-    U("INPUT TO AGENT", 3);
+    U("typing to ", 3);
     U("shell · session running", 3);
     for (i = 0; i < 3; i++) {
         kt_write(observation, observed[i]);
@@ -187,20 +187,20 @@ int main(void) {
     S("(sleep 1; printf 'FORM_LIVE' > form-proof; printf 'FORM_LIVE\\n') &\r");
     kt_pump(&s, .2);
     S("\035/");
-    U("Search heads", 3);
+    U("Filter heads", 3);
     kt_pump(&s, 1.2);
     proof(one, "form-proof", "FORM_LIVE");
     CHECK(kt_contains(&s, "FORM_LIVE"), "form does not block output");
     S("\033[200~search\nq\033[201~");
     U("search q", 3); /* a pasted line break is a blank in a text field */
-    CHECK(kt_contains(&s, "Search heads"), "paste did not submit form");
+    CHECK(kt_contains(&s, "Filter heads"), "paste did not submit form");
     S("\033[H界\033[C\177");
     U("界earch q", 3);
     S("\033");
     kt_pump(&s, .2);
-    CHECK(!kt_contains(&s, "Search heads"), "form dismiss");
-    S("\t"); /* leaving input focused navigation; Tab goes on to the agent */
-    U("INPUT TO AGENT", 3);
+    CHECK(!kt_contains(&s, "Filter heads"), "form dismiss");
+    S("\t"); /* leaving input focused the list; Tab goes on to the agent */
+    U("typing to ", 3);
     S("sleep 15\r");
     kt_pump(&s, .2);
     S("\003");
@@ -217,24 +217,27 @@ int main(void) {
     proof(one, "paste-proof", "paste");
     S("printf 'draft' > draft-proof");
     kt_pump(&s, .2);
+    /* The page chords: a head without a plan or run has neither page; A
+     * shows its Details beside the conversation. Stats and back. */
     S("\034B");
-    U("PLAN OVERVIEW", 3);
+    U("No Plan page for this selection", 3);
     S("\034C");
-    U("MONITOR", 3);
+    U("No Run page for this selection", 3);
     S("\034A");
-    U("PLAN TOGETHER", 3);
+    U("Session     running", 3);
     S("\034D");
-    U("STATISTICS", 3);
-    CHECK(!exists(one, "draft-proof"), "mode switching preserves unsent draft");
-    S("D");
-    U("INPUT TO AGENT", 3);
+    kt_pump(&s, .4);
+    CHECK(!kt_contains(&s, "Heads \xe2\x94\x80"), "Ctrl-\\ D shows Stats");
+    CHECK(!exists(one, "draft-proof"), "page and screen switching preserves unsent draft");
+    S("D\t\t");
+    U("typing to ", 3);
     S("\r");
     kt_pump(&s, .5);
     proof(one, "draft-proof", "draft");
     S("\035j");
     kt_pump(&s, .2);
     S("a");
-    U("INPUT TO AGENT", 3);
+    U("typing to ", 3);
     kt_pump(&s, .5);
     S("printf 'two' > attachment-proof\r");
     kt_pump(&s, .5);
@@ -251,16 +254,15 @@ int main(void) {
     S("\034n");
     S("printf 'multi-two' > multi-proof");
     kt_pump(&s, .2);
-    CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two attached panes");
-    S("\034B\034S");
+    CHECK(hf_count(kt_text(&s), "attached \xc2\xb7") == 2, "two attached panes");
+    S("\034A");
     kt_pump(&s, .3);
-    CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two panes in plan");
-    S("\034C\034S");
-    kt_pump(&s, .3);
-    CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two panes in monitor");
+    CHECK(hf_count(kt_text(&s), "attached \xc2\xb7") == 2, "two panes beside the Details page");
     S("\034D");
-    U("STATISTICS", 3);
-    S("D\034A");
+    kt_pump(&s, .4);
+    S("D");
+    kt_pump(&s, .3);
+    CHECK(hf_count(kt_text(&s), "attached \xc2\xb7") == 2, "two panes after Stats and back");
     for (i = 0; i < 3; i++) {
         kt_resize(&s, sizes[i][0], sizes[i][1]);
         kt_pump(&s, .3);
@@ -269,7 +271,7 @@ int main(void) {
               "resize preserved drafts");
         save(&s, "two-agents", sizes[i][0], sizes[i][1]);
     }
-    CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two agents remain attached");
+    CHECK(hf_count(kt_text(&s), "attached \xc2\xb7") == 2, "two agents remain attached");
     S("\r");
     kt_pump(&s, .4);
     proof(two, "multi-proof", "multi-two");
@@ -318,7 +320,7 @@ int main(void) {
     kt_pump(&s, .2);
     CHECK(!exists(one, "reconnect-proof"), "detach retains unsent draft");
     S("a");
-    U("INPUT TO AGENT", 3);
+    U("typing to ", 3);
     kt_pump(&s, .4);
     S("\r");
     kt_pump(&s, .4);
@@ -326,14 +328,14 @@ int main(void) {
     S("printf 'zoom-draft' > zoom-proof");
     kt_pump(&s, .1);
     S("\034z");
-    U("z restores the splits", 3);
-    CHECK(!kt_contains(&s, "PROJECT"), "zoom hides panes");
+    U("z restores the panes", 3);
+    CHECK(!kt_contains(&s, "Heads \xe2\x94\x80"), "zoom hides panes");
     S("\034D");
-    U("STATISTICS", 3);
+    kt_pump(&s, .4);
     S("D");
-    U("z restores the splits", 3);
+    U("z restores the panes", 3);
     S("\034z");
-    U("PROJECT", 3);
+    U("Heads \xe2\x94\x80", 3);
     CHECK(!exists(one, "zoom-proof"), "zoom retains draft");
     S("\r");
     kt_pump(&s, .4);
@@ -352,17 +354,17 @@ int main(void) {
         CHECK(sscanf(dimensions, "%d %d", &term_rows, &term_cols) == 2, "terminal dimensions");
         if (sizes[i][0] == 40) {
             CHECK(term_rows >= 6 && term_cols >= 35, "compact conversation usable");
-            CHECK(!kt_contains(&s, "PROJECT") && kt_contains(&s, "INPUT TO AGENT"),
+            CHECK(!kt_contains(&s, "Heads \xe2\x94\x80") && kt_contains(&s, "typing to "),
                   "compact conversation view");
         }
         save(&s, "attached", sizes[i][0], sizes[i][1]);
     }
     kt_format(path, sizeof(path), "=%s", session);
     RUN("tmux", "detach-client", "-s", path);
-    U("CLIENT DISCONNECTED", 3);
-    CHECK(kt_contains(&s, "NO INPUT"), "disconnected client input disabled");
+    U("disconnected \xc2\xb7 a reconnects", 3);
+    CHECK(!kt_contains(&s, "typing to "), "disconnected client input disabled");
     S("\034r");
-    U("INPUT TO AGENT", 3);
+    U("typing to ", 3);
     kt_pump(&s, .4);
     S("printf 'resumed' > resumed-proof\r");
     kt_pump(&s, .4);

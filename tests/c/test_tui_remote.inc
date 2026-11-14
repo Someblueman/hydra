@@ -53,9 +53,9 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     if (!result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open unified workspace terminal")) { remote_env_clear(); return; }
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    result(wait_for_marker(&session, "builder/feature-build", 6000), "a remote head is listed beside local heads");
+    result(wait_for_marker(&session, "builder/feature-", 6000), "a remote head is listed beside local heads");
     result(wait_for_marker(&session, "task_build", 2000), "a remote task is listed beside local heads");
-    result(wait_for_marker(&session, "WHERE", 1000), "the list names where each row runs at 140 columns");
+    result(wait_for_marker(&session, "local   ", 1000), "the list names where each row runs at 140 columns");
     result(wait_for_marker(&session, "Remote live", 3000), "the footer reports the remote observation beside the local one");
     write_input(session.master, "L", 1U);
     result(wait_for_marker(&session, "Showing local work", 1000), "L narrows to local work");
@@ -63,7 +63,7 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "Showing remote work", 1000), "L narrows to remote work");
     write_input(session.master, "L", 1U);
     result(wait_for_marker(&session, "Showing host builder", 1000), "L narrows to one host");
-    result(wait_for_marker(&session, "Heads: host builder", 1000), "the panel title names the host filter");
+    result(wait_for_marker(&session, "Heads   host builder", 1000), "the list's rule names the host filter");
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "Showing all work", 1000), "Esc shows all work again");
     {
@@ -72,7 +72,7 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
         result(ioctl(session.master, TIOCSWINSZ, &size) == 0, "resize the unified list to 80x24");
     }
     write_input(session.master, "t", 1U);
-    result(wait_for_screen_text(&session, "builder/feature-build", 80, 24, 3000), "the unified list fits 80x24");
+    result(wait_for_screen_text(&session, "builder/feature-", 80, 24, 3000), "the unified list fits 80x24");
     write_input(session.master, "t", 1U);
     if (!result(wait_for_screen_text(&session, "q quit", 80, 24, 3000), "hints stay visible at 80x24")) remote_dump(&session);
     write_input(session.master, "I", 1U);
@@ -117,9 +117,9 @@ static void test_remote_actions(const char *tui, const char *hydra, const char *
     /* The Work list (the control centre opens on the Workspace, whose tree
      * also lists runs): local heads, then the remote head. */
     write_input(session.master, "1", 1U);
-    (void)wait_for_marker(&session, "Heads in this project", 2000);
+    (void)wait_for_marker(&session, "Heads  ", 2000);
     write_input(session.master, "jjj", 3U);
-    result(wait_for_marker(&session, "On builder", 2000), "the remote head's summary names its host");
+    result(wait_for_marker(&session, "on builder   desired", 2000), "the remote head's conversation header names its host");
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Interrupt feature-build on builder?", 2000), "x on a remote head asks to interrupt, naming host and branch");
     write_input(session.master, "y", 1U);
@@ -139,7 +139,7 @@ static void test_remote_actions(const char *tui, const char *hydra, const char *
            strstr(captured, "fleet\ntask\ndecide\nbuilder\n--id\ntask_build\n--request\nreq-1\n--decision\napprove\n--trust-spec\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n") != NULL,
            "the decision carries the exact task, request and bound spec");
     write_input(session.master, "kk", 2U);
-    (void)wait_for_marker(&session, "desired running", 2000);
+    (void)wait_for_marker(&session, "on builder   desired", 2000);
     write_input(session.master, "a", 1U);
     result(wait_for_screen_text(&session, "FAKE REMOTE ATTACH", 100, 30, 4000), "a on a remote head attaches through fleet attach in the workspace");
     result(read_small_file(attach_path, captured, sizeof(captured)) &&
@@ -184,11 +184,11 @@ static void test_remote_stale_and_disconnected(const char *tui, const char *hydr
     if (!result(open_session(&session, tui, hydra, fake_bin, 100, 30) == 0, "open stale remote terminal")) { remote_env_clear(); return; }
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    result(wait_for_marker(&session, "builder/feature-build", 6000), "remote rows arrive");
+    result(wait_for_marker(&session, "builder/feature-", 6000), "remote rows arrive");
     write_input(session.master, "1", 1U);
-    (void)wait_for_marker(&session, "Heads in this project", 2000);
+    (void)wait_for_marker(&session, "Heads  ", 2000);
     write_input(session.master, "jjj", 3U);
-    (void)wait_for_marker(&session, "On builder", 2000);
+    (void)wait_for_marker(&session, "on builder   desired", 2000);
     fd = open(fail_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
     result(fd >= 0, "inject a lost remote observation");
     if (fd >= 0) close(fd);
@@ -204,7 +204,7 @@ static void test_remote_stale_and_disconnected(const char *tui, const char *hydr
     write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Reconnecting to builder", 2000), "r asks for a fresh observation of the host");
     if (!result(wait_for_marker(&session, "retained from an observation", 12000), "a host that stops answering keeps its head as a retained row with its age")) remote_dump(&session);
-    result(wait_for_marker(&session, "host disconnected", 2000), "the retained row says its host is disconnected");
+    result(wait_for_marker(&session, "disconnected   on builder", 2000), "the retained row says its host is disconnected");
     write_input(session.master, "a", 1U);
     result(wait_for_marker(&session, "host builder is disconnected", 3000), "a disconnected host refuses to attach");
     result(access(attach_path, F_OK) != 0, "a disconnected host never invokes fleet attach");

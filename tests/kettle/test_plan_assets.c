@@ -6,6 +6,8 @@
 #include <string.h>
 static struct hf_fixture f;
 #define U(marker, timeout) kt_until(&s, (marker), (timeout))
+/* The Plan page's state line: "READY · revision 1 · awaiting you". */
+#define STATE(word, n) word " \xc2\xb7 revision " #n
 /* The fixture plan's verifier becomes a proposal asset run as @input/verifier. */
 static void asset_draft(const char *draft) {
     char path[4096];
@@ -42,7 +44,7 @@ int main(void) {
     kt_copy(path, asset, false);
     hf_commit_init(&f);
     hf_open(&f, &s);
-    U("PLAN TOGETHER", 3);
+    U("No agent work in this project yet", 5);
     kt_send(&s, ":import\r");
     U("Draft JSON path", 3);
     kt_send(&s, draft);
@@ -50,14 +52,15 @@ int main(void) {
     U("Policy JSON path", 3);
     kt_send(&s, policy);
     kt_send(&s, "\r");
-    U("Revision 1 / DRAFT", 3);
+    /* The import opens the Plan page with focus. */
+    U(STATE("DRAFT", 1), 3);
     kt_send(&s, "V");
-    U("READY / awaiting approval", 30);
+    U(STATE("READY", 1), 30);
     kt_write(asset, "#!/bin/sh\nexit 1\n");
-    U("Revision 2 / DRAFT", 8);
-    CHECK(!kt_contains(&s, "READY / awaiting approval"), "a changed asset invalidates the validated revision");
+    U(STATE("DRAFT", 2), 8);
+    CHECK(!kt_contains(&s, "READY \xc2\xb7"), "a changed asset invalidates the validated revision");
     kt_send(&s, "V");
-    U("READY / awaiting approval", 30);
+    U(STATE("READY", 2), 30);
     kt_close(&s, "q", 0, 0);
     kt_format(text, sizeof(text),
               "PASS plan assets: the draft's sibling assets compile into the revision and a changed asset "

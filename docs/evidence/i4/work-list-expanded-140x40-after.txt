@@ -1,41 +1,41 @@
 FRAME 1 140x40
- ◆ hydra   1 Work   2 Details  3 Overview  4 Inbox ·  5 Workflows  6 Statistics  7 Workspace  8 Hosts                                 WORK 
-                                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Heads in this project ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-     HEAD                                                                        STATUS         AGENT           WHERE        REPORTED      
-     add-kill                                                                    running        codex           local        -             
-       ▾ plan run kill-dry-run                                                   succeeded      2 heads                                    
-  ▌      worker   kill-dry-run-worker                                            done           codex           local        -             
-         verifier kill-dry-run-check                                             retired                                                   
-     notes-cleanup                                                               terminal gone  claude          local        -             
-  2 heads you started · 1 in runs  |  Row 3 of 5                                                                                           
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
                                                                                                                                            
- kill-dry-run-worker ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────  
-   codex · step implement · succeeded · headless (no terminal) · 1 changed file                                                            
-   Enter details · p step output · x dismiss (keeps the branch) · : more actions                                                           
+ Heads ─────────────────────── 3  kill-dry-run-worker ───────────────── latest output · read-only  Details  Run ─────────────────────────  
+  ● add-kill           codex      ✓ worker · codex · step implement · succeeded · headless, no t…  ✓ succeeded · plan run kill-dry-run     
+    ▾ ✓ plan run kill… 4/4                                                                                                                 
+ ▌    ✓ worker kill-d… codex      Reading the step output...                                       ╭────────────────────╮     ╭─────────   
+      ○ verifier kill… retired                                                                     │ spawn-worker       │──┬─>│ implemen   
+  ▲ notes-cleanup      claude                                                                      │ succeeded          │  │  │ succeede   
+                                                                                                   ╰────────────────────╯  │  ╰─────────   
+                                                                                                                           │               
+                                                                                                   ╭────────────────────╮  │               
+                                                                                                   │ spawn-check        │──┘               
+                                                                                                   │ succeeded          │                  
+                                                                                                   ╰────────────────────╯                  
                                                                                                                                            
+                                                                                                    STEP          STATE         TIME       
+                                                                                                   ▌spawn-worker  ✓ succeeded   5s         
+                                                                                                    implement     ✓ succeeded   1m06s      
+                                                                                                    spawn-check   ✓ succeeded   5s         
+                                                                                                    verify        ✓ succeeded   3s         
                                                                                                                                            
+                                                                                                   spawn-worker ─────────────── evidence   
+                                                                                                   Head    kill-dry-run-worker             
+                                                                                                   Kind    spawn/work, attempt 1           
+                                                                                                   Needs   -                               
                                                                                                                                            
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
-                                                                                                                                           
+                                                                                                   Next    Worker branch kill-dry-run-wo   
+                                                                                                           rker holds the result: review   
+                                                                                                           (: diff) · land (hydra land     
+                                                                                                           kill-dry-run-worker) ·          
+                                                                                                           dismiss (x removes the worker   
+                                                                                                           head, keeps the branch)         
+                                                                                                   Heads   kill-dry-run-worker (worker)    
+                                                                                                           kill-dry-run-check (retired)    
                                                                                                                                            
                                                                                                                                            
-  ● live                                                                                                                                   
- ↑/↓ select • enter details • a talk to agent • n new task • x remove • p output • d technical • L location • / search • ? help • q quit   
+                                                                                                                                           
+  2 heads · 1 needs you                                                                                                                    
+  ● live   kill-dry-run-worker · done                                                                                                      
+ ↑/↓ select • ←/→ collapse/expand • x remove • n new task • / filter • L location • tab/shift+tab pane • [/] page • ? help • q quit        

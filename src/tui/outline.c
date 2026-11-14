@@ -219,12 +219,6 @@ static void outline_run(struct outline_build *b, size_t run, int depth, bool own
     outline_members(b, run, depth + 1);
 }
 
-static bool run_has_heads(const struct outline_build *b, size_t run) {
-    const struct workflow_model *m = b->app->workflows;
-    size_t i;
-    for (i = 0; i < m->head_count; i++) if (m->heads[i].run == run) return true;
-    return false;
-}
 
 static bool head_runs_match(const struct outline_build *b, size_t head) {
     const struct app *app = b->app;
@@ -255,7 +249,7 @@ size_t outline_build(struct app *app, struct outline_row *rows, size_t capacity)
     for (i = 0; i < app->model.task_count; i++)
         if (task_visible(app, &app->model.tasks[i])) outline_add(&b, OUTLINE_TASK, SIZE_MAX, SIZE_MAX, i, 0);
     for (i = 0; app->workflows && i < app->workflows->run_count; i++)
-        if (b.run_owner[i] == SIZE_MAX && run_has_heads(&b, i)) outline_run(&b, i, 0, false);
+        if (b.run_owner[i] == SIZE_MAX && !location_remote_only(app)) outline_run(&b, i, 0, false);
     return b.count;
 }
 

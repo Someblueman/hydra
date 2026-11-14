@@ -89,7 +89,7 @@ static void wide_intact(void) {
     CHECK(!strcmp(s.screen.cells[y * s.screen.cols + x + 2].text, "\xe9\x9d\xa2"), "next wide cell aligned");
 }
 
-/* Rows only a 140x40 Details view has room for. */
+/* Rows only a 140x40 conversation has room for. */
 static void codex_full(void) {
     wide_intact();
     CHECK(fg_of("-w\xc3\xb6rld") == WARNING_FG, "removed diff line toned");
@@ -97,12 +97,12 @@ static void codex_full(void) {
     if (find_row(UNICODE_LINE, NULL) < 0) fail_with("Unicode line not verbatim");
 }
 
-/* The Details transcript of Codex's plain diff: themed diff, wrapped long
- * line. 80x24 leaves room for the newest rows only. */
+/* The conversation's read-only latest output of Codex's plain diff: themed
+ * diff, wrapped long line. 80x24 leaves room for the newest rows only. */
 static void details_codex(bool full) {
-    kt_until(&s, "TERMINAL OUTPUT", 5);
+    kt_until(&s, "latest output", 5);
     kt_until(&s, "LONGLINE:", 8);
-    kt_until(&s, "Read-only transcript", 3);
+    kt_until(&s, "enter to talk", 3);
     clean_screen("codex transcript");
     CHECK(kt_contains(&s, "\xe2\x86\xaa"), "long line continues with a marker");
     CHECK(kt_contains(&s, "-END"), "end of the long line is not clipped");
@@ -135,7 +135,7 @@ static void attached(void) {
     kt_send(&s, "\033");
     kt_pump(&s, .3);
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, "typing to ", 5);
     kt_send(&s, "/bin/cat '");
     kt_send(&s, f.root);
     kt_send(&s, "/tests/fixtures/providers/codex-exec.raw'; /bin/cat '");
@@ -193,8 +193,14 @@ int main(void) {
         const char *argv[] = {f.tui, "--hydra", f.hydra, "--store", NULL};
         kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
-    kt_until(&s, "Session   running", 8);
-    kt_send(&s, "p");
+    kt_until(&s, "Session     running", 8);
+    /* Tab: the conversation holds the keys (scrolling it) while its head's
+     * output is shown read-only. */
+    kt_send(&s, "\t");
+    /* z zooms the conversation to the whole width, which a verbatim
+     * 80-cell line needs (beside the list and side pane it would wrap). */
+    kt_send(&s, "z");
+    kt_pump(&s, .3);
     details_codex(true);
     resize(80, 24);
     details_codex(false);
@@ -211,12 +217,12 @@ int main(void) {
     clean_screen("scrolled transcript");
     save("details-scrolled");
     kt_send(&s, "\033[6~\033[6~\033[6~");
-    kt_until(&s, "PgUp scrolls", 3);
+    kt_until(&s, "enter to talk", 3);
     kt_until(&s, "for agents", 3);
     resize(140, 40);
     attached();
     resize(80, 24);
-    kt_until(&s, "INPUT TO AGENT", 3);
+    kt_until(&s, "typing to ", 3);
     kt_until(&s, "for agents", 5);
     clean_screen("attached after resize");
     save("attached");

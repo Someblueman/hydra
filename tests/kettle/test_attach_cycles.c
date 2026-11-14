@@ -1,7 +1,7 @@
 /* U16: an attached agent view can always be left and closed cleanly. Real key
- * sequences drive repeated attach -> type -> leave -> close -> layout switch
- * -> resize -> reattach cycles across the planning, plan-overview and
- * monitoring layouts, including 80x24 and the compact fallback. Each cycle
+ * sequences drive repeated attach -> type -> leave -> close -> page switch
+ * -> resize -> reattach cycles with Work's side pane on its Details page, at
+ * 140x40, 100x30, 80x24 and the one-pane 60x20. Each cycle
  * checks that the footer names the leave and close keys, input reaches only
  * the agent, one view shows the agent once, a full repaint equals the
  * incrementally updated screen (no residual regions), and the tmux session
@@ -23,11 +23,15 @@ static char session[256], target[300], evidence[4096], pane_pid[64];
 #define RUN(...) hf_run(&f, NULL, 0, (const char *[]){__VA_ARGS__, NULL})
 #define H(...) RUN(f.hydra, __VA_ARGS__)
 
-struct cycle { char layout; const char *title; int cols, rows; };
+/* The page chord each cycle starts with: Ctrl-\ A shows the Details page
+ * (in the side pane, or in the shared pane below 120 columns), Ctrl-\ B
+ * and C name the pages a head without a plan or run does not have. */
+#define TYPING "typing to "
+struct cycle { const char *chord, *title; int cols, rows; };
 static const struct cycle cycles[] = {
-    {'A', "PLAN TOGETHER", 140, 40}, {'B', "PLAN OVERVIEW", 80, 24}, {'C', "MONITOR", 60, 20},
-    {'A', "PLAN TOGETHER", 80, 24}, {'C', "MONITOR", 140, 40}, {'B', "PLAN OVERVIEW", 100, 30},
-    {'A', "PLAN TOGETHER", 60, 20}, {'A', "PLAN TOGETHER", 140, 40},
+    {"\034A", "Session     running", 140, 40}, {"\034B", "No Plan page", 80, 24}, {"\034C", "No Run page", 60, 20},
+    {"\034A", "Session     running", 80, 24}, {"\034C", "No Run page", 140, 40}, {"\034B", "No Plan page", 100, 30},
+    {"\034A", "Session     running", 60, 20}, {"\034A", "Session     running", 140, 40},
 };
 
 static void save(const char *step, int cycle) {
@@ -155,8 +159,7 @@ static void no_residue(const char *when) {
 }
 
 static void layout(const struct cycle *c) {
-    char key[2] = {c->layout, 0};
-    kt_send(&s, key);
+    kt_send(&s, c->chord);
     kt_until(&s, c->title, 5);
     kt_resize(&s, c->cols, c->rows);
     kt_pump(&s, .4);
@@ -166,11 +169,11 @@ static void layout(const struct cycle *c) {
 static void attach_and_type(int cycle, const char *marker) {
     char command[128];
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
-    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "Ctrl-\\ x close") || kt_contains(&s, "Ctrl-B"))
+    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "ctrl+\\ x close") || kt_contains(&s, "Ctrl-B"))
         fail_with("leave/close keys hidden, or the old prefix advertised");
-    CHECK(hf_count(kt_text(&s), "INPUT TO AGENT") == 1, "one attached view");
+    CHECK(hf_count(kt_text(&s), TYPING) == 1, "one attached view");
     kt_format(command, sizeof(command), "echo MARK_$((%d*1000+7))\r", cycle);
     kt_send(&s, command);
     kt_until(&s, marker, 5);
@@ -184,42 +187,49 @@ static void attach_and_type(int cycle, const char *marker) {
     kt_until(&s, "^[", 3);
     kt_send(&s, "\004");
     kt_pump(&s, .3);
-    CHECK(kt_contains(&s, "INPUT TO AGENT"), "Esc does not silently leave the agent");
+    CHECK(kt_contains(&s, TYPING), "Esc does not silently leave the agent");
     save("attached", cycle);
 }
 
 /* Ctrl-] leaves input: Hydra keys no longer reach the agent, and the
- * conversation stays on screen at every width that shows navigation beside
- * it (80 columns and wider), in every layout. Plain Tab cycles focus back to
- * the agent, and the Ctrl-\ Tab chord leaves as well. */
+ * conversation stays on screen at every width that shows the list beside it
+ * (80 columns and wider). Plain Tab cycles focus back to the agent, and the
+ * Ctrl-\ Tab chord leaves as well. */
 static void leave_input(int cycle, const char *marker) {
     int cursor;
     int i;
     kt_send(&s, "\035");
     kt_pump(&s, .3);
-    if (kt_contains(&s, "INPUT TO AGENT")) fail_with("Ctrl-] left input");
+    if (kt_contains(&s, TYPING)) fail_with("Ctrl-] left input");
     if (s.screen.cols >= 80 && !kt_contains(&s, marker))
         fail_with("leaving input hid the conversation");
     cursor = agent_cursor();
-    /* Focus is on navigation: k and j move its selection up and back. */
+    /* Focus is on the list: k and j move its selection up and back. */
     kt_send(&s, "kj");
     kt_pump(&s, .3);
     CHECK(agent_cursor() == cursor, "Hydra keys do not reach the agent after leaving");
     save("left", cycle);
-    for (i = 0; i < 8 && !kt_contains(&s, "INPUT TO AGENT"); i++) { kt_send(&s, "\t"); kt_pump(&s, .2); }
-    CHECK(kt_contains(&s, "INPUT TO AGENT"), "Tab focus returns to the agent");
+    for (i = 0; i < 8 && !kt_contains(&s, TYPING); i++) { kt_send(&s, "\t"); kt_pump(&s, .2); }
+    CHECK(kt_contains(&s, TYPING), "Tab focus returns to the agent");
     kt_send(&s, "\034\t");
     kt_pump(&s, .3);
-    if (kt_contains(&s, "INPUT TO AGENT")) fail_with("Ctrl-\\ Tab left input");
+    if (kt_contains(&s, TYPING)) fail_with("Ctrl-\\ Tab left input");
 }
 
-/* Ctrl-\ x closes only the view: no attached content remains on screen. */
+/* Ctrl-\ x closes only the view: no attached view remains on screen. Where
+ * the conversation stays beside the list (70 columns and wider) it goes back
+ * to the head's read-only latest output, which may show the marker (its rule
+ * says so where the side pane has its own pane, from 120 columns; narrower,
+ * the rule names the pages instead); the one-pane list shows no agent
+ * content at all. */
 static void close_view(int cycle, const char *marker) {
     kt_send(&s, "\034x");
     kt_pump(&s, .4);
-    if (kt_contains(&s, "ATTACHED") || kt_contains(&s, "INPUT TO AGENT") || kt_contains(&s, marker))
+    if (kt_contains(&s, "live \xc2\xb7 tab here") || kt_contains(&s, TYPING) ||
+        (s.screen.cols < 70 && kt_contains(&s, marker)))
         fail_with("closed view left agent content");
-    kt_until(&s, "View closed", 3);
+    if (s.screen.cols >= 120) kt_until(&s, "latest output", 3);
+    kt_until(&s, "Conversation closed", 3);
     wait_clients(0);
     owner_alive("closing the view killed the agent");
     no_residue("residual region after closing the view");
@@ -232,18 +242,18 @@ static void disconnected_client(void) {
     char quoted[300];
     const char *argv[] = {"tmux", "detach-client", "-s", quoted, NULL};
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
     kt_format(quoted, sizeof(quoted), "=%s", session);
     (void)tmux_out(argv);
-    kt_until(&s, "CLIENT DISCONNECTED", 5);
-    if (!kt_contains(&s, "a reconnect") && !kt_contains(&s, "Ctrl-\\ r reconnect")) fail_with("reconnect key hidden");
+    kt_until(&s, "disconnected \xc2\xb7 a reconnects", 5);
+    if (!kt_contains(&s, "a reconnect")) fail_with("reconnect key hidden");
     save("disconnected", 90);
     kt_send(&s, "\t");
     kt_pump(&s, .4);
     CHECK(!kt_contains(&s, "Input not delivered"), "disconnected pane does not capture keys");
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
     owner_alive("disconnect killed the agent");
     kt_send(&s, "\034x");
@@ -271,7 +281,7 @@ static void shared_session(void) {
     const char *argv[] = {"tmux", "attach-session", "-t", target, NULL};
     if (s.screen.cols != 140 || s.screen.rows != 40) kt_resize(&s, 140, 40);
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
     kt_open_terminal(&other, argv, 50, 15, f.repo);
     wait_clients(2);
@@ -307,7 +317,7 @@ static void shared_session(void) {
 static void stalled_terminal(void) {
     kt_send(&s, "a");
     kt_sleep(6);
-    kt_until(&s, "INPUT TO AGENT", 10);
+    kt_until(&s, TYPING, 10);
     wait_clients(1);
     kt_pump(&s, .5);
     kt_send(&s, "echo STALLED_$((6*7))\r");
@@ -334,11 +344,11 @@ static void wait_agent_mode(const char *expected, const char *message) {
  * mode and Ctrl-B Ctrl-B sends the byte on to the program in the pane. */
 static void agent_keeps_ctrl_b(void) {
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
     kt_send(&s, "\002[");
     wait_agent_mode("1", "Ctrl-B [ reaches the agent's tmux as its prefix");
-    CHECK(kt_contains(&s, "INPUT TO AGENT"), "Ctrl-B is not a Hydra command");
+    CHECK(kt_contains(&s, TYPING), "Ctrl-B is not a Hydra command");
     CHECK(!kt_contains(&s, "is not bound"), "Ctrl-B starts no Hydra chord");
     kt_send(&s, "q");
     wait_agent_mode("0", "keys after the prefix reach the agent's tmux");
@@ -355,7 +365,7 @@ static void agent_keeps_ctrl_b(void) {
 static void unbound_chord(void) {
     kt_send(&s, "k");
     kt_until(&s, "Ctrl-\\ k is not bound", 3);
-    if (kt_contains(&s, "Ctrl-\\ \xe2\x80\xa6") || !kt_contains(&s, "INPUT TO AGENT"))
+    if (kt_contains(&s, "Ctrl-\\ \xe2\x80\xa6") || !kt_contains(&s, TYPING))
         fail_with("an unbound chord left the indicator up or changed focus");
     save("unbound-chord", 94);
     kt_send(&s, "LEAKCHECK\r");
@@ -392,7 +402,7 @@ static void literal_keys(void) {
     CHECK(!kt_contains(&s, "Ctrl-\\ \xe2\x80\xa6"), "the indicator clears when a chord completes");
     kt_send(&s, "\034\035");
     kt_until(&s, "^]", 3);
-    CHECK(kt_contains(&s, "INPUT TO AGENT"), "a literal Ctrl-] does not leave input");
+    CHECK(kt_contains(&s, TYPING), "a literal Ctrl-] does not leave input");
     kt_send(&s, "\r");
     kt_pump(&s, .3);
     CHECK(agent_contains("^\\^]"), "the agent received exactly the two literal keys");
@@ -408,7 +418,7 @@ static void open_tui(const char *keys) {
     if (keys) CHECK(!setenv("HYDRA_TUI_KEYS", keys, 1), "keys file override");
     else unsetenv("HYDRA_TUI_KEYS");
     kt_open_terminal(&s, argv, 140, 40, f.repo);
-    kt_until(&s, "Session   running", 8);
+    kt_until(&s, "Session     running", 8);
 }
 
 /* With the Ctrl-B prefix configured, the default keys are ordinary input,
@@ -420,7 +430,7 @@ static void custom_keys_input(void) {
     kt_pump(&s, .2);
     kt_send(&s, "\035\034\r");
     kt_until(&s, "^]^\\", 3);
-    if (!kt_contains(&s, "INPUT TO AGENT")) fail_with("a default key still acted as a Hydra command");
+    if (!kt_contains(&s, TYPING)) fail_with("a default key still acted as a Hydra command");
     kt_send(&s, "\002\002\002\002Z9\r");
     kt_until(&s, "^BZ9", 3);
     if (!agent_contains("^BZ9")) fail_with("the configured literal chord did not send its key");
@@ -429,7 +439,8 @@ static void custom_keys_input(void) {
 }
 
 /* A keys file that brings the Ctrl-B prefix back: its chords work, every
- * hint and the help name them, and the default keys are ordinary input. */
+ * hint and the help name them, and the default keys are ordinary input.
+ * The file moves every chord, the four screen chords (screen.*) included. */
 static void custom_keys(void) {
     char path[4096];
     kt_format(path, sizeof(path), "%s/prefix-keys.conf", f.base);
@@ -438,21 +449,22 @@ static void custom_keys(void) {
                    "terminal.reconnect = ctrl+b r\nterminal.history = ctrl+b [\nterminal.live = ctrl+b ]\n"
                    "app.quit = ctrl+b q\nview.statistics = ctrl+b D\nworkspace.layout.conversation = ctrl+b A\n"
                    "workspace.layout.plan = ctrl+b B\nworkspace.layout.monitor = ctrl+b C\nworkspace.zoom = ctrl+b z\n"
-                   "workspace.split = ctrl+b S\nterminal.literal = ctrl+b ctrl+b\n");
+                   "workspace.split = ctrl+b S\nterminal.literal = ctrl+b ctrl+b\n"
+                   "screen.work = ctrl+b 1\nscreen.inbox = ctrl+b 2\nscreen.hosts = ctrl+b 3\nscreen.stats = ctrl+b 4\n");
     open_tui(path);
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
     if (kt_contains(&s, "prefix-keys.conf")) fail_with("a valid keys file raised a notice");
-    if (!kt_contains(&s, "Ctrl-B Tab leave") || !kt_contains(&s, "Ctrl-B x close")) fail_with("hints do not name the configured keys");
-    if (kt_contains(&s, "Ctrl-]") || kt_contains(&s, "Ctrl-\\")) fail_with("the default keys are still advertised");
+    if (!kt_contains(&s, "Ctrl-B Tab leave") || !kt_contains(&s, "ctrl+b x close")) fail_with("hints do not name the configured keys");
+    if (kt_contains(&s, "Ctrl-]") || kt_contains(&s, "ctrl+]") || kt_contains(&s, "ctrl+\\")) fail_with("the default keys are still advertised");
     save("custom-keys", 95);
     custom_keys_input();
     kt_send(&s, "\002");
     kt_until(&s, "Ctrl-B \xe2\x80\xa6", 3);
     kt_send(&s, "\t");
     kt_pump(&s, .3);
-    if (kt_contains(&s, "INPUT TO AGENT")) fail_with("the configured leave chord did not leave input");
+    if (kt_contains(&s, TYPING)) fail_with("the configured leave chord did not leave input");
     kt_send(&s, "?");
     kt_until(&s, "KEYBOARD HELP", 3);
     if (!kt_contains(&s, "ctrl+b tab") || !kt_contains(&s, "ctrl+b x") || !kt_contains(&s, "leave input") ||
@@ -477,9 +489,9 @@ static void malformed_keys(void) {
     kt_until(&s, "broken-keys.conf line 2: unknown action 'terminal.leav' (and 1 more)", 5);
     save("malformed-keys", 97);
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
-    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "Ctrl-B x close")) fail_with("good lines apply; bad lines keep defaults");
+    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "ctrl+b x close")) fail_with("good lines apply; bad lines keep defaults");
     kt_send(&s, "\002x");
     wait_clients(0);
     kt_close(&s, "\034q", 0, 0);
@@ -487,9 +499,9 @@ static void malformed_keys(void) {
     open_tui(path);
     kt_until(&s, "broken-keys.conf has conflicting keys: terminal.leave and terminal.close (line 1) both use Ctrl-]", 5);
     kt_send(&s, "a");
-    kt_until(&s, "INPUT TO AGENT", 5);
+    kt_until(&s, TYPING, 5);
     wait_clients(1);
-    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "Ctrl-\\ x close")) fail_with("conflicting keys fall back to the defaults");
+    if (!kt_contains(&s, "Ctrl-] leave") || !kt_contains(&s, "ctrl+\\ x close")) fail_with("conflicting keys fall back to the defaults");
     kt_send(&s, "\034x");
     wait_clients(0);
     kt_close(&s, "\034q", 0, 0);
@@ -558,7 +570,7 @@ int main(void) {
     custom_keys();
     malformed_keys();
     hf_finish(&f);
-    printf("PASS attach cycles: %zu cycles of attach/type/leave/close/layout/resize/reattach at 140x40, 100x30, "
+    printf("PASS attach cycles: %zu cycles of attach/type/leave/close/page/resize/reattach at 140x40, 100x30, "
            "80x24 and 60x20; disconnected client releases input; shared-size fill named; a stalled terminal types nothing; "
            "Ctrl-B reaches the agent's tmux; pending, unbound and literal chords; custom and malformed keys files; evidence in %s\n",
            sizeof(cycles) / sizeof(*cycles), evidence);

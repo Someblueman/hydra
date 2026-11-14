@@ -76,9 +76,13 @@ contains "invalid numeric field" "$test_root/invalid-number.err" "numeric protoc
 "$tui" --headless-fixture "$fixture" --size 80x24 --frames 2 > "$test_root/heads.out"
 assert_success $? "headless fixture renders deterministically"
 assert_equal "2" "$(grep -c '^FRAME ' "$test_root/heads.out")" "explicit frame bound is honored"
-contains "running" "$test_root/heads.out" "live state is distinct"
-contains "terminal gone" "$test_root/heads.out" "stale state is distinct"
-contains "unknown" "$test_root/heads.out" "unavailable state is distinct"
+# Work's list marks each state with its own glyph; the one-pane list says it in words.
+contains "$(printf '\342\226\262 feature-stale')" "$test_root/heads.out" "stale state has its own glyph"
+contains "? feature-unavailable" "$test_root/heads.out" "unavailable state has its own glyph"
+"$tui" --headless-fixture "$fixture" --size 60x24 > "$test_root/heads-words.out"
+contains "running" "$test_root/heads-words.out" "live state is distinct"
+contains "terminal gone" "$test_root/heads-words.out" "stale state is distinct"
+contains "unknown" "$test_root/heads-words.out" "unavailable state is distinct"
 if grep -Eq 'LIVE|STALE|UNAVAILABLE' "$test_root/heads.out"; then
     assert_success 1 "default list uses plain-language session states"
 else
@@ -102,9 +106,10 @@ fi
 "$tui" --headless-fixture "$fixture" --size 100x28 --diagnostics > "$test_root/diagnostics.out"
 contains "lifecycle source: /tmp/hydra/state/head_live" "$test_root/diagnostics.out" "diagnostics retain inspectable sources"
 contains "confidence: verified-local-help" "$test_root/diagnostics.out" "diagnostics retain evidence confidence"
-"$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination.out"
+"$tui" --headless-fixture "$fixture" --size 80x40 --view coordination > "$test_root/coordination.out"
 contains "Approvals   1 of 2 approved" "$test_root/coordination.out" "coordination focuses on selected head"
-contains "single agent session" "$test_root/coordination.out" "coordination explains what there is to coordinate"
+contains "Coordinate  1 claims" "$test_root/coordination.out" "coordination counters are one Details row"
+contains "flags overlap" "$test_root/coordination.out" "coordination explains what there is to coordinate"
 "$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-empty.tsv" \
     --size 80x24 --view attention > "$test_root/attention-no-runs.out"
 contains "No workflow runs are recorded in this project, so only heads are watched." "$test_root/attention-no-runs.out" \
@@ -153,7 +158,7 @@ contains "Host        builder" "$test_root/remote-approval.out" "the remote deci
 contains "rejects it on its host" "$test_root/remote-approval.out" "the remote decision says where it is decided"
 # The recovery findings are Inbox's Repairs; --view recovery opens Inbox.
 "$tui" --headless-fixture "$fixture" --size 54x30 --view recovery > "$test_root/recovery.out"
-contains "INBOX" "$test_root/recovery.out" "the recovery view name opens Inbox"
+contains " 2 Inbox " "$test_root/recovery.out" "the recovery view name opens Inbox"
 contains "Repairs 3" "$test_root/recovery.out" "recovery findings are listed under Repairs"
 contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"
 contains "Agents 2" "$test_root/recovery.out" "a stopped terminal is one Agents item, not also a repair"
@@ -213,11 +218,11 @@ contains "Needs inspection: T-4" "$test_root/inbox.out" "an item Hydra cannot cl
 contains "Request     req_7f3a2c" "$test_root/inbox.out" "the Summary names the exact request"
 contains "Y Approve    N Reject    r Review    s Seen" "$test_root/inbox.out" "the Summary lists the keys that act on the item"
 contains "Summary  Review  References  Technical" "$test_root/inbox.out" "the detail names its pages"
-contains " 4 Inbox  11" "$test_root/inbox.out" "the Inbox tab carries the count of waiting items"
+contains " 2 Inbox 11" "$test_root/inbox.out" "the Inbox tab carries the count of waiting items"
 contains "11 items need you" "$test_root/inbox.out" "the status line counts the waiting items"
 "$tui" --headless-fixture "$fixture" --size 100x30 --view inbox > "$test_root/inbox-loading.out"
 contains "Reading what needs you" "$test_root/inbox-loading.out" "Inbox says it is still reading attention"
-contains "$(printf ' 4 Inbox  \302\267')" "$test_root/inbox-loading.out" "the badge is a dot until the first read"
+contains "$(printf ' 2 Inbox \302\267')" "$test_root/inbox-loading.out" "the badge is a dot until the first read"
 for view in heads detail coordination inbox; do
     "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
     assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"
@@ -232,41 +237,45 @@ done
 awk 'BEGIN {FS = OFS = "\t"}
 $1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}
 {print}' "$fixture" > "$test_root/columns.tsv"
-"$tui" --ascii --headless-fixture "$test_root/columns.tsv" --size 100x24 > "$test_root/columns.out"
+"$tui" --ascii --headless-fixture "$test_root/columns.tsv" --size 140x24 > "$test_root/columns.out"
+# A long name ends in an ellipsis inside its column; the agent column starts
+# at the same place on every row (read inside the list's 34 columns).
 awk '
-index($0, "STATUS") && index($0, "AGENT") { status = index($0, "STATUS"); agent = index($0, "AGENT"); next }
-status && /^  [ >*][ *] [^ ]/ {
-    if (length != 99) exit 1
-    if (substr($0, status - 1, 1) != " " || substr($0, status, 1) == " ") exit 1
-    if (substr($0, agent - 1, 1) != " " || substr($0, agent, 1) == " ") exit 1
-    rows++
-}
+/^ [ >][*!?~x+-] feature-/ { row = substr($0, 1, 34); agent = index(row, "codex") + index(row, "claude") + index(row, "shell")
+    if (!agent || (first && agent != first)) exit 1
+    first = agent; rows++ }
 END { if (rows != 3) exit 1 }
 ' "$test_root/columns.out"
-assert_success $? "table headers and cells share fixed status and agent columns"
-contains "Heads in this project ---" "$test_root/columns.out" "head list is titled by a named rule (ASCII)"
+assert_success $? "list rows share a fixed agent column"
+contains "Heads ---" "$test_root/columns.out" "head list is titled by a named rule (ASCII)"
 "$tui" --headless-fixture "$fixture" --size 100x24 > "$test_root/unicode.out"
-contains "$(printf 'Heads in this project \342\224\200')" "$test_root/unicode.out" "default output titles panes with a Unicode rule"
+contains "$(printf 'Heads \342\224\200')" "$test_root/unicode.out" "default output titles panes with a Unicode rule"
 if grep -q "$(printf '\342\225\255')" "$test_root/unicode.out"; then
     assert_success 1 "panes are not boxed"
 else
     assert_success 0 "panes are not boxed"
 fi
 "$tui" --headless-fixture "$fixture" --size 80x24 --view heads > "$test_root/tabs.out"
-# The top bar: the brand, numbered tabs (the active one a pill) and the view's title at the right.
-contains " 1 Work  2 Details 3 Overview" "$test_root/tabs.out" "the first tabs are visible at 80 columns with short labels and the active one is a pill"
-contains "WORK" "$test_root/tabs.out" "the view title stays at the right of the top bar at 80 columns"
+# The top bar: the brand, the four screens as numbered tabs (the active one
+# a pill) and the project summary at the right.
+contains " 1 Work  2 Inbox " "$test_root/tabs.out" "the four screens are numbered tabs and the active one is a pill"
+contains "3 Hosts  4 Stats" "$test_root/tabs.out" "every screen's tab is visible at 80 columns"
+contains "1 running" "$test_root/tabs.out" "the summary keeps its running count at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/hosts-tabs.out"
-contains " 8 Hosts " "$test_root/hosts-tabs.out" "the Hosts tab stays in view at 80 columns"
+contains " 3 Hosts " "$test_root/hosts-tabs.out" "the Hosts tab stays in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination-tabs.out"
-contains " 3 Coord " "$test_root/coordination-tabs.out" "the coordination tab is shown, short, at 80 columns"
+contains " 1 Work " "$test_root/coordination-tabs.out" "the coordination view name opens Work"
+contains "Conversation  Details" "$test_root/coordination-tabs.out" "the coordination view name opens Work on its Details page"
 "$tui" --fleet --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/fleet-tabs.out"
-contains "5 Flows 6 Stats 7 Workspace  8 Hosts " "$test_root/fleet-tabs.out" "the compatibility entry keeps the one numbered tab order, Hosts in view at 80 columns"
+contains "1 Work  2 Inbox" "$test_root/fleet-tabs.out" "the fleet entry keeps the four screens"
+contains " 3 Hosts  4 Stats" "$test_root/fleet-tabs.out" "the fleet entry keeps Hosts in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 100x24 --view hosts > "$test_root/wide-tabs.out"
-contains " 8 Hosts " "$test_root/wide-tabs.out" "the active tab is a pill at 100 columns"
+contains " 3 Hosts " "$test_root/wide-tabs.out" "the active tab is a pill at 100 columns"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
-contains " 6 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
-contains "STATISTICS" "$test_root/stats-tabs.out" "statistics names itself in the top bar"
+contains " 4 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view stats > "$test_root/stats-name.out"
+cmp -s "$test_root/stats-tabs.out" "$test_root/stats-name.out"
+assert_success $? "the Stats screen opens by its name and by the earlier one"
 # Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
 contains "Agent tokens" "$test_root/stats-usage.out" "statistics notes name agent tokens"
@@ -307,21 +316,23 @@ assert_success $? "an empty sample is not called filtered out"
 assert_success $? "an empty sample draws no chart"
 ! grep -Fq "Unobserved" "$test_root/stats-empty.out"
 assert_success $? "an empty sample draws no tiles"
-# Golden frames of every view at 140x40 and 80x24, in Unicode and ASCII: the
-# frame (top bar, titled rules, status chip, generated footer) is pinned.
+# Golden frames of every screen at 140x40 and 80x24 (Work also at 100x30
+# and 60x20, where its panes share one), in Unicode and ASCII: the frame (top
+# bar, titled rules, status chip, generated footer) is pinned. The earlier
+# view names detail and overview open Work on its Details and Run pages.
 # Regenerate with the same command when a change to a screen is intended.
-for golden_view in heads detail coordination overview workflows hosts workspace inbox statistics; do
-    for golden_size in 140x40 80x24; do
-        for golden_mode in plain ascii; do
-            golden_flag=
-            [ "$golden_mode" = ascii ] && golden_flag=--ascii
-            "$tui" $golden_flag --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" \
-                --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" \
-                --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" --size "$golden_size" --view "$golden_view" \
-                > "$test_root/golden.out"
-            cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/$golden_view-$golden_size-$golden_mode.txt"
-            assert_success $? "golden frame $golden_view at $golden_size ($golden_mode)"
-        done
+for golden_case in work:140x40 work:100x30 work:80x24 work:60x20 detail:140x40 detail:80x24 overview:140x40 overview:80x24 \
+    hosts:140x40 hosts:80x24 inbox:140x40 inbox:80x24 stats:140x40 stats:80x24; do
+    golden_view="${golden_case%%:*}"; golden_size="${golden_case#*:}"
+    for golden_mode in plain ascii; do
+        golden_flag=
+        [ "$golden_mode" = ascii ] && golden_flag=--ascii
+        "$tui" $golden_flag --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" \
+            --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" \
+            --attention-fixture "$repo_root/tests/fixtures/tui/inbox-v1.tsv" --size "$golden_size" --view "$golden_view" \
+            > "$test_root/golden.out"
+        cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/$golden_view-$golden_size-$golden_mode.txt"
+        assert_success $? "golden frame $golden_view at $golden_size ($golden_mode)"
     done
 done
 # Golden Stats frames: head sessions at every layout (tiles and charts,
@@ -376,8 +387,10 @@ assert_success $? "no location chip while every location is shown"
 ! grep -Fq "Cohorts" "$test_root/stats-local.out"
 assert_success $? "a sample without remote steps has no cohorts page"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
-contains " 7 Workspace " "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
-contains "PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is named in the top bar"
+contains " 1 Work " "$test_root/workspace-tabs.out" "the workspace view name opens Work"
+"$tui" --headless-fixture "$fixture" --size 80x24 > "$test_root/work-default.out"
+cmp -s "$test_root/workspace-tabs.out" "$test_root/work-default.out"
+assert_success $? "the workspace view is Work: no layout is named any more"
 if grep -q "Tab to focus / scroll" "$test_root/workspace-tabs.out"; then
     assert_success 1 "workspace panes do not repeat focus hints"
 else
@@ -386,13 +399,13 @@ fi
 printf 'HYDRA_TUI\t2\n' > "$test_root/empty.tsv"
 "$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view heads > "$test_root/empty-heads.out"
 contains "No agent work in this project yet" "$test_root/empty-heads.out" "empty head list explains the situation"
-contains "Press n to start one" "$test_root/empty-heads.out" "empty head list offers a next action"
-"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view workspace > "$test_root/empty-workspace.out"
-contains "Press n to start a task" "$test_root/empty-workspace.out" "empty workspace offers a next action"
+contains "n start a task" "$test_root/empty-heads.out" "empty head list offers a next action"
+contains "A head is one task: its own branch, worktree, terminal and agent." "$test_root/empty-heads.out" "empty Work says what a head is"
+contains "3 add a remote host" "$test_root/empty-heads.out" "empty Work offers adding a host"
 "$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view overview > "$test_root/empty-overview.out"
 contains "No agent work in this project yet" "$test_root/empty-overview.out" "empty overview explains instead of showing empty charts"
-"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view workflows > "$test_root/empty-workflows.out"
-contains "A workflow is a saved sequence of steps" "$test_root/empty-workflows.out" "empty workflows view explains what a workflow is"
+"$tui" --headless-fixture "$test_root/empty.tsv" --size 140x40 --view workflows > "$test_root/empty-workflows.out"
+contains "No agent work in this project yet" "$test_root/empty-workflows.out" "the workflows view name opens the same empty Work"
 
 printf 'WRONG\t1\n' > "$test_root/bad.tsv"
 "$tui" --headless-fixture "$test_root/bad.tsv" --size 80x24 > /dev/null 2>&1
@@ -723,10 +736,12 @@ wait "$change_pid"
 assert_equal "20" "$change_index" "changing state remains a complete native snapshot"
 
 "$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v1.tsv" --size 100x24 > "$test_root/fleet.txt"
-contains 'WHERE' "$test_root/fleet.txt" 'the one Work list names where each head runs'
+"$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v1.tsv" --size 100x24 --view detail > "$test_root/fleet-detail.txt"
+grep -Eq '^ .. ovh/feature +ovh ' "$test_root/fleet.txt"
+assert_success $? 'the one Work list names where each head runs'
 contains 'ovh/feature' "$test_root/fleet.txt" 'a remote head is named with its host and branch'
-contains 'desired running' "$test_root/fleet.txt" 'a remote head reports its durable desired state explicitly'
-contains 'unknown; no host observation' "$test_root/fleet.txt" 'a version-1 stream without host rows is an unknown observation, not a live one'
+contains 'desired running' "$test_root/fleet-detail.txt" 'a remote head reports its durable desired state explicitly'
+contains 'unknown; no host observation' "$test_root/fleet-detail.txt" 'a version-1 stream without host rows is an unknown observation, not a live one'
 contains 'x interrupt' "$test_root/fleet.txt" 'a remote head offers interrupt in place of removal'
 contains 'Showing remote work' "$test_root/fleet.txt" 'hydra fleet tui opens filtered to remote work'
 
@@ -737,33 +752,37 @@ contains 'stale' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders stale freshne
 contains 'task_abc' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders task identity'
 contains 'dependency' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders waiting reason'
 "$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view overview --ascii --size 140x30 > "$test_root/fleet-v3-overview.txt"
-contains '> task_abc' "$test_root/fleet-v3-overview.txt" 'a remote task is a row of the one Work list'
+contains '>- task_abc' "$test_root/fleet-v3-overview.txt" 'a remote task is a row of the one Work list'
 contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'the selected task shows the next action'
 contains 'confirmed_stopped' "$test_root/fleet-v3-overview.txt" 'the selected task shows the receiver cancellation acknowledgment'
-contains 'TASK / receiver-owned observation' "$test_root/fleet-v3-overview.txt" 'a selected remote task gets a full-width panel'
+contains 'task task_abc on build' "$test_root/fleet-v3-overview.txt" 'a selected remote task gets the Details page'
+contains 'Request      req-1' "$test_root/fleet-v3-overview.txt" 'the Details page carries the binding the controls act on'
 
 # One workspace (U11): a local and a remote observation compose one list.
 remote_fixture="$repo_root/tests/fixtures/tui/remote-v3.tsv"
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view heads > "$test_root/unified.txt"
 contains 'feature-live' "$test_root/unified.txt" 'local heads stay in the unified list'
-contains 'builder/feature-build' "$test_root/unified.txt" 'a remote head is listed beside local heads'
+contains 'builder/feature' "$test_root/unified.txt" 'a remote head is listed beside local heads'
 contains 'task_build' "$test_root/unified.txt" 'a remote task is listed beside local heads'
-contains 'needs approval' "$test_root/unified.txt" 'a waiting task says what it needs'
-contains 'archive/feature-index' "$test_root/unified.txt" 'a stale host keeps its head listed'
-contains 'Remote / 2 heads, 1 task on 3 hosts (1 disconnected)' "$test_root/unified.txt" 'the header counts remote work and disconnected hosts'
-contains 'Local / 3 heads' "$test_root/unified.txt" 'the header keeps the local counts'
+contains '~ task_build' "$test_root/unified.txt" 'a waiting task is marked as waiting on the user'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 60x40 --view heads > "$test_root/unified-words.txt"
+contains 'needs approval' "$test_root/unified-words.txt" 'a waiting task says what it needs'
+contains '! archive/feature...' "$test_root/unified.txt" 'a stale host keeps its head listed, marked'
+contains '3 remote / 1 of 3 hosts disconnected' "$test_root/unified.txt" 'the header counts remote work and disconnected hosts'
+contains '3 local' "$test_root/unified.txt" 'the header keeps the local counts'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 80x24 --view heads > "$test_root/unified-narrow.txt"
-contains 'builder/feature-build' "$test_root/unified-narrow.txt" 'the unified list fits 80 columns'
+contains 'builder/feature-b' "$test_root/unified-narrow.txt" 'the unified list fits 80 columns'
 contains '? help' "$test_root/unified-narrow.txt" 'the unified list keeps its hints at 80 columns'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view heads --location builder > "$test_root/location-host.txt"
-contains 'Heads: host builder' "$test_root/location-host.txt" 'a host filter names the host'
+contains 'Heads / host builder' "$test_root/location-host.txt" 'a host filter names the host on the list rule'
 contains 'builder/feature-build' "$test_root/location-host.txt" 'a host filter keeps that host''s head'
-contains 'observation fresh, 3s old' "$test_root/location-host.txt" 'a fresh remote head shows the observation age'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view detail --location builder > "$test_root/location-host-detail.txt"
+contains 'fresh, 3s old' "$test_root/location-host-detail.txt" 'a fresh remote head shows the observation age'
 if grep -Fq 'feature-live' "$test_root/location-host.txt"; then assert_success 1 'a host filter hides local heads'; else assert_success 0 'a host filter hides local heads'; fi
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view heads --location local > "$test_root/location-local.txt"
-contains 'Heads: local work' "$test_root/location-local.txt" 'the local filter is named'
+contains 'Heads / local work' "$test_root/location-local.txt" 'the local filter is named'
 if grep -Fq 'builder/' "$test_root/location-local.txt"; then assert_success 1 'the local filter hides remote heads'; else assert_success 0 'the local filter hides remote heads'; fi
-"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x28 --view detail --task archive/feature-index > "$test_root/stale-detail.txt"
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 110x28 --view detail --task archive/feature-index > "$test_root/stale-detail.txt"
 contains 'stale, 300s old' "$test_root/stale-detail.txt" 'a stale remote head shows its observation age'
 contains 'not its current state' "$test_root/stale-detail.txt" 'a stale observation is never presented as current'
 contains 'nothing here completes or stops it' "$test_root/stale-detail.txt" 'a stale observation does not complete or stop work'
@@ -773,8 +792,8 @@ contains 'disconnected' "$test_root/unified-hosts.txt" 'a host that did not answ
 contains 'never observed' "$test_root/unified-hosts.txt" 'a never-observed host says so instead of claiming an age'
 contains 'r retries' "$test_root/unified-hosts.txt" 'hosts offer an explicit retry'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
-contains 'REMOTE' "$test_root/unified-overview.txt" 'overview counts remote work'
-contains '1 disconnected of 3' "$test_root/unified-overview.txt" 'overview names disconnected hosts'
+contains '3 local / 3 remote' "$test_root/unified-overview.txt" 'the top bar counts remote work apart'
+contains '1 of 3 hosts disconnected' "$test_root/unified-overview.txt" 'the top bar names disconnected hosts'
 
 # Runs group the heads they create; headless heads describe their steps.
 runs_heads="$repo_root/tests/fixtures/tui/native-runs.tsv"
@@ -783,18 +802,18 @@ runs_live="$repo_root/tests/fixtures/tui/workflow-runs-running.tsv"
 not_contains() {
     if grep -Fq "$1" "$2"; then assert_success 1 "$3"; else assert_success 0 "$3"; fi
 }
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 120x30 --view heads > "$test_root/runs-heads.out"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 60x30 --view heads > "$test_root/runs-heads.out"
 # The summary follows the view title at the right of the top bar where the tabs leave room.
 "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 240x30 --view heads > "$test_root/runs-heads-wide.out"
-contains "2 heads (+1 in runs) / 1 running / 1 need attention" "$test_root/runs-heads-wide.out" "header counts the heads the user started and counts run heads within their run"
-contains "+ plan run kill-dry-run" "$test_root/runs-heads.out" "the run is listed under its planning head with an expand affordance"
+contains "2 heads / +1 in runs / 1 running" "$test_root/runs-heads-wide.out" "header counts the heads the user started and counts run heads within their run"
+contains "> + plan run kill-dry-run" "$test_root/runs-heads.out" "the run is listed under its planning head with an expand affordance"
 not_contains "kill-dry-run-worker" "$test_root/runs-heads.out" "run heads start collapsed under their run"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x30 --view heads > "$test_root/runs-expanded.out"
-contains "  - plan run kill-dry-run" "$test_root/runs-expanded.out" "a selected run head opens its run"
-contains "worker   kill-dry-run-worker" "$test_root/runs-expanded.out" "the worker is listed inside its run with its role"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 60x30 --view heads > "$test_root/runs-expanded.out"
+contains "  v + plan run kill-dry-run" "$test_root/runs-expanded.out" "a selected run head opens its run"
+contains "+ worker kill-dry-run-worker" "$test_root/runs-expanded.out" "the worker is listed inside its run with its role"
 contains "verifier kill-dry-run-check" "$test_root/runs-expanded.out" "a retired verifier stays visible inside its run"
 contains "retired" "$test_root/runs-expanded.out" "the verifier shows that it was retired"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x40 --view detail > "$test_root/runs-worker.out"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 100x40 --view detail > "$test_root/runs-worker.out"
 contains "Terminal    headless (no terminal)" "$test_root/runs-worker.out" "a headless head says it has no terminal"
 contains "Agent       codex / step implement / succeeded" "$test_root/runs-worker.out" "a headless head names the agent of its step"
 contains "Model       configured default: gpt-6-sol (not observed)" "$test_root/runs-worker.out" "a configured model is labelled as configuration"
@@ -803,25 +822,31 @@ contains "Executable  codex-cli 0.46.0" "$test_root/runs-worker.out" "the execut
 contains "Tokens      in 24,763  cached 24,448  out 1,122  cost unknown" "$test_root/runs-worker.out" "tokens are shown and an unreported cost stays unknown"
 contains "Role        worker (holds the run's result)" "$test_root/runs-worker.out" "the worker role is explained"
 not_contains "Session" "$test_root/runs-worker.out" "a headless head is not described by a terminal session"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --task kill-dry-run-worker --size 120x40 --view detail > "$test_root/runs-worker-live.out"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --task kill-dry-run-worker --size 100x40 --view detail > "$test_root/runs-worker-live.out"
 contains "Tokens      reported when the step finishes" "$test_root/runs-worker-live.out" "running tokens are pending, not zero"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 120x40 --view detail > "$test_root/runs-planner.out"
-contains "Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC / run run_aaaaaaaaaaaaaaaaaaaa / succeeded" "$test_root/runs-planner.out" "the planning head shows its plan approval and run"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 100x40 --view detail > "$test_root/runs-planner.out"
+contains "Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC / run" "$test_root/runs-planner.out" "the planning head shows its plan approval and run"
+contains "run_aaaaaaaaaaaaaaaaaaaa / succeeded" "$test_root/runs-planner.out" "the planning head names its run and its state"
 contains "Worker branch kill-dry-run-worker holds the result" "$test_root/runs-planner.out" "the planning head names what to do with the result"
 contains "Approval requests  none" "$test_root/runs-planner.out" "gate approval requests are named as such"
 not_contains "0 of 0" "$test_root/runs-planner.out" "no misleading zero-of-zero approval count"
-contains "Full diff   everything since the branch base: press : and choose diff" "$test_root/runs-planner.out" "the full diff row has a value"
+contains "Full diff   : diff (everything since the branch base)" "$test_root/runs-planner.out" "the full diff row has a value"
 not_contains "Full diff       :" "$test_root/runs-planner.out" "the full diff row has no stray colon"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 140x40 --view overview > "$test_root/runs-overview.out"
-contains "RUN / plan run kill-dry-run / succeeded / 2 heads / from add-kill" "$test_root/runs-overview.out" "Overview centres on the run"
-contains "implement        exec/compose   succeeded         1     1m06s         kill-dry-run-worker" "$test_root/runs-overview.out" "each step shows kind, role, state, attempts, duration and head"
-contains "kill-dry-run-check (retired)" "$test_root/runs-overview.out" "the run panel shows the retired verifier head"
+# --view overview opens Work on the Run page of the run it used to centre on.
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 100x40 --view overview > "$test_root/runs-overview.out"
+contains "+ succeeded / plan run kill-dry-run" "$test_root/runs-overview.out" "the Run page leads with the run's state and names it"
+contains "plan run kill-dry-run / succeeded / 2 heads" "$test_root/runs-overview.out" "the status line names the selected run"
+contains "Conversation  Details  Run" "$test_root/runs-overview.out" "the run's pages are named in the strip"
+contains " implement     + succeeded         1m06s" "$test_root/runs-overview.out" "each step shows its state and duration"
+contains "Head    kill-dry-run-worker" "$test_root/runs-overview.out" "the selected step names the head it ran on"
+contains "kill-dry-run-check (retired)" "$test_root/runs-overview.out" "the Run page shows the retired verifier head"
 not_contains "QUEUE DEPTH" "$test_root/runs-overview.out" "an empty queue chart is not drawn"
-"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --size 140x40 --view overview > "$test_root/runs-overview-live.out"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --size 100x40 --view overview > "$test_root/runs-overview-live.out"
 contains "Running step implement on kill-dry-run-worker (codex)" "$test_root/runs-overview-live.out" "a running run says what is running and where"
 contains "kill-dry-run-check (pending)" "$test_root/runs-overview-live.out" "a head the run has not created yet is pending"
 "$tui" --ascii --headless-fixture "$runs_heads" --size 140x40 --view overview > "$test_root/runs-overview-empty.out"
-contains "No workflow run yet." "$test_root/runs-overview-empty.out" "the run panel explains when there is no run"
+not_contains "Details  Run" "$test_root/runs-overview-empty.out" "without a run there is no Run page"
+contains " Details " "$test_root/runs-overview-empty.out" "without a run the side pane shows the head's details"
 "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x40 --diagnostics > "$test_root/runs-technical.out"
 for group in IDENTITY LIFECYCLE ADAPTER SOURCES; do
     contains "$group" "$test_root/runs-technical.out" "technical details group $group"

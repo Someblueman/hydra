@@ -698,9 +698,12 @@ static void goto_entry(struct app *app, struct native_inbox *in, const struct in
     const struct head *h = e->kind == INBOX_ATTENTION ? NULL : entry_head(app, e);
     size_t run = e->kind == INBOX_ATTENTION ? run_index(app, app->attention->items[e->index].run) : SIZE_MAX;
     if (!h && run == SIZE_MAX) { copy_text(app->notice, sizeof(app->notice), "It is not listed in Work"); return; }
-    enter_view(app, 0);
+    app->task_row = false;
     if (h) { app->run_row = false; app->selected = (size_t)(h - app->model.heads); }
     else { app->run_row = true; app->workflow_run = run; run_set_expanded(app, run, true); }
+    /* The page that answers the item: the Run page for a run, the Plan page
+     * for a plan, the Details page for a head. */
+    work_open(app, h ? (e->kind == INBOX_PLAN || e->kind == INBOX_LAND ? WORK_PLAN : WORK_DETAILS) : WORK_RUN);
     in->jumped = true;
 }
 
