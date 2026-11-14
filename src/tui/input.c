@@ -45,6 +45,7 @@ static int view_page(int *view) {
 void enter_view(struct app *app, int view) {
     int page = view_page(&view);
     if (view < 6 || view > 9) return;
+    if (view != app->view) work_selection_notice_clear(app);
     if (view == 8) { if (app->view != 8) statistics_toggle(app); return; }
     if (app->view == 8 && app->statistics) app->statistics->detail = false;
     if (view != app->view) app->previous_view = app->view;
@@ -247,7 +248,7 @@ bool screen_alias(struct app *app, enum key_action action) {
 static void remove_or_interrupt(struct app *app) {
     const struct head *head = selected_head(app);
     if (head && head_remote(head)) { fleet_action(app); return; }
-    if (selected_task(app)) { copy_text(app->notice, sizeof(app->notice), "Remote task: X cancels it through its receiver; x applies to heads"); return; }
+    if (selected_task(app)) { work_selection_notice(app, "Remote task: X cancels it through its receiver; x applies to heads"); return; }
     remove_key_action(app);
 }
 
@@ -258,7 +259,7 @@ static void retry_selected(struct app *app) {
     if (head && head_remote(head)) remote_retry(app, head->remote_host);
     else if (task) remote_retry(app, task->host);
     else if (app->model.host_count || app->remote_stale) remote_retry(app, NULL);
-    else copy_text(app->notice, sizeof(app->notice), "r retries a remote host; select remote work or a host first");
+    else work_selection_notice(app, "r retries a remote host; select remote work or a host first");
 }
 
 static void group_key(struct app *app) {

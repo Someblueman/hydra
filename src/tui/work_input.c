@@ -14,10 +14,10 @@ static void talk(struct app *app) {
     char refusal[TEXT];
     const struct head *h = selected_head(app);
     if (app->run_row) { (void)outline_toggle(app, 0); return; }
-    if (selected_task(app)) { copy_text(app->notice, sizeof(app->notice), "A remote task has no terminal here; Y/N/R/X are its controls"); return; }
-    if (!h) { copy_text(app->notice, sizeof(app->notice), "Select a head first; n starts a task"); return; }
+    if (selected_task(app)) { work_selection_notice(app, "A remote task has no terminal here; Y/N/R/X are its controls"); return; }
+    if (!h) { work_selection_notice(app, "Select a head first; n starts a task"); return; }
     if (remote_action_refusal(app, h, refusal, sizeof(refusal))) { toast(app, KT_TOAST_ERROR, refusal); return; }
-    if (head_headless(h)) { copy_text(app->notice, sizeof(app->notice), "A headless head has no terminal; its step output is in the conversation"); return; }
+    if (head_headless(h)) { work_selection_notice(app, "A headless head has no terminal; its step output is in the conversation"); return; }
     if (native_terminal_attach(app)) native_workspace_show_terminal(app, true);
 }
 
@@ -79,7 +79,7 @@ static void plan_key(struct app *app, enum key_action action) {
 void work_land(struct app *app) {
     char worker[TEXT];
     if (!work_land_worker(app, worker, sizeof(worker))) {
-        copy_text(app->notice, sizeof(app->notice), "Nothing to land: select the planning head of a finished run whose worker is kept");
+        work_selection_notice(app, "Nothing to land: select the planning head of a finished run whose worker is kept");
         return;
     }
     plan_action_land(app, worker);
@@ -114,7 +114,7 @@ static bool list_perform(struct app *app, enum key_action action) {
     case KEY_HEADS_OPEN: case KEY_HEADS_TALK: case KEY_WS_OPEN: talk(app); return true;
     case KEY_HEADS_COLLAPSE: case KEY_HEADS_EXPAND:
         if (!outline_toggle(app, action == KEY_HEADS_EXPAND ? 1 : -1))
-            copy_text(app->notice, sizeof(app->notice), "Left and right collapse and expand a run; select a run first");
+            work_selection_notice(app, "Left and right collapse and expand a run; select a run first");
         work_selection_changed(app);
         return true;
     default: return false;
@@ -125,7 +125,7 @@ static bool list_perform(struct app *app, enum key_action action) {
 static void run_control(struct app *app, enum key_action action) {
     static const char keys[] = {'Y', 'N', 'R', 'X'};
     if (!native_control_key(app, keys[action - KEY_RUN_APPROVE]))
-        copy_text(app->notice, sizeof(app->notice), "Y/N/R/X act on a selected run or remote task");
+        work_selection_notice(app, "Y/N/R/X act on a selected run or remote task");
 }
 
 bool work_perform(struct app *app, enum key_action action) {

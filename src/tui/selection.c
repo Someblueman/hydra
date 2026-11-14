@@ -86,7 +86,7 @@ void toggle_mark(struct app *app) {
     struct head *head = selected_head(app);
     size_t index;
     if (head == NULL) return;
-    if (head_remote(head)) { copy_text(app->notice, sizeof(app->notice), "Remote heads are not marked: removal and grouping run on their host"); return; }
+    if (head_remote(head)) { work_selection_notice(app, "Remote heads are not marked: removal and grouping run on their host"); return; }
     index = marked_index(app, head->branch);
     if (index < app->marked_count) {
         app->marked_count--;

@@ -129,9 +129,20 @@ int work_page(const struct app *app) {
     return work_page_shown(app, !work_merged(app));
 }
 
+void work_selection_notice(struct app *app, const char *text) {
+    copy_text(app->notice, sizeof(app->notice), text);
+    copy_text(app->selection_notice, sizeof(app->selection_notice), text);
+}
+
+void work_selection_notice_clear(struct app *app) {
+    if (app->selection_notice[0] && !strcmp(app->notice, app->selection_notice)) app->notice[0] = '\0';
+    app->selection_notice[0] = '\0';
+}
+
 void work_set_page(struct app *app, int page) {
     struct native_workspace *w = app->workspace;
     if (!w || !work_page_available(app, page)) return;
+    work_selection_notice_clear(app);
     selection_key(app, w->chosen_for, sizeof(w->chosen_for));
     w->chosen = page;
     w->scroll[page] = 0;
@@ -212,6 +223,7 @@ enum key_chain_id work_chain(const struct app *app) {
 void work_selection_changed(struct app *app) {
     struct native_workspace *w = app->workspace;
     app->preview_back = 0;
+    work_selection_notice_clear(app);
     if (w) {
         w->run_auto = false;
         memset(w->scroll, 0, sizeof(w->scroll));

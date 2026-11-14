@@ -147,6 +147,9 @@ struct app {
     char search[TEXT];
     char pending_task[TEXT];
     char notice[TEXT];
+    /* A notice about the selection or the page shown ("No Run page for this
+     * selection"); it goes when either changes (work_selection_notice). */
+    char selection_notice[TEXT];
     char snapshot_error[TEXT];
     char preview_text[32768];
     /* Rows the Details transcript is scrolled back from its newest output. */

@@ -845,6 +845,13 @@ done
 contains 'Heads ---' "$test_root/alias-back.txt" 'Esc after an old screen key returns to the screen it left'
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" --ascii --size 140x40 --view work --keys DD > "$test_root/alias-toggle.txt"
 contains 'Heads ---' "$test_root/alias-toggle.txt" 'D on Stats still goes back, as the toggle it was'
+# A notice about the selection's pages goes when the selection moves.
+"$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" --ascii --size 140x40 --view work \
+    --keys "$(printf '\034C')" > "$test_root/page-notice.txt"
+contains 'No Run page for this selection' "$test_root/page-notice.txt" 'ctrl+\ C on a head without a run says there is no Run page'
+"$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" --ascii --size 140x40 --view work \
+    --keys "$(printf '\034C')j" > "$test_root/page-notice-moved.txt"
+if grep -Fq 'No Run page' "$test_root/page-notice-moved.txt"; then assert_success 1 'the page notice goes when the selection moves'; else assert_success 0 'the page notice goes when the selection moves'; fi
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
 contains '3 local / 3 remote' "$test_root/unified-overview.txt" 'the top bar counts remote work apart'
 contains '1 of 3 hosts disconnected' "$test_root/unified-overview.txt" 'the top bar names disconnected hosts'

@@ -70,7 +70,9 @@ static void show_page(struct app *app, enum key_action action) {
     int page=pages[action-KEY_LAYOUT_CONVERSATION];
     enter_view(app,7);
     if (!work_page_available(app,page)) {
-        snprintf(app->notice,sizeof(app->notice),"No %s page for this selection",page==WORK_PLAN ? "Plan" : page==WORK_RUN ? "Run" : "Details");
+        char text[64];
+        snprintf(text,sizeof(text),"No %s page for this selection",page==WORK_PLAN ? "Plan" : page==WORK_RUN ? "Run" : "Details");
+        work_selection_notice(app,text);
         return;
     }
     work_set_page(app,page);
@@ -83,7 +85,7 @@ static void show_page(struct app *app, enum key_action action) {
  * that completed its chord, so a key Hydra keeps can still be typed. */
 static void view_command(struct app *app, enum key_action action, const struct kt_event *e) {
     struct native_terminal *t=native_terminal_selected(app);
-    if (!t || !t->screen) { copy_text(app->notice,sizeof(app->notice),"No agent view is open; a opens the selected one"); return; }
+    if (!t || !t->screen) { work_selection_notice(app,"No agent view is open; a opens the selected one"); return; }
     switch (action) {
     case KEY_TERMINAL_RECONNECT: reconnect(app,t); break;
     case KEY_TERMINAL_CLOSE: close_view(app,t); break;

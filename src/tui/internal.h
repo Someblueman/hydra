@@ -223,6 +223,11 @@ void work_focus_list(struct app *app);
 void work_focus_page(struct app *app, int page);
 /* The selection moved: its pages start at the top and its output is read. */
 void work_selection_changed(struct app *app);
+/* A notice that holds only for the selection and page shown now: it is
+ * cleared when the selection, the page or the screen changes, unless another
+ * notice has replaced it. */
+void work_selection_notice(struct app *app, const char *text);
+void work_selection_notice_clear(struct app *app);
 void work_open(struct app *app, int page);
 bool work_back(struct app *app);
 enum key_chain_id work_chain(const struct app *app);
