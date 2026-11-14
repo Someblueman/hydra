@@ -50,6 +50,7 @@ workflow_task_start() {
         # Remote task records are Hydra evidence; no local user command runs here.
         umask 077
         _wts_pid=""
+        trap 'workflow_wake_driver' 0
         trap '[ -z "$_wts_pid" ] || operations_signal_tree "$_wts_pid" TERM' HUP INT TERM
         if ! workflow_bindings_match "$_wts_run"; then
             workflow_atomic_scalar "$_wts_sd/state" recovery-required

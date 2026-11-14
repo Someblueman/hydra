@@ -72,6 +72,17 @@ workflow_count_states() {
         END { print count + 0 }' "$1/graph.tsv"
 }
 
+# Run by a step worker as it exits, after it recorded its result, so the
+# driver polls at once instead of finishing its one-second sleep. A worker is
+# the driver's child; once the driver is gone the worker is reparented and the
+# driver's PID may name an unrelated process, so no signal is sent then.
+workflow_wake_driver() {
+    [ -n "${_wd_driver_pid:-}" ] || return 0
+    _wwd_worker="$(exec sh -c 'printf %s "$PPID"')"
+    operations_owns_pid "$_wd_driver_pid" "$_wwd_worker" || return 0
+    kill -USR1 "$_wd_driver_pid" 2>/dev/null || true
+}
+
 workflow_run_owner_active() {
     _wroa_dir="$1"
     _wroa_pid="$(sed -n '1p' "$_wroa_dir/owner-pid" 2>/dev/null || true)"
@@ -357,6 +368,7 @@ workflow_start_step() {
     fi
     workflow_event "$_wss_dir" "$_wss_id" step.running "attempt=$_wss_attempt"
     (
+        trap 'workflow_wake_driver' 0
         _ws_command_pid=""
         _ws_cancelled=0
         trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
@@ -478,6 +490,10 @@ workflow_drive() {
     # while the driver keeps running; the run would then look stale and a
     # resume could start a second driver.
     _wd_driver_pid="$(exec sh -c 'printf %s "$PPID"')"
+    # Step workers started from here on signal USR1 as they exit (see
+    # workflow_wake_driver); the trap stays set so a late signal is harmless.
+    _wd_woken=0
+    trap '_wd_woken=1' USR1
     workflow_atomic_scalar "$_wd_dir/owner-pid" "$_wd_driver_pid" || return 1
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1
@@ -495,6 +511,9 @@ workflow_drive() {
     trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
     while :; do
+        # A worker that finishes after this point is either seen by this
+        # poll's scans or makes the poll skip its sleep.
+        _wd_woken=0
         workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)"
         if workflow_plan_expired "$_wd_dir" && [ ! -f "$_wd_dir/cancel-requested" ]; then
             workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"
@@ -597,6 +616,16 @@ workflow_drive() {
                 return 1
             fi
         fi
-        sleep 1
+        # Sleep at most a second; a finishing worker's signal ends the wait.
+        # The background sleep lets the trap run at once instead of after a
+        # foreground sleep returns.
+        if [ "$_wd_woken" -eq 0 ]; then
+            sleep 1 &
+            _wd_sleep=$!
+            if ! wait "$_wd_sleep" 2>/dev/null; then
+                kill "$_wd_sleep" 2>/dev/null || true
+                wait "$_wd_sleep" 2>/dev/null || true
+            fi
+        fi
     done
 }
