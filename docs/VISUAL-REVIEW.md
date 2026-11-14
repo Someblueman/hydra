@@ -1,7 +1,8 @@
 # Visual review without manual runs
 
 `make visual-review` replaces "build it and look" for the control centre's
-screens (roadmap U4, I4 and the 2.9.0 Hosts screens). It installs this checkout
+four screens (1 Work, 2 Inbox, 3 Hosts, 4 Stats), their pages and dialogs
+(roadmap U4, I4 and the Hosts setup screens). It installs this checkout
 into a private prefix, drives the installed native TUI over a pseudo-terminal
 through a fixed set of states with real key presses, keeps the exact byte
 stream of every state, renders each stream through the product's own terminal
@@ -36,10 +37,14 @@ flows in `scripts/visual_review/flows.py` cover:
 
 | Flow | States |
 |---|---|
-| `work` | the Workspace planning view, the Work list with a run collapsed and expanded, Overview with the run running, finished and failed, a headless worker's details, technical details, a head whose terminal is gone, Coordination, Recovery and a finding's diagnostics, Workflows, Statistics, the Attention queue (an approval waiting for the user), its detail, a failed check, the result review (verdict, verification, changes), the selected identity, the evidence review, keyboard help, the Hosts hub |
-| `fleet` | the Fleet workspace, remote heads, the Fleet overview, Hosts with observations, Recovery with an offline host, Fleet attention |
-| `hosts` | the guided remote setup: entry, Hosts, the form, host-key trust (a wrong word, typed `yes`), blocking requirements, the missing-tmux pause, the provisioning plan (declined, shown again), the agent inventory, an installer plan, the sign-in hand-off and its terminal, a failed sign-in, done, Hosts afterwards |
+| `work` | Work with a live planning head selected and its latest output beside the list; a run expanded under its planning head with its Run page (graph, steps, evidence) running, finished and failed; a run head's Run page; a headless worker's Details page and the technical page (`d`); the Details of a head whose terminal is gone; the remove dialog; the command palette; the Inbox (an approval waiting first), an item's Summary, the approve dialog, a stopped terminal and its Technical page (DIAGNOSTICS), a failed check; the result review (verdict, how it was verified, changes, identity) and the evidence review; Stats (Workflow runs); keyboard help; Hosts with This machine |
+| `fleet` | `hydra tui --fleet`: Work filtered to remote work, a remote head's Details, Hosts with observed hosts, the Inbox with remote decisions and host problems, Stats with the latest fleet response |
+| `hosts` | the guided remote setup from Hosts (`3`): entry, the list, the add-host form, host-key trust (a wrong word, typed `yes`), blocking requirements, the missing-tmux pause, the provisioning plan (declined, shown again), the agent inventory, an installer plan, the sign-in hand-off and its terminal, a failed sign-in, done, Hosts afterwards |
 | `hosts-changed-key`, `hosts-unfinished`, `hosts-running` | a changed host key (manual recovery only), an unfinished setup with its removal plan, a kept record, a duplicate name and the edit form, a running step with its elapsed time and the cancelled result |
+
+Pages are reached with `[` and `]`, screens with `1`-`4`, and every dialog is
+captured over the screen it opened from, so the dimmed backdrop is on the
+sheet too.
 
 Each flow runs at 80x24 and 140x40 in the dark and light themes and in
 no-colour mode (`NO_COLOR=1`): six variants per state. The `terminal` theme
@@ -79,8 +84,9 @@ within the matrix above. It fails on:
   a complete word; an unbalanced `(`; and footer hints cut to a lone letter.
 - **overlap**: two panels whose rectangles intersect without one containing
   the other, or text drawn over a panel's side border.
-- **focus**: no cell in the theme's selected tone, no `>` marker, no visible
-  cursor and no action prompt (`y approve`, `Type yes`, `Enter continues`...).
+- **focus**: no cell in the theme's selected tone, no `▌` or `>` marker, no
+  visible cursor and no action prompt (`y approve`, `Type yes`, `Enter
+  continues`...).
 - **palette** and **status-tone**: a colour outside the theme's declared
   palette (the nine tones in `src/tui/render.c`, mirrored in `themes.py` and
   checked against the C source on every run), any colour escape in no-colour
@@ -94,7 +100,9 @@ within the matrix above. It fails on:
   screen.
 - **contrast**: text whose foreground/background WCAG contrast is below 4.5
   (3.0 for the muted tone and for box-drawing glyphs) in the dark and light
-  themes; no-colour mode uses the terminal's own colours and is not judged.
+  themes, selected rows included (every ink on a filled selection is the
+  theme's `on_selection` colour); no-colour mode uses the terminal's own
+  colours and is not judged.
 
 Findings listed in `scripts/visual_review/lint-known.tsv` (rule, capture glob,
 message substring, reason) are reported as known on the contact sheet and do
@@ -112,4 +120,4 @@ of the live refresh path), real-provider output, a real remote host, or the
 aesthetic result; the reviewer still looks at the page. States that need a
 real agent conversation (the planning journey with a live provider) are
 exercised by `make test-usability` with text snapshots and are not on this
-sheet; the Workspace planning layout is captured with the fixture heads.
+sheet; Work's planning head is captured with the fixture heads.
