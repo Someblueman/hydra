@@ -233,8 +233,8 @@ assert_equal "$settled_rows" "$(HYDRA_SESSIONS_NO_CACHE=1 rows 2500)" "sessions 
 HYDRA_SESSIONS_CHECKPOINT_EVENTS=1
 cache="$HYDRA_HOME/cache/sessions/$project"
 assert_equal "$settled_rows" "$(rows 2500)" "the first cached read agrees"
-[ -f "$cache/$alpha.tsv" ] && [ -f "$cache/$beta.tsv" ]
-assert_success $? "settled history is checkpointed"
+if [ -f "$cache/$alpha.tsv" ] && [ -f "$cache/$beta.tsv" ]; then status=0; else status=1; fi
+assert_success "$status" "settled history is checkpointed"
 assert_equal 600 "$(stat -c %a "$cache/$alpha.tsv" 2>/dev/null || stat -f %Lp "$cache/$alpha.tsv")" "checkpoints are private"
 assert_equal "" "$(find "$cache" -name '*.next.*')" "no partial checkpoint is left"
 assert_equal "$settled_rows" "$(rows 2500)" "a read from checkpoints agrees"
@@ -254,8 +254,8 @@ assert_equal "$(HYDRA_SESSIONS_NO_CACHE=1 rows 9100)" "$(rows 9100)" "a log shor
 rm -rf "$HYDRA_HOME/cache"
 ln -s "$test_root/elsewhere" "$HYDRA_HOME/cache"
 assert_equal "$(HYDRA_SESSIONS_NO_CACHE=1 rows 9100)" "$(rows 9100)" "a symlinked cache is not used"
-[ ! -e "$test_root/elsewhere" ]
-assert_success $? "nothing is written through a symlinked cache"
+if [ -e "$test_root/elsewhere" ]; then status=1; else status=0; fi
+assert_success "$status" "nothing is written through a symlinked cache"
 rm -f "$HYDRA_HOME/cache"
 
 # The command: schema 5, session rows before the closing counts, and the

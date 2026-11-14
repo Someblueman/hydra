@@ -80,8 +80,8 @@ assert_failure $? "requires a branch"
 activity_json "$instance" active "$now" | "$hydra" adapter activity missing-branch >/dev/null 2>&1
 assert_failure $? "rejects an unknown head"
 assert_equal "$before" "$(wc -l < "$event_file" | tr -d ' ')" "rejected input appends nothing"
-[ ! -e "$head_dir/instances/$instance/activity-state" ]
-assert_success $? "rejected input records no state"
+if [ -e "$head_dir/instances/$instance/activity-state" ]; then status=1; else status=0; fi
+assert_success "$status" "rejected input records no state"
 
 output="$(activity_json "$instance" active $((now - 30)) | "$hydra" adapter activity watched 2>&1)"
 assert_success $? "an activity change is recorded"
@@ -161,8 +161,8 @@ state_v2_write_scalar "$head_dir/desired-state" running
 # Observer coverage: one interval while the observer keeps reporting, a new
 # one after it was away, bounded, and never silently trusted when damaged.
 coverage="$(activity_coverage_file "$project")"
-[ -f "$coverage" ]
-assert_success $? "recording activity also records coverage"
+if [ -f "$coverage" ]; then status=0; else status=1; fi
+assert_success "$status" "recording activity also records coverage"
 rm -f "$coverage"
 "$hydra" adapter watch >/dev/null 2>&1
 assert_success $? "adapter watch records coverage"
