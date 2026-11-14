@@ -69,6 +69,11 @@ void kt_restyle(struct kt_canvas *canvas, struct kt_rect area, struct kt_style s
 
 /* Display columns of UTF-8 text as kt_text lays it out on a Unicode canvas. */
 int kt_text_width(const char *text);
+/* How much of `length` bytes of text fits in `columns` without cutting a
+ * cell or a cluster of joined scalars: returns the bytes that fit and, when
+ * `width` is not NULL, the columns they take. For wrapping, scrolling a line
+ * sideways and measuring part of a text; the text need not be terminated. */
+size_t kt_text_fit(const char *text, size_t length, int columns, int *width);
 enum kt_align { KT_ALIGN_LEFT, KT_ALIGN_CENTER, KT_ALIGN_RIGHT };
 /* One line of text on the first row of `area`, aligned within the part of
  * the area that is on the canvas. Text that does not fit is cut between

@@ -34,6 +34,12 @@ bool kt_chord_parse(const char *text, size_t length, struct kt_chord *out);
  * pieces rather than inside a character, and terminated when capacity allows. */
 size_t kt_chord_format(const struct kt_chord *chord, char *out, size_t capacity);
 size_t kt_chord_config(const struct kt_chord *chord, char *out, size_t capacity);
+/* The compact form footers and help screens show: named keys in lower case
+ * ("enter", "esc", "pgdn", "space"), arrows as their glyphs (U+2190-2193,
+ * which an ASCII canvas draws as < ^ > v) and modifiers spelled as in
+ * configuration ("ctrl+]", "shift+tab", "g g"). Returns the full length and
+ * cuts output as kt_chord_format does. */
+size_t kt_chord_hint(const struct kt_chord *chord, char *out, size_t capacity);
 bool kt_chord_equal(const struct kt_chord *a, const struct kt_chord *b);
 /* True when chord begins with every keystroke of prefix and is longer. */
 bool kt_chord_extends(const struct kt_chord *chord, const struct kt_chord *prefix);
@@ -43,12 +49,20 @@ bool kt_chord_extends(const struct kt_chord *chord, const struct kt_chord *prefi
  * the application. scope is a bit set: the binding is live whenever one of
  * its scopes is among those passed to kt_keymap_feed, so an application adds
  * scopes later by adding bits and rows. A binding without chords is unbound.
- * line is the configuration line that last set the binding, or 0. */
+ * line is the configuration line that last set the binding, or 0.
+ *
+ * group and priority are for generated help (components.h): group is the
+ * heading the binding is listed under in the full form (NULL: the first,
+ * untitled group), and priority orders what the one-line form keeps when it
+ * runs out of room: higher stays longer, and a negative priority lists the
+ * binding in the full form only. A binding without a label is in neither. */
 struct kt_binding {
     const char *name, *label;
     uint32_t action, scope;
     struct kt_chord chords[KT_BINDING_CHORDS];
     unsigned chord_count, line;
+    const char *group;
+    int priority;
 };
 struct kt_keymap { struct kt_binding *bindings; size_t count; };
 /* pending holds the keystrokes of a chord entered so far (count 0 when idle),

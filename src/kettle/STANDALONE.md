@@ -9,8 +9,8 @@ their layout can affect both source and binary compatibility.
 
 ```
 make                    # portable C99 static library, no POSIX layer
-make runtime            # also the optional POSIX runtime and its test driver
-make test               # component suites, the runtime, the examples' own tests
+make runtime            # also the optional POSIX runtime, its test driver and the components
+make test               # core suites, the runtime, the components, the examples' own tests
 make examples           # chart, counter, themes and workspace examples
 make test-pty           # the runtime and a real shell on actual PTYs, native C observer
 build/kettle-counter
@@ -40,6 +40,11 @@ tree's `build` directory.
 - [Input](input.h) and [key bindings](keymap.h): the caller owns the decoder,
   the binding table and the chord state. Key events carry the exact bytes
   received. Bindings hold pointers to caller strings, which must outlive them.
+- [Components](components.h): structs the application owns and initialises
+  in place; nothing is allocated. Their data comes from callbacks or arrays
+  the caller owns and keeps in place while the component uses them; filter
+  and text storage is inline or supplied by the caller. They use the
+  runtime's messages and commands, so they link with it.
 - [Runtime](program.h): optional, POSIX. It owns the event loop, the
   terminal's modes, signal handlers while it runs, the frame buffers and the
   child processes it starts; the application owns its model and whatever its

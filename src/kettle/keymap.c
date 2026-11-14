@@ -209,6 +209,43 @@ static size_t chord_text(const struct kt_chord *chord, char *out, size_t capacit
     return finish(&w);
 }
 
+/* The hint spelling of a named key: arrows as glyphs, page keys short, the
+ * rest as configuration writes them. */
+static const char *hint_word(uint32_t key) {
+    switch (key) {
+    case KT_KEY_UP: return "\xe2\x86\x91";
+    case KT_KEY_DOWN: return "\xe2\x86\x93";
+    case KT_KEY_LEFT: return "\xe2\x86\x90";
+    case KT_KEY_RIGHT: return "\xe2\x86\x92";
+    case KT_KEY_PAGE_UP: return "pgup";
+    case KT_KEY_PAGE_DOWN: return "pgdn";
+    case KT_KEY_DELETE: return "del";
+    default: return key_word(key, false);
+    }
+}
+
+static void put_hint(struct writer *w, const struct kt_keystroke *k) {
+    const char *word = hint_word(k->key);
+    size_t i;
+    for (i = 0; i < MODIFIER_NAMES; i++) {
+        if (!modifier_names[i].display || !(k->mods & modifier_names[i].mod)) continue;
+        put(w, modifier_names[i].name);
+        put(w, "+");
+    }
+    if (word) put(w, word);
+    else put_key(w, k, false);
+}
+
+size_t kt_chord_hint(const struct kt_chord *chord, char *out, size_t capacity) {
+    struct writer w = {out, capacity, 0, 0, false};
+    unsigned i;
+    for (i = 0; i < chord->count && i < KT_CHORD_MAX; i++) {
+        if (i) put(&w, " ");
+        put_hint(&w, &chord->keys[i]);
+    }
+    return finish(&w);
+}
+
 size_t kt_chord_format(const struct kt_chord *chord, char *out, size_t capacity) {
     return chord_text(chord, out, capacity, true);
 }

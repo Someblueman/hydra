@@ -131,7 +131,14 @@ $(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(K
 $(BUILD_DIR)/test-kettle-themes: examples/themes_test.c examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes_test.c $(KETTLE_SOURCES) -o $@
 
-test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap
+# Components: pure parts drawn into a canvas, then interaction under the headless driver.
+$(BUILD_DIR)/test-kettle-components: tests/c/test_kettle_components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_components.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/test-kettle-widgets: tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) -o $@
+
+test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets
 	$(BUILD_DIR)/test-kettle
 	$(BUILD_DIR)/test-kettle-present
 	$(BUILD_DIR)/test-kettle-style
@@ -144,6 +151,8 @@ test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_D
 	$(BUILD_DIR)/test-kettle-program
 	$(BUILD_DIR)/test-kettle-counter
 	$(BUILD_DIR)/test-kettle-themes
+	$(BUILD_DIR)/test-kettle-components
+	$(BUILD_DIR)/test-kettle-widgets
 
 $(BUILD_DIR)/kettle-example: examples/kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/kettle.c $(KETTLE_SOURCES) -o $@
@@ -573,7 +582,7 @@ sanitize-plan-workspace:
 sanitize-workspace:
 	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
 
-$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter: $(KETTLE_HEADERS)
+$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets: $(KETTLE_HEADERS)
 
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.

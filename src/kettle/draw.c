@@ -57,10 +57,10 @@ static size_t next_scalar(const char *text, size_t remaining, uint32_t *cp) {
  * cluster: `bytes` of it, `width` columns wide. `total` is the whole width. */
 struct fit { size_t bytes; int width, total; };
 
-static struct fit measure(const char *text, bool unicode, int limit) {
+static struct fit measure_bytes(const char *text, size_t length, bool unicode, int limit) {
     struct walk w;
     struct fit fit = {0, 0, 0};
-    size_t length = text ? strlen(text) : 0, at = 0;
+    size_t at = 0;
     memset(&w, 0, sizeof(w));
     w.unicode = unicode;
     while (at < length) {
@@ -76,8 +76,19 @@ static struct fit measure(const char *text, bool unicode, int limit) {
     return fit;
 }
 
+static struct fit measure(const char *text, bool unicode, int limit) {
+    return measure_bytes(text, text ? strlen(text) : 0, unicode, limit);
+}
+
 int kt_text_width(const char *text) {
     return measure(text, true, 0).total;
+}
+
+size_t kt_text_fit(const char *text, size_t length, int columns, int *width) {
+    struct fit fit = {0, 0, 0};
+    if (text && length) fit = measure_bytes(text, length, true, columns < 0 ? 0 : columns);
+    if (width) *width = fit.width;
+    return fit.bytes;
 }
 
 /* ---- aligned text ------------------------------------------------------- */
