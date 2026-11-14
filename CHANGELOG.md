@@ -266,6 +266,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `hydra-fleet` reads JSON with non-ASCII text again when built against
+  json-c 0.18 (Ubuntu 26.04), whose strict parser rejected every character
+  from U+0080: receipts, plans and records with an accented letter or a
+  symbol failed to load. Hydra now checks UTF-8 itself (RFC 3629, so overlong
+  forms and encoded surrogates are refused on every json-c version) and parses
+  the same text on 0.17 and 0.18.
 - The control centre opens on the first local head when a remote observation
   answers before the local one, instead of selecting the first remote head.
 - Keys that arrive in one burst can no longer scroll the onboarding view past
