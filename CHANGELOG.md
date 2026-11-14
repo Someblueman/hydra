@@ -135,7 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tabs: 1 Work, 2 Inbox, 3 Hosts and 4 Stats (the keys `1` to `4`, or the
   configurable `screen.*` chords while you type to an agent). The old
   `--view` names open the screen or page that replaced them, and key names
-  from earlier keys files still load.
+  from earlier keys files still load. Tab no longer changes screens: it
+  moves between a screen's panes.
   - **Work** replaces Heads, Details, Coordination, Overview, Workflows and
     the Workspace layouts. The list of heads, their runs, remote tasks and
     retired run heads sits beside the selected head's latest output, shown
@@ -162,6 +163,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `o` opens the item in Work, and Esc comes back.
 
     The Inbox tab carries a badge with the number of items.
+  - **Hosts** is a list beside a detail pane:
+    - The list shows This machine (its heads, tmux and Hydra versions and
+      the agents on its PATH, read when Hosts opens), the hosts Hydra
+      observes, unfinished setups and "+ Add a host".
+    - Enter on a host opens Work filtered to it, and Esc comes back.
+    - A setup's steps and the current step show in the detail pane. A
+      running step has a spinner and its elapsed time; `c` cancels it and
+      Esc leaves it running.
+    - The add-host form, the host-key trust and every plan open as dialogs.
+      Trusting a host key needs a typed `yes`. A plan is approved with `y`
+      only; Enter never approves it.
+    - `[` and `]` switch between Hosts and the Onboarding page (`O` still
+      opens it).
   - **Stats** shows its pages (Sessions, Runs and, when the sample records
     remote steps, Cohorts) on one frame. Four tiles sit above the charts and
     tables, and Enter opens a row's evidence. `/` filters as you type, `w`
