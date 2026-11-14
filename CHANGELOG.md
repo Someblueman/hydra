@@ -57,6 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   truncation, and rectangle helpers (inset, cut from an edge, centre, split by
   fixed, percentage, minimum and flexible constraints).
 
+- kettle components (`components.h`, "Components" in `src/kettle/README.md`,
+  `examples/components.c`): a footer and full help generated from keymaps
+  (the short form drops lower-priority keys to fit and says so), list (with
+  filter-as-you-type, sections and match highlighting), table, viewport,
+  single-line text input, confirmation dialog, form, modal stack with a
+  dimmed backdrop, tabs, spinner, progress bar, toasts and a command palette
+  with fuzzy matching. Each is a caller-owned struct with `init`, `update` and
+  `view`, draws with theme tokens, takes its keys from a rebindable binding
+  table, and wakes the program only while it animates. `struct kt_binding`
+  gains `group` and `priority` for the generated help.
 - Statistics covers interactive work, not only recorded workflow runs. While
   a control centre is open it notes, from tmux's record of each head's last
   output, when a head starts and stops producing terminal output, and records
