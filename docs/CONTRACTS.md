@@ -790,6 +790,28 @@ acceptance digest), `questions`, `context`; `steps[]` in plan order, each with
 `minutes` and `heads`); `scripts[]` (`name`, `path`, and `text` for proposal
 assets) and `repository_files[]` (`name`, `path`). Members may be added.
 
+`hydra land <worker> [--into <branch>] [--dry-run] [--keep-head]` without
+`--gate` lands a plan result: it finds the latest plan run whose spawn step
+created `<worker>` and requires `workflow-plan verified-commit <run-dir>
+<branch>` (the run succeeded, its delivery verifies now, and the commit is the
+one `head-commit` binds; printed as `commit<TAB>plan-id`, otherwise
+`not_verified`, `checks_elsewhere` or `no_commit`). `--into` defaults to the
+current branch of the project's checkout. Under the source and target locks it
+refuses `worker_moved` when `refs/heads/<worker>` is not that commit,
+`dirty_target` when the checkout has staged or unstaged changes to tracked
+files (untracked files are left to Git), `target_changed` and `agent_environment`
+as above; asks `Merge ... into <branch>? [y/N]` on a terminal unless
+`HYDRA_NONINTERACTIVE` is set; archives the target; and merges exactly that
+commit with `git merge --no-ff -m "Land <worker> (Hydra plan <id>, run <run>)"`,
+aborting a conflict with the checkout restored. It never pushes. The run records
+`landed` (`commit<TAB>branch<TAB>merge`), which the result review reports.
+Afterwards the worker head is removed with `--protect-untracked` semantics and its
+branch kept, unless `--keep-head` or its worktree holds changes not on the
+branch, in which case it is kept and the output says so. With `--gate`, landing
+is the head-gate integration as before, and `--into` now also defaults to the
+current branch. The result review's `next.land` is `hydra land <worker>`, and
+`next.cleanup` lists the plan's other spawned heads.
+
 `hydra plan approve` starts the owner through `workflow-plan detach
 <stdin-file> <program> [<argument>...]`, which runs it in a session of its own
 with hangups ignored and prints its PID.

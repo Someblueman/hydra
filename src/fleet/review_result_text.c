@@ -346,22 +346,24 @@ static void changes(struct out *o, json_object *changes)
 
 static void next(struct out *o, json_object *next, const char *verdict)
 {
-    json_object *cleanup = f_field(next, "cleanup");
+    json_object *cleanup = f_field(next, "cleanup"), *landed = f_field(next, "landed");
     say(o, "");
     say(o, "NEXT");
-    if (f_string(next, "keep")) {
+    if (landed) {
+        say(o, "  Landed: commit %.12s was merged into %s as %.12s; nothing was pushed.", text(landed, "commit", "?"),
+            text(landed, "into", "?"), text(landed, "merge", "?"));
+    } else if (f_string(next, "keep")) {
         say(o, "  Not landable as is. To keep the worker's uncommitted and untracked work, commit it on its branch");
-        say(o, "  (review git status there first), then land the branch yourself; Hydra never merges for you:");
+        say(o, "  (review git status there first) and run the plan's checks again; landing takes only a verified commit:");
         say(o, "    %s", f_string(next, "keep"));
-        if (f_string(next, "land"))
-            say(o, "    %s", f_string(next, "land"));
     } else if (f_string(next, "land")) {
-        say(o, "  %s the worker branch yourself; Hydra never merges for you:",
-            strcmp(verdict, "pass") ? "When it is ready, land" : "Land");
+        say(o, "  %s, a local merge of the verified commit after you confirm; nothing is pushed:",
+            strcmp(verdict, "pass") ? "Once a run verifies it, land it into your current branch" : "Land it into your current branch");
         say(o, "    %s", f_string(next, "land"));
+        say(o, "  That removes the worker head and keeps its branch.");
     }
     if (rr_length(cleanup))
-        say(o, "  After landing, remove the plan's heads (each refuses while its worktree has uncommitted or untracked files):");
+        say(o, "  Then remove the plan's other heads (each refuses while its worktree has uncommitted or untracked files):");
     for (size_t i = 0; i < rr_length(cleanup); i++)
         say(o, "    %s", f_text(json_object_array_get_idx(cleanup, i)));
     say(o, "  Dismiss: Esc returns to the attention list, where s marks the item seen.");

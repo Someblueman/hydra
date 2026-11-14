@@ -716,27 +716,49 @@ static void review_keep(const struct rr *r, json_object *out, json_object *chang
     free(message);
 }
 
-/* Hydra never merges on the reviewer's behalf; it only names the commands.
- * Removing a head with --protect-untracked refuses while its worktree still
- * holds uncommitted or untracked work, so a cleanup cannot discard it. */
+/* Where hydra land merged this run's result: "commit<TAB>branch<TAB>merge". */
+static void review_landed(const struct rr *r, json_object *out)
+{
+    char *text = review_scalar(r->run, "landed"), *fields[3], *cursor = text;
+    size_t i;
+    for (i = 0; i < 3 && cursor; i++) {
+        fields[i] = cursor;
+        cursor = strchr(cursor, '\t');
+        if (cursor)
+            *cursor++ = 0;
+    }
+    if (i == 3 && (task_hex(fields[2], 40) || task_hex(fields[2], 64))) {
+        json_object *landed = json_object_new_object();
+        f_string_add(landed, "commit", fields[0]);
+        f_string_add(landed, "into", fields[1]);
+        f_string_add(landed, "merge", fields[2]);
+        json_object_object_add(out, "landed", landed);
+    }
+    free(text);
+}
+
+/* The one way to land a result is hydra land, which merges only the verified
+ * commit into the checkout's current branch after confirmation, never pushes,
+ * and then removes the worker head but keeps its branch. Removing the plan's
+ * other heads with --protect-untracked refuses while a worktree still holds
+ * uncommitted or untracked work, so a cleanup cannot discard it. */
 static json_object *review_next(const struct rr *r, json_object *steps, json_object *changes)
 {
     json_object *out = json_object_new_object(), *cleanup = json_object_new_array();
     const char *branch = changes_branch(r);
     char line[F_PATH * 2];
-    char *repo = r->repo[0] ? shell_word(r->repo) : NULL;
-    if (branch && repo && snprintf(line, sizeof(line), "cd %s && git merge --no-ff %s", repo, branch) < (int)sizeof(line))
+    if (branch && plan_id(branch) && snprintf(line, sizeof(line), "hydra land %s", branch) < (int)sizeof(line))
         f_string_add(out, "land", line);
     review_keep(r, out, changes);
+    review_landed(r, out);
     for (size_t i = 0; i < rr_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i);
         const char *kind = f_string(step, "kind"), *head = f_string(step, "head");
-        if (kind && head && !strcmp(kind, "spawn") && plan_id(head) &&
+        if (kind && head && !strcmp(kind, "spawn") && plan_id(head) && (!branch || strcmp(head, branch)) &&
             snprintf(line, sizeof(line), "hydra kill %s --protect-untracked", head) < (int)sizeof(line))
             json_object_array_add(cleanup, json_object_new_string(line));
     }
     json_object_object_add(out, "cleanup", cleanup);
-    free(repo);
     return out;
 }
 

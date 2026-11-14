@@ -88,15 +88,16 @@ jq -e '.data.result.changes as $c | $c.state == "observed" and $c.branch == "kil
     and ($c.commits | length) == 2 and ($c.commits | map(.subject) | index("feat(kill): add --dry-run preview")) != null
     and ($c.files | map(.path) | sort) == ["README.md","lib/kill_dry.sh"]
     and ($c.diff | contains("+hydra kill --dry-run previews the targets")) and $c.uncommitted_changes == false
-    and (.data.result.next.land | endswith("git merge --no-ff kill-dry-worker")) and .data.result.next.landable == true
+    and .data.result.next.land == "hydra land kill-dry-worker" and .data.result.next.landable == true
     and .data.result.next.keep == null
-    and .data.result.next.cleanup == ["hydra kill kill-dry-worker --protect-untracked","hydra kill kill-dry-verifier --protect-untracked"]' "$fixture/review.json" >/dev/null
+    and .data.result.next.cleanup == ["hydra kill kill-dry-verifier --protect-untracked"]' "$fixture/review.json" >/dev/null
 review review-data "$verify_row" > "$fixture/review.tsv"
 for text in 'RESULT  kill-dry-run  -  verdict PASS (verified)  -  run succeeded' 'WHAT WAS PRODUCED' \
     '  PASS    preview-targets - Dry run lists targets (check: check)' "    Ran: sh @input/verify  (@input/NAME is the run's sealed copy of that input)" \
     '      Passed: 2  Failed: 0  Total: 2' '      tokens in 3.85M, cached 3.74M, out 23.0k; cost not reported' \
     'CHANGES ON kill-dry-worker  (2 commits, 2 files, +4 -0; the commit the checks ran on)' 'DIFF  (complete)' \
-    '  Land the worker branch yourself; Hydra never merges for you:' 'TECHNICAL DETAILS  (exact identity and retained-contract checks)' \
+    '  Land it into your current branch, a local merge of the verified commit after you confirm; nothing is pushed:' \
+    '    hydra land kill-dry-worker' 'TECHNICAL DETAILS  (exact identity and retained-contract checks)' \
     'readiness: ready'; do
     grep -Fqx "TEXT$tab$text" "$fixture/review.tsv" || { printf 'missing review line: %s\n' "$text" >&2; exit 1; }
 done
@@ -112,12 +113,12 @@ review review "$verify_row" > "$fixture/pending.json"
 jq -e '.data.result.changes as $c | $c.uncommitted_changes == true and $c.uncommitted_count == 1
     and $c.uncommitted_paths == ["?? pending.txt"] and .data.result.next.landable == false
     and (.data.result.next.keep | endswith("&& git add -A && git commit -m '"'"'Result of plan kill-dry-run'"'"'"))
-    and (.data.result.next.land | endswith("git merge --no-ff kill-dry-worker"))' "$fixture/pending.json" >/dev/null
+    and .data.result.next.land == "hydra land kill-dry-worker"' "$fixture/pending.json" >/dev/null
 review review-data "$verify_row" > "$fixture/pending.tsv"
 for text in '  Not landable as is: the worker head has 1 uncommitted or untracked path that branch kill-dry-worker does not contain' \
     '    ?? pending.txt' '  Not landable as is. To keep the worker'"'"'s uncommitted and untracked work, commit it on its branch' \
-    '  After landing, remove the plan'"'"'s heads (each refuses while its worktree has uncommitted or untracked files):' \
-    '    hydra kill kill-dry-worker --protect-untracked'; do
+    '  Then remove the plan'"'"'s other heads (each refuses while its worktree has uncommitted or untracked files):' \
+    '    hydra kill kill-dry-verifier --protect-untracked'; do
     grep -Fqx "TEXT$tab$text" "$fixture/pending.tsv" || { printf 'missing review line: %s\n' "$text" >&2; exit 1; }
 done
 if hydra kill kill-dry-worker --protect-untracked > "$fixture/kill.out" 2>&1; then exit 1; fi

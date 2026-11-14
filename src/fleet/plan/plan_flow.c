@@ -153,6 +153,30 @@ json_object *plan_detach_cli(int argc, char **argv) {
     return NULL;
 }
 
+/* verified-commit <run-dir> <branch>: "commit<TAB>plan-id" when the run
+ * succeeded, its delivery verifies now, and every command after the last agent
+ * step on branch ran on that agent step's commit: the only commit landing
+ * accepts as the run's result. */
+json_object *plan_verified_commit_cli(int argc, char **argv) {
+    char path[F_PATH], commit[65], *state = NULL;
+    json_object *delivery = NULL, *compiled = NULL, *result = NULL;
+    int bound = -1;
+    if (argc != 3) return plan_failure("workflow plan verified-commit", "invalid_arguments", "use verified-commit <run-dir> <branch>", "run hydra land <worker>");
+    if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);
+    if (state && !strcmp(state, "succeeded\n")) delivery = plan_delivery(argv[1]);
+    if (delivery && !f_path(path, sizeof(path), argv[1], "compiled.json")) compiled = plan_read(path);
+    if (compiled) bound = plan_head_commit(argv[1], f_field(compiled, "plan"), argv[2], commit);
+    if (!delivery)
+        result = plan_failure("workflow plan verified-commit", "not_verified", "the run did not succeed with a verified result", "review it with hydra plan review; only a verified result can be landed");
+    else if (bound == -2)
+        result = plan_failure("workflow plan verified-commit", "checks_elsewhere", "a command on this branch ran on another commit than the agent step left", "run the plan again; its checks must run on the committed result");
+    else if (bound)
+        result = plan_failure("workflow plan verified-commit", "no_commit", "no agent step of this run committed on that branch", "land the branch a plan's agent step worked on");
+    else printf("%s\t%s\n", commit, f_string(f_field(compiled, "plan"), "id"));
+    free(state); json_object_put(delivery); json_object_put(compiled);
+    return result;
+}
+
 static void print_line(void *context, const char *line) { (void)context; puts(line); }
 
 /* review-text <run-dir> <project-dir> [--json]: the result review of a plan run. */

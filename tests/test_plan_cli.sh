@@ -156,6 +156,49 @@ assert_success $? 'the review shows the verified check bound to the worker commi
 on_terminal y "$HYDRA_BIN" plan approve > "$root/again.out" 2>&1
 grep -q "already ran as $run" "$root/again.out"
 assert_success $? 'an approved revision runs at most once'
+grep -Fqx '    hydra land greeting-work' "$root/review.out"
+assert_success $? 'the review gives one command to land the result'
+
+# Landing: only the verified commit, into the current branch, after review.
+worker="$(hydra path greeting-work)"
+verified="$(git -C "$worker" rev-parse HEAD)"
+base="$(git rev-parse HEAD)"
+HYDRA_HEAD_ID=head_00000000000000000000 hydra land greeting-work > "$root/land-agent.out" 2>&1
+assert_failure $? 'an agent cannot land a plan result'
+printf 'local edit\n' >> README
+hydra land greeting-work > "$root/land-dirty.out" 2>&1
+assert_failure $? 'a checkout with tracked changes is refused'
+grep -q 'uncommitted changes to tracked files; nothing was changed' "$root/land-dirty.out"
+assert_success $? 'the refusal says nothing was changed'
+git checkout -q README
+git -C "$worker" -c commit.gpgSign=false commit -q --allow-empty -m 'after the checks'
+hydra land greeting-work > "$root/land-moved.out" 2>&1
+assert_failure $? 'a worker that moved since its checks is refused'
+grep -q "but its checks ran on $verified" "$root/land-moved.out"
+assert_success $? 'the refusal names the verified commit'
+git -C "$worker" reset -q --hard "$verified"
+assert_equal "$base" "$(git rev-parse HEAD)" 'refused landings leave the checkout where it was'
+hydra land greeting-work --dry-run > "$root/land-dry.out" 2>&1
+assert_success $? 'a dry run predicts the merge'
+assert_equal "$base" "$(git rev-parse HEAD)" 'a dry run changes nothing'
+printf 'scratch\n' > "$worker/notes.txt"
+on_terminal n "$HYDRA_BIN" land greeting-work > "$root/land-no.out" 2>&1
+grep -q 'Not landed; nothing was changed.' "$root/land-no.out"
+assert_success $? 'declining the confirmation lands nothing'
+on_terminal y "$HYDRA_BIN" land greeting-work > "$root/land.out" 2>&1
+grep -q 'Landed greeting-work into master' "$root/land.out" || grep -q 'Landed greeting-work into main' "$root/land.out"
+assert_success $? 'landing merges into the current branch'
+assert_equal "$verified" "$(git rev-parse HEAD^2)" 'the merge takes exactly the verified commit'
+if [ -s greeting.txt ] && [ -f tests/greeting.sh ]; then check=0; else check=1; fi
+assert_success "$check" 'the checkout has the verified change'
+grep -q 'is kept: its worktree has changes that are not on the branch' "$root/land.out" && [ "$(cat "$worker/notes.txt")" = scratch ]
+assert_success $? 'a worker head with untracked work is kept, not deleted'
+rm "$worker/notes.txt"
+hydra kill greeting-work --protect-untracked >/dev/null 2>&1
+git rev-parse --verify -q refs/heads/greeting-work >/dev/null
+assert_success $? 'the worker branch is kept'
+hydra plan review "$run" | grep -q 'Landed: commit .* was merged into'
+assert_success $? 'the review says where the result landed'
 
 # The project's plan policy: shown in words, edited by the user only.
 hydra plan policy > "$root/policy.out"

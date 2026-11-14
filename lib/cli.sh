@@ -110,7 +110,7 @@ Commands:
   gate              Run verification gates and record explicit approvals
   context           Create typed, explicit context packs without implicit files
   sync <head>       Safely merge a named ref into a clean, approved head
-  land <head>       Safely merge an approved head into the current target branch
+  land <worker>     Merge a plan's verified result (or a gated head) into your current branch
   integrate         Assemble, verify, approve, and promote completed heads
                     Use "integrate train" for per-candidate guarded gates
   du                Report per-head worktree and durable-state disk usage

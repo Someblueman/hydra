@@ -137,7 +137,7 @@ _load_libs_for_cmd() {
             ;;
         context|sync|land|integrate)
             _load_runtime_libs
-            _load_libs notify hooks messages operations parallel integration integration_verified \
+            _load_libs notify hooks messages operations parallel integration integration_verified cmd_fleet workflow_plan integration_plan \
                 integration_verified_actions kill limits spawn cmd_integration
             ;;
         du|gc|worktree)
