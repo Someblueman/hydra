@@ -9,6 +9,7 @@ where it now lives."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 
@@ -97,13 +98,10 @@ def single_agent(j: Case) -> None:
     j.record("U13.a", "the Work selection is unchanged after visiting Stats",
              j.selected_row() == before and before != "", detail=before[:40])
     j.keys(b"2")
-    j.see("Nothing needs you")
-    try:
-        screen = j.see_prose("No workflow runs are recorded in this project", timeout=8)
-    except TimeoutError:
-        screen = j.screen()
-    j.record("U9.d", "the Inbox says nothing needs the user and why only heads are watched (no runs), not a zero count",
-             says(screen, "No workflow runs are recorded in this project"))
+    screen = j.settled(j.see("Nothing needs you"))
+    j.record("U9.d", "the Inbox says in words that nothing needs the user, and what would appear, rather than a zero count",
+             says(screen, "Approvals, failed checks, finished results, stopped terminals and repairs appear here")
+             and re.search(r"\b0 (items|need)", screen) is None)
 
 
 def handoff_workflow(j: Case) -> str:

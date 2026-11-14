@@ -107,7 +107,7 @@ def ui_conversation(j: Case) -> None:
     uninitialized(j)
     before = j.repo_state()
     j.open()
-    screen = j.screen()
+    screen = j.see("No agent work in this project yet")  # past the loading state
     j.record("U3.d", "entering the UI registers nothing, starts no terminal and trusts nothing",
              not list((j.base / "state").rglob("projects/*")) and not j.tmux("list-sessions")
              and not (j.repo / ".git" / "hydra").exists() and "No agent work in this project yet" in screen)
