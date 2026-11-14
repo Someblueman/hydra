@@ -80,6 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is schema 5 (session rows; readers accept 2 to 5) and `statistics-json`
   exports the session summaries. Tokens and cost are not measured for
   interactive sessions.
+- Activity events live in a separate, bounded per-session log
+  (`instances/<id>/activity.jsonl`) instead of the head's lifecycle log. When
+  a session ends Hydra writes a small summary of it under the project
+  (`projects/<p>/sessions/`), which Statistics reads instead of replaying
+  events, so finished sessions stay countable after `hydra kill`; an open
+  session's older activity is folded into a checkpoint. A head observed for
+  100 hours keeps about 15 KB of activity instead of 1.5 MB, and the feed for
+  20 such heads takes about 35 ms instead of 0.5 s. `hydra cleanup` now
+  records `lifecycle.torn-down` for a session it finds dead.
 
 ### Changed
 
