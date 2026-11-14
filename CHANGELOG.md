@@ -136,7 +136,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configurable `screen.*` chords while you type to an agent). The old
   `--view` names open the screen or page that replaced them, and key names
   from earlier keys files still load. Tab no longer changes screens: it
-  moves between a screen's panes.
+  moves between a screen's panes. For one release the old screen letters
+  `W`, `I`, `H` and `D` still open Work, Inbox, Hosts and Stats, with a note
+  naming the new key. "What moved" in `docs/USAGE.md` lists every key whose
+  meaning changed.
   - **Work** replaces Heads, Details, Coordination, Overview, Workflows and
     the Workspace layouts. The list of heads, their runs, remote tasks and
     retired run heads sits beside the selected head's latest output, shown
@@ -175,7 +178,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       Trusting a host key needs a typed `yes`. A plan is approved with `y`
       only; Enter never approves it.
     - `[` and `]` switch between Hosts and the Onboarding page (`O` still
-      opens it).
+      opens it). The Onboarding page's keys are in the keys file and its
+      footer and help, like every other screen's.
   - **Stats** shows its pages (Sessions, Runs and, when the sample records
     remote steps, Cohorts) on one frame. Four tiles sit above the charts and
     tables, and Enter opens a row's evidence. `/` filters as you type, `w`
