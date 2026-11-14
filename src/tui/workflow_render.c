@@ -63,7 +63,7 @@ void render_workflow_graph(struct app *app) {
                    m->runs[app->workflow_run].state, app->workflow_run + 1, m->run_count);
     dashboard_text(&c, 1, 1, width - 2, app->workflow_stale ? KT_WARNING : KT_BORDER,
                    "%s / %zu steps / %zu dependency edges", app->workflow_stale ? "STALE snapshot" : "Recorded state", n, count);
-    kt_panel(&c, (struct kt_rect){0, 3, width, height - 6}, "DEPENDENCIES / prerequisite -> dependent");
+    pane_rule(&c, (struct kt_rect){0, 3, width, height - 6}, "DEPENDENCIES / prerequisite -> dependent");
     area = (struct kt_rect){2, 5, width - 4, height - 9};
     if (area.height < 1) area.height = 1;
     for (i = 0; i < n; i++) {

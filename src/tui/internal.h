@@ -496,6 +496,9 @@ bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
 bool frame_content(struct app *app, struct kt_canvas *out);
 void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
+/* A pane's titled rule (render.c), accent when the pane has the focus. */
+void pane_rule(struct kt_canvas *c, struct kt_rect r, const char *title);
+void pane_rule_styled(struct kt_canvas *c, struct kt_rect r, const char *title, bool focused);
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);

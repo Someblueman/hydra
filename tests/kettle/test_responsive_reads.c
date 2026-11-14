@@ -142,7 +142,7 @@ static void statistics(void) {
     open_view(&s, "heads");
     U("feature-live", 5);
     S("D");
-    U("HYDRA / STATISTICS", PROMPT);
+    U("STATISTICS", PROMPT);
     U("Loading statistics...", PROMPT);
     keys_answered(&s, "Statistics");
     U("Latest attempts average", 6);
@@ -158,7 +158,7 @@ static void statistics(void) {
     CHECK(started >= 1 && started <= 4, "repeated refresh keys do not pile up reads");
     /* g opens the graph from what is known and asks for a fresh read. */
     S("0g");
-    U("[Workflows]", PROMPT);
+    U("WORKFLOWS", PROMPT);
     keys_answered(&s, "graph");
     kt_close(&s, "q", 0, 0);
     puts("PASS statistics: the view opens at once, r and g never wait, refreshes run one at a time");

@@ -23,13 +23,13 @@ static void local_statistics(void) {
     kt_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("HYDRA / PLAN TOGETHER");
+    U("PLAN TOGETHER");
     /* Tab order: selected work, dependencies, then activity. */
     S("j\tjj\t\tjjj");
     kt_pump(&s, .2);
     CHECK(HAS("scroll 2") && HAS("scroll 3"), "workspace scroll setup");
     S("D");
-    U("HYDRA / STATISTICS");
+    U("STATISTICS");
     U("Latest attempts average 95.0s over 6 timed steps, longest 120s");
     CHECK(HAS("Attempts 8/11"), "attempt coverage");
     save(&s, "statistics", 140, 40);
@@ -49,7 +49,7 @@ static void local_statistics(void) {
     S("\033");
     U("RUNS / newest");
     S("D");
-    U("HYDRA / PLAN TOGETHER");
+    U("PLAN TOGETHER");
     CHECK(HAS("scroll 2") && HAS("scroll 3"), "preserved workspace scroll");
     S("D");
     U("Recorded workflow runs · all recorded · recovery");
@@ -58,10 +58,10 @@ static void local_statistics(void) {
     S("visualization\r");
     U("1/1 / Enter evidence");
     S("g");
-    U("[Workflows]");
+    U("WORKFLOWS");
     U("prepare");
     S("\033");
-    U("HYDRA / STATISTICS");
+    U("STATISTICS");
     U("Recorded workflow runs · all recorded · visualization");
     S("0");
     U("1/8 / Enter evidence");
@@ -81,7 +81,7 @@ static void local_statistics(void) {
     CHECK(!HAS("STATISTICS (STALE)"), "refresh recovers");
     for (i = 0; i < 3; i++) {
         kt_resize(&s, sizes[i][0], sizes[i][1]);
-        U("HYDRA / STATISTICS");
+        U("STATISTICS");
         U("q quit");
         CHECK(!s.screen.overflow, "statistics resize overflow");
         CHECK(s.screen.repaints >= 1 && !s.screen.clears, "resize repaints every cell without erasing the display");
@@ -118,7 +118,7 @@ static void metric_pages(void) {
             save(&s, names[j], sizes[i][0], sizes[i][1]);
         }
         S("M");
-        U("HYDRA / STATISTICS");
+        U("STATISTICS");
     }
     kt_resize(&s, 140, 40);
     S("MMMM/");
@@ -128,7 +128,7 @@ static void metric_pages(void) {
     S("\r");
     U("failed / 2");
     S("D");
-    U("HYDRA / PLAN TOGETHER");
+    U("PLAN TOGETHER");
     S("D");
     U("OWNER RECOVERIES");
     U("known 2/2");
@@ -263,7 +263,7 @@ static void session_statistics(void) {
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5-sessions.tsv", 1), "session fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("HYDRA / PLAN TOGETHER");
+    U("PLAN TOGETHER");
     S("D");
     session_overview(&s);
     session_filters(&s);
@@ -272,7 +272,7 @@ static void session_statistics(void) {
     kt_close(&s, "q", 0, 0);
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "mixed fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
-    U("HYDRA / PLAN TOGETHER");
+    U("PLAN TOGETHER");
     S("D");
     U("RUNS / newest creation first");
     U("s sessions/runs");

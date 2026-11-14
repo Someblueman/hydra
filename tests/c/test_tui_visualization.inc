@@ -55,7 +55,7 @@ static void test_visualization_refresh(const char *tui, const char *hydra, const
     result(wait_for_marker(&session, "shell data adapter failed; showing last good snapshot", 2000),
            "continuous input still refreshes and labels the retained snapshot");
     unlink(marker);
-    result(wait_for_marker(&session, "Live", 4000), "successful observation clears stale state");
+    result(wait_for_marker(&session, "\xe2\x97\x8f live", 4000), "successful observation clears stale state");
     write_input(session.master, "q", 1);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "refresh recovery preserves terminal state");
     close_session(&session);
@@ -71,7 +71,7 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "Search: empty", 1000), "Enter filters heads for an empty host");
     result(wait_for_marker(&session, "No heads match the search.", 1000), "empty host does not borrow another host's head");
     write_input(session.master, "\033", 1);
-    (void)wait_for_marker(&session, "[Work]", 2000);
+    (void)wait_for_marker(&session, "Heads in this project", 2000);
     write_input(session.master, "H", 1);
     result(wait_for_marker(&session, "HOST DETAIL", 2000), "return to hosts after clearing its head filter");
     mouse_input(&session, "\033[<0;10;8M");

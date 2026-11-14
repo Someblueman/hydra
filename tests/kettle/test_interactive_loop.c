@@ -106,24 +106,24 @@ static void prompt(struct kt_session *s) {
     CHECK(!strstr(s->raw + mark, ERASE), "a prompt opens and closes without erasing the display");
 }
 
-/* A new size, another theme and another workspace layout each repaint by
+/* A new size, another theme (dark, the default, to light) and another workspace layout each repaint by
  * overwriting. */
 static void repaints(struct kt_session *s) {
     size_t mark = s->raw_size;
     kt_send(s, "t");
-    kt_until(s, "Theme: dark", 3);
+    kt_until(s, "Theme: light", 3);
     kt_resize(s, 80, 24);
-    kt_until(s, "Theme: dark", 3);
+    kt_until(s, "Theme: light", 3);
     kt_resize(s, 140, 40);
-    kt_until(s, "Theme: dark", 3);
+    kt_until(s, "Theme: light", 3);
     kt_send(s, "W");
-    kt_until(s, "HYDRA / PLAN TOGETHER", 3);
+    kt_until(s, "PLAN TOGETHER", 3);
     kt_send(s, "B");
-    kt_until(s, "HYDRA / PLAN OVERVIEW", 3);
+    kt_until(s, "PLAN OVERVIEW", 3);
     kt_send(s, "C");
-    kt_until(s, "HYDRA / MONITOR", 3);
+    kt_until(s, "MONITOR", 3);
     kt_send(s, "A");
-    kt_until(s, "HYDRA / PLAN TOGETHER", 3);
+    kt_until(s, "PLAN TOGETHER", 3);
     CHECK(!strstr(s->raw + mark, ERASE), "theme, resize and layout changes never erase the display");
 }
 
@@ -193,9 +193,9 @@ int main(void) {
     hf_commit_init(&f);
     H("spawn", "one", "--no-agent");
     hf_open(&f, &s);
-    U("HYDRA / PLAN TOGETHER", 5);
+    U("PLAN TOGETHER", 5);
     U("Session   running", 10);
-    U("Live", 10);
+    U("\xe2\x97\x8f live", 10);
     U("repo \xc2\xb7 Local", 10);
     idle(&s);
     S("1");

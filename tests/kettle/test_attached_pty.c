@@ -81,6 +81,15 @@ static void styled_output(struct kt_session *s) {
     CHECK(colored, "ANSI red survives the tmux and native render path");
 }
 
+/* A pane's title starts its rule at (x, y): "two ... ────". */
+static bool pane_title_at(struct kt_session *s, int y, int x, const char *name) {
+    char row[4096];
+    size_t b;
+    for (b = 0; name[b]; b++)
+        if (x + (int)b >= s->screen.cols || s->screen.cells[y * s->screen.cols + x + (int)b].text[0] != name[b]) return false;
+    return strstr(kt_row(s, y, row, sizeof(row)), "\xe2\x94\x80") != NULL;
+}
+
 int main(void) {
     struct kt_session s;
     char path[4096], one[4096], two[4096], pids[8192], branch[2][256], session[256], head[256],
@@ -149,7 +158,7 @@ int main(void) {
         const char *argv[] = {f.tui, "--hydra", adapter, NULL};
         kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
-    U("HYDRA / PLAN TOGETHER", 3);
+    U("PLAN TOGETHER", 3);
     U("Session   running", 3);
     S("a");
     U("INPUT TO AGENT", 3);
@@ -172,9 +181,9 @@ int main(void) {
     S("printf 'responsive' > latency-proof\r");
     kt_pump(&s, .4);
     proof(one, "latency-proof", "responsive");
-    U("STALE: last good", snapshot_delay);
+    U("last good snapshot", snapshot_delay);
     CHECK(!unlink(slow), "remove delay trigger");
-    U("Live", 6);
+    U("\xe2\x97\x8f live", 6);
     S("(sleep 1; printf 'FORM_LIVE' > form-proof; printf 'FORM_LIVE\\n') &\r");
     kt_pump(&s, .2);
     S("\035/");
@@ -215,7 +224,7 @@ int main(void) {
     S("\034A");
     U("PLAN TOGETHER", 3);
     S("\034D");
-    U("HYDRA / STATISTICS", 3);
+    U("STATISTICS", 3);
     CHECK(!exists(one, "draft-proof"), "mode switching preserves unsent draft");
     S("D");
     U("INPUT TO AGENT", 3);
@@ -250,7 +259,7 @@ int main(void) {
     kt_pump(&s, .3);
     CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two panes in monitor");
     S("\034D");
-    U("HYDRA / STATISTICS", 3);
+    U("STATISTICS", 3);
     S("D\034A");
     for (i = 0; i < 3; i++) {
         kt_resize(&s, sizes[i][0], sizes[i][1]);
@@ -285,26 +294,14 @@ int main(void) {
     kt_pump(&s, .2);
     {
         int x, y, hit_x = -1, hit_y = -1;
-        size_t b;
         for (y = 0; y < s.screen.rows; y++)
             for (x = 0; x < s.screen.cols; x++)
-                if (!strcmp(s.screen.cells[y * s.screen.cols + x].text, "─")) {
-                    bool matches = true;
-                    for (b = 0; branch[1][b]; b++) {
-                        if (x + 2 + (int)b >= s.screen.cols ||
-                            s.screen.cells[y * s.screen.cols + x + 2 + (int)b].text[0] !=
-                                branch[1][b]) {
-                            matches = false;
-                            break;
-                        }
-                    }
-                    if (matches) {
-                        hit_x = x;
-                        hit_y = y;
-                        break;
-                    }
+                if (pane_title_at(&s, y, x, branch[1])) {
+                    hit_x = x - 1;
+                    hit_y = y;
+                    break;
                 }
-        CHECK(hit_x >= 0, "second agent border rendered");
+        CHECK(hit_x >= 0, "second agent pane title rendered");
         kt_format(script, sizeof(script), "\033[<0;%d;%dM\033[<0;%d;%dm", hit_x + 4, hit_y + 4,
                   hit_x + 4, hit_y + 4);
         S(script);
@@ -332,7 +329,7 @@ int main(void) {
     U("z restores the splits", 3);
     CHECK(!kt_contains(&s, "PROJECT"), "zoom hides panes");
     S("\034D");
-    U("HYDRA / STATISTICS", 3);
+    U("STATISTICS", 3);
     S("D");
     U("z restores the splits", 3);
     S("\034z");

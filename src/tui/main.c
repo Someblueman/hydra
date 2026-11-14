@@ -65,6 +65,10 @@ static void initialize_app(struct app *app) {
     app->cols = 80; app->rows = 24;
     app->no_color = getenv("NO_COLOR") != NULL;
     app->ascii = strcasecmp(nl_langinfo(CODESET), "UTF-8") != 0;
+    /* Dark by default: the terminal's own sixteen colours cannot show the
+     * surfaces the screens are drawn with. --theme and HYDRA_TUI_THEME choose
+     * another, the palette's "Theme" cycles them. */
+    app->theme = 1;
 }
 
 static bool task_option(struct app *app, const char *branch) {

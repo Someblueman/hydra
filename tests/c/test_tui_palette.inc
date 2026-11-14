@@ -44,7 +44,7 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
                    "a read-only command opens in the viewer without leaving the control centre");
         session.slow_output = false;
         write_input(session.master, "\n", 1U);
-        (void)wait_for_marker(&session, "HYDRA / ", 1000);
+        (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     }
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Commands", 1000);
@@ -54,24 +54,24 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     result(wait_for_marker(&session, "FAKE ACTION <status>", 1000),
            "queued form input preserves a fragmented Home key and cursor insertion");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     palette_query(&session, "collisions");
     (void)wait_for_marker(&session, "Compare with head", 1000);
     write_input(session.master, "other head;literal\n", 19U);
     result(wait_for_marker(&session, "FAKE ACTION <collision> <feature-live> <other head;literal>", 1000),
            "comparison target remains one literal argument");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Commands", 1000);
     write_input(session.master, "\033", 1U);
     sleep_ms(60);
-    result(wait_for_marker(&session, "HYDRA / ", 1000) && still_running(&session), "Esc closes the palette and runs nothing");
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000) && still_running(&session), "Esc closes the palette and runs nothing");
     palette_query(&session, "UNKNOWN");
     result(wait_for_marker(&session, "No matching command", 1000), "unknown palette search is inert");
     write_input(session.master, "\033", 1U);
     sleep_ms(60); /* Escape stands alone after 20 ms; a key sooner would make it Alt */
-    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "no-match\n", 9U);
@@ -83,7 +83,7 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     palette_query(&session, "status");
     result(wait_for_marker(&session, "FAKE ACTION <status>", 1000), "global actions work without a selected head");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0, "palette test exits cleanly");
     close_session(&session);
@@ -96,16 +96,16 @@ static void test_recovery_actions(const char *tui, const char *hydra, const char
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open recovery action terminal")) return;
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
-    write_input(session.master, "\033[<0;40;2M", 10U);
+    write_input(session.master, "\033[<0;57;1M", 10U);
     (void)wait_for_marker(&session, "RECOVERY  4", 1000);
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "x removes leftover worktrees only", 1000), "x on a non-worktree finding removes nothing");
     write_input(session.master, "jj", 2U);
-    result(wait_for_marker(&session, "> Leftover worktree from a removed task", 1000), "leftover worktree finding is selectable");
+    result(wait_for_marker(&session, "\xe2\x96\x8c Leftover worktree from a removed task", 1000), "leftover worktree finding is selectable");
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "FAKE GC <gc> <--policy> <orphaned> <--dry-run>", 2000), "Enter runs the read-only gc review");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000);
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Remove leftover worktree feature-old", 1000), "worktree removal asks inside the UI");
     write_input(session.master, "n", 1U);

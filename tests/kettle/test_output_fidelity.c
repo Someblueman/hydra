@@ -184,6 +184,9 @@ static void fixture(void) {
 }
 
 int main(void) {
+    /* The tones below are the sixteen-colour terminal theme's: the theme
+     * that draws provider output in the terminal's own colours. */
+    setenv("HYDRA_TUI_THEME", "terminal", 1);
     fixture();
     show_in_head("codex-exec.raw");
     {

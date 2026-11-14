@@ -78,7 +78,7 @@ static void restore(const char *worktree, const char *head, const char *status) 
     U("a  restart its terminal (files are kept)", 5);
     CHECK(!kt_contains(&s, "a  talk to the agent"), "a gone terminal is not offered as a live agent");
     S("1");
-    U("[Work]", 5);
+    U("Heads in this project", 5);
     S("a");
     U("Typing goes to the agent", 30);
     CHECK(!kt_contains(&s, "CLIENT DISCONNECTED"), "the restarted terminal is attached, not a disconnected client");
@@ -101,7 +101,7 @@ static void refuse(const char *worktree) {
     hf_open(&f, &s);
     U("keeper", 10);
     S("1");
-    U("[Work]", 5);
+    U("Heads in this project", 5);
     S("a");
     U("not restarted", 30);
     U("is missing", 5);

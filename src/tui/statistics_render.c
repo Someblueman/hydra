@@ -26,7 +26,7 @@ static void statistics_hit(struct app *app, struct kt_rect r, size_t item) {
 static void statistics_distribution(struct kt_canvas *c, struct kt_rect r, const struct hs_summary *s) {
     static const char *names[] = {"Succeeded", "Failed", "Running", "Queued", "Blocked", "Cancelled", "Unknown"};
     size_t i;
-    kt_panel(c, r, "RUN OUTCOMES / recorded");
+    pane_rule(c, r, "RUN OUTCOMES / recorded");
     for (i = 0; i < HS_STATES && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i, bar = r.width - 22;
         struct kt_style tone = i == HS_FAILED || i == HS_BLOCKED || i == HS_UNKNOWN ? KT_WARNING : KT_BASE;
@@ -37,7 +37,7 @@ static void statistics_distribution(struct kt_canvas *c, struct kt_rect r, const
 
 static void statistics_trend(struct kt_canvas *c, struct kt_rect r, const struct hs_summary *s) {
     size_t i, maximum = 1;
-    kt_panel(c, r, "RUN CREATION / 7 x 24h");
+    pane_rule(c, r, "RUN CREATION / 7 x 24h");
     for (i = 0; i < 7; i++) if (s->daily[i] > maximum) maximum = s->daily[i];
     for (i = 0; i < 7 && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i;
@@ -63,7 +63,7 @@ static void statistics_run_table(struct app *app, struct kt_canvas *c, struct kt
     struct statistics_view *v = app->statistics;
     size_t i, start;
     int available = r.height - 4, row = r.y + 2;
-    kt_panel(c, r, "RUNS / newest creation first");
+    pane_rule(c, r, "RUNS / newest creation first");
     if (!v->count) {
         dashboard_text(c, r.x+2, row, r.width-4, KT_WARNING, "No matching recorded runs");
         dashboard_text(c, r.x+2, row+1, r.width-4, KT_BORDER, "0 reset filters / / search"); return;
@@ -105,7 +105,7 @@ static void statistics_run_detail(struct app *app, struct kt_canvas *c, struct k
     const struct hs_step *first = NULL;
     size_t i, ordinal = 0, run_index;
     int row = r.y + 5, bottom = r.y + r.height - (r.height > 12 ? 6 : 2);
-    kt_panel(c, r, "RUN EVIDENCE / latest attempts");
+    pane_rule(c, r, "RUN EVIDENCE / latest attempts");
     if (!v->count) { dashboard_text(c,r.x+2,r.y+2,r.width-4,KT_WARNING,"Selected run no longer matches"); return; }
     run_index = v->visible[v->selected]; run = &v->model->runs[run_index];
     dashboard_text(c,r.x+2,r.y+1,r.width-4,KT_STRONG,"%s / %s",run->name,run->state);
@@ -130,7 +130,7 @@ static void statistics_fleet(struct app *app, struct kt_canvas *c, struct kt_rec
     char reported[24]="--";
     int row = r.y+5;
     size_t start = 0;
-    kt_panel(c,r,"HOST STATISTICS / latest fleet response");
+    pane_rule(c,r,"HOST STATISTICS / latest fleet response");
     for (i=0;i<v->count;i++) {
         const struct host_observation *h = &app->model.hosts[v->visible[i]];
         if (!strcmp(h->state,"failed")) failed++; else { responded++; heads+=h->heads; }
@@ -266,7 +266,7 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
     } else {
         left=width>=110 ? 25 : 0; body=width-left; cards=body/4;
         if (left) {
-            kt_panel(&c,(struct kt_rect){0,2,left-1,height-4},"SCOPE");
+            pane_rule(&c,(struct kt_rect){0,2,left-1,height-4},"SCOPE");
             dashboard_text(&c,2,4,left-5,KT_STRONG,"%s",statistics_range(v));
             dashboard_text(&c,2,5,left-5,KT_MUTED,"T changes the range");
             dashboard_text(&c,2,7,left-5,KT_BASE,"Workflow: %s",v->filter.workflow[0] ? v->filter.workflow : "all");

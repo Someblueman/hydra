@@ -162,7 +162,7 @@ $1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}
 "$tui" --ascii --headless-fixture "$test_root/columns.tsv" --size 100x24 > "$test_root/columns.out"
 awk '
 index($0, "STATUS") && index($0, "AGENT") { status = index($0, "STATUS"); agent = index($0, "AGENT"); next }
-status && /^\| [ >*][ *] [^ ]/ {
+status && /^  [ >*][ *] [^ ]/ {
     if (length != 99) exit 1
     if (substr($0, status - 1, 1) != " " || substr($0, status, 1) == " ") exit 1
     if (substr($0, agent - 1, 1) != " " || substr($0, agent, 1) == " ") exit 1
@@ -171,22 +171,29 @@ status && /^\| [ >*][ *] [^ ]/ {
 END { if (rows != 3) exit 1 }
 ' "$test_root/columns.out"
 assert_success $? "table headers and cells share fixed status and agent columns"
-contains "+- Heads in this project" "$test_root/columns.out" "head list is enclosed in a named panel"
+contains "Heads in this project ---" "$test_root/columns.out" "head list is titled by a named rule (ASCII)"
 "$tui" --headless-fixture "$fixture" --size 100x24 > "$test_root/unicode.out"
-contains "$(printf '\342\225\255\342\224\200 Heads in this project')" "$test_root/unicode.out" "default output draws rounded Unicode borders"
+contains "$(printf 'Heads in this project \342\224\200')" "$test_root/unicode.out" "default output titles panes with a Unicode rule"
+if grep -q "$(printf '\342\225\255')" "$test_root/unicode.out"; then
+    assert_success 1 "panes are not boxed"
+else
+    assert_success 0 "panes are not boxed"
+fi
 "$tui" --headless-fixture "$fixture" --size 80x24 --view heads > "$test_root/tabs.out"
-contains "[Work] Details Overview Attention Recovery Flows Stats Workspace Hosts" "$test_root/tabs.out" "every tab is fully visible at 80 columns with short labels"
+# The top bar: the brand, numbered tabs (the active one a pill) and the view's title at the right.
+contains " 1 Work  2 Details 3 Overview" "$test_root/tabs.out" "the first tabs are visible at 80 columns with short labels and the active one is a pill"
+contains "WORK" "$test_root/tabs.out" "the view title stays at the right of the top bar at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/hosts-tabs.out"
-contains " Work Details Overview Attention Recovery Flows Stats Workspace [Hosts]" "$test_root/hosts-tabs.out" "the Hosts tab keeps the leftmost tab in view at 80 columns"
+contains " 9 Hosts " "$test_root/hosts-tabs.out" "the Hosts tab stays in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination-tabs.out"
-contains "Work Details [Coord] Overview Attention Recovery Flows Stats Workspace Hosts" "$test_root/coordination-tabs.out" "the coordination tab fits every tab at 80 columns"
+contains " 3 Coord " "$test_root/coordination-tabs.out" "the coordination tab is shown, short, at 80 columns"
 "$tui" --fleet --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/fleet-tabs.out"
-contains "Work  Details  Overview  [Hosts]  Attention  Recovery  Stats  Workspace" "$test_root/fleet-tabs.out" "fleet tabs are fully visible at 80 columns"
+contains "1 Work 2 Details 3 Overview  4 Hosts " "$test_root/fleet-tabs.out" "fleet tabs number Hosts fourth and keep it in view at 80 columns"
 "$tui" --headless-fixture "$fixture" --size 100x24 --view hosts > "$test_root/wide-tabs.out"
-contains "Work  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace  [Hosts]" "$test_root/wide-tabs.out" "tabs keep full labels from 100 columns"
+contains " 9 Hosts " "$test_root/wide-tabs.out" "the active tab is a pill at 100 columns"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
-contains "[Stats]" "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
-contains "Work Details Overview" "$test_root/stats-tabs.out" "statistics keeps the other tabs reachable"
+contains " 7 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
+contains "STATISTICS" "$test_root/stats-tabs.out" "statistics names itself in the top bar"
 # Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
 contains "Agent tokens" "$test_root/stats-usage.out" "statistics scope panel names agent tokens"
@@ -215,6 +222,22 @@ contains "s sessions/runs" "$test_root/stats-mixed.out" "the runs page offers he
 contains "No head sessions recorded yet" "$test_root/stats-empty.out" "an empty sample says nothing was recorded"
 ! grep -Fq "7 x 24h" "$test_root/stats-empty.out"
 assert_success $? "an empty sample draws no chart"
+# Golden frames of every view at 140x40 and 80x24, in Unicode and ASCII: the
+# frame (top bar, titled rules, status chip, generated footer) is pinned.
+# Regenerate with the same command when a change to a screen is intended.
+for golden_view in heads detail coordination recovery overview workflows hosts workspace attention statistics; do
+    for golden_size in 140x40 80x24; do
+        for golden_mode in plain ascii; do
+            golden_flag=
+            [ "$golden_mode" = ascii ] && golden_flag=--ascii
+            "$tui" $golden_flag --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-v1.tsv" \
+                --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size "$golden_size" --view "$golden_view" \
+                > "$test_root/golden.out"
+            cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/$golden_view-$golden_size-$golden_mode.txt"
+            assert_success $? "golden frame $golden_view at $golden_size ($golden_mode)"
+        done
+    done
+done
 # Samples without sessions render exactly as they did before sessions existed.
 for stats_case in v2:80x24 v2:140x40 v4:80x24 v4:140x40; do
     "$tui" --ascii --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-${stats_case%%:*}.tsv" --size "${stats_case##*:}" --view statistics > "$test_root/stats-same.out"
@@ -224,8 +247,8 @@ done
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
 contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
-contains "[Workspace]" "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
-contains "HYDRA / PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is titled after the reviewed mockup"
+contains " 8 Workspace " "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
+contains "PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is named in the top bar"
 if grep -q "Tab to focus / scroll" "$test_root/workspace-tabs.out"; then
     assert_success 1 "workspace panes do not repeat focus hints"
 else
@@ -601,7 +624,9 @@ not_contains() {
     if grep -Fq "$1" "$2"; then assert_success 1 "$3"; else assert_success 0 "$3"; fi
 }
 "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 120x30 --view heads > "$test_root/runs-heads.out"
-contains "2 heads (+1 in runs) / 1 running / 1 need attention" "$test_root/runs-heads.out" "header counts the heads the user started and counts run heads within their run"
+# The summary follows the view title at the right of the top bar where the tabs leave room.
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 240x30 --view heads > "$test_root/runs-heads-wide.out"
+contains "2 heads (+1 in runs) / 1 running / 1 need attention" "$test_root/runs-heads-wide.out" "header counts the heads the user started and counts run heads within their run"
 contains "+ plan run kill-dry-run" "$test_root/runs-heads.out" "the run is listed under its planning head with an expand affordance"
 not_contains "kill-dry-run-worker" "$test_root/runs-heads.out" "run heads start collapsed under their run"
 "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x30 --view heads > "$test_root/runs-expanded.out"

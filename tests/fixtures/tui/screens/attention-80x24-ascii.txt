@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery ..    ATTENTION 
+                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Attention ------------------------------------------------------------------- 
+  ATTENTION / loading                                                          
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  * live                                                                       
+ ^/v select | enter details | r review | s mark seen | ? help | q quit         

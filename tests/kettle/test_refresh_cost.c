@@ -294,16 +294,16 @@ static void slow_read(void) {
     struct kt_session s;
     char project[4096];
     open_project(&s, "slow", 2, project, sizeof(project));
-    U("Live", 5);
+    U("\xe2\x97\x8f live", 5);
     kt_write(slow, "");
-    U("STALE: last good snapshot", 16);
+    U("last good snapshot", 16);
     CHECK(HAS("state read timed out; showing last good snapshot"), "a read that ran out of time is named");
     CHECK(HAS("work-1") && HAS("work-2"), "the last good snapshot stays on screen");
     S("?");
     U("KEYBOARD HELP", 1);
     S("?");
     CHECK(!unlink(slow), "tmux answers again");
-    U("Live", 16);
+    U("\xe2\x97\x8f live", 16);
     kt_close(&s, "q", 0, 0);
     puts("PASS slow read: stale after the budget, last good snapshot kept, keys answered, live again");
 }
@@ -322,7 +322,7 @@ static void workflow_reads(void) {
     CHECK(logged("hydra ", "") == 0, "an ended, unchanged run is not asked of the CLI again");
     /* The workspace reads its links once, then only when a graph changes. */
     S("W");
-    U("HYDRA / PLAN TOGETHER", 3);
+    U("PLAN TOGETHER", 3);
     kt_pump(&s, 3.0);
     kt_write(calls, "");
     kt_pump(&s, 6.0);

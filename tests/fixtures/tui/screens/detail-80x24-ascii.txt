@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work  2 Details  3 Overview 4 Attention 5 Recovery ..      DETAILS 
+                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Details: feature-live ------------------------------------------------------- 
+  feature-live                                                                 
+  Agent       codex                                                            
+  Session     running                                                          
+  Reported    done                                                             
+  Group       alpha / PR 42                                                    
+                                                                               
+  CHANGES                                                                      
+  Changed     4 files in the worktree, not yet committed                       
+  Full diff   everything since the branch base: press : and choose diff        
+                                                                               
+  CHECKS                                                                       
+  Approval requests  1 of 2 approved / waiting for your decision               
+  Messages           3 exchanged with other heads                              
+                                                                               
+  NEXT                                                                         
+  a  talk to the agent in the workspace     p  show recent terminal output     
+  c  coordination with other heads          x  remove this head                
+  :  more actions (diff, switch, approvals)  d  technical details              
+                                                                               
+  * live                                                                       
+ ^/v select | a talk to agent | n new task | x remove | ? help | q quit        

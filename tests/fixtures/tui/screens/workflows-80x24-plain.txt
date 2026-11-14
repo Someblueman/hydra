@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  2 Details 3 Overview 4 Attention 5 Recovery  6 Flows  …    WORKFLOWS 
+                  Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Workflows ─────────────────────────────────────────────────────────────────── 
+   visualization-proof / running / run 1 of 2                                  
+   Recorded state / 4 steps / 4 dependency edges                               
+                                                                               
+  DEPENDENCIES / prerequisite -> dependent ─────────────────────────────────   
+                                                                               
+    +────────────────────+     +────────────────────+     +────────────────    
+    │ prepare            │──+─>│ build              │──+─>│ review             
+    │ succeeded          │  │  │ running            │  │  │ queued             
+    +────────────────────+  │  +────────────────────+  │  +────────────────    
+                            │                          │                       
+                            │  +────────────────────+  │                       
+                            +─>│ tests              │──+                       
+                               │ failed             │                          
+                               +────────────────────+                          
+                                                                               
+   prepare [spawn] / succeeded / attempts 1                                    
+   Requires: -                                                                 
+                                                                               
+                                                                               
+  ● live                                                                       
+ ↑/↓ step • [/] run • ←/→ pan • K/J pan up/down • ? help • q quit              

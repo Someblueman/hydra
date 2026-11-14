@@ -37,6 +37,7 @@ static int tests;
 static int failures;
 static long long monotonic_ms(void);
 static int open_session(struct session *, const char *, const char *, const char *, unsigned short, unsigned short);
+static bool wait_for_selected(struct session *session, const char *text, long timeout_ms);
 static bool wait_for_raw(struct session *);
 static bool wait_for_model(struct session *);
 static bool wait_for_marker(struct session *, const char *, long);
@@ -597,7 +598,7 @@ static void test_small_list(const char *tui, const char *hydra, const char *fake
     write_input(session.master, "feature\n", 8U);
     (void)wait_for_marker(&session, "Search: feature", 1000);
     write_input(session.master, "jj", 2U);
-    result(wait_for_marker(&session, ">  feature-unavail", 1000), "selection scrolls into view in a short filtered list");
+    result(wait_for_marker(&session, "\xe2\x96\x8c  feature-unavail", 1000), "selection scrolls into view in a short filtered list");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "small list exits with exact terminal restoration");
     close_session(&session);
@@ -637,7 +638,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "d", 1U);
     result(wait_for_marker(&session, "lifecycle source:", 1000), "diagnostics are reachable on demand");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "[Work]", 1000), "Escape returns to the head list");
+    result(wait_for_marker(&session, "Heads in this project", 1000), "Escape returns to the head list");
     write_input(session.master, "/", 1U);
     result(wait_for_marker(&session, "Search heads", 1000), "keyboard search prompt is reachable");
     write_input(session.master, "FEATURE-STALE\n", 14U);
@@ -656,7 +657,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000),
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000),
            "keyboard-only search can be cleared");
     write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
@@ -672,7 +673,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "oversized paste cannot inject quit and preserves the next key");
     write_input(session.master, "?", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "keyboard input resumes after oversized paste");
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000), "keyboard input resumes after oversized paste");
     write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
     result(still_running(&session), "mouse over a non-list view is inert");
@@ -682,13 +683,13 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 1000), "keyboard help is available in-product");
     write_input(session.master, "?", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "keyboard help closes in raw mode");
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000), "keyboard help closes in raw mode");
     write_input(session.master, ":", 1U);
     result(wait_for_marker(&session, "Commands", 1000), "dashboard action search is reachable");
     write_input(session.master, "dashboard\n", 10U);
     result(wait_for_marker(&session, "FAKE DASHBOARD", 1000), "dashboard delegates to the shell CLI");
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "dashboard returns to native raw mode");
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000), "dashboard returns to native raw mode");
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Commands", 1000);
     write_input(session.master, "spawn\n", 6U);
@@ -730,8 +731,12 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "y", 1U);
     result(wait_for_marker(&session, "Removed 2 heads; skipped the current session", 3000),
            "bulk removal delegates non-current branches, preserves the current session and reports in place");
-    write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "bulk kill returns to native raw mode");
+    /* Still in raw mode and taking keys: help opens and closes. */
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 1000) && still_running(&session),
+           "bulk kill returns to native raw mode");
+    write_input(session.master, "\033", 1U);
+    sleep_ms(60);
     memset(&size, 0, sizeof(size));
     size.ws_col = 41; size.ws_row = 10;
     (void)ioctl(session.master, TIOCSWINSZ, &size);
@@ -943,7 +948,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
     (void)times(&before);
     started = monotonic_ms();
     if (open_session(&session, tui, hydra, fake_bin, 120, 40) != 0) return 1;
-    if (!wait_for_marker(&session, "HYDRA / ", 5000)) {
+    if (!wait_for_marker(&session, "\xe2\x97\x86 hydra", 5000)) {
         kill(session.pid, SIGKILL); (void)waitpid(session.pid, NULL, 0); close_session(&session); return 1;
     }
     ready = monotonic_ms();
@@ -1007,6 +1012,30 @@ static int screen_text_row(const struct measure_screen *screen, const char *text
         if (strstr(line, text)) return y;
     }
     return -1;
+}
+
+/* Whether the emulated screen shows the selection bar (U+258C) on the row
+ * that names text: the incremental presenter may redraw only part of that
+ * row, so the stream alone cannot say. */
+static bool screen_selected(const struct measure_screen *screen, const char *text) {
+    const struct kt_canvas *canvas = screen->terminal.alternate_active ?
+        &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
+    int y = screen_text_row(screen, text), x;
+    if (y < 0) return false;
+    for (x = 0; x < canvas->width; x++)
+        if (canvas->cells[(size_t)y * (size_t)canvas->stride + (size_t)x].glyph == 0x258CU) return true;
+    return false;
+}
+
+static bool wait_for_selected(struct session *session, const char *text, long timeout_ms) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    while (monotonic_ms() < deadline) {
+        char bytes[4096];
+        ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (session->screen && screen_selected(session->screen, text)) return true;
+        if (length <= 0) sleep_ms(10);
+    }
+    return false;
 }
 
 /* Workspace redraws can place cursor controls between the words of a label. */

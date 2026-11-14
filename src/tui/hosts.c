@@ -35,7 +35,7 @@ static void render_host_task(struct app *app, struct kt_canvas *canvas, const st
 }
 
 static void render_host_detail(struct app *app, struct kt_canvas *canvas, const struct host_observation *host, int split, int width, int height) {
-    kt_panel(canvas, (struct kt_rect){split + 1, 0, width - split - 1, height}, "HOST DETAIL");
+    pane_rule(canvas, (struct kt_rect){split + 1, 0, width - split - 1, height}, "HOST DETAIL");
     dashboard_text(canvas, split + 3, 2, width - split - 5, KT_STRONG, "%s", host->name);
     dashboard_text(canvas, split + 3, 4, width - split - 5, KT_BASE, "List response: %s", host->state);
     dashboard_text(canvas, split + 3, 5, width - split - 5, KT_BASE, "Connection: %s", host->connection);
@@ -67,7 +67,7 @@ static void render_setup_row(struct app *app, struct kt_canvas *canvas, const st
 static void render_setup_detail(struct app *app, struct kt_canvas *canvas, const struct host_row *row, int split, int width, int height) {
     char name[160], state[200];
     setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
-    kt_panel(canvas, (struct kt_rect){split + 1, 0, width - split - 1, height}, row->kind == HOST_ROW_ADD ? "ADD A HOST" : "UNFINISHED SETUP");
+    pane_rule(canvas, (struct kt_rect){split + 1, 0, width - split - 1, height}, row->kind == HOST_ROW_ADD ? "ADD A HOST" : "UNFINISHED SETUP");
     dashboard_text(canvas, split + 3, 2, width - split - 5, KT_STRONG, "%s", name);
     dashboard_text(canvas, split + 3, 4, width - split - 5, KT_BASE, "%s", state);
     dashboard_text(canvas, split + 3, 6, width - split - 5, KT_BASE, "%s", row->kind == HOST_ROW_ADD
@@ -94,7 +94,7 @@ void render_hosts(struct app *app) {
     if (width < 38 || height < 6) { linef(app, "More space needed"); return; }
     if (app->host_selected >= count) app->host_selected = 0;
     split = width >= 110 ? width * 3 / 5 : width;
-    kt_panel(&c, (struct kt_rect){0, 0, split, height}, "HOSTS / latest list response");
+    pane_rule(&c, (struct kt_rect){0, 0, split, height}, "HOSTS / latest list response");
     if (!app->model.host_count) dashboard_text(&c, 2, 1, split - 4, KT_MUTED, "No host observations yet; A adds a host.");
     available = height - 5;
     start = app->host_selected >= (size_t)available ? app->host_selected - (size_t)available + 1 : 0;

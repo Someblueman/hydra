@@ -126,6 +126,20 @@ bool frame_begin(struct app *app, bool headless) {
 
 static void overlays(struct app *app);
 
+/* A pane's title: a rule on the first row of its area, the title at its
+ * left, nothing around the sides. Its content keeps the box's inside. */
+void pane_rule(struct kt_canvas *c, struct kt_rect r, const char *title) {
+    pane_rule_styled(c, r, title, false);
+}
+
+void pane_rule_styled(struct kt_canvas *c, struct kt_rect r, const char *title, bool focused) {
+    char text[TEXT + 96];
+    if (r.width < 2 || r.height < 1) return;
+    snprintf(text, sizeof(text), "%s", title ? title : "");
+    kt_rule_styled(c, (struct kt_rect){r.x, r.y, r.width - 1, 1}, text[0] ? text : NULL, KT_ALIGN_LEFT,
+                   focused ? KT_FOCUS : KT_STRONG, focused ? KT_FOCUS : KT_BORDER);
+}
+
 /* Deterministic rendering prints the frame as text; the loop presents its own. */
 void frame_end(struct app *app, unsigned frame, bool headless) {
     int y;
@@ -321,7 +335,7 @@ static const char *tab_labels[] = {"Work", "Details", "Coordination", "Recovery"
 /* Below TAB_SHORT_BELOW columns the tab bar uses these so every tab, Hosts
  * included, fits at 80 columns; keys and view titles are unchanged. */
 static const char *tab_short[] = {"Work", "Details", "Coord", "Recovery", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Attention"};
-#define TAB_SHORT_BELOW 100
+#define TAB_SHORT_BELOW 140
 
 size_t tab_order(const struct app *app, int *views) {
     size_t count = 0;
@@ -337,47 +351,64 @@ size_t tab_order(const struct app *app, int *views) {
     return count;
 }
 
-static int tab_width(const char *const *labels, int view, bool current) {
-    return (int)strlen(labels[view]) + (current ? 2 : 0);
-}
-
-/* First tab to draw so the active tab stays visible in the available width. */
-static size_t tabs_first_visible(const char *const *labels, const int *views, size_t active, int gap, int width) {
-    size_t first = 0, i;
-    while (first < active) {
-        int needed = 0;
-        for (i = first; i <= active; i++) needed += tab_width(labels, views[i], i == active) + gap;
-        if (needed <= width) break;
-        first++;
-    }
-    return first;
-}
-
 static void record_tab(struct app *app, int x, int length, int view) {
     if (app->tab_count >= 12) return;
     app->tab_left[app->tab_count] = x; app->tab_right[app->tab_count] = x + length - 1;
     app->tab_view[app->tab_count++] = view;
 }
 
-static void chrome_tabs(struct app *app, struct kt_canvas *c, int row) {
-    int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
+/* A tab is "N Label": its number (the key that opens it) and its label; the
+ * active one is a pill with a blank on each side. */
+static int tab_width(const char *const *labels, int view, bool current, int number) {
+    return (int)strlen(labels[view]) + (number < 10 ? 2 : 0) + (current ? 2 : 0);
+}
+
+static void tab_draw(struct app *app, struct kt_canvas *c, int x, int row, int view, bool current, int number,
+                     const char *const *labels) {
+    char label[32];
+    int length = tab_width(labels, view, current, number);
+    if (current) {
+        snprintf(label, sizeof(label), " %d %s ", number, labels[view]);
+        /* Without colour the pill is reverse video, as a selection is. */
+        kt_text(c, (struct kt_rect){x, row, length, 1}, label, app->no_color ?
+                KT_STYLE(KT_COLOR_ON_SELECTION, KT_COLOR_SELECTION, KT_BOLD) : KT_STYLE(KT_COLOR_ON_ACCENT, KT_COLOR_ACCENT, KT_BOLD));
+    } else {
+        snprintf(label, sizeof(label), "%d", number);
+        kt_text(c, (struct kt_rect){x, row, 1, 1}, label, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0));
+        kt_text(c, (struct kt_rect){x + 2, row, length - 2, 1}, labels[view], KT_MUTED);
+    }
+    record_tab(app, x, length, view);
+}
+
+/* The first tab drawn, so the active one fits in room columns. */
+static size_t tabs_first(const char *const *labels, const int *views, size_t active, int gap, int room) {
+    size_t first = 0, i;
+    while (first < active) {
+        int needed = 0;
+        for (i = first; i <= active; i++) needed += tab_width(labels, views[i], i == active, (int)i + 1) + gap;
+        if (needed <= room) break;
+        first++;
+    }
+    return first;
+}
+
+/* The tabs after the brand; they give up their gap, then their long labels,
+ * then the tabs far from the active one, before the active tab would go. */
+static int chrome_tabs(struct app *app, struct kt_canvas *c, int row, int x, int width) {
+    int views[12], gap = 2, total = 0;
     const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
-    size_t count = tab_order(app, views), i, first, active = 0;
-    for (i = 0; i < count; i++) { total += tab_width(labels, views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
-    /* Tabs start at column x, so they have width - x columns. */
+    size_t count = tab_order(app, views), i, first = 0, active = 0;
+    for (i = 0; i < count; i++) { total += tab_width(labels, views[i], views[i] == app->view, (int)i + 1); if (views[i] == app->view) active = i; }
     if (total + (int)(count - 1) * gap > width - x) gap = 1;
     app->tab_count = 0;
-    first = tabs_first_visible(labels, views, active, gap, width - x);
+    first = tabs_first(labels, views, active, gap, width - x);
     for (i = first; i < count; i++) {
-        char label[32];
-        bool current = views[i] == app->view;
-        int length = tab_width(labels, views[i], current);
-        if (x + length > width) { kt_text(c, (struct kt_rect){x, row, width - x, 1}, "..", KT_MUTED); break; }
-        snprintf(label, sizeof(label), current ? "[%s]" : "%s", labels[views[i]]);
-        kt_text(c, (struct kt_rect){x, row, length, 1}, label, current ? KT_SELECTED : KT_MUTED);
-        record_tab(app, x, length, views[i]);
+        int length = tab_width(labels, views[i], views[i] == app->view, (int)i + 1);
+        if (x + length > width) { kt_text(c, (struct kt_rect){x, row, width - x, 1}, app->ascii ? ".." : "\xe2\x80\xa6", KT_MUTED); break; }
+        tab_draw(app, c, x, row, views[i], views[i] == app->view, (int)i + 1, labels);
         x += length + gap;
     }
+    return x;
 }
 
 static void header_project(const struct app *app, char *project, size_t size) {
@@ -409,19 +440,69 @@ static int text_columns(const char *text) {
     return length;
 }
 
+/* The top bar: the brand, the views as numbered tabs (the active one a
+ * pill) and at the right what is shown: the view's title, which names the
+ * workspace layout, followed by the project's summary when there is room.
+ * The title keeps its place; the tabs give way before it. The row under the
+ * bar is left blank. */
 void chrome_header(struct app *app, struct kt_canvas *c, const char *title) {
-    char left[256], right[256] = "", project[128];
-    int width = c->width, length;
-    snprintf(left, sizeof(left), "HYDRA / %s", title);
-    kt_text(c, (struct kt_rect){1, 0, width - 2, 1}, left, KT_TITLE);
-    if (width >= 60) {
-        header_project(app, project, sizeof(project));
-        header_summary(app, project, right, sizeof(right));
-        length = text_columns(right);
-        if (length + (int)strlen(left) + 4 < width)
-            kt_text(c, (struct kt_rect){width - length - 1, 0, length, 1}, right, KT_MUTED);
+    char right[384] = "", summary[256] = "", project[128];
+    int width = c->width, length, end, room;
+    kt_text(c, (struct kt_rect){1, 0, 8, 1}, app->ascii ? "# hydra" : "\xe2\x97\x86 hydra", KT_TITLE);
+    length = text_columns(title);
+    room = width - 1 - (length && width - length > 24 ? length + 3 : 0);
+    end = chrome_tabs(app, c, 0, 10, room);
+    header_project(app, project, sizeof(project));
+    header_summary(app, project, summary, sizeof(summary));
+    snprintf(right, sizeof(right), "%s%s%s", title, dot(app), summary);
+    if (end + text_columns(right) + 3 >= width) {
+        /* No room beside the tabs: the summary takes the row under the bar. */
+        snprintf(right, sizeof(right), "%s", title);
+        length = text_columns(summary);
+        if (c->height > 2 && width >= 60 && length + 2 < width)
+            kt_text(c, (struct kt_rect){width - length - 1, 1, length, 1}, summary, KT_MUTED);
     }
-    chrome_tabs(app, c, 1);
+    length = text_columns(right);
+    if (end + length + 2 < width) kt_text(c, (struct kt_rect){width - length - 1, 0, length, 1}, right, KT_MUTED);
+}
+
+/* The status line starts with a chip saying how fresh the data is: live,
+ * updated a while ago, stale, or still loading; the text after it says the
+ * rest (what failed, a notice, the search). */
+static struct kt_style chip_tone(int kind) {
+    if (kind == 0) return KT_SUCCESS;
+    if (kind == 3) return KT_STYLE(KT_COLOR_INFO, KT_COLOR_SURFACE, 0);
+    return KT_WARNING;
+}
+
+static const char *chip_for(const struct app *app, const char **status, struct kt_style *chip) {
+    static const struct { const char *prefix, *utf8, *ascii; int kind; } chips[] = {
+        {"Live", "\xe2\x97\x8f live", "* live", 0},
+        {"STALE", "\xe2\x96\xb2 stale", "! stale", 1},
+        {"Updated", "\xe2\x97\x8c updated", ". updated", 2},
+        {"Waiting for the first snapshot", "\xe2\x97\x8c loading", ". loading", 3}};
+    size_t i, n;
+    for (i = 0; i < sizeof(chips) / sizeof(chips[0]); i++) {
+        n = strlen(chips[i].prefix);
+        if (strncmp(*status, chips[i].prefix, n)) continue;
+        *status += n;
+        while (**status == ' ' || **status == ':' || !strncmp(*status, "\xc2\xb7", 2)) *status += **status == ' ' || **status == ':' ? 1 : 2;
+        *chip = chip_tone(chips[i].kind);
+        return app->ascii ? chips[i].ascii : chips[i].utf8;
+    }
+    return NULL;
+}
+
+static void status_chip(struct app *app, struct kt_canvas *c, int row, const char *status, struct kt_style tone) {
+    struct kt_style chip_tone;
+    const char *chip = chip_for(app, &status, &chip_tone);
+    int x = 1;
+    if (chip) {
+        int width = kt_text_width(chip);
+        kt_text(c, (struct kt_rect){x + 1, row, width, 1}, chip, chip_tone);
+        x += width + 4;
+    }
+    kt_text(c, (struct kt_rect){x, row, c->width - x - 1, 1}, status, tone);
 }
 
 /* A partly entered chord takes the status line until it completes: its keys
@@ -433,7 +514,7 @@ void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, str
         status = pending; tone = KT_STRONG;
         if (height < 3) hints = pending;
     }
-    if (height >= 3) kt_text(c, (struct kt_rect){1, height - 2, c->width - 2, 1}, status, tone);
+    if (height >= 3) status_chip(app, c, height - 2, status, tone);
     if (hints) kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, hints, KT_MUTED);
     else key_footer(app, c, (struct kt_rect){1, height - 1, c->width - 2, 1});
 }
@@ -476,8 +557,9 @@ static void outline_line(struct app *app, const struct outline_row *row, bool se
     head_row_layout(width, &k);
     if (row) outline_row_text(app, row, &t);
     else outline_heading(app, &t);
-    snprintf(cell, sizeof(cell), "%c%c %s", selected ? '>' : ' ', outline_marked(app, row) ? '*' : ' ', t.name);
-    if (selected) column(app, 0, width, KT_SELECTED, "");
+    snprintf(cell, sizeof(cell), "%s%c %s", selected ? (app->ascii ? ">" : "\xe2\x96\x8c") : " ", outline_marked(app, row) ? '*' : ' ', t.name);
+    /* The selection fills its row; the bar at its left edge marks it too. */
+    if (selected) kt_fill(&app->frame, (struct kt_rect){app->content_x, app->line, width, 1}, KT_SELECTED);
     column(app, 0, k.name_width + 3, row_tone, cell);
     column(app, k.status_x, 14, selected ? KT_SELECTED : t.tone, t.status);
     if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, t.agent);
@@ -535,7 +617,7 @@ static void summary_actions(struct app *app, const struct head *head, char *line
 static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
     struct kt_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
     if (r.height > 5) r.height = 5;
-    kt_panel_styled(&app->frame, r, title, KT_BORDER, KT_STRONG);
+    pane_rule(&app->frame, r, title);
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
     paragraph(app, first, KT_BASE);
@@ -644,7 +726,8 @@ static void render_recovery_row(struct app *app, size_t index) {
     bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     record_hit(app, index);
-    if (selected) column(app, 0, app->content_width, KT_SELECTED, ">");
+    if (selected) kt_fill(&app->frame, (struct kt_rect){app->content_x, app->line, app->content_width, 1}, KT_SELECTED);
+    if (selected) column(app, 0, app->content_width, KT_SELECTED, app->ascii ? ">" : "\xe2\x96\x8c");
     column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? KT_SELECTED : KT_WARNING, title);
     if (wide) column(app, app->content_width - 18, 18, selected ? KT_SELECTED : KT_MUTED, item->kind);
     app->line++;
@@ -858,8 +941,8 @@ void render(struct app *app, unsigned frame, bool headless) {
     if (!frame_begin(app, headless)) return;
     app->limit = app->rows - 3;
     chrome_header(app, &app->frame, view_titles[app->view]);
-    if (app->rows >= 6) kt_panel_styled(&app->frame, (struct kt_rect){0, 2, app->frame.width, app->frame.height - 4},
-                                        panel_title(app, title, sizeof(title)), KT_BORDER, KT_STRONG);
+    if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4},
+                                  panel_title(app, title, sizeof(title)));
     app->line = 3;
     style(app, TONE_BASE);
     render_content(app);

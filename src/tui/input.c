@@ -113,7 +113,7 @@ static void statistics_mouse(struct app *app, const unsigned values[3]) {
 
 static bool tab_click(struct app *app, const unsigned values[3]) {
     size_t index;
-    if (values[0] != 0U || values[2] != 2U || app->help || app->result_open) return false;
+    if (values[0] != 0U || values[2] != 1U || app->help || app->result_open) return false;
     for (index = 0U; index < app->tab_count; index++) {
         if ((int)values[1] - 1 >= app->tab_left[index] && (int)values[1] - 1 <= app->tab_right[index]) {
             enter_view(app, app->tab_view[index]);

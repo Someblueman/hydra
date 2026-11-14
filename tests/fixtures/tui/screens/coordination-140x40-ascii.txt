@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work 2 Details  3 Coordination  4 Overview 5 Attention 6 Recovery 7 Workflows 8 Statistics 9 Workspace 1 Hos      COORDINATION 
+                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Coordination ---------------------------------------------------------------------------------------------------------------------------- 
+  COORDINATION  feature-live                                                                                                               
+                                                                                                                                           
+  This head is a single agent session. Coordination between heads uses claims (files a head intends to change), scopes (areas it stays     
+  within), a shared work queue and allocated resources. A workflow adds steps, dependencies and handoffs on top.                           
+                                                                                                                                           
+  THIS HEAD                                                                                                                                
+  Claims      1 recorded             : claims                                                                                              
+  Scopes      2 recorded             : scopes                                                                                              
+  Queue       0 waiting entries      : queue                                                                                               
+  Resources   1 allocated            : resources                                                                                           
+  Approvals   1 of 2 approved        : approvals                                                                                           
+                                                                                                                                           
+  WORKFLOW                                                                                                                                 
+  2 recorded workflow run(s) in this project; Workflows shows steps and dependencies.                                                      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live                                                                                                                                   
+ ^/v select | a talk to agent | n new task | x remove | p output | d technical | / search | : more actions | ? help | q quit               

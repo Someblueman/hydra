@@ -291,6 +291,14 @@ static void render_all(struct app *app, char *all, size_t size) {
     app->setup->scroll = 0;
 }
 
+/* Whether the first rows of a frame (the top bar) hold text. */
+static bool top_bar_has(const char *frame, const char *text) {
+    const char *at = strstr(frame, text), *end = frame;
+    int rows = 0;
+    while (rows < 2 && (end = strchr(end, '\n')) != NULL) { end++; rows++; }
+    return at && (!end || at < end);
+}
+
 static void screen_case(struct app *app, const struct screen_case *c, int cols, int rows) {
     static char all[1 << 20];
     char name[160], first[65536];
@@ -310,7 +318,8 @@ static void screen_case(struct app *app, const struct screen_case *c, int cols, 
     (void)render_capture(app, first, sizeof(first));
     keep(c->label, cols, rows, first);
     snprintf(name, sizeof(name), "%s screen at %dx%d shows what it must and nothing it must not", c->label, cols, rows);
-    check(contains_all(all, c->must, 4) && contains_none(all, c->never, 3) && strstr(first, "[Hosts]"), name);
+    /* Drawn inside Hosts: the view is Hosts and the top bar shows its tab. */
+    check(contains_all(all, c->must, 4) && contains_none(all, c->never, 3) && app->view == 6 && top_bar_has(first, " Hosts "), name);
 }
 
 static void hub_case(struct app *app, int cols, int rows) {

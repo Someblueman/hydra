@@ -20,7 +20,7 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "ATTENTION  2 need you", 1000), "Escape leaves the detail for the list; the approval still counts");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "attention Escape returns to heads");
+    result(wait_for_marker(&session, "Heads in this project", 1000), "attention Escape returns to heads (its tab is active)");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "attention exits with terminal restored");
     close_session(&session);
@@ -211,7 +211,7 @@ static void test_help_scroll(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "\033[5~kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk", 46U);
     result(wait_for_marker(&session, "Heads", 1000), "scrolling back reaches the first help group");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "Esc closes the scrolled help");
+    result(wait_for_marker(&session, "\xe2\x97\x86 hydra", 1000), "Esc closes the scrolled help");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "help scroll exits with terminal restored");
     close_session(&session);

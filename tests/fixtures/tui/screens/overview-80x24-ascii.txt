@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work 2 Details  3 Overview  4 Attention 5 Recovery ..     OVERVIEW 
+                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Overview -------------------------------------------------------------------- 
+   2 running / 3 need attention / 1 active run / 4 to repair                   
+                                                                               
+  WORK / what you started, with its runs -----------------------------------   
+                                                                               
+    > feature-live                                         running             
+      feature-stale                                        terminal gone       
+      feature-unavailable                                  unknown             
+    3 heads you started / Enter opens or expands                               
+                                                                               
+  RUN / run visualization-proof / running ----------------------------------   
+    STEP            STATE         TIME          HEAD                           
+    prepare         succeeded     -             -                              
+    build           running       -             -                              
+    tests           failed        -             -                              
+    review          queued        -             -                              
+    Next  Running step build; p on that head shows its output                  
+                                                                               
+                                                                               
+                                                                               
+  * live                                                                       
+ ^/v select | enter details | a talk to agent | n new task | ? help | q quit   

@@ -54,7 +54,7 @@ static bool theme_switch(struct session *session, const char *base, const char *
     return !strncmp(frame, THEME_FRAME_BEGIN, strlen(THEME_FRAME_BEGIN)) &&
         theme_count(frame, THEME_FRAME_BEGIN) == theme_count(frame, THEME_FRAME_END) &&
         !strstr(frame, "\033[2J") && theme_rows_painted(frame, 24) == 24 &&
-        strstr(frame, base) != NULL && strstr(frame, base) < strstr(frame, "HYDRA /") &&
+        strstr(frame, base) != NULL && strstr(frame, base) < strstr(frame, "\xe2\x97\x86 hydra") &&
         theme_ends_reset(frame, named);
 }
 
@@ -83,12 +83,16 @@ static void test_themes(const char *tui, const char *hydra, const char *fake_bin
     close_session(&session);
     (void)unsetenv("HYDRA_TEST_COLOR");
     if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open NO_COLOR themed terminal")) goto done;
-    /* Without colour the attributes still carry the meaning: the title is
-     * bold and the selected tab is bold reverse video, in every theme. */
-    result(wait_for_markers(&session, "\033[1;1H \033[1mHYDRA / WORK", "\033[1;7m[Work]", 2000),
+    /* Without colour the attributes still carry the meaning: the brand is
+     * bold and the active tab is bold reverse video, in every theme. */
+    result(wait_for_markers(&session, "\033[1;1H \033[1m\xe2\x97\x86 hydra", "\033[1;7m 1 Work ", 2000),
            "NO_COLOR startup writes attributes only, from the first cell on");
     (void)wait_for_model(&session);
-    result(wait_for_marker(&session, ">  feature-live", 1000), "NO_COLOR retains textual selection with a configured theme");
+    /* One key at a time, so each row is drawn again as the selection moves. */
+    mouse_input(&session, "j");
+    (void)wait_for_marker(&session, "\xe2\x96\x8c  feature-stale", 1000);
+    mouse_input(&session, "k");
+    result(wait_for_marker(&session, "\xe2\x96\x8c  feature-live", 1000), "NO_COLOR retains the selection bar with a configured theme");
     mouse_input(&session, "t");
     result(wait_for_marker(&session, "Theme: light (NO_COLOR)", 1000), "NO_COLOR remains authoritative when cycling themes");
     result(!wait_for_marker(&session, "38;5;", 600) && !wait_for_marker(&session, "48;5;", 100),

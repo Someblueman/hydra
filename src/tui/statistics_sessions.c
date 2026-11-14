@@ -161,7 +161,7 @@ static uint64_t observed_seconds(const struct hs_session *s) {
 
 static void text_card(struct kt_canvas *c, int x, int width, const char *title, const char *value,
                       const char *caption, struct kt_style tone) {
-    kt_panel(c, (struct kt_rect){x, 0, width, 5}, title);
+    pane_rule(c, (struct kt_rect){x, 0, width, 5}, title);
     dashboard_text(c, x + 2, 1, width - 4, tone, "%s", value);
     dashboard_text(c, x + 2, 3, width - 4, KT_BASE, "%s", caption);
 }
@@ -214,7 +214,7 @@ static void time_bar(struct kt_canvas *c, struct kt_rect r, int row, const char 
 static void sessions_time(struct kt_canvas *c, struct kt_rect r, const struct hs_session_summary *s) {
     uint64_t whole = s->active_sum + s->quiet_sum + s->unobserved_sum;
     char reported[32];
-    kt_panel(c, r, "SESSION TIME / inferred while observed");
+    pane_rule(c, r, "SESSION TIME / inferred while observed");
     time_bar(c, r, r.y + 2, "Active", s->active_sum, whole, s->activity_known > 0);
     time_bar(c, r, r.y + 3, "Quiet", s->quiet_sum, whole, s->activity_known > 0);
     time_bar(c, r, r.y + 4, "Unobserved", s->unobserved_sum, whole, s->coverage_known > 0);
@@ -225,7 +225,7 @@ static void sessions_time(struct kt_canvas *c, struct kt_rect r, const struct hs
 
 static void sessions_trend(struct kt_canvas *c, struct kt_rect r, const struct hs_session_summary *s) {
     size_t i, maximum = 1;
-    kt_panel(c, r, "SESSIONS STARTED / 7 x 24h");
+    pane_rule(c, r, "SESSIONS STARTED / 7 x 24h");
     for (i = 0; i < 7; i++) if (s->daily[i] > maximum) maximum = s->daily[i];
     for (i = 0; i < 7 && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i;
@@ -288,7 +288,7 @@ static void sessions_table(struct app *app, struct kt_canvas *c, struct kt_rect 
     struct statistics_view *v = app->statistics;
     size_t i, start;
     int available = r.height - 4, row = r.y + 2;
-    kt_panel(c, r, "HEAD SESSIONS / newest start first");
+    pane_rule(c, r, "HEAD SESSIONS / newest start first");
     if (!v->session_count) { sessions_empty(c, r, v); return; }
     if (available < 1) return;
     start = v->session_selected >= (size_t)available ? v->session_selected - (size_t)available + 1 : 0;
@@ -319,7 +319,7 @@ static void session_detail(struct app *app, struct kt_canvas *c, struct kt_rect 
     char started[40], ended[40], length[32] = "--", active[32], quiet[32], unobserved[32], share[16];
     uint64_t seconds;
     int x = r.x + 2, width = r.width - 4;
-    kt_panel(c, r, "SESSION EVIDENCE / one head instance");
+    pane_rule(c, r, "SESSION EVIDENCE / one head instance");
     if (!v->session_count) { dashboard_text(c, x, r.y + 2, width, KT_WARNING, "Selected session no longer matches"); return; }
     s = &v->model->sessions[v->session_rows[v->session_selected]];
     date_text(s->started, s->started_known, started, sizeof(started));
@@ -343,7 +343,7 @@ static void session_detail(struct app *app, struct kt_canvas *c, struct kt_rect 
 static void sessions_scope(struct app *app, struct kt_canvas *c, int width, int height, const struct hs_session_summary *s) {
     const struct statistics_view *v = app->statistics;
     char updated[40];
-    kt_panel(c, (struct kt_rect){0, 2, width - 1, height - 4}, "SCOPE");
+    pane_rule(c, (struct kt_rect){0, 2, width - 1, height - 4}, "SCOPE");
     dashboard_text(c, 2, 4, width - 5, KT_STRONG, "%s", range_text(v));
     dashboard_text(c, 2, 5, width - 5, KT_MUTED, "T changes the range");
     dashboard_text(c, 2, 7, width - 5, KT_BASE, "Head sessions");

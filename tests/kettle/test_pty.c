@@ -168,7 +168,7 @@ static void hydra(void) {
         const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
         kt_open_terminal(&s, argv, 140, 40, NULL);
     }
-    kt_until(&s, "HYDRA / PLAN TOGETHER", 3);
+    kt_until(&s, "PLAN TOGETHER", 3);
     kt_until(&s, "Session   running", 3);
     before = s.screen.clears;
     kt_send(&s, "j");

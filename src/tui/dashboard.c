@@ -15,7 +15,7 @@ void dashboard_text(struct kt_canvas *c, int x, int y, int width,
 
 void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
                            size_t count, const char *caption, struct kt_style tone) {
-    kt_panel(c, (struct kt_rect){x, 0, width, 5}, title);
+    pane_rule(c, (struct kt_rect){x, 0, width, 5}, title);
     if (count == SIZE_MAX) dashboard_text(c, x + 2, 1, width - 4, tone, "--");
     else dashboard_text(c, x + 2, 1, width - 4, tone, "%zu", count);
     dashboard_text(c, x + 2, 3, width - 4, KT_BASE, "%s", caption);
@@ -45,7 +45,7 @@ static void dashboard_heads(struct app *app, struct kt_canvas *c, struct kt_rect
     size_t i, count, position, start;
     int row = r.y + 2, available = r.height - 4;
     struct work_counts n;
-    kt_panel(c, r, app->fleet ? "REMOTE HEADS / desired state" : "WORK / what you started, with its runs");
+    pane_rule(c, r, app->fleet ? "REMOTE HEADS / desired state" : "WORK / what you started, with its runs");
     retarget_selection(app);
     count = outline_build(app, rows, OUTLINE_ROWS);
     position = outline_position(app, rows, count);
@@ -107,7 +107,7 @@ static void dashboard_detail_head(struct app *app, struct kt_canvas *c, struct k
 
 static void dashboard_detail(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     const struct head *h = selected_head(app);
-    kt_panel(c, r, "SELECTED / what it needs");
+    pane_rule(c, r, "SELECTED / what it needs");
     if (!app->fleet && app->run_row && app->workflows && app->workflow_run < app->workflows->run_count) { dashboard_detail_run(app, c, r); return; }
     if (!h) { dashboard_text(c, r.x + 2, r.y + 2, r.width - 4, KT_BASE, "No head selected"); return; }
     dashboard_detail_head(app, c, r, h);
@@ -143,7 +143,7 @@ static void selected_task_details(struct kt_canvas *c, struct kt_rect r, int *ro
 static void dashboard_fleet_tasks(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     int row = r.y + 2, available = r.height - 14;
     size_t selected = app->task_selected, start;
-    kt_panel(c, r, "REMOTE TASKS / receiver-owned observations");
+    pane_rule(c, r, "REMOTE TASKS / receiver-owned observations");
     if (available < 1) available = 1;
     if (available > 5) available = 5;
     start = selected < app->model.task_count && selected >= (size_t)available ? selected - (size_t)available + 1 : 0;
@@ -183,7 +183,7 @@ static bool queue_has_data(const struct app *app) {
 
 static void dashboard_queue_chart(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     size_t i; double maximum = 1;
-    kt_panel(c, r, "QUEUE DEPTH / waiting work");
+    pane_rule(c, r, "QUEUE DEPTH / waiting work");
     for (i = 0; i < app->history_count; i++) if (app->history_valid[i] && app->queue_history[i] > maximum) maximum = app->queue_history[i];
     dashboard_text(c, r.x + 2, r.y + 1, r.width - 4, KT_MUTED, "0..%.0f queued entries over %zu samples", maximum, app->history_count);
     dashboard_text(c, r.x + 2, r.y + 2, r.width - 4, KT_MUTED, "A gap means the queue was unknown at that sample");
@@ -192,7 +192,7 @@ static void dashboard_queue_chart(struct app *app, struct kt_canvas *c, struct k
 }
 
 static void dashboard_charts(struct app *app, struct kt_canvas *c, struct kt_rect r) {
-    kt_panel(c, r, "HOST OBSERVATIONS");
+    pane_rule(c, r, "HOST OBSERVATIONS");
     dashboard_fleet_charts(app, c, r);
 }
 
@@ -318,13 +318,13 @@ static void dashboard_run_panel(struct app *app, struct kt_canvas *c, struct kt_
     size_t run = overview_run(app);
     char title[TEXT + 160];
     int row;
-    if (run == SIZE_MAX) { kt_panel(c, r, "RUN / no run yet"); run_panel_empty(c, r); return; }
+    if (run == SIZE_MAX) { pane_rule(c, r, "RUN / no run yet"); run_panel_empty(c, r); return; }
     run_summary_text(app, run, title, sizeof(title));
     if (app->workflows->runs[run].planning[0]) text_append(title, sizeof(title), "%sfrom %s", dot(app), app->workflows->runs[run].planning);
     {
         char panel[TEXT + 200];
         snprintf(panel, sizeof(panel), "RUN / %s", title);
-        kt_panel(c, r, panel);
+        pane_rule(c, r, panel);
     }
     row = run_panel_steps(app, c, r, run, r.y + r.height - 3);
     run_panel_next(app, c, r, run, r.y + r.height - 1 - (row + 1) >= 3 ? row + 1 : row);

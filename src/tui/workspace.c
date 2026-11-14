@@ -628,7 +628,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     native_workspace_tree(app);
     if (compact) {
         char title[96];
-        snprintf(title, sizeof(title), "HYDRA / %s", w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
+        snprintf(title, sizeof(title), "%s  %s", app->ascii ? "# hydra" : "\xe2\x97\x86 hydra", w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
         kt_text(c, (struct kt_rect){1,0,width-2,1}, title, KT_TITLE);
     } else chrome_header(app, c, w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
     for (i = 0; i < w->layout.count; i++) {
@@ -656,8 +656,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
             const char *base_title = pane_title(app,w,i,agent,attached,agent_title);
             if (!attached && p->scroll) snprintf(titled,sizeof(titled),"%s%sscroll %zu",base_title,sep,p->scroll);
             else snprintf(titled,sizeof(titled),"%s",base_title);
-            kt_panel_styled(&view, (struct kt_rect){0,0,view.width,view.height}, titled,
-                            focused ? KT_FOCUS : KT_BORDER, focused ? KT_SELECTED : KT_STRONG);
+            pane_rule_styled(&view, (struct kt_rect){0,0,view.width,view.height}, titled, focused);
             if (attached) dashboard_text(&view,1,1,view.width-2,focused ? KT_SELECTED : KT_MUTED,
                 "%s", attached_label(app, t, focused, view.width-2, label, sizeof(label)));
         }
