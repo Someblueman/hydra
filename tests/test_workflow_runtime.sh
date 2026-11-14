@@ -315,20 +315,22 @@ steps:
 EOF
 # Delay the scheduler's next state scan until the cancelled step publishes its
 # terminal state, reproducing the ordering that intermittently failed in CI.
+# The scheduler's step-state scans are awk passes that receive the run
+# directory as WORKFLOW_RUN_DIR.
 mkdir "$test_root/race-bin"
-cat > "$test_root/race-bin/find" <<EOF
+cat > "$test_root/race-bin/awk" <<EOF
 #!/bin/sh
 run_dir=\$(cat "$test_root/cancel-race-dir" 2>/dev/null || true)
-if [ "\$#" -ge 3 ] && [ "\$1" = "\$run_dir/steps" ] && [ "\$2" = -name ] && [ -s "\$run_dir/residual-children.tsv" ]; then
+if [ -n "\$run_dir" ] && [ "\${WORKFLOW_RUN_DIR:-}" = "\$run_dir" ] && [ -s "\$run_dir/residual-children.tsv" ]; then
     count=0
     while [ "\$(cat "\$run_dir/steps/long/state")" = running ] && [ "\$count" -lt 100 ]; do
         sleep 0.05; count=\$((count + 1))
     done
     : > "$test_root/cancel-race-observed"
 fi
-exec "$(command -v find)" "\$@"
+exec "$(command -v awk)" "\$@"
 EOF
-chmod +x "$test_root/race-bin/find"
+chmod +x "$test_root/race-bin/awk"
 PATH="$test_root/race-bin:$PATH" "$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
 cancel_runner=$!
 wait_for_file "$test_root/cancel-started" || exit 1

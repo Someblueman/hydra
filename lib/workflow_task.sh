@@ -101,15 +101,29 @@ workflow_task_start() {
     workflow_atomic_scalar "$_wts_sd/worker-pid" "$!"
 }
 workflow_waiting_state() {
-    _wws_states="$(find "$1/steps" -name state -exec sed -n '1p' {} \;)"
-    printf '%s\n' "$_wws_states" | grep -Eq '^waiting-(approval|remote)$' || return 1
-    if printf '%s\n' "$_wws_states" | grep -Eq '^(running|retrying)$'; then return 1; fi
-    if printf '%s\n' "$_wws_states" | grep -q '^ready$'; then
-        _wws_remote="$(printf '%s\n' "$_wws_states" | grep -c '^waiting-remote$' || true)"
+    # One pass counts steps waiting for approval, waiting on remote work,
+    # active (running or retrying), and ready.
+    _wws_counts="$(WORKFLOW_RUN_DIR="$1" awk -F '\t' '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" {
+            state = ""; file = dir "/steps/" $2 "/state"
+            getline state < file; close(file)
+            if (state == "waiting-approval") approval++
+            else if (state == "waiting-remote") remote++
+            else if (state == "running" || state == "retrying") active++
+            else if (state == "ready") ready++
+        }
+        END { print approval + 0, remote + 0, active + 0, ready + 0 }' "$1/graph.tsv")" || return 1
+    read -r _wws_approval _wws_remote _wws_active _wws_ready <<EOF
+$_wws_counts
+EOF
+    [ "$((_wws_approval + _wws_remote))" -gt 0 ] || return 1
+    [ "$_wws_active" -eq 0 ] || return 1
+    if [ "$_wws_ready" -gt 0 ]; then
         [ "$_wws_remote" -ge "$(sed -n '1p' "$1/parallelism")" ] || return 1
     fi
     _wws_state=waiting-approval
-    if printf '%s\n' "$_wws_states" | grep -q '^waiting-remote$'; then _wws_state=waiting-remote; fi
+    [ "$_wws_remote" -eq 0 ] || _wws_state=waiting-remote
     workflow_atomic_scalar "$1/state" "$_wws_state"
     workflow_event "$1" "" "run.$(printf '%s' "$_wws_state" | tr '-' '_')"
 }
@@ -130,10 +144,12 @@ workflow_task_cancel() {
 
 workflow_next_step() {
     if [ -f "$1/tasks.json" ]; then workflow_task_tool next "$1"; return $?; fi
-    awk -F '\t' '$1=="step" {print $2}' "$1/graph.tsv" | while IFS= read -r _wns_id; do
-        if [ "$(sed -n '1p' "$1/steps/$_wns_id/state")" = ready ]; then
-            printf '%s\n' "$_wns_id"
-            break
-        fi
-    done
+    # The first ready step in graph order, found in one pass.
+    WORKFLOW_RUN_DIR="$1" awk -F '\t' '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" {
+            state = ""; file = dir "/steps/" $2 "/state"
+            getline state < file; close(file)
+            if (state == "ready") { print $2; exit }
+        }' "$1/graph.tsv"
 }

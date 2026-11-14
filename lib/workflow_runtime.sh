@@ -54,6 +54,24 @@ workflow_pid_alive() {
     kill -0 "$1" 2>/dev/null
 }
 
+# Each scan below reads every step state of a run in graph order inside one
+# awk process, rather than starting one process per step. A missing or empty
+# state file reads as an empty state, as `sed -n '1p'` reads it. The run
+# directory reaches awk through the environment, which keeps it byte-exact.
+
+# Usage: workflow_count_states <run-dir> "<state> ..." [kind]
+# Prints how many steps (of the given kind, if any) are in one of the states.
+workflow_count_states() {
+    WORKFLOW_RUN_DIR="$1" awk -F '\t' -v want=" $2 " -v kind="${3:-}" '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" && (kind == "" || $3 == kind) {
+            state = ""; file = dir "/steps/" $2 "/state"
+            getline state < file; close(file)
+            if (state != "" && index(want, " " state " ")) count++
+        }
+        END { print count + 0 }' "$1/graph.tsv"
+}
+
 workflow_run_owner_active() {
     _wroa_dir="$1"
     _wroa_pid="$(sed -n '1p' "$_wroa_dir/owner-pid" 2>/dev/null || true)"
@@ -189,43 +207,63 @@ workflow_step_command() {
     "$HYDRA_BIN_PATH" "$@"
 }
 
+# Decides queued steps exactly as one sequential pass per graph line would,
+# repeated until nothing changes: a decision is visible to the steps after it.
+# Prints "cancelled <id>" when a dependency failed, "ready <id>" when all
+# dependencies succeeded, in the order the transitions are to be recorded.
+workflow_queued_decisions() {
+    WORKFLOW_RUN_DIR="$1" awk -F '\t' '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" {
+            state = ""; file = dir "/steps/" $2 "/state"
+            getline state < file; close(file)
+            count++; id[count] = $2; needs[count] = $4; current[$2] = state
+        }
+        END {
+            changed = 1
+            while (changed) {
+                changed = 0
+                for (i = 1; i <= count; i++) {
+                    if (current[id[i]] != "queued") continue
+                    ready = 1; failed = 0
+                    # Split as the shell splits with IFS=",": a trailing comma
+                    # ends the list instead of naming an empty dependency.
+                    deps = split(needs[i], dep, ",")
+                    if (deps > 0 && dep[deps] == "") deps--
+                    for (j = 1; j <= deps; j++) {
+                        if (dep[j] == "-") continue
+                        dep_state = current[dep[j]]
+                        if (dep_state == "succeeded") continue
+                        if (dep_state == "failed" || dep_state == "cancelled" || dep_state == "recovery-required") failed = 1
+                        else ready = 0
+                    }
+                    if (failed) { current[id[i]] = "cancelled"; print "cancelled " id[i]; changed = 1 }
+                    else if (ready) { current[id[i]] = "ready"; print "ready " id[i]; changed = 1 }
+                }
+            }
+        }' "$1/graph.tsv"
+}
+
 workflow_refresh_states() {
     _wrs_dir="$1"
-    _wrs_changed=1
-    while [ "$_wrs_changed" -eq 1 ]; do
-        _wrs_changed=0
-        while IFS="$(printf '\t')" read -r _wrs_tag _wrs_id _wrs_kind _wrs_needs _wrs_retry _wrs_idem _wrs_rest; do
-            [ "$_wrs_tag" = step ] || continue
+    while :; do
+        _wrs_decisions="$(workflow_queued_decisions "$_wrs_dir")"
+        [ -n "$_wrs_decisions" ] || return 0
+        while read -r _wrs_action _wrs_id; do
             _wrs_sd="$_wrs_dir/steps/$_wrs_id"
-            _wrs_state="$(sed -n '1p' "$_wrs_sd/state")"
-            [ "$_wrs_state" = queued ] || continue
-            _wrs_ready=1
-            _wrs_failed=0
-            _wrs_oldifs="$IFS"
-            IFS=,
-            for _wrs_dep in $_wrs_needs; do
-                [ "$_wrs_dep" != - ] || continue
-                _wrs_ds="$(sed -n '1p' "$_wrs_dir/steps/$_wrs_dep/state")"
-                case "$_wrs_ds" in
-                    succeeded) ;;
-                    failed|cancelled|recovery-required) _wrs_failed=1 ;;
-                    *) _wrs_ready=0 ;;
-                esac
-            done
-            IFS="$_wrs_oldifs"
-            if [ "$_wrs_failed" -eq 1 ]; then
+            if [ "$_wrs_action" = cancelled ]; then
                 workflow_atomic_scalar "$_wrs_sd/state" cancelled
                 workflow_event "$_wrs_dir" "$_wrs_id" step.cancelled dependency_failed
-                _wrs_changed=1
-            elif [ "$_wrs_ready" -eq 1 ]; then
+            else
                 if [ "$(sed -n '1p' "$_wrs_sd/attempts")" = 0 ]; then
                     workflow_atomic_scalar "$_wrs_sd/initial-ready-at" "$(date +%s)"
                 fi
                 workflow_atomic_scalar "$_wrs_sd/state" ready
                 workflow_event "$_wrs_dir" "$_wrs_id" step.ready
-                _wrs_changed=1
             fi
-        done < "$_wrs_dir/graph.tsv"
+        done <<EOF
+$_wrs_decisions
+EOF
     done
 }
 
@@ -243,12 +281,25 @@ workflow_disk_available() {
 
 workflow_recover_running_steps() {
     _wrr_dir="$1"
-    while IFS="$(printf '\t')" read -r _wrr_tag _wrr_id _wrr_kind _wrr_needs _wrr_retry _wrr_idem _wrr_rest; do
-        [ "$_wrr_tag" = step ] || continue
+    # One pass lists running steps with their recorded worker, read after the
+    # state as before. A worker records its result and then exits, so a step
+    # whose worker is gone is read again before it is recovered.
+    _wrr_running="$(WORKFLOW_RUN_DIR="$_wrr_dir" awk -F '\t' '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" {
+            state = ""; file = dir "/steps/" $2 "/state"
+            getline state < file; close(file)
+            if (state != "running") next
+            pid = ""; file = dir "/steps/" $2 "/worker-pid"
+            getline pid < file; close(file)
+            if (pid == "") pid = "-"
+            print $2 "\t" $3 "\t" $5 "\t" $6 "\t" pid
+        }' "$_wrr_dir/graph.tsv")" || return 1
+    [ -n "$_wrr_running" ] || return 0
+    while IFS="$(printf '\t')" read -r _wrr_id _wrr_kind _wrr_retry _wrr_idem _wrr_pid; do
+        workflow_pid_alive "$_wrr_pid" && continue
         _wrr_sd="$_wrr_dir/steps/$_wrr_id"
         [ "$(sed -n '1p' "$_wrr_sd/state")" = running ] || continue
-        _wrr_pid="$(sed -n '1p' "$_wrr_sd/worker-pid" 2>/dev/null || true)"
-        workflow_pid_alive "$_wrr_pid" && continue
         _wrr_attempt="$(sed -n '1p' "$_wrr_sd/attempts")"
         _wrr_exit="$(sed -n '1p' "$_wrr_sd/attempt-$_wrr_attempt/exit-code" 2>/dev/null || true)"
         if [ "$_wrr_kind" = task ]; then
@@ -256,7 +307,9 @@ workflow_recover_running_steps() {
             continue
         fi
         workflow_attempt_result "$_wrr_dir" "$_wrr_id" "$_wrr_retry" "$_wrr_idem" "${_wrr_exit:-unknown}"
-    done < "$_wrr_dir/graph.tsv"
+    done <<EOF
+$_wrr_running
+EOF
 }
 
 workflow_start_step() {
@@ -451,7 +504,7 @@ workflow_drive() {
             workflow_refresh_states "$_wd_dir"
         fi
 
-        _wd_active="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^running$' || true)"
+        _wd_active="$(workflow_count_states "$_wd_dir" running)"
         if [ ! -f "$_wd_dir/cancel-requested" ]; then
             _wd_slots=$((_wd_parallelism - _wd_active))
             while [ "$_wd_slots" -gt 0 ]; do
@@ -463,11 +516,7 @@ workflow_drive() {
                 [ -n "$_wd_next" ] || break
                 _wd_next_kind="$(awk -F '\t' -v id="$_wd_next" '$1=="step" && $2==id { print $3; exit }' "$_wd_dir/graph.tsv")"
                 if [ "$_wd_next_kind" = spawn ]; then
-                    _wd_spawn_active="$(awk -F '\t' '$1=="step" && $3=="spawn" { print $2 }' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_spawn_id; do
-                        if [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_spawn_id/state")" = running ]; then
-                            printf 'running\n'
-                        fi
-                    done | grep -Ec '^running$' || true)"
+                    _wd_spawn_active="$(workflow_count_states "$_wd_dir" running spawn)"
                     [ "$_wd_spawn_active" -eq 0 ] || break
                 fi
                 if ! workflow_disk_available "$_wd_dir"; then
@@ -486,7 +535,7 @@ workflow_drive() {
         fi
 
         # Count active work first so a concurrent waiting-remote publication cannot look terminal.
-        _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
+        _wd_nonterminal="$(workflow_count_states "$_wd_dir" 'queued ready running retrying')"
         if workflow_waiting_state "$_wd_dir"; then
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
