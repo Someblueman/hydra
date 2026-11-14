@@ -214,9 +214,45 @@ workflow_plan_record_commit() {
     workflow_atomic_scalar "$2" "$_wprc_commit"
 }
 
+# Usage: workflow_plan_secret_path <path>
+# Names of new files that look like secrets (environment files, private keys,
+# key stores, credential files). Narrow on purpose: a match is left out of
+# Hydra's commit, so a broad pattern would drop real work.
+workflow_plan_secret_path() {
+    _wpsp_base="$(printf '%s' "${1##*/}" | tr '[:upper:]' '[:lower:]')"
+    case "$_wpsp_base" in
+        *.example|*.sample|*.template|*.dist) return 1 ;;
+        .env|.env.*|*.pem|*.key|*.p12|*.pfx|*.jks|*.keystore|id_rsa*|id_dsa*|id_ecdsa*|id_ed25519*|\
+        credentials|credentials.*|.netrc|.npmrc|.pypirc) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Usage: workflow_plan_withhold <worktree> <attempt-dir>
+# Unstages new files that look like secrets before Hydra commits an agent
+# step, and lists them in <attempt-dir>/withheld. They stay in the worktree
+# as untracked files, so `hydra land` keeps the worker head instead of
+# removing them, and the review lists them as uncommitted work.
+workflow_plan_withhold() {
+    _wph_list="$(git -C "$1" -c core.quotepath=false diff --cached --name-only --diff-filter=A)" || return 1
+    _wph_held=''
+    while IFS= read -r _wph_path; do
+        [ -n "$_wph_path" ] || continue
+        workflow_plan_secret_path "$_wph_path" || continue
+        git -C "$1" rm --cached -q -- "$_wph_path" >/dev/null || return 1
+        _wph_held="$_wph_held$_wph_path
+"
+    done <<EOF
+$_wph_list
+EOF
+    [ -n "$_wph_held" ] || return 0
+    hydra_private_touch "$2/withheld" && printf '%s' "$_wph_held" > "$2/withheld"
+}
+
 # Usage: workflow_plan_commit <run-dir> <step> <worktree> <attempt-dir>
 # After an agent step, commits whatever it left in its worker head (tracked,
-# new and deleted files, as .gitignore allows), so the checks, the review and
+# new and deleted files, as .gitignore allows, except new files that look like
+# secrets: see workflow_plan_withhold), so the checks, the review and
 # landing all refer to one commit. Commit hooks and signing are not run: the
 # plan's checks verify the work. A step that changed nothing records the head
 # commit as it is. The commit is also offered to the step as its "commit"
@@ -225,6 +261,7 @@ workflow_plan_commit() (
     _wpc_dir="$1" _wpc_step="$2" _wpc_tree="$3" _wpc_attempt="$4"
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
     git -C "$_wpc_tree" add -A >/dev/null || exit 1
+    workflow_plan_withhold "$_wpc_tree" "$_wpc_attempt" || exit 1
     if ! git -C "$_wpc_tree" diff --cached --quiet; then
         _wpc_plan="$(sed -n '1p' "$_wpc_dir/graph.tsv" | cut -f2)"
         _wpc_run="$(sed -n '1p' "$_wpc_dir/run-id")"

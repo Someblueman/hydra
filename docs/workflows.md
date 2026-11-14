@@ -170,7 +170,11 @@ list `needs`. All of them run on one new worker branch (`worker`, by default
 `<id>-work`, with `id` taken from the objective's first words). After each agent
 step Hydra commits what the agent changed there, and a check passes when its
 command exits 0 on that commit: Hydra writes the check's evidence ("make check
-exited 0 on commit ...") itself.
+exited 0 on commit ...") itself. Hydra leaves out new files that look like
+secrets (`.env` files, private keys and key stores, `credentials`, `.netrc`
+and similar; not `*.example` or `*.sample`): they stay untracked in the
+worker's worktree and are listed in the step attempt's `withheld` file, and
+`hydra land` keeps that worker head instead of removing it.
 
 The agent publishes with `hydra plan propose plan.json`. Each publication is a
 new revision, checked at once against the project's plan policy; the agent sees
