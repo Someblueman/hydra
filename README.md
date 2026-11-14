@@ -40,8 +40,9 @@ and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
 
-- **Lead from native mission control.** Browse heads, inspect activity and changes,
-  and launch actions from the native C TUI.
+- **Lead from native mission control.** Four screens in the native C TUI: Work
+  (your heads beside each agent's conversation and its details, plan and run),
+  Inbox (everything waiting for you, acted on in place), Hosts and Stats.
 - **Run coding agents across your fleet.** Select agent profiles and task prompts,
   bootstrap trusted SSH hosts, launch remote heads and workflows, and attach to
   their sessions. Inspect host-qualified heads in the native fleet view.
@@ -136,10 +137,13 @@ To steer an agent, queue an inbox message with `hydra send feature/search "Revie
 the failing test"`; read it with `hydra recv --peek` inside that head. A queued
 message is not evidence of consumption or completion.
 
-In the native control centre,
-`Tab` moves between tabs (or workspace panes), arrows select, `Enter` opens and
-`Esc` steps back. `n` starts a task, `a` talks to the selected agent, `x` removes
-heads after an in-app confirmation, `:` opens actions, `?` shows help and `q` exits.
+In the native control centre `1`-`4` switch between Work, Inbox, Hosts and
+Stats, `Tab` moves between a screen's panes, `[` / `]` between a pane's pages,
+arrows select, `Enter` opens and `Esc` steps back. In Work `n` starts a task,
+Enter (or `a`) talks to the selected agent, `x` removes heads after an in-app
+confirmation; Inbox is where approvals, failed checks and results to review wait.
+`:` searches every action, `?` shows the keys for where you are and `q` exits.
+See [TUI](docs/USAGE.md#tui) for each screen.
 
 After reviewing and preserving the work you need, stop the head from your original
 terminal:
@@ -171,7 +175,7 @@ hydra fleet tui
 Remote heads and tasks then appear in `hydra tui` beside local work, with their
 host and observation age; `L` filters by location, `a` attaches and `x`
 interrupts through the fleet commands, and `hydra fleet tui` opens the same
-control centre filtered to remote work. Agent executables and repositories live
+four screens with the location filter set to remote work. Agent executables and repositories live
 on the host that runs the work. See [fleet setup](docs/FLEET.md) for pinned
 bootstrap, host requirements, remote workflows, and recovery behavior.
 `hydra fleet discover --source ssh-config|
@@ -244,10 +248,12 @@ The fleet build additionally needs pkg-config and JSON-C development files.
 Fleet C code is grouped under `src/fleet/{agent,auth,plan,task,workflow,transport,support}`.
 Domain headers expose their own contracts; support headers cover bounded files,
 JSON and subprocess capture. The native TUI lives in `src/tui/`, with independently
-compiled model, adapter, process, selection, rendering, input and terminal modules.
-Workspace views include A/B/C layouts, attached tmux clients, draft validation,
-exact-digest execution and selected-run evidence. Statistics and graph rendering
-use the reusable `src/kettle/` components; see its [standalone library guide](src/kettle/STANDALONE.md).
+compiled model, adapter, selection, rendering, input and terminal modules, one
+binding table for every key (`keys.c`, `bindings.c`) and a module per screen
+(`work*.c`, `inbox*.c`, `hosts*.c`, `statistics*.c`). Work's panes hold attached
+tmux clients, the plan with its approval, and the selected run's graph and
+evidence. Dialogs, help, the palette, toasts, statistics and graph rendering use
+the reusable `src/kettle/` components; see its [standalone library guide](src/kettle/STANDALONE.md).
 
 Testing requires a C99 compiler, JSON-C development files and pkg-config in
 addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds

@@ -10,20 +10,19 @@ notes.
 ## Starting out
 
 Open `hydra` in your repository and press `n`.
-Each view explains its concept where you meet it, in its empty state: Work says
-what a head is (one piece of work with its own branch, worktree, terminal and
-agent, with an example), Workflows what a workflow is and when a single
-conversation is enough, the plan pane that a proposal runs nothing until it is
-validated and the exact revision approved, Overview's run panel how a run starts,
-Attention what needs a decision (an approval request, a failed check, a result to
-review, a stopped terminal), Hosts when a remote machine helps, and Details that
-`Session` is the live terminal while `Reported` is the outcome the agent declares.
-While typing to an agent the status row says that leaving or closing the view
-keeps the agent running; removal and execution approval state their consequences
-before `y`. The shell TUI (`hydra tui --basic`) carries the same explanation of a
-head in its empty list.
+Each screen explains its concept where you meet it, in its empty state: Work says
+what a head is (one task with its own branch, worktree, terminal and agent, which
+you talk to and whose actions you approve), Inbox what needs a decision (an
+approval request, a failed check, a result to review, a stopped terminal, a
+repair), Hosts when a remote machine helps, and the Plan page that nothing runs
+until you approve the exact revision shown. While typing to an agent the status
+line says that leaving or closing the view keeps the agent running; removal and
+plan approval state their consequences in a dialog before `y`.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
-enter an objective or leave it blank to start a conversation. A task name that is
+enter an objective or leave it blank to start a conversation, and choose how it
+starts: "Plan first" (the agent plans with you before it changes anything) or
+"Just do it" (the objective is the agent's first instruction, in its own
+worktree and branch). A task name that is
 not already a valid branch, such as `add kill dry run`, starts on a derived branch
 (`add-kill-dry-run`); the agent still sees the task name. Hydra registers the
 project, creates the head and opens agent input in the same workspace. Opening
@@ -582,6 +581,17 @@ signal for the running program, and Hydra takes the key before that happens. The
 two `terminal.literal` chords type either key to the agent. On a keyboard layout
 where `\` or `]` needs AltGr, choose other keys.
 
+Every other key of the control centre is a binding of the same table, named by
+screen: `output.*` (a command's output), `help.*`, `review.*` and `inbox.*`,
+`statistics.*`, `hosts.*`, `setup.*` (a host's setup), `onboarding.*` (the
+Onboarding page), `heads.*`, `head.*`, `workspace.*`, `work.*`, `workflows.*`
+(the Run page), `plan.*`, `run.*`, `task.new`, `view.*`, `views.*` and `app.*`. The footer
+and `?` help are generated from it, so they always name the keys in effect.
+Names of earlier releases stay in the table so their keys files load: rows
+whose job moved are marked `(no longer used)` and are live nowhere, and
+`view.workspace`, `view.attention`, `view.hosts` and `view.stats` (`W`, `I`,
+`H`, `D`) are the one-release old keys of the four screens.
+
 To change the keys, write a keys file at `$HYDRA_HOME/tui/keys.conf` (default
 `~/.hydra/tui/keys.conf`), or name one in `HYDRA_TUI_KEYS`. `hydra tui --print-keys`
 prints the keys in effect in the file's own syntax, so this is a valid start:
@@ -601,7 +611,11 @@ mkdir -p ~/.hydra/tui && hydra tui --print-keys > ~/.hydra/tui/keys.conf
   `alt+enter`, `shift+tab`, `ctrl+alt+x`. A terminal sends some combinations as
   another key, and they are read that way: `ctrl+i` is `tab`, `ctrl+m` is `enter`,
   `ctrl+[` is `esc`; `ctrl+B` is `ctrl+b`.
-- Two actions cannot share a chord, and a chord cannot be the beginning of another.
+- Two actions that are live in the same place (one screen's focused pane, a
+  dialog, typing to an agent) cannot share a chord, and there a chord cannot be
+  the beginning of another; the same key may mean different things on different
+  screens (`x` removes a head in Work and a leftover worktree in Inbox).
+  The agent-input chords are live everywhere, so no screen key may start one.
 - `terminal.leave` cannot be unbound: without it input could never return to Hydra.
 
 A keys file never stops Hydra from starting. A line it cannot read keeps that
@@ -734,136 +748,246 @@ hydra tui                  # native mission control
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
-Every native screen shares one frame: a header with the four screens (`1 Work`,
-`2 Inbox` with how many items need you, `3 Hosts`, `4 Stats`) and a summary of the
-project at the right, the screen itself, and a two-line footer with the current
-status and the keys that apply. `--view` names a screen (`work`, `inbox`, `hosts`,
-`stats`); the names of earlier releases still work and open the page that replaced
-them (`heads` and `workspace` Work, `detail` and `coordination` Work's Details page,
-`overview` and `workflows` its Run page, `attention` and `recovery` Inbox,
-`statistics` Stats). Only changed cells are repainted, so idle refreshes
-do not flicker. Session states use plain words: `running`, `terminal gone`,
-`stopped` and `unknown`; internal tokens stay behind `d` (technical details).
-Statistics (`D`) reads recorded workflow runs: `M` cycles the metric pages, `C`
-opens the Cohorts page (steps that ran as fleet tasks grouped by host,
-placement, generation and provider, with the receipts' wall, CPU, peak RSS and
-transport bytes), and `L` cycles the location filter between all, local, remote
-and each recorded host. Unmeasured values read `unknown` with their reason, never
-zero; see [workflows](workflows.md#reviewing-a-finished-plan).
+### The four screens
 
-One interaction model applies everywhere:
+The control centre has four screens: **1 Work** (your heads, their agents,
+plans and runs), **2 Inbox** (everything waiting for you), **3 Hosts** (this
+machine and remote machines) and **4 Stats** (head sessions and workflow runs).
+Every screen shares one frame: a top bar with the four screens as numbered tabs
+(Inbox carries how many items need you) and a summary at the right (local and
+remote heads counted apart, disconnected hosts, what is running), the screen
+itself with titled rules over its panes, and a two-line footer: a status line
+whose chip says how fresh the snapshot is (`live`, `stale`, remote stale) next
+to the last notice, and the keys that apply to what is focused, generated from
+the binding table. `?` lists every key of the place you are in, `:` searches
+every action, and `hydra tui --print-keys` prints them all. The theme is dark by
+default; `t` (or "Theme" in `:`) cycles dark, light and your terminal's colours,
+and `--theme` and `--ascii` choose at start. Only changed cells are repainted, so
+idle refreshes do not flicker.
+
+`--view` opens a screen by name (`work`, `inbox`, `hosts`, `stats`). The names of
+earlier releases still work and open the page that replaced them: `heads` and
+`workspace` open Work, `detail` and `coordination` its Details page, `overview`
+and `workflows` its Run page, `attention` and `recovery` Inbox, `statistics`
+Stats. Session states use plain words (`running`, `terminal gone`, `stopped`,
+`unknown`); internal tokens stay behind `d` (technical details).
+
+One interaction model applies everywhere Hydra has the keys:
 
 | Key | Action |
 |-----|--------|
-| `1`-`4` | Work, Inbox, Hosts, Stats (`I`, `H`, `W`, `D` jump there too, and Esc comes back) |
-| `Tab` / `Shift-Tab` | Next / previous pane in Work (list, conversation, side pane); next / previous tab elsewhere |
-| `[` / `]` | Previous / next page of Work's side pane: Details, Plan, Run (and Conversation below 120 columns) |
-| `Up` / `Down`, `j` / `k` | Select |
-| `Enter`, `a` | Talk to the selected agent in the conversation (a remote head attaches through `hydra fleet attach`); on a run, expand or collapse it |
-| `l` / `h` | Expand / collapse the selected run in Work |
-| `Esc` | One step back: the filter, the location, the zoom, then focus back to the list |
-| `n` | Start a new task (branch, worktree, terminal and agent); choose "Plan first" or "Just do it" |
-| `x` | Remove the selected or marked heads after an in-app confirmation; on a remote head, interrupt its agent |
-| `L`, `r` | Location filter (all, local, remote, each host); observe a remote host again |
-| `Y` / `N` / `R` / `X` | On a remote task row: approve, reject, resume, cancel, each confirmed |
-| `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
-| `/`, `:` | Filter heads, search explicit actions |
-| `d` | Technical details on the Details page |
-| `3` | Hosts: `A` adds a remote machine over SSH, Enter opens a host's work or continues its setup, `[`/`]` or `O` the Onboarding page |
-| `?`, `t`, `q` | Keyboard help, theme, quit |
+| `1`-`4` | Work, Inbox, Hosts, Stats (`ctrl+\ 1`-`4` while typing to an agent) |
+| `Tab` / `Shift-Tab` | Next / previous pane of this screen |
+| `[` / `]` | Previous / next page of the focused pane (Work's side pane, Inbox's detail, Hosts and Onboarding, Stats' pages) |
+| `Up` / `Down`, `j` / `k` | Select, or scroll a pane that scrolls; PgUp/PgDn page |
+| `Enter` | Open or activate the selection; it never approves, removes or runs anything |
+| `Esc` | One step back: close the top dialog, clear the filter, give focus back to the list, return to the screen a jump came from; it never quits |
+| `:` | Command palette: every action and CLI command (diff, claims, queue, approvals...), searchable, output shown in place |
+| `ctrl+r` | Read everything again now |
+| `?`, `q` | Help for where you are, quit (agents keep running) |
+| `t` | Theme |
 
-Work lists the heads you started. Heads a workflow run created sit inside their
-run, and a run launched from a planning conversation sits inside that planning
-head; runs start collapsed and the header counts their heads separately. Beside
-the list the conversation shows the selected head's latest output, read-only,
-until you talk to it; the side pane shows the selection's Details, its Plan (a
-head whose agent published a plan, or a plan imported with `:`) with `E` approve,
-`F` request changes, `L` land the finished worker, `r` result review and `s` run
-status, and its Run (the run's graph, its steps and the selected step's
-evidence; `Y`, `N`, `R`, `X` act on it). A headless head is described by the step
-that runs on it (agent, model and effort, tokens, duration) rather than by a
-terminal, and the conversation shows that step's live output. See
+Actions that change something ask first in a dialog whose default is Cancel:
+`y` (or the named button) confirms, `n` or Esc cancels, and nothing is ever
+typed to confirm except a new host key, which takes the word `yes`. A key that
+does not apply to the selection is left out of the footer and help and does
+nothing. A jump (`o` in Inbox, `g` in Stats, Enter on a host) opens another
+screen on one thing; Esc there comes back. The screen letters of earlier
+releases (`W`, `I`, `H`, `D`) still open Work, Inbox, Hosts and Stats for this
+release, as jumps, with a toast naming the number to use; `?` lists them as old
+keys.
+
+### Work
+
+Work is the list of heads beside the selected head's conversation and a side
+pane with its pages: **Details**, **Plan** (when the head has a plan) and
+**Run** (when a run is selected or the head belongs to one). From 120 columns
+the three sit side by side; narrower, the conversation and the side pane share
+one pane whose pages begin with Conversation; below 70 columns (or 12 rows) one
+pane fills the screen and Tab changes it. A `WHERE` column names the machine
+from 95 columns. The list's rule names a location filter while one is set.
+
+Heads a workflow run created sit inside their run, and a run launched from a
+planning conversation sits inside that planning head; runs start collapsed and
+the top bar counts their heads separately. The conversation shows the selected
+head's latest output, read-only, as you move through the list (one capture of
+that head per refresh); Enter or `a` talks to it: input goes to the agent, a
+stopped terminal is restarted in the same worktree first, and a remote head
+attaches through `hydra fleet attach`. A headless head is described by the step
+that runs on it (agent, model and effort, tokens, duration), and the
+conversation shows that step's live output. See
 [workflows](workflows.md#heads-a-plan-run-creates).
 
-Statistics (`D`) has up to three pages, Sessions, Runs and Cohorts; `[` and `]`
-go between them. Head sessions lists
-every start or resume of a head in this project, newest first, with its agent,
-state (`open`, `ended`, or `replaced` when a resume took over), start, length
-and how long its terminal was active or quiet; a project without workflow runs
-opens on this page. Active and quiet are inferred from
-terminal output: while a control centre is open it notes when each interactive
-head's tmux window stops or resumes producing output (quiet after 10 seconds of
-silence, active once output has continued for 4 seconds). They say what the
-terminal did, not what the agent was waiting for, and the page labels them as
-inferred. Time nobody watched (no control centre open) is shown as unobserved,
-never as quiet, together with the share of session time that was observed; a
-value that is not known is `--`. Headless and remote heads are not observed:
-their owners report exact status, which counts where it exists. A finished
-session is kept as a small summary with the project, so it stays listed after
-`hydra kill` and its terminal activity does not accumulate in the head's
-records. Tokens and cost
-are not measured for sessions. `T` changes the range, `/` filters by branch,
-agent or head as you type (Enter keeps the filter, Esc clears it), `!` keeps
-sessions declared failed or blocked, `0` resets every filter, and Enter shows one
-session's evidence: beside the list when the terminal is wide enough (Tab moves
-between the two), in its place otherwise. `g` shows the session's head in Details,
-and Esc comes back. A filter that hides everything says so ("Nothing matches the
-filters"), which is not the same as nothing recorded. The workflow runs page shows
-recorded runs with their steps, timing, retries and tokens (`M` for metrics, `w`
-for one workflow at a time, `g` for the run's graph). When steps ran as remote
-tasks a third page, Cohorts, groups them (`C` also opens it), and `L` cycles the
-location filter, which the page strip shows as a chip. `ctrl+r` reads the sample
-again. `hydra workflow statistics-json` exports both.
+| Key | Where | Action |
+|-----|-------|--------|
+| `Enter`, `a` | list | Talk to the selected agent; on a run, expand or collapse it |
+| `l` / `h` (`Right` / `Left`) | list | Expand / collapse a run, or go to its row |
+| `n` | Work | Start a task: branch, worktree, terminal and agent; choose "Plan first" (the agent proposes a plan) or "Just do it" |
+| `x` | list | Remove the selected or marked heads (confirmed); on a remote head, interrupt its agent |
+| `Space`, `A`, `G` | list | Mark one head, mark all shown, group the marked heads |
+| `/`, `L`, `r` | list | Filter as you type; location filter (all, local, remote, each host); observe the remote host again |
+| `Y` / `N` / `R` / `X` | Work | On a run or remote task row: approve or reject its waiting request, resume, cancel (each confirmed) |
+| `d` | Work | Technical details (identities, sources) on the Details page |
+| `z`, `S` | Work | Zoom the focused pane (`z` restores); two agents side by side |
+| `E` / `F` / `L` | Plan page | Approve and run exactly this revision; request changes with your feedback; land the finished worker (confirmed) |
+| `r` / `s`, `P` / `V` | Plan page | Result review, run status; review the agent's published proposal, validate a revision |
+| `j` / `k`, `h` / `l`, `J` / `K` | Run page | Select a step (its evidence shows below), pan the graph |
+| `Enter`, PgUp/PgDn | Run page | Recentre on the selected step; page through its evidence |
+
+`ctrl+\ A`, `ctrl+\ B` and `ctrl+\ C` show the Details, Plan and Run pages from
+anywhere, typing included; a notice says when the selection has no such page,
+and it goes when the selection or the page changes. Removal confirms the exact
+targets, runs `hydra kill` per head with its output captured, reports a short
+result and opens the full output only when something was kept (for example
+uncommitted changes); the current tmux session is always skipped.
+
+While typing to an agent every key goes to it, Esc, Tab and `Ctrl-B` included,
+except Hydra's chords: `Ctrl-]` leaves input and the conversation stays where it
+is, `Ctrl-\ x` closes the view while the agent keeps running in its tmux session
+(`a` reopens it), `Ctrl-\ n` switches agent, `Ctrl-\ r` reconnects and `Ctrl-\ [`
+opens the agent's tmux history (PgUp/PgDn, `q` returns). A client that
+disconnects never holds input. After `Ctrl-\` the status line lists what may
+follow. These chords are yours to change: see [TUI keys](#tui-keys). The
+conversation keeps the agent's colours and wraps long lines (PgUp/PgDn scroll it
+once it has focus); key hints the agent prints there only work in live input.
+The palette (`:`) still hands interactive commands such as `switch` and
+`dashboard` to the shell CLI with argument-vector execution.
+
+### Inbox
+
+Inbox (`2`) lists what needs you, in sections: Decisions (approval requests and
+gates, remote task decisions naming their host, plans ready to approve),
+Failed, Ready for review (results, plan workers ready to land), Agents (stopped
+terminals, unknown states), Repairs (leftover locks and worktrees, removals that
+did not finish, hosts that did not answer), Your actions (what only you can
+fix, such as building `hydra-fleet`, and actions that failed in this session)
+and Seen. Beside the list (in its place below 120 columns) the
+selected item's detail has four pages: Summary (what it is, what each key will
+do), Review, References and Technical (the exact identity, route and source).
+Nothing is approved, rejected or removed without a confirmation that names it.
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Open the item's detail |
+| `Y` / `N` | Approve / reject the request (confirmed) |
+| `R` | Resume the run, or restart the stopped terminal (`hydra resume --terminal`) |
+| `F` | Send a failed plan back to its planning agent with your feedback |
+| `L` | Land a finished plan worker (`hydra land`, confirmed) |
+| `r` | The exact read-only review of the result or failure, on the Review page |
+| `s` | Mark seen for this client (again: new); never approves or resolves |
+| `o` | Show the head or run in Work (Esc comes back) |
+| `c`, `x` | Run a repair's recorded check (output opens here); remove a leftover worktree, keeping its branch |
+
+On the Review page `j`/`k`, Space/`b` and PgUp/PgDn scroll, `g`/`G` go to the
+top and end, `n`/`N` move between sections, Enter opens the selected reference,
+`L` the full log, `r` reads the review again and `+` supplies one log,
+transcript or PR reference to the public review producer. A stale attention
+snapshot cannot be reviewed until it is read again. Seen state is client-local
+and does not approve, accept or change a workflow.
+
+### Hosts
 
 Hosts (`3`) lists the machines Hydra can run agents on beside a detail pane: This
 machine (its heads, tmux and Hydra versions and the agents `hydra agent list`
 finds, read when Hosts opens), the observed remote hosts with their connection,
 head count and observation age, the setups not finished yet, and "+ Add a host".
-Enter on a host (or on This machine) opens its work in Work, filtered to it; Esc
-comes back to Hosts. `r` observes the hosts again and `/` filters the list. `A`
-opens a form for the SSH destination and a name, then walks through the guided
-`hydra remote setup` steps (host key, requirements, installing Hydra, agents and
-sign-in) in the detail pane, showing each plan before anything changes: the host
-key is trusted only by typing `yes`, and a plan is approved with `y` (Enter never
+From 90 columns the list and the detail sit side by side, from 70 the detail is
+below the list, and narrower Tab opens it in the list's place. Enter on a host
+(or on This machine) opens its work in Work, filtered to it; Esc comes back to
+Hosts. `r` observes the hosts again and `/` filters the list. `A` opens a form
+for the SSH destination and a name, then walks through the guided `hydra remote
+setup` steps (host key, requirements, installing Hydra, agents and sign-in) in
+the detail pane, showing each plan before anything changes: the host key is
+trusted only by typing `yes`, and a plan is approved with `y` (Enter never
 approves; `n` or Esc declines). A running step shows its elapsed time; `c`
-cancels it and `b` or Esc leaves it running. Enter continues an unfinished setup,
-`e` edits one that has not changed the remote yet and `x` removes its record
-after showing what stays. See [guided remote setup](FLEET.md#guided-remote-setup).
+cancels it and `b` or Esc leaves it running. Enter continues an unfinished
+setup, `e` edits one that has not changed the remote yet and `x` removes its
+record after showing what stays. See [guided remote setup](FLEET.md#guided-remote-setup).
 
-The Onboarding page of Hosts (`]`, or `O`) opens onboarding for hosts found through `hydra fleet discover`:
-candidates with filters for state, source, platform and label (`s`, `S`, `P`,
-`l`, `/`), a detail with provenance, observation age, qualification result,
-fingerprints and revocation, the source changes (`c`) and the reviewed intent
-(`i`) with per-host apply progress. `Q` qualifies, `r` reviews a compatible
-candidate into an intent, and `a` shows the exact `hydra fleet enroll apply
---confirm DIGEST` command and runs it once you confirm the dialog that names
-that digest (it defaults to Cancel).
-Revoked identities can be inspected, not reviewed. See
+The Onboarding page of Hosts (`]`, or `O`) is for hosts found through `hydra
+fleet discover`: candidates with filters for state, source, platform and label
+(`s`, `S`, `P`, `l`, `/`; `x` clears them), a detail with provenance,
+observation age, qualification result, fingerprints and revocation, the source
+changes (`c`) and the reviewed intent (`i`) with per-host apply progress. `f`
+names a selection to discover, `Q` qualifies, `r` reviews a compatible candidate
+into an intent, and `a` on the intent shows the exact `hydra fleet enroll apply
+--confirm DIGEST` command and runs it once you confirm the dialog that names that
+digest (it defaults to Cancel). Its keys are in the footer and `?` like every
+other screen's; Esc steps back to the list, then to Hosts. Revoked identities can
+be inspected, not reviewed. See
 [onboarding in the control centre](FLEET.md#onboarding-in-the-control-centre).
 
-Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
-captured, reports a concise result in the status line and opens the full output only
-when something was kept (for example uncommitted changes). The current tmux session
-is always skipped. Recovery findings are explained in plain language; `Enter` runs
-the recorded check and shows its output in place, and `d` keeps the raw kind,
-source and confidence available.
+### Stats
 
-In Work, `z` zooms the focused pane and `S` shows two agents side by side.
-While typing to an attached agent, Esc, Tab and `Ctrl-B` go to the agent; `Ctrl-]` leaves
-input (keys go to Hydra, the view stays open), `Ctrl-\ x` closes the view while the
-agent keeps running in its tmux session (`a` reopens it), `Ctrl-\ n` switches agent
-and `Ctrl-\ [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
-that disconnects never holds input; `a` or `Ctrl-\ r` reattaches. After `Ctrl-\` the
-status line lists what may follow. These chords are yours to change: see
-[TUI keys](#tui-keys). The conversation's read-only output keeps the agent's colors
-and wraps long lines (PgUp/PgDn scroll it once the conversation has focus); key
-hints printed by the agent there only work in live input. The action
-palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
-to the shell CLI with argument-vector execution. Press `2` (or `I`) for Inbox;
-`j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision
-seen for this client, and `r` opens the exact read-only review. In review, `j`/`k`
-scroll, `i` shows the full identity, `f` shows supplied references, `o` follows a
-selected reference, and `Esc` backs out. `l`, `t`, and `p` supply one explicit log,
-transcript, or PR reference to the public review producer. A stale attention snapshot
-cannot be reviewed until it is refreshed. Seen state is client-local and does not
-approve, accept, or mutate a workflow.
+Stats (`4`) reads recorded sessions and runs. It has up to three pages,
+Sessions, Runs and Cohorts; `[` and `]` go between them. Head sessions lists
+every start or resume of a head in this project, newest first, with its agent,
+state (`open`, `ended`, or `replaced` when a resume took over), start, length
+and how long its terminal was active or quiet; a project without workflow runs
+opens on this page. Active and quiet are inferred from terminal output: while a
+control centre is open it notes when each interactive head's tmux window stops
+or resumes producing output (quiet after 10 seconds of silence, active once
+output has continued for 4 seconds). They say what the terminal did, not what
+the agent was waiting for, and the page labels them as inferred. Time nobody
+watched (no control centre open) is shown as unobserved, never as quiet,
+together with the share of session time that was observed; a value that is not
+known is `--`. Headless and remote heads are not observed: their owners report
+exact status, which counts where it exists. A finished session is kept as a
+small summary with the project, so it stays listed after `hydra kill` and its
+terminal activity does not accumulate in the head's records. Tokens and cost
+are not measured for sessions.
+
+`T` changes the range, `/` filters by branch, agent or head as you type (Enter
+keeps the filter, Esc clears it), `!` keeps only what failed, is blocked or was
+declared failed, `0` resets every filter, and Enter shows one session's or run's
+evidence: beside the list when the terminal is wide enough (Tab moves between
+the two), in its place otherwise. `g` shows a session's head on Work's Details
+page, or a run on its Run page, and Esc comes back. A filter that hides
+everything says so ("Nothing matches the filters"), which is not the same as
+nothing recorded. The Runs page shows recorded runs with their steps, timing,
+retries and tokens: `M` cycles the metric pages and `w` the workflow filter.
+When steps ran as remote tasks the Cohorts page (`C` also opens it) groups them
+by host, placement, generation and provider, with the receipts' wall, CPU, peak
+RSS and transport bytes, and `L` cycles the location filter, which the page
+strip shows as a chip. Unmeasured values read `unknown` with their reason, never
+zero; see [workflows](workflows.md#reviewing-a-finished-plan). `ctrl+r` reads
+the sample again; `hydra workflow statistics-json` exports both pages.
+
+### What moved
+
+Earlier releases had up to ten tabs: Work, Details, Coordination, Overview,
+Workflows and Workspace are now **1 Work**, Attention and Recovery **2 Inbox**,
+Hosts **3**, Statistics **4 Stats**. Workspace layouts are gone: the conversation
+is always beside the list, and the details, the plan and the run are pages of
+the pane next to it. Approvals, failed checks, results to review, stopped
+terminals and leftover worktrees are all in Inbox, and you act on them there
+without typing a request ID. Read-only commands from `:` (diff, claims,
+queue...) open inside Hydra.
+
+| Key | Was | Now |
+|-----|-----|-----|
+| `Tab` / `Shift-Tab` | next / previous tab | next / previous pane (screens are `1`-`4`) |
+| `Left` / `Right` | previous / next tab | collapse / expand a run; pan the run graph (in Stats they still change screens) |
+| `Enter` on a head | open Details | talk to its agent (also `a`) |
+| `1`-`9` | jump to tab 1-9 | `1`-`4` screens; `5`-`9` do nothing |
+| `[` / `]` | previous / next run (Workflows, monitor); workflow filter (Statistics) | previous / next page of a pane; runs are selected in the list; the Stats workflow filter is `w` |
+| `A` / `B` / `C` | workspace layouts (and mark all in Work) | `A` marks all (Work) and adds a host (Hosts); `B`, `C` free; `ctrl+\ A`/`B`/`C` show the Details, Plan and Run pages |
+| `I` | Attention; refresh attention; import plan files | Inbox is `2` (`I` still jumps there for this release, with a toast); refresh is `ctrl+r`; import is in `:` |
+| `W`, `H` | Workspace, Hosts | `1`, `3` (both still jump there for this release, with a toast) |
+| `D` | Statistics toggle | `4` (`D` still opens Stats for this release, with a toast, and on Stats goes back); `ctrl+\ D` unchanged |
+| `v` | next tab | `Tab` moves between panes, `1`-`4` between screens |
+| `o` | Overview | Inbox: open the item's head or run in Work |
+| `w` | Workflows | Stats: workflow filter |
+| `c` | Coordination; fleet interrupt | Inbox: run a repair's check; a remote head is interrupted with `x`, a remote task cancelled with `X` |
+| `p` | terminal or step output | free: the latest output is always in the conversation |
+| `d` | technical details; explain (Recovery) | technical details in Work; Inbox has its Technical page |
+| `r` | review (Attention); refresh (Statistics) | review (Inbox); observe a host again (Work, Hosts); refresh everywhere is `ctrl+r` |
+| `s` | mark seen (Attention); sessions / runs (Statistics) | mark seen (Inbox); Stats pages are `[` / `]` |
+| `x` in Recovery | remove a leftover worktree | the same, in Inbox |
+| `Y` / `N` | approve / reject after typing the request ID and the word | approve / reject from a dialog (`y` confirms) |
+| `i` `f` `l` `t` `p` `o` in review | IDs, references, supply a log, transcript or PR, follow a reference | Technical and References pages; `+` adds a reference; Enter opens the selected one |
+
+`keys.conf` files of earlier releases keep working: their action names still
+load, the three `workspace.layout.*` actions keep their chords with the new page
+meaning, and actions whose job moved are kept by name but live nowhere
+(`--print-keys` marks them "no longer used").

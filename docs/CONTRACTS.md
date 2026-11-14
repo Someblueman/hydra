@@ -635,7 +635,7 @@ heads a run's spawn steps created (worker or verifier, and retirement). Version-
 workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
 bounded, read-only text view of the step running (or last run) on a headless head.
 
-The onboarding view (`O` on Hosts, since 3.0.0) reads CLI envelopes only:
+The onboarding view (the Onboarding page of Hosts, `]` or `O`, since 3.0.0) reads CLI envelopes only:
 `fleet-discovery` (candidate schema 1, with `sources[]`), `fleet-enrollment-review`,
 `fleet-enrollment-status` and `fleet-enrollment`, parsed within the CLI's own
 bounds (100 candidates and records, four sources, 100 intent hosts). `hydra tui
@@ -663,14 +663,22 @@ Without a qualified `hydra-tui` helper it prints how to obtain one and exits 1;
 an unexpected helper exit status is reported on one line and returned after the
 terminal is restored. `hydra tui --basic` is rejected as a usage error (exit 2).
 `hydra tui --capabilities --json` keeps its fields and reports
-`"fallback_mode":"none"` and `"basic":false`. Native mutations execute
+`"fallback_mode":"none"` and `"basic":false`. The control centre has four
+screens, Work, Inbox, Hosts and Stats; `hydra tui --view work|inbox|hosts|stats`
+opens one, and the view names of earlier releases (`heads`, `workspace`,
+`detail`, `coordination`, `overview`, `workflows`, `attention`, `recovery`,
+`statistics`) are still accepted and open the screen, or the Work page, that
+replaced them. Keys files (`HYDRA_TUI_KEYS`, `$HYDRA_HOME/tui/keys.conf`) written
+for earlier releases still load: every action name they may contain is still
+known, and actions whose job moved are live nowhere. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `hydra tui --attention-data` (internal), which merges `workflow
 attention-data` with `fleet attention-data` (when remote aliases are registered)
 into one `HYDRA_ATTENTION<TAB>3` stream whose `END` counts the merged items and
 whose partial flag is set when either producer failed; `hydra fleet tui` consumes
-`fleet attention-data` alone. The `I` view and `r` exact review route are
-read-only client interaction.
+`fleet attention-data` alone. Reading Inbox (screen 2) and its `r` exact review
+is read-only client interaction; Inbox's decisions and repairs run the public CLI
+with explicit argv after a confirmation dialog, like every native mutation.
 Review selection carries the complete attention identity, requested revision, and
 identity hash. `review-data` is a bounded framed projection of the public workflow
 or Fleet review command; opening a review or supplied reference cannot change

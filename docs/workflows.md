@@ -253,14 +253,15 @@ planning head, so Work shows the task you started rather than every head
 Runs start collapsed; Enter, `l` and `h` expand and collapse them, and the header
 counts run heads inside their run.
 
-A headless head has no terminal. Details shows `headless (no terminal)`, the agent
+A headless head has no terminal. Its Details page shows `headless (no terminal)`, the agent
 of its current or last step (`codex · step implement · running`), the executable
 version, the model and reasoning effort, tokens and duration. A model the provider
 reports is shown as reported; one read from its configuration is labelled
-"configured default … (not observed)"; otherwise it is unknown. `p` shows the
-running step's live events (or a command's output, or a finished step's declared
-result) in place of a terminal preview. Overview's run panel lists every step with
-its kind and role, state, attempts, duration and head, and what comes next.
+"configured default … (not observed)"; otherwise it is unknown. The conversation
+pane shows the running step's live events (or a command's output, or a finished
+step's declared result) in place of a terminal. The run's Run page in Work lists
+every step with its kind and role, state, attempts, duration and head, and what
+comes next.
 
 When the run succeeds, fails or is cancelled, verifier heads are retired with
 `hydra kill --protect-untracked` after their evidence is sealed in the run record;
@@ -351,7 +352,7 @@ notices in that head's inbox, so they are recorded even when the TUI is closed.
 
 ### Reviewing a finished plan
 
-Attention (`I` in the TUI) lists what needs you as sentences such as "Result
+Inbox (`2` in the TUI) lists what needs you as sentences such as "Result
 ready for review · kill-dry-run · verify". Steps that declare no outputs, such as
 spawn steps, are not results and never appear. `r` opens the review of the
 selected item. For a compiled plan run it starts with the result: the verdict,
@@ -367,18 +368,18 @@ Technical identity and retained-contract checks follow the result.
 `s` marks an item seen. The marker is kept per user under `$HYDRA_HOME`, moves the
 item to a collapsed Seen group and out of the count, and lasts until the item
 changes. An approval that is marked seen stays listed until someone decides.
-The Statistics view (`D`) shows the same token counts per step and run, with
-totals for the selected range. Its other page (`s`) covers the heads you work
+Stats (`4` in the TUI) shows the same token counts per step and run, with
+totals for the selected range. Its Sessions page (`[` / `]`) covers the heads you work
 in directly: session length and the time each terminal was active, quiet or
 unobserved, described under [TUI](USAGE.md#tui). Since 3.0 it also reads the remote evidence of
-steps that ran as fleet tasks: `C` opens the remote cohorts page, which groups the
+steps that ran as fleet tasks: `C` opens the Cohorts page, which groups the
 scope's steps by location (local or remote), receiving host, placement mode
 (`auto` from a placement record, otherwise `pinned`), assignment generation and
 agent provider, and shows per cohort the runs, steps, outcomes, wall time, CPU,
 peak RSS and transport bytes that the task receipts and transport records carry
 ([telemetry block 1](FLEET.md#task-telemetry)). `L` cycles the location filter
 (all, local, remote, then each recorded host) on every statistics page, the same
-location notion the workspace uses; `0` clears it with the other filters. A
+location notion Work uses; `0` clears it with the other filters. A
 measurement the protocol did not supply is shown as `unknown`, a partly reported
 one as `value (n/N)`, and each cohort names how many steps are unmeasured and the
 recorded reason (`no task receipt` for local steps, `no telemetry block` for
