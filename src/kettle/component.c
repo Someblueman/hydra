@@ -150,10 +150,15 @@ size_t kt_ui_row_at(const struct kt_ui_rows *rows, size_t top, int line, int hei
 
 /* ---- marks -------------------------------------------------------------- */
 
+struct kt_style kt_ui_lit(struct kt_style ink, struct kt_style fill) {
+    ink.fg = fill.fg;
+    return ink;
+}
+
 void kt_ui_selection(struct kt_canvas *canvas, struct kt_rect row, bool focused, struct kt_style fill,
                      struct kt_style bar, struct kt_style bar_unfocused) {
     if (focused) kt_fill(canvas, row, fill);
-    kt_box(canvas, row, &kt_border_bar, focused ? bar : bar_unfocused);
+    kt_box(canvas, row, &kt_border_bar, focused ? kt_ui_lit(bar, fill) : bar_unfocused);
 }
 
 /* Splits text into runs at the matched characters, into caller storage. */

@@ -37,8 +37,13 @@ size_t kt_ui_scroll_by(const struct kt_ui_rows *rows, size_t top, long delta, in
 /* The row at screen line `line` of a view starting at `top`, or KT_NONE. */
 size_t kt_ui_row_at(const struct kt_ui_rows *rows, size_t top, int line, int height);
 
-/* A selected row: filled, with a bar at its left edge; unfocused, the bar
- * alone in its own style. */
+/* An ink drawn on a filled (focused) selected row: the fill's foreground,
+ * the ink's attributes kept. A theme chooses that foreground to read on the
+ * selection, which no other token promises (an accent can be the selection
+ * colour itself), so every text of a lit row reads, in every theme. */
+struct kt_style kt_ui_lit(struct kt_style ink, struct kt_style fill);
+/* A selected row: filled, with a bar at its left edge in the fill's
+ * foreground (kt_ui_lit); unfocused, the bar alone in its own style. */
 void kt_ui_selection(struct kt_canvas *canvas, struct kt_rect row, bool focused, struct kt_style fill,
                      struct kt_style bar, struct kt_style bar_unfocused);
 /* Text with the characters matching `pattern` drawn in `mark`, cut with an

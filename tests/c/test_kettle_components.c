@@ -330,8 +330,11 @@ static void list_view(void) {
     CHECK(strstr(row(0), "\xe2\x94\x80\xe2\x94\x83") && strstr(row(3), "\xe2\x94\x80") == NULL);
     CHECK(!strncmp(row(1), " \xe2\x96\x8c \xe2\x97\x8f feature-live", 21));
     CHECK(strstr(row(1), "codex"));
-    CHECK(cell(1, 1)->foreground == KT_COLOR_ACCENT && cell(5, 1)->background == KT_COLOR_SELECTION);
-    CHECK(cell(3, 1)->foreground == KT_COLOR_SUCCESS && (cell(5, 1)->attributes & KT_BOLD));
+    /* Every ink of the lit row, its bar and icon too, is the selection's
+     * own, which the theme makes read on the fill (an accent need not). */
+    CHECK(cell(1, 1)->foreground == KT_COLOR_ON_SELECTION && cell(5, 1)->background == KT_COLOR_SELECTION);
+    CHECK(cell(3, 1)->foreground == KT_COLOR_ON_SELECTION && (cell(5, 1)->attributes & KT_BOLD));
+    CHECK(cell(3, 2)->foreground == KT_COLOR_SUCCESS);
     /* Moving skips headers and scrolls; the last row is at the bottom edge. */
     CHECK(kt_list_update(&list, &down, NULL) == KT_LIST_MOVED && kt_list_index(&list) == 2);
     CHECK(kt_list_update(&list, &down, NULL) == KT_LIST_MOVED);
@@ -445,6 +448,14 @@ static void table_view(void) {
     CHECK(!strcmp(row(2), "   feature-stale   terminal \xe2\x80\xa6     \xe2\x80\x94 \xe2\x94\x83"));
     CHECK(cell(20, 2)->foreground == KT_COLOR_WARNING);
     CHECK(!strncmp(row(3), "   feature-unava\xe2\x80\xa6", 19));
+    /* Selected, the row's cells and bar take the selection's ink, a cell's
+     * own colour included, so none is lost on the fill. */
+    t->selected = 1;
+    blank(40, 6, true);
+    kt_table_view(t, &canvas, t->area);
+    CHECK(cell(20, 2)->foreground == KT_COLOR_ON_SELECTION && cell(20, 2)->background == KT_COLOR_SELECTION);
+    CHECK(cell(1, 2)->foreground == KT_COLOR_ON_SELECTION && cell(1, 2)->background == KT_COLOR_SELECTION);
+    t->selected = 0;
 }
 
 static void table_keys(void) {
@@ -892,6 +903,11 @@ static void palette(void) {
     kt_palette_view(&p, &canvas, p.area);
     CHECK(starts(row(2), "\xe2\x94\x82  > type to filter "));
     CHECK(starts(row(4), "\xe2\x94\x82 \xe2\x96\x8c open  go ") && strstr(row(4), "enter  \xe2\x94\x82"));
+    /* The selected row's label, name, keys and bar are in the selection's
+     * ink; the next row keeps its own. */
+    CHECK(cell(2, 4)->foreground == KT_COLOR_ON_SELECTION && cell(4, 4)->foreground == KT_COLOR_ON_SELECTION &&
+          cell(10, 4)->foreground == KT_COLOR_ON_SELECTION && cell(44, 4)->foreground == KT_COLOR_ON_SELECTION);
+    CHECK(cell(4, 5)->foreground == KT_COLOR_TEXT && cell(4, 5)->background != KT_COLOR_SELECTION);
     /* Typing filters and ranks; the label is highlighted. */
     CHECK(kt_palette_update(&p, &n, NULL) == KT_PALETTE_HANDLED);
     CHECK(kt_palette_update(&p, &t, NULL) == KT_PALETTE_HANDLED);

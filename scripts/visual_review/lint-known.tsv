@@ -9,12 +9,6 @@ contrast	*	#5f87af on #eeeeee	light border tone for section headings and caption
 contrast	*	#008700 on #eeeeee	light success tone (status words, graph edges) reads at 4.05:1; palette decision for the I4 pass
 contrast	*	#af5f00 on #eeeeee	light warning tone reads at 4.06:1; palette decision for the I4 pass
 contrast	*	#8a8a8a on #eeeeee	light muted tone (title bar, inactive tabs, footers) reads at 2.98:1 against the 3.0 secondary-text floor; palette decision for the I4 pass
-contrast	work--palette--*	on #87d7ff	the command palette's selected row keeps the palette component's text, muted and accent inks on the dark theme's light selection fill (text 1.03:1, the bar invisible); the component's selected-row inks or the theme's selection colour need a decision
-contrast	work--palette--*	on #005f87	the same selected palette row on the light theme's selection fill (bar 1.00:1, muted keys 2.04:1)
-contrast	work--statistics--*	on #87d7ff	the Stats table's selected row draws its bar (accent, the same colour as the selection) and its muted and success cells over the dark selection fill; selected-row inks or the selection colour need a decision
-contrast	work--statistics--*	on #005f87	the same selected Stats row on the light theme's selection fill
-contrast	fleet--fleet-stats--*	on #87d7ff	the fleet Stats hosts table's selected row: bar and muted cells over the dark selection fill (as work--statistics)
-contrast	fleet--fleet-stats--*	on #005f87	the same fleet Stats row on the light theme's selection fill
 clip-area	hosts*--hosts-*-140x40	d by ssh (/	the setup step list's note column (the trust step's known_hosts path) is cut at the detail pane's edge without an ellipsis at 140 columns
 clip-area	hosts--hosts-entry--*-140x40	step 2 of 4 · run	the Run page's state line is cut at the side pane's edge without an ellipsis at 140 columns
 clip-area	work--help--*-80x24	tui sets	the help dialog's keys-file sentence is one row, cut at 80 columns

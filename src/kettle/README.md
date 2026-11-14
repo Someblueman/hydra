@@ -329,7 +329,10 @@ in a dialog.
 
 **List.** Selectable rows from a callback, with section headers, one or two
 rows per item, a bar on the selected row, a status line and filtering as you
-type with the matched characters marked:
+type with the matched characters marked. On a focused selected row every ink
+(bar, icon, detail, a table cell's own colour, a palette row's keys) is the
+selection's foreground, so the row reads in any theme, even one whose accent
+is the selection colour:
 
 ```c
 static void head_item(void *context, size_t index, struct kt_list_item *item) {

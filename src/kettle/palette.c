@@ -166,20 +166,22 @@ enum kt_palette_result kt_palette_update(struct kt_palette *p, const struct kt_m
 
 static void draw_row(const struct kt_palette *p, struct kt_canvas *canvas, struct kt_rect row,
                      const struct kt_binding *b, bool selected) {
-    struct kt_style label = p->style.label;
+    struct kt_style label = p->style.label, keys_ink = p->style.keys, name = p->style.name, match = p->style.match;
     struct kt_rect text = kt_rect_inset(row, 0, 1, 0, 2);
     char keys[48] = "";
     int used;
     if (selected) {
+        /* Every text of the selected row in the selection's ink. */
+        label = kt_ui_lit(label, p->style.selection); keys_ink = kt_ui_lit(keys_ink, p->style.selection);
+        name = kt_ui_lit(name, p->style.selection); match = kt_ui_lit(match, p->style.selection);
         label.attrs |= KT_BOLD;
         kt_ui_selection(canvas, row, true, p->style.selection, p->style.bar, p->style.bar);
     }
     if (b->chord_count) (void)kt_chord_hint(&b->chords[0], keys, sizeof(keys));
-    used = kt_text_aligned(canvas, text, keys, KT_ALIGN_RIGHT, p->style.keys);
+    used = kt_text_aligned(canvas, text, keys, KT_ALIGN_RIGHT, keys_ink);
     text.width -= used ? used + 2 : 0;
-    used = kt_ui_marked(canvas, text, b->label, kt_textinput_value(&p->query), label, p->style.match);
-    if (b->name) (void)kt_text_aligned(canvas, kt_rect_inset(text, 0, 0, 0, used + 2), b->name, KT_ALIGN_LEFT,
-                                       p->style.name);
+    used = kt_ui_marked(canvas, text, b->label, kt_textinput_value(&p->query), label, match);
+    if (b->name) (void)kt_text_aligned(canvas, kt_rect_inset(text, 0, 0, 0, used + 2), b->name, KT_ALIGN_LEFT, name);
 }
 
 void kt_palette_view(const struct kt_palette *p, struct kt_canvas *canvas, struct kt_rect area) {

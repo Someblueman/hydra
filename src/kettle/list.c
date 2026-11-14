@@ -345,33 +345,36 @@ static void draw_header(const struct kt_list *l, struct kt_canvas *canvas, struc
 
 /* The icon, when there is one, and the room after it. */
 static struct kt_rect draw_icon(struct kt_canvas *canvas, struct kt_rect line, const struct kt_list_item *item,
-                                struct kt_style title) {
+                                struct kt_style title, bool lit) {
     struct kt_style style = title;
     int width;
     if (!item->icon || !item->icon[0]) return line;
-    if (item->icon_color != KT_DEFAULT) style.fg = item->icon_color;
+    if (item->icon_color != KT_DEFAULT && !lit) style.fg = item->icon_color;
     width = kt_text_aligned(canvas, line, item->icon, KT_ALIGN_LEFT, style);
     return kt_rect_inset(line, 0, 0, 0, width + 1);
 }
 
 static void draw_item(const struct kt_list *l, struct kt_canvas *canvas, struct kt_rect row,
                       const struct kt_list_item *item, bool selected) {
-    struct kt_style title = selected && l->focused ? l->style.title_selected : l->style.title;
+    bool lit = selected && l->focused;
+    struct kt_style title = lit ? l->style.title_selected : l->style.title;
+    struct kt_style detail_ink = lit ? kt_ui_lit(l->style.detail, l->style.selection) : l->style.detail;
+    struct kt_style match = lit ? kt_ui_lit(l->style.match, l->style.selection) : l->style.match;
     struct kt_rect line = kt_rect_inset((struct kt_rect){row.x, row.y, row.width, 1}, 0, 1, 0, 2);
     const char *pattern = filter_applied(l) ? kt_textinput_value(&l->filter) : NULL;
     if (selected) {
         title.attrs |= KT_BOLD;
         kt_ui_selection(canvas, row, l->focused, l->style.selection, l->style.bar, l->style.bar_unfocused);
     }
-    line = draw_icon(canvas, line, item, title);
+    line = draw_icon(canvas, line, item, title, lit);
     if (item->detail && l->item_height == 2) {
         (void)kt_text_aligned(canvas, (struct kt_rect){line.x, row.y + 1, line.width, 1}, item->detail, KT_ALIGN_LEFT,
-                              l->style.detail);
+                              detail_ink);
     } else if (item->detail) {
-        int detail = kt_text_aligned(canvas, line, item->detail, KT_ALIGN_RIGHT, l->style.detail);
+        int detail = kt_text_aligned(canvas, line, item->detail, KT_ALIGN_RIGHT, detail_ink);
         line.width -= detail + 2;
     }
-    (void)kt_ui_marked(canvas, line, item->title, pattern, title, l->style.match);
+    (void)kt_ui_marked(canvas, line, item->title, pattern, title, match);
 }
 
 static void draw_rows(const struct kt_list *l, struct kt_canvas *canvas, struct kt_rect body) {

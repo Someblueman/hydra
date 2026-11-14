@@ -245,7 +245,10 @@ typedef void (*kt_list_item_fn)(void *context, size_t index, struct kt_list_item
  * '/' starts typing a filter, which goes to an embedded text input: typed
  * characters edit it, the arrow and page keys still move, Enter keeps the
  * filter and returns to the list, and Esc, then or later, clears it. The selected row is filled and marked
- * with a bar at its left edge; an unfocused list keeps the bar only. The
+ * with a bar at its left edge, and everything on it (bar, icon, title,
+ * detail, matched characters) takes the fill's foreground, which the theme
+ * makes read on the selection; an unfocused list keeps the bar only. The
+ * table and the palette draw their selected rows the same way. The
  * mouse wheel scrolls; a click selects, and a click on the selected item
  * chooses it. */
 enum kt_list_action {

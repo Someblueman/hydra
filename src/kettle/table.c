@@ -225,7 +225,8 @@ static void draw_row(const struct kt_table *t, struct kt_canvas *canvas, const s
         struct kt_style style = base;
         struct kt_rect part = parts[column];
         t->cell(t->context, row, column, &cell);
-        if (cell.color != KT_DEFAULT) style.fg = cell.color;
+        /* A lit row's cells all take the selection's ink (kt_ui_lit). */
+        if (cell.color != KT_DEFAULT && !(selected && t->focused)) style.fg = cell.color;
         style.attrs |= cell.attrs;
         part.y = line.y;
         if (cell.text) (void)kt_text_aligned(canvas, part, cell.text, t->columns[column].align, style);
