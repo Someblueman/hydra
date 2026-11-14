@@ -551,9 +551,9 @@ workflow_drive() {
             # A worker can finish after the cancellation snapshot was taken.
             # Refresh it before publishing a terminal run state.
             [ ! -f "$_wd_dir/cancel-requested" ] || workflow_cancel_steps "$_wd_dir"
-            if find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -q '^recovery-required$'; then
+            if [ "$(workflow_count_states "$_wd_dir" recovery-required)" -gt 0 ]; then
                 _wd_final=recovery-required
-            elif find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -q '^failed$'; then
+            elif [ "$(workflow_count_states "$_wd_dir" failed)" -gt 0 ]; then
                 _wd_final=failed
             elif [ -f "$_wd_dir/cancel-requested" ]; then
                 _wd_final=cancelled

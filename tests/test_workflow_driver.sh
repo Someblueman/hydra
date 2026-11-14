@@ -156,6 +156,20 @@ assert_equal "Workflow $cascade_run: failed (source: recorded)
 assert_equal "{\"schema_version\":1,\"ok\":true,\"command\":\"workflow status\",\"data\":{\"run_id\":\"$cascade_run\",\"state\":\"failed\",\"source\":\"recorded\",\"evidence_expired\":false,\"steps\":[{\"step_id\":\"a\",\"state\":\"failed\",\"attempts\":2},{\"step_id\":\"b\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"c\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"d\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"e\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"f\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"g\",\"state\":\"cancelled\",\"attempts\":0}]}}" \
     "$("$HYDRA_BIN" workflow status "$cascade_run" --json)" "status JSON reports every step in graph order"
 
+# Deciding the terminal state of a failed run reads every step state without
+# leaving a reader to die on a closed pipe and report it on stderr.
+{
+    printf 'version: 1\nid: driver-fanout-failure\nparallelism: 1\nresources:\n  disk_mb: 1\n  max_heads: 1\nsteps:\n'
+    printf '  - id: root\n    kind: exec\n    needs: []\n    retry: 0\n    idempotent: true\n    args:\n      head: driver-head\n      argv: ["false"]\n'
+    for fanout_step in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+        printf '  - id: leaf-%s\n    kind: exec\n    needs: [root]\n    retry: 0\n    idempotent: true\n    args:\n      head: driver-head\n      argv: ["true"]\n' "$fanout_step"
+    done
+} > "$test_root/fanout.yml"
+"$HYDRA_BIN" workflow run "$test_root/fanout.yml" > "$test_root/fanout.out" 2> "$test_root/fanout.err"
+assert_failure $? "a failed root fails the fan-out run"
+assert_equal failed "$(sed -n '1p' "$(run_dir_for "$(sed -n '1p' "$test_root/fanout.out")")/state")" "the fan-out run records a terminal failure"
+assert_equal "" "$(cat "$test_root/fanout.err")" "a failed run reports no state-reader errors"
+
 echo "============================================"
 echo "Test Results:"
 echo "Total:  $test_count"
