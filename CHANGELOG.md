@@ -146,10 +146,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     read-only and captured once per refresh. Enter or `a` talks to the agent,
     and `ctrl+]` leaves input with the conversation still drawn. A side pane
     has three pages, switched with `[` and `]`; Tab moves between panes.
-    Details shows the head. Plan approves (`E`), requests changes (`F`),
+    Details shows the head: its task's objective, the workflow step that
+    targets it, and whether its agent has exited. Plan approves (`E`),
+    requests changes (`F`),
     lands the worker (`L`), reviews and shows the run's status. Run shows the
     graph, the steps and the selected step's evidence, paged with PgUp/PgDn.
-    Below 120 columns the conversation and the pages share one pane. The
+    A plan an agent published but Hydra has not yet validated is shown in
+    words, not as its JSON. Below 120 columns the conversation and the
+    pages share one pane. The
     new-task form asks whether to plan first (the default) or just do it:
     the objective then becomes the agent's first prompt on its own branch.
   - **Inbox** replaces Attention and Recovery. One list holds everything
@@ -321,6 +325,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Approving a plan in the control centre runs only the revision its dialog
+  named. If the agent published a newer revision while the dialog was open,
+  nothing is approved.
+- `q` in the control centre's output viewer closes it instead of quitting
+  Hydra.
 - `hydra-fleet` reads JSON with non-ASCII text again when built against
   json-c 0.18 (Ubuntu 26.04), whose strict parser rejected every character
   from U+0080: receipts, plans and records with an accented letter or a
