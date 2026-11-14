@@ -178,18 +178,18 @@ int main(void) {
     S("(sleep 1; printf 'FORM_LIVE' > form-proof; printf 'FORM_LIVE\\n') &\r");
     kt_pump(&s, .2);
     S("\035/");
-    U("INPUT TO HYDRA / text field", 3);
+    U("Search heads", 3);
     kt_pump(&s, 1.2);
     proof(one, "form-proof", "FORM_LIVE");
     CHECK(kt_contains(&s, "FORM_LIVE"), "form does not block output");
     S("\033[200~search\nq\033[201~");
-    U("searchq", 3);
-    CHECK(kt_contains(&s, "INPUT TO HYDRA / text field"), "paste did not submit form");
+    U("search q", 3); /* a pasted line break is a blank in a text field */
+    CHECK(kt_contains(&s, "Search heads"), "paste did not submit form");
     S("\033[H界\033[C\177");
-    U("界earchq", 3);
+    U("界earch q", 3);
     S("\033");
     kt_pump(&s, .2);
-    CHECK(!kt_contains(&s, "INPUT TO HYDRA / text field"), "form dismiss");
+    CHECK(!kt_contains(&s, "Search heads"), "form dismiss");
     S("\t"); /* leaving input focused navigation; Tab goes on to the agent */
     U("INPUT TO AGENT", 3);
     S("sleep 15\r");

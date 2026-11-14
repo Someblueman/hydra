@@ -1,7 +1,9 @@
-/* Exercise the public palette through a PTY and observe literal CLI argv. */
+/* Exercise the public palette through a PTY and observe literal CLI argv.
+ * The palette is kettle's: typing filters the commands, Enter runs the best
+ * match, read-only commands open in the output viewer (Enter closes it). */
 static void palette_query(struct session *session, const char *query) {
     write_input(session->master, ":", 1U);
-    (void)wait_for_marker(session, "Action search:", 1000);
+    (void)wait_for_marker(session, "Commands", 1000);
     write_input(session->master, query, strlen(query));
     write_input(session->master, "\n", 1U);
 }
@@ -16,11 +18,11 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
         {"scopes", "FAKE ACTION <scope> <show> <feature-live>"},
         {"queue", "FAKE ACTION <queue>"},
         {"resources", "FAKE ACTION <resource> <status> <feature-live>"},
-        {"git diff", "FAKE ACTION <diff> <feature-live>"},
+        {"diff", "FAKE ACTION <diff> <feature-live>"},
         {"approvals", "FAKE ACTION <gate> <status> <feature-live>"},
         {"recovery inspect", "FAKE ACTION <doctor>"},
         {"dashboard", "FAKE DASHBOARD"},
-        {"s", "FAKE ACTION <switch> <feature-live>"}
+        {"sw", "FAKE ACTION <switch> <feature-live>"}
     };
     struct session session;
     size_t index;
@@ -33,16 +35,19 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
         session.slow_output = strcmp(cases[index].query, "recovery inspect") == 0;
         palette_query(&session, cases[index].query);
         if (strcmp(cases[index].query, "kill") == 0) {
-            result(wait_for_marker(&session, "Remove 1 head (feature-live)?", 1000), "kill asks for an in-app confirmation");
-            write_input(session.master, "y\n", 2U);
+            result(wait_for_marker(&session, "Remove feature-live?", 1000), "kill asks for an in-app confirmation");
+            write_input(session.master, "y", 1U);
         }
         result(wait_for_marker(&session, cases[index].expected, 2000), cases[index].expected);
+        if (!strcmp(cases[index].query, "diff"))
+            result(!wait_for_marker(&session, "Press Enter to return", 300) && still_running(&session),
+                   "a read-only command opens in the viewer without leaving the control centre");
         session.slow_output = false;
         write_input(session.master, "\n", 1U);
         (void)wait_for_marker(&session, "HYDRA / ", 1000);
     }
     write_input(session.master, ":", 1U);
-    (void)wait_for_marker(&session, "Action search:", 1000);
+    (void)wait_for_marker(&session, "Commands", 1000);
     write_input(session.master, "tatus\033[", 7U);
     sleep_ms(10);
     write_input(session.master, "Hs\n", 3U);
@@ -51,24 +56,30 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     write_input(session.master, "\n", 1U);
     (void)wait_for_marker(&session, "HYDRA / ", 1000);
     palette_query(&session, "collisions");
-    (void)wait_for_marker(&session, "Compare with head:", 1000);
+    (void)wait_for_marker(&session, "Compare with head", 1000);
     write_input(session.master, "other head;literal\n", 19U);
     result(wait_for_marker(&session, "FAKE ACTION <collision> <feature-live> <other head;literal>", 1000),
            "comparison target remains one literal argument");
     write_input(session.master, "\n", 1U);
     (void)wait_for_marker(&session, "HYDRA / ", 1000);
-    palette_query(&session, "");
-    result(wait_for_marker(&session, "action search canceled", 1000), "empty palette search cancels");
+    write_input(session.master, ":", 1U);
+    (void)wait_for_marker(&session, "Commands", 1000);
+    write_input(session.master, "\033", 1U);
+    sleep_ms(60);
+    result(wait_for_marker(&session, "HYDRA / ", 1000) && still_running(&session), "Esc closes the palette and runs nothing");
     palette_query(&session, "UNKNOWN");
-    result(wait_for_marker(&session, "no explicit local action matched", 1000), "unknown palette search is inert");
+    result(wait_for_marker(&session, "No matching command", 1000), "unknown palette search is inert");
+    write_input(session.master, "\033", 1U);
+    sleep_ms(60); /* Escape stands alone after 20 ms; a key sooner would make it Alt */
+    (void)wait_for_marker(&session, "HYDRA / ", 1000);
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads:", 1000);
+    (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "no-match\n", 9U);
     (void)wait_for_marker(&session, "Search: no-match", 1000);
     palette_query(&session, "switch");
-    result(wait_for_marker(&session, "select a head for that action", 1000), "palette requires a visible selected head");
+    result(wait_for_marker(&session, "a head for that command", 1000), "palette requires a visible selected head");
     palette_query(&session, "collisions");
-    result(wait_for_marker(&session, "select a head for that action", 1000), "comparison requires a head before prompting");
+    result(wait_for_marker(&session, "a head for that command", 1000), "comparison requires a head before prompting");
     palette_query(&session, "status");
     result(wait_for_marker(&session, "FAKE ACTION <status>", 1000), "global actions work without a selected head");
     write_input(session.master, "\n", 1U);
@@ -97,11 +108,11 @@ static void test_recovery_actions(const char *tui, const char *hydra, const char
     (void)wait_for_marker(&session, "HYDRA / ", 1000);
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Remove leftover worktree feature-old", 1000), "worktree removal asks inside the UI");
-    write_input(session.master, "n\n", 2U);
+    write_input(session.master, "n", 1U);
     result(wait_for_marker(&session, "Removal cancelled; nothing changed", 1000), "declined worktree removal changes nothing");
     write_input(session.master, "x", 1U);
     (void)wait_for_marker(&session, "Remove leftover worktree feature-old", 1000);
-    write_input(session.master, "y\n", 2U);
+    write_input(session.master, "y", 1U);
     result(wait_for_marker(&session, "Removed leftover worktree /tmp/wt/head_0123456789abcdef; the branch is kept", 3000),
            "confirmed removal passes only that worktree path to gc --apply");
     write_input(session.master, "q", 1U);

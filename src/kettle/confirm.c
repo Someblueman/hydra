@@ -69,7 +69,12 @@ static void button_rects(const struct kt_confirm *c, struct kt_rect inside, stru
     }
 }
 
-static struct kt_rect inside_of(struct kt_rect area) { return kt_rect_inset(area, 2, 3, 2, 3); }
+/* Inside the border; a dialog given fewer rows than it needs gives up its
+ * blank rows first, so the question keeps the room. */
+static bool cramped(const struct kt_confirm *c, struct kt_rect area) { return area.height < kt_confirm_height(c, area.width); }
+static struct kt_rect inside_of(const struct kt_confirm *c, struct kt_rect area) {
+    return cramped(c, area) ? kt_rect_inset(area, 1, 3, 1, 3) : kt_rect_inset(area, 2, 3, 2, 3);
+}
 
 static enum kt_confirm_result press(struct kt_confirm *c, size_t button) {
     if (button >= c->button_count) return KT_CONFIRM_HANDLED;
@@ -83,7 +88,7 @@ static enum kt_confirm_result click(struct kt_confirm *c, const struct kt_msg *m
     size_t i;
     int x, y;
     if (!kt_ui_click(msg, c->area, &x, &y)) return msg->type == KT_MSG_MOUSE ? KT_CONFIRM_HANDLED : KT_CONFIRM_IGNORED;
-    button_rects(c, inside_of(c->area), rects);
+    button_rects(c, inside_of(c, c->area), rects);
     for (i = 0; i < c->button_count; i++)
         if (kt_ui_inside(rects[i], msg->u.event.x, msg->u.event.y)) return press(c, i);
     return KT_CONFIRM_HANDLED;
@@ -143,9 +148,10 @@ void kt_confirm_view(const struct kt_confirm *c, struct kt_canvas *canvas, struc
     hints.bindings = keys;
     hints.count = KT_CONFIRM_ACTIONS;
     hints.scope = ALL;
-    inside = kt_ui_dialog(canvas, area, c->title, c->destructive ? c->style.border_destructive : c->style.border,
-                          c->style.title, &hints, 1, &c->style.hints);
-    (void)kt_paragraph(canvas, kt_rect_inset(inside, 0, 0, 2, 0), c->body, c->style.body);
+    (void)kt_ui_dialog(canvas, area, c->title, c->destructive ? c->style.border_destructive : c->style.border,
+                       c->style.title, &hints, 1, &c->style.hints);
+    inside = inside_of(c, area);
+    (void)kt_paragraph(canvas, kt_rect_inset(inside, 0, 0, cramped(c, area) ? 1 : 2, 0), c->body, c->style.body);
     button_rects(c, inside, rects);
     for (i = 0; i < c->button_count; i++) {
         struct kt_style style = button_style(c, i);

@@ -33,8 +33,20 @@ static const struct task_observation *current_target(const struct app *app, cons
     }
     return NULL;
 }
+/* The confirmation names the exact task and host; a reject or cancel is
+ * drawn as destructive. */
+static bool fleet_confirmed(struct app *app, char key, const char *action, const struct task_observation *target) {
+    char body[640], title[64];
+    static const char *const accept[] = {"Approve", "Reject", "Resume", "Cancel"};
+    size_t which = key == 'Y' ? 0 : key == 'N' ? 1 : key == 'R' ? 2 : 3;
+    snprintf(title, sizeof(title), "%c%s remote task", action[0] - 'a' + 'A', action + 1);
+    snprintf(body, sizeof(body), "%c%s task %.120s on %.80s?\n\nThe receiver acts on exactly this task, request and "
+             "specification; if any of them changes before you confirm, nothing is sent.",
+             action[0] - 'a' + 'A', action + 1, target->task_id, target->host);
+    return dialog_confirm(app, title, body, accept[which], which == 1 || which == 3);
+}
+
 bool native_fleet_control_key(struct app *app, char key, const char *action) {
-    char answer[64], prompt[192];
     if (app->task_selected >= app->model.task_count) {
         copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; use j/k in Overview."); return true;
     }
@@ -43,8 +55,7 @@ bool native_fleet_control_key(struct app *app, char key, const char *action) {
     struct task_observation target = app->model.tasks[app->task_selected];
     const char *reason = disabled_reason(app, &target, key);
     if (reason) { copy_text(app->notice, sizeof(app->notice), reason); return true; }
-    snprintf(prompt, sizeof(prompt), "Type %s to dispatch for the selected task: ", action);
-    if (prompt_text(app, prompt, answer, sizeof(answer)) || strcmp(answer, action)) return true;
+    if (!fleet_confirmed(app, key, action, &target)) return true;
     const struct task_observation *current = current_target(app, &target);
     if (!current || disabled_reason(app, current, key)) {
         copy_text(app->notice, sizeof(app->notice), "Task evidence changed during confirmation; no mutation dispatched."); return true;

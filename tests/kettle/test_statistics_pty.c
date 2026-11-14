@@ -38,7 +38,7 @@ static void local_statistics(void) {
     CHECK(HAS("1 outside range"), "date exclusion");
     U("1/4 / Enter evidence");
     S("0/");
-    U("Find workflow, run or project:");
+    U("Find workflow, run or project");
     S("recovery\r");
     U("Recorded workflow runs · all recorded · recovery");
     U("1/2 / Enter evidence");
@@ -54,7 +54,7 @@ static void local_statistics(void) {
     S("D");
     U("Recorded workflow runs · all recorded · recovery");
     S("0/");
-    U("Find workflow, run or project:");
+    U("Find workflow, run or project");
     S("visualization\r");
     U("1/1 / Enter evidence");
     S("g");
@@ -122,7 +122,7 @@ static void metric_pages(void) {
     }
     kt_resize(&s, 140, 40);
     S("MMMM/");
-    U("Find workflow, run or project:");
+    U("Find workflow, run or project");
     S("recovery\r");
     U("known 2/2");
     S("\r");
@@ -149,7 +149,7 @@ static void fleet_statistics(void) {
     S("\033");
     U("> builder");
     S("/");
-    U("Find host:");
+    U("Find host");
     S("offline\r");
     U("0 responded   1 failed   -- reported heads");
     CHECK(HAS("Failed hosts have unknown head counts"), "unknown-host explanation");
@@ -205,7 +205,7 @@ static void session_filters(struct kt_session *p) {
     PU("1/3 / Enter evidence");
     PU("1 outside range");
     PS("0/");
-    PU("Find branch, agent or head:");
+    PU("Find branch, agent or head");
     PS("absent\r");
     PU("No sessions match: 5 recorded, all filtered out");
     PS("0!");
@@ -216,7 +216,7 @@ static void session_filters(struct kt_session *p) {
     PS("\033");
     PU("HEAD SESSIONS / newest start first");
     PS("0/");
-    PU("Find branch, agent or head:");
+    PU("Find branch, agent or head");
     PS("docs\r");
     PU("Head sessions \302\267 all recorded \302\267 docs");
     PU("2/2 / Enter evidence");

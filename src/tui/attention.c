@@ -412,6 +412,7 @@ static void retain_state(struct native_attention *old, struct native_attention *
     next->seen_open = old->seen_open; next->on_group = old->on_group;
     copy_text(next->feedback, sizeof(next->feedback), old->feedback);
 }
+static bool present(const char *value) { return value[0] && strcmp(value, "-"); }
 static void attention_error(struct app *app, const char *message)
 {
     if (!app->attention) return;
@@ -480,6 +481,39 @@ void native_attention_tick(struct app *app, bool request)
     if (!native_capture_start(job, argv, app->fleet ? 13000L : 10000L)) capture_failure(app);
 }
 
+/* Starts an attention read wherever the user is (the run monitor needs the
+ * requests waiting on its runs); the result arrives with the next tick. */
+void native_attention_read(struct app *app)
+{
+    struct native_capture *job;
+    char *argv[4];
+    if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
+    if (!app->attention || !app->observations) return;
+    job = &app->observations->jobs[OBSERVE_ATTENTION];
+    if (job->pid) return;
+    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "workflow"); argv[2] = (char *)"attention-data"; argv[3] = NULL;
+    app->attention->loading = true;
+    if (!native_capture_start(job, argv, app->fleet ? 13000L : 10000L)) capture_failure(app);
+}
+
+/* The approval request waiting on a run in the last good attention
+ * snapshot, and its step; false when none is known (or the list is stale). */
+bool native_attention_run_request(const struct app *app, const char *run, char *request, size_t size,
+                                  char *step, size_t step_size)
+{
+    const struct native_attention *view = app->attention;
+    size_t i;
+    if (!view || !view->have_good || view->stale) return false;
+    for (i = 0U; i < view->count; i++) {
+        const struct attention_item *item = &view->items[i];
+        if (strcmp(item->run, run) || !present(item->request) || strcmp(item->kind, "approval")) continue;
+        copy_text(request, size, item->request);
+        copy_text(step, step_size, item->step);
+        return true;
+    }
+    return false;
+}
+
 /* ---- wording ---------------------------------------------------------------- */
 
 static const char *failure_title(const struct attention_item *item)
@@ -500,7 +534,6 @@ static const char *item_title(const struct attention_item *item)
     for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(item->kind, map[i][0])) return map[i][1];
     return "Needs inspection";
 }
-static bool present(const char *value) { return value[0] && strcmp(value, "-"); }
 /* "Check failed · plan · step — requirements; review the log and send the plan
  * back or retry": the failure's one-line account and what the user can do. */
 static void failure_tail(const struct app *app, const struct attention_item *item, char *out, size_t size)

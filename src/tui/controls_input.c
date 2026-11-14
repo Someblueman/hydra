@@ -3,14 +3,44 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
-static bool confirm_local_control(struct app *app, const char *run, const char *request,
-                                   const char *action, const char *answer) {
-    return !strcmp(answer, action) && app->workflows && app->workflow_run < app->workflows->run_count &&
-        !strcmp(run, app->workflows->runs[app->workflow_run].id) && native_control_submit(app, run, action, request);
+/* The run and request are read again after the confirmation: when either
+ * changed while the dialog was open, nothing is sent. */
+static bool control_current(const struct app *app, const char *run, const char *request) {
+    char now[80] = "-", step[80];
+    if (!app->workflows || app->workflow_run >= app->workflows->run_count ||
+        strcmp(run, app->workflows->runs[app->workflow_run].id)) return false;
+    if (!strcmp(request, "-")) return true;
+    return native_attention_run_request(app, run, now, sizeof(now), step, sizeof(step)) && !strcmp(now, request);
+}
+
+static void control_body(const char *action, const char *run, const char *request, const char *step, char *body, size_t size) {
+    if (!strcmp(action, "approve") || !strcmp(action, "reject"))
+        snprintf(body, size, "%s %s?\n\nRun %s %s.\n\nRequest %s. If the run or request changes before you "
+                 "confirm, nothing is sent.", !strcmp(action, "approve") ? "Approve" : "Reject", step, run,
+                 !strcmp(action, "approve") ? "continues: the waiting step may run" : "fails at this step and stops",
+                 request);
+    else if (!strcmp(action, "resume"))
+        snprintf(body, size, "Resume run %s?\n\nIts owner continues the steps that are ready. A decision alone never "
+                 "resumes a run; this does.", run);
+    else
+        snprintf(body, size, "Cancel run %s?\n\nSteps that are running are stopped and the run ends as cancelled. "
+                 "Heads it created and their work are kept.", run);
+}
+
+static const char *control_title(const char *action) {
+    return !strcmp(action, "approve") ? "Approve request" : !strcmp(action, "reject") ? "Reject request" :
+        !strcmp(action, "resume") ? "Resume run" : "Cancel run";
+}
+
+static bool control_request(struct app *app, const char *run, char *request, size_t size, char *step, size_t step_size) {
+    if (native_attention_run_request(app, run, request, size, step, step_size)) return true;
+    native_attention_read(app);
+    copy_text(app->notice, sizeof(app->notice), "No approval request is known to wait on this run; reading requests again");
+    return false;
 }
 bool native_control_key(struct app *app, char key) {
     const char *action=key=='R' ? "resume" : key=='X' ? "cancel" : key=='Y' ? "approve" : key=='N' ? "reject" : NULL;
-    char run[80],request[80]="-",answer[128],prompt[256];
+    char run[80],request[80]="-",step[80]="-",body[1024],accept[16];
     if (!action) return false;
     if (app->fleet) return native_fleet_control_key(app, key, action);
     if (!native_workspace_monitoring(app)) return false;
@@ -24,12 +54,13 @@ bool native_control_key(struct app *app, char key) {
             copy_text(app->notice,sizeof(app->notice),"Terminal run: no resume or cancel. Inspect evidence before starting new work."); return true;
         }
     }
-    if (key=='Y' || key=='N') {
-        if (prompt_text(app,"Request ID from the evidence pane: ",request,sizeof(request))!=0 || !request[0]) return true;
+    if ((key=='Y' || key=='N') && !control_request(app,run,request,sizeof(request),step,sizeof(step))) return true;
+    control_body(action,run,request,step,body,sizeof(body));
+    snprintf(accept,sizeof(accept),"%c%s",action[0]-'a'+'A',action+1);
+    if (!dialog_confirm(app,control_title(action),body,accept,key=='X' || key=='N')) {
+        copy_text(app->notice,sizeof(app->notice),"Control not submitted; nothing changed."); return true;
     }
-    snprintf(prompt,sizeof(prompt),"Run %s / request %s. Type %s to confirm: ",run,request,action);
-    if (prompt_text(app,prompt,answer,sizeof(answer))!=0) return true;
-    if (!confirm_local_control(app, run, request, action, answer))
+    if (!control_current(app,run,request) || !native_control_submit(app,run,action,request))
         copy_text(app->notice,sizeof(app->notice),"Control not submitted: confirmation, selected run or owner availability changed.");
     return true;
 }

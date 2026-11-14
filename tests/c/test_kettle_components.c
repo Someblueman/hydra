@@ -659,6 +659,19 @@ static void confirm(void) {
     c.button_count = 3;
     c.focus = 2;
     CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_CHOSEN && c.chosen == 2);
+    /* Two rows short of its height, it gives up its blank rows: the whole
+     * body still shows, the buttons on the row above the bottom edge. */
+    c.button_count = 2;
+    kt_confirm_place(&c, (struct kt_rect){1, 1, 40, 8});
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(!strcmp(row(2), " \xe2\x94\x82  Remove feature-live?                \xe2\x94\x82"));
+    CHECK(!strncmp(row(4), " \xe2\x94\x82  Closes its terminal and deletes", 37));
+    CHECK(strstr(row(7), "Cancel") != NULL && strstr(row(8), "esc cancel") != NULL);
+    {
+        struct kt_msg on_remove = mouse(33, 7, 0);
+        CHECK(kt_confirm_update(&c, &on_remove, NULL) == KT_CONFIRM_ACCEPTED);
+    }
 }
 
 /* ---- form ---------------------------------------------------------------- */
@@ -740,6 +753,22 @@ static void form_keys(void) {
         CHECK(kt_form_update(&form, &agent, NULL) == KT_FORM_CHANGED && form.focus == 1 && fields[1].choice == 1);
         CHECK(kt_form_update(&form, &toggle, NULL) == KT_FORM_CHANGED && form.focus == 2 && !fields[2].on);
     }
+}
+
+/* A body paragraph sits above the fields, wrapped to the inside width, and
+ * moves the fields down by its rows and one more. */
+static void form_body(void) {
+    form_setup();
+    form.body = "Hydra spawns a worktree and starts the agent there.";
+    CHECK(kt_form_height(&form, 40) == 3 + 1 + 2 + 1 + 2 + 4 + 3);
+    kt_form_place(&form, (struct kt_rect){0, 0, 40, 16});
+    CHECK(name_input.area.y == 6);
+    blank(42, 17, true);
+    kt_form_view(&form, &canvas, form.area);
+    CHECK(starts(row(2), "\xe2\x94\x82  Hydra spawns a worktree and starts"));
+    CHECK(starts(row(3), "\xe2\x94\x82  the agent there."));
+    CHECK(starts(row(5), "\xe2\x94\x82  Task name"));
+    form.body = NULL;
 }
 
 /* ---- tabs ---------------------------------------------------------------- */
@@ -946,6 +975,7 @@ int main(void) {
     confirm();
     form_view();
     form_keys();
+    form_body();
     tabs();
     progress();
     palette();

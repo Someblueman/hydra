@@ -210,9 +210,10 @@ static void refresh_all(struct app *app) {
     copy_text(app->notice, sizeof(app->notice), "Reading everything again");
 }
 
-static void perform(struct app *app, enum key_action action) {
+void key_perform(struct app *app, enum key_action action) {
     uint32_t key = action_key(action);
     if (action == KEY_REFRESH) { refresh_all(app); return; }
+    if (action == KEY_PALETTE) { palette_open(app); return; }
     if (key == SHIFT_TAB) input_named(app, KT_KEY_TAB, KT_MOD_SHIFT);
     else if (key >= KT_KEY_UP) input_named(app, key, 0);
     else if (key) input_character(app, (char)key);
@@ -233,7 +234,7 @@ bool key_dispatch(struct app *app, const struct kt_event *e) {
     }
     match = kt_keymap_feed(&k->map, &k->view_state, chain, e, &binding);
     if (match == KT_KEY_PENDING || match == KT_KEY_ABANDONED) return true;
-    if (match == KT_KEY_ACTION) { perform(app, (enum key_action)binding->action); return true; }
+    if (match == KT_KEY_ACTION) { key_perform(app, (enum key_action)binding->action); return true; }
     if (!app->help) return false;
     app->help = false; app->help_scroll = 0;
     return key_dispatch(app, e);
@@ -247,6 +248,11 @@ static void applying(const struct app *app, struct kt_binding *rows) {
     memcpy(rows, native_keys((struct app *)app)->bindings, sizeof(struct kt_binding) * KEY_ACTIONS);
     for (i = KEY_VIEW_ACTIONS; i < KEY_ACTIONS; i++)
         if (!key_applies(app, (enum key_action)i)) rows[i].scope = 0;
+}
+
+uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]) {
+    applying(app, rows);
+    return key_chains[key_chain(app)] & ~(uint32_t)KEY_SCOPE_TERMINAL;
 }
 
 static struct kt_help_style hint_style(void) {

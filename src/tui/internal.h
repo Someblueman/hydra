@@ -95,6 +95,9 @@ struct native_plan {
     char planning_head[TEXT], planning_instance[TEXT], notified[NATIVE_PLAN_NOTICES][112];
     size_t notified_count;
     unsigned launched_revision;
+    /* The revision approved before its validation finished; it runs when
+     * that validation is ready (plan_actions.c). 0: none. */
+    unsigned approved_revision;
     bool follow_launched_run;
     bool projecting;
     char *source_bytes, *policy_bytes, *text;
@@ -253,6 +256,16 @@ bool statistics_back(struct app *app);
 bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
+/* Dialogs (forms.c): each waits for its answer. A question's default button
+ * is Cancel; a form returns 0 when submitted and -1 when cancelled. */
+bool dialog_confirm(struct app *app, const char *title, const char *body, const char *accept, bool destructive);
+int dialog_form(struct app *app, const char *title, struct kt_field *fields, size_t count);
+int dialog_form_body(struct app *app, const char *title, const char *body, struct kt_field *fields, size_t count);
+void dialogs_draw(struct app *app);
+/* Runs a kettle modal until final() accepts its result: that result, or -1
+ * when it was closed, cancelled or the program is ending. */
+typedef bool (*dialog_final_fn)(int result);
+int dialog_run(struct app *app, const struct kt_modal *dialog, dialog_final_fn final);
 bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
 bool render_statistics_runs(struct app *app, unsigned frame, bool headless);
@@ -362,6 +375,9 @@ void native_activity_tick(struct app *app);
 void native_activity_destroy(struct app *app);
 void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
+void native_attention_read(struct app *app);
+bool native_attention_run_request(const struct app *app, const char *run, char *request, size_t size,
+                                  char *step, size_t step_size);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
 bool native_links_accept(struct app *app, FILE *input);
@@ -390,6 +406,15 @@ void native_plan_returned(struct native_plan *p);
 void native_plan_execute(struct app *app);
 void native_plan_request_changes(struct app *app);
 void native_plan_import(struct app *app);
+void native_plan_proposal(struct app *app);
+void native_plan_validate(struct app *app);
+/* Planning actions (plan_actions.c): what screens and keys call. */
+void plan_action_load_proposal(struct app *app);
+void plan_action_import(struct app *app);
+void plan_action_validate(struct app *app);
+void plan_action_request_changes(struct app *app);
+void plan_action_approve(struct app *app);
+void plan_actions_tick(struct app *app);
 bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);
@@ -447,7 +472,7 @@ ssize_t output_read(struct output_child *child, char *buffer, size_t size);
 int output_finish(struct output_child *child, bool failed);
 void group_marked_action(struct app *app);
 void kill_marked_action(struct app *app);
-void execute_palette(struct app *app, const char *query);
+void palette_open(struct app *app);
 void fleet_action(struct app *app);
 bool parse_theme(const char *name, int *theme);
 void style(struct app *app, enum tone tone);
@@ -474,6 +499,11 @@ void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);
+/* Outcomes of in-app actions (actions.c): a toast for one that finished, the
+ * session list of those that did not, and that list in the output viewer. */
+void toast(struct app *app, enum kt_toast_kind kind, const char *text);
+void action_failed(struct app *app, const char *title, const char *output);
+void actions_failed_show(struct app *app);
 /* Scrolls the help text by rows (negative: up). */
 void help_scroll(struct app *app, int rows);
 void render(struct app *app, unsigned frame, bool headless);

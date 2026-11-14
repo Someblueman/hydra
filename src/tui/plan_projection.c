@@ -104,4 +104,5 @@ void native_plan_tick(struct app *app, bool watch) {
         (void)native_plan_load(app,path,policy);
         if (p->state==PLAN_DRAFT) native_plan_message(p,"Draft or policy changed. Previous approval is invalid; press V to validate this revision.");
     }
+    plan_actions_tick(app);
 }

@@ -44,24 +44,60 @@ static bool state_is(const char *run_dir, const char *expected) {
     return !strcmp(value, expected);
 }
 /* The approval shows the revision and a short digest; the CLI still receives
- * the full digest, which the launch receipt directory name proves. */
-static void check_digest(struct kt_session *s, const char *digest) {
-    const char *p = kt_text(s);
-    char compact[131072], marker[64];
+ * the full digest, which the launch receipt directory name proves. Only the
+ * dialog's inside is read, where its text wraps; the view behind is not. */
+static bool dialog_bounds(struct kt_session *s, int *top, int *left, int *right) {
+    int y, x;
+    for (y = 0; y < s->screen.rows; y++) {
+        char row[2048];
+        if (!strstr(kt_row(s, y, row, sizeof(row)), "Execute plan")) continue;
+        for (x = 0; x < s->screen.cols && strcmp(s->screen.cells[y * s->screen.cols + x].text, "\xe2\x95\xad"); x++) {}
+        *left = x;
+        for (x = *left + 1; x < s->screen.cols && strcmp(s->screen.cells[y * s->screen.cols + x].text, "\xe2\x95\xae"); x++) {}
+        *right = x; *top = y;
+        return *left < *right && *right < s->screen.cols;
+    }
+    return false;
+}
+/* The dialog's text without blanks, so wrapped sentences read whole. */
+static size_t row_compact(struct kt_session *s, int y, int left, int right, char *out, size_t used, size_t capacity) {
+    int x;
+    for (x = left + 1; x < right; x++) {
+        const char *t = s->screen.cells[y * s->screen.cols + x].text;
+        size_t len = strlen(t);
+        if (!len || !strcmp(t, " ") || used + len + 1 >= capacity) continue;
+        memcpy(out + used, t, len);
+        used += len;
+    }
+    return used;
+}
+static void dialog_compact(struct kt_session *s, char *compact, size_t capacity) {
     size_t n = 0;
-    for (; *p; p++)
-        if (*p != ' ' && *p != '\n' && *p != '\t' && *p != '\r') {
-            CHECK(n + 1 < sizeof(compact), "screen compact bound");
-            compact[n++] = *p;
-        }
+    int top = 0, left = 0, right = 0, y;
+    CHECK(dialog_bounds(s, &top, &left, &right), "approval dialog on screen");
+    for (y = top + 1; y < s->screen.rows; y++) n = row_compact(s, y, left, right, compact, n, capacity);
     compact[n] = 0;
+}
+/* Whether the dialog says text (compared without blanks). */
+static bool dialog_says(struct kt_session *s, const char *text) {
+    static char compact[131072];
+    char wanted[1024];
+    size_t n = 0;
+    for (; *text && n + 1 < sizeof(wanted); text++) if (*text != ' ') wanted[n++] = *text;
+    wanted[n] = 0;
+    dialog_compact(s, compact, sizeof(compact));
+    if (!strstr(compact, wanted)) fprintf(stderr, "The dialog at %dx%d lacks %s:\n%s\n", s->screen.cols, s->screen.rows, wanted, compact);
+    return strstr(compact, wanted) != NULL;
+}
+static void check_digest(struct kt_session *s, const char *digest) {
+    char marker[64];
     kt_format(marker, sizeof(marker), "digest%.12s?", digest);
-    CHECK(strstr(compact, marker), "short digest visible at all sizes");
+    CHECK(dialog_says(s, marker), "short digest visible at all sizes");
 }
 /* A draft or policy change while the approval is open invalidates it. */
 static void refuse_changed(struct kt_session *s, const char *changed, const char *runs) {
     kt_send(s, "E");
-    kt_until(s, "INPUT TO HYDRA / execution approval", 3);
+    kt_until(s, "Execute plan", 3);
     kt_append(changed, "\n");
     kt_pump(s, 2.5);
     kt_send(s, "y");
@@ -69,13 +105,13 @@ static void refuse_changed(struct kt_session *s, const char *changed, const char
     CHECK(!hf_glob_count(runs), "changed revision creates no run");
 }
 /* The confirmation names the revision, short digest, policy and consequences
- * at every size; only an explicit y approves, so Enter, other keys and paste
- * leave it open, and n declines without a run. */
+ * at every size; only an explicit y approves: other keys and paste leave it
+ * open, and Enter (its default button is Cancel) declines without a run. */
 static void review_approval(struct kt_session *s, const char *digest) {
     int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
     size_t i;
     kt_send(s, "E");
-    kt_until(s, "INPUT TO HYDRA / execution approval", 3);
+    kt_until(s, "Execute plan", 3);
     kt_until(s, "Execute imported plan revision 1", 3);
     for (i = 0; i < 3; i++) {
         kt_resize(s, sizes[i][0], sizes[i][1]);
@@ -84,19 +120,19 @@ static void review_approval(struct kt_session *s, const char *digest) {
         CHECK(!s->screen.overflow, "approval resize");
         save(s, "approval", sizes[i][0], sizes[i][1]);
     }
-    CHECK(kt_contains(s, "Runs 3 steps, spawns 1 head, up to 3 minutes; declares no repository writes."),
+    CHECK(dialog_says(s, "Runs 3 steps, spawns 1 head, up to 3 minutes; declares no repository writes."),
           "approval states the consequences");
-    CHECK(kt_contains(s, "Policy: tools sh; parallelism 1; at most 1 head; 3 min wall time"),
+    CHECK(dialog_says(s, "Policy: tools sh; parallelism 1; at most 1 head; 3 min wall time"),
           "approval summarizes the policy");
-    kt_send(s, "\rx\033[200~y\033[201~");
+    kt_send(s, "x\033[200~y\033[201~");
     kt_pump(s, .5);
-    CHECK(kt_contains(s, "INPUT TO HYDRA / execution approval"), "Enter, other keys and paste cannot approve");
-    kt_send(s, "n");
+    CHECK(kt_contains(s, "Execute plan"), "other keys and paste cannot approve");
+    kt_send(s, "\r");
     kt_until(s, "Execution not approved", 3);
     /* The confirmation is part of the frame: opening it, resizing under it
      * and closing it overwrite cells and never erase the display. */
     kt_pump(s, .3);
-    CHECK(!kt_contains(s, "INPUT TO HYDRA / execution approval"), "approval closed");
+    CHECK(!kt_contains(s, "Execute plan"), "approval closed");
     CHECK(hf_count(s->raw, "\033[2J") == 1, "a confirmation opens, resizes and closes without erasing the display");
 }
 static void sanitize_path(const char *input, char *output, size_t capacity) {
@@ -142,10 +178,10 @@ int main(void) {
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
     S(":import\r");
-    U("Draft JSON path:", 3);
+    U("Draft JSON path", 3);
     S(draft);
     S("\r");
-    U("Policy JSON path:", 3);
+    U("Policy JSON path", 3);
     S(policy);
     S("\r");
     U("Revision 1 / DRAFT", 3);
@@ -174,7 +210,7 @@ int main(void) {
      * leaves the same revision launchable once the cause is removed. */
     RUN("git", "-C", f.repo, "branch", "plan-smoke");
     S("E");
-    U("INPUT TO HYDRA / execution approval", 3);
+    U("Execute plan", 3);
     U("revision 3", 3);
     S("y");
     U("Launch of revision 3 failed; nothing ran, E launches it again", 30);
@@ -185,7 +221,7 @@ int main(void) {
     CHECK(!kt_contains(&s, "already submitted"), "a failed launch is not reported as submitted");
     RUN("git", "-C", f.repo, "branch", "-D", "plan-smoke");
     S("E");
-    U("INPUT TO HYDRA / execution approval", 3);
+    U("Execute plan", 3);
     U("revision 3", 3);
     S("y");
     kt_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/%s/run-id",
@@ -210,7 +246,7 @@ int main(void) {
           "receipt observed during execution");
     S("E");
     U("This revision was already submitted", 3);
-    CHECK(!kt_contains(&s, "INPUT TO HYDRA / execution approval"), "duplicate launch form refused");
+    CHECK(!kt_contains(&s, "Execute plan"), "duplicate launch form refused");
     kt_close(&s, "q", 0, 0);
     CHECK(!kt_exists(compiled), "UI temp snapshot cleaned");
     hf_run(&f, snapshot, -2,

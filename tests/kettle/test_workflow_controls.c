@@ -91,6 +91,29 @@ static bool lines_subset(const char *before, const char *after) {
     }
     return true;
 }
+/* Asks for a control and waits for its confirmation. The monitor reads the
+ * requests waiting on its runs when it opens; until that read is in, the
+ * control says so and reads again, so the key is pressed again. */
+static void ask(struct kt_session *s, const char *key, const char *title) {
+    int tries;
+    for (tries = 0; tries < 20; tries++) {
+        kt_send(s, key);
+        kt_pump(s, .5);
+        if (kt_contains(s, title)) return;
+    }
+    kt_until(s, title, 3);
+}
+
+/* The approval names the exact request waiting on the run; declining it
+ * records no decision. */
+static void decline(struct kt_session *s, const char *request, const char *decision) {
+    ask(s, "Y", "Approve request");
+    CHECK(kt_contains(s, request), "the confirmation names the exact request waiting on the run");
+    kt_send(s, "n");
+    kt_until(s, "Control not submitted", 3);
+    CHECK(!kt_exists(decision), "a declined confirmation has no decision");
+}
+
 int main(void) {
     struct kt_session s;
     char path[4096], worker[4096], pids[8192], effect[4096], effects[4096], flow[4096], yaml[8192],
@@ -166,36 +189,21 @@ int main(void) {
                 U("waiting-approval", 10);
                 save(&s, "waiting", sizes[j][0], sizes[j][1]);
             }
-            S("Y");
-            U("Request ID from the evidence pane", 3);
-            S(request);
-            S("\r");
-            U("Type approve to confirm", 3);
-            S("wrong\r");
-            U("Control not submitted", 3);
-            CHECK(!kt_exists(decision), "wrong confirmation has no decision");
+            decline(&s, request, decision);
         }
         if (i < 2) {
-            S(i == 0 ? "Y" : "N");
-            U("Request ID from the evidence pane", 3);
-            S(request);
-            S("\r");
-            kt_format(text, sizeof(text), "Type %s to confirm", action);
-            U(text, 3);
-            S(action);
-            S("\r");
+            ask(&s, i == 0 ? "Y" : "N", i == 0 ? "Approve request" : "Reject request");
+            S("y");
             U("Control completed", 15);
             kt_format(text, sizeof(text), "%s\n", action);
             CHECK(kt_file_equals(decision, text), "exact decision durable");
             CHECK(state_is(run_dir, "waiting-approval"), "decision separate from resume");
             CHECK(after_count(effects) == (i == 0 ? 0U : 1U), "decision has no implicit execution");
-            S("R");
-            U("Type resume to confirm", 3);
-            S("resume\r");
+            ask(&s, "R", "Resume run");
+            S("y");
         } else {
-            S("X");
-            U("Type cancel to confirm", 3);
-            S("cancel\r");
+            ask(&s, "X", "Cancel run");
+            S("y");
         }
         if (i == 0) {
             U("OBSERVED EVIDENCE / run running", 10);

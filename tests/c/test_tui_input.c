@@ -204,18 +204,19 @@ static bool keys_over_overlays(void) {
 }
 
 /* A prompt waits inside the key handler while the loop runs: what follows in
- * the input is its text, a paste is text and cannot submit, Enter submits.
- * With nothing left to read it gives up rather than wait. */
+ * the input is its text, a paste is text and cannot submit (its line break
+ * is a blank), Enter submits. With nothing left to read it gives up rather
+ * than wait. */
 static bool prompt_takes_input(void) {
     struct fixture f;
     bool ok = fixture_open(&f);
     if (!ok) { fixture_close(&f); return false; }
     one_head(f.app);
     type(&f, "/fea\033[200~tu\rre\033[201~-x\177\177\r");
-    ok = !strcmp(f.app->search, "feature") && !f.app->modal_count && kt_test_running(f.test);
+    ok = !strcmp(f.app->search, "featu re") && !f.app->modal_count && kt_test_running(f.test);
     type(&f, "/zzz");
-    ok = ok && !strcmp(f.app->search, "feature") && !f.app->modal_count && kt_test_running(f.test);
-    ok = ok && !kt_test_contains(f.test, "INPUT TO HYDRA");
+    ok = ok && !strcmp(f.app->search, "featu re") && !f.app->modal_count && kt_test_running(f.test);
+    ok = ok && !kt_test_contains(f.test, "Search heads");
     fixture_close(&f);
     return ok;
 }
@@ -241,6 +242,23 @@ static bool frames_are_few(void) {
     return ok;
 }
 
+/* A question's default button is Cancel: x then Enter removes nothing, and
+ * the dialog is gone. Esc closes a form without submitting it and leaves
+ * the view as it was. */
+static bool dialogs_default_to_cancel(void) {
+    struct fixture f;
+    bool ok = fixture_open(&f);
+    if (!ok) { fixture_close(&f); return false; }
+    one_head(f.app);
+    type(&f, "x\r");
+    ok = !strcmp(f.app->notice, "Removal cancelled; nothing changed") && !f.app->modal_count && !f.app->dialogs.count;
+    type(&f, "/abc\033");
+    kt_test_advance(f.test, 20);
+    ok = ok && !f.app->search[0] && f.app->view == 0 && !f.app->dialogs.count && kt_test_running(f.test);
+    fixture_close(&f);
+    return ok;
+}
+
 int main(void) {
     static const struct { bool (*run)(void); const char *name; } cases[] = {
         {chords_without_agent, "chords are held, named when unbound and case-sensitive with no agent attached"},
@@ -249,6 +267,7 @@ int main(void) {
         {escape_then_key, "Escape acts after 20 ms; Escape then a key handles both"},
         {keys_over_overlays, "arrow and page keys scroll the result overlay and the help, which Esc closes"},
         {prompt_takes_input, "a prompt reads its text through the loop; paste cannot submit"},
+        {dialogs_default_to_cancel, "a question defaults to Cancel and Esc closes a form without submitting"},
         {frames_are_few, "a burst of keys is one frame; a resize erases nothing"}
     };
     size_t i;

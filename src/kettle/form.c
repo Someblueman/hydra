@@ -2,7 +2,8 @@
 #include <string.h>
 
 /* Labelled fields in a column: a label, the field's row, and its hint or
- * error, with a blank row between fields. */
+ * error, with a blank row between fields; an optional body paragraph and a
+ * blank row come first. */
 
 #define FIELDS KT_FORM_SCOPE_FIELDS
 #define ADJUST (KT_FORM_SCOPE_CHOICE | KT_FORM_SCOPE_TOGGLE)
@@ -29,21 +30,25 @@ static struct kt_rect inside_of(const struct kt_form *f, struct kt_rect area) {
 }
 
 static bool has_note(const struct kt_field *field) { return field->error[0] || (field->hint && field->hint[0]); }
+/* Rows the body takes above the fields at an inside width, its gap included. */
+static int body_rows(const struct kt_form *f, int width) {
+    return f->body && f->body[0] ? kt_paragraph_height(f->body, width) + 1 : 0;
+}
 static int field_rows(const struct kt_field *field) { return 2 + (has_note(field) ? 1 : 0); }
 
 /* The rows of field `index` in the inside area: its label row first. */
 static struct kt_rect field_rect(const struct kt_form *f, struct kt_rect inside, size_t index) {
     struct kt_rect r = inside;
     size_t i;
+    r.y += body_rows(f, inside.width);
     for (i = 0; i < index && i < f->count; i++) r.y += field_rows(&f->fields[i]) + 1;
     r.height = index < f->count ? field_rows(&f->fields[index]) : 0;
     return r;
 }
 
 int kt_form_height(const struct kt_form *f, int width) {
-    int rows = 0;
+    int rows = body_rows(f, framed(f) ? width - 6 : width);
     size_t i;
-    (void)width;
     for (i = 0; i < f->count; i++) rows += field_rows(&f->fields[i]) + (i ? 1 : 0);
     return rows + (framed(f) ? 4 : 0);
 }
@@ -94,6 +99,7 @@ void kt_form_init(struct kt_form *f, const char *title, struct kt_field *fields,
     s->label = KT_INK(KT_COLOR_MUTED, 0);
     s->label_focused = KT_INK(KT_COLOR_TEXT, KT_BOLD);
     s->hint = KT_INK(KT_COLOR_MUTED, 0);
+    s->body = KT_INK(KT_COLOR_TEXT, 0);
     s->error = KT_INK(KT_COLOR_DANGER, 0);
     s->option = KT_INK(KT_COLOR_MUTED, 0);
     s->option_selected = KT_INK(KT_COLOR_TEXT, KT_BOLD | KT_UNDERLINE);
@@ -290,6 +296,7 @@ void kt_form_view(const struct kt_form *f, struct kt_canvas *canvas, struct kt_r
         hints.scope = FIELDS;
         inside = kt_ui_dialog(canvas, area, f->title, f->style.border, f->style.title, &hints, 1, &f->style.hints);
     }
+    if (f->body && f->body[0]) (void)kt_paragraph(canvas, inside, f->body, f->style.body);
     for (i = 0; i < f->count; i++) {
         struct kt_rect r = field_rect(f, inside, i);
         if (r.y >= inside.y + inside.height) break;

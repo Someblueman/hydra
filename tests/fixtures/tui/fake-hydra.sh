@@ -108,6 +108,7 @@ case "${1:-}:${2:-}" in
         printf 'FAKE SPAWN %s\n' "$*"
         ;;
     group:create)
+        if [ -n "${HYDRA_TEST_GROUP_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_GROUP_ARGV"; fi
         printf 'FAKE GROUP %s\n' "$*"
         ;;
     kill:*)

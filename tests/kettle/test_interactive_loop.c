@@ -95,15 +95,14 @@ static void burst(struct kt_session *s) {
 static void prompt(struct kt_session *s) {
     size_t mark = s->raw_size;
     kt_send(s, "/");
-    kt_until(s, "INPUT TO HYDRA / text field", 3);
-    kt_until(s, "Search heads:", 3);
+    kt_until(s, "Search heads", 3);
     kt_pump(s, .5);
     CHECK(kt_pump(s, 4.5) == 0, "an open, idle prompt writes nothing");
     kt_send(s, "on");
-    kt_until(s, "on_", 3);
+    kt_until(s, "\xe2\x94\x83 on", 3);
     kt_send(s, "\033");
     kt_pump(s, .5);
-    CHECK(!kt_contains(s, "INPUT TO HYDRA / text field"), "prompt closed");
+    CHECK(!kt_contains(s, "Search heads"), "prompt closed");
     CHECK(!strstr(s->raw + mark, ERASE), "a prompt opens and closes without erasing the display");
 }
 

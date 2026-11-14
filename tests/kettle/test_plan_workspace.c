@@ -24,10 +24,10 @@ int main(void) {
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
     kt_send(&s, ":import\r");
-    U("Draft JSON path:", 3);
+    U("Draft JSON path", 3);
     kt_send(&s, draft);
     kt_send(&s, "\r");
-    U("Policy JSON path:", 3);
+    U("Policy JSON path", 3);
     kt_send(&s, policy);
     kt_send(&s, "\r");
     U("Revision 1 / DRAFT", 3);

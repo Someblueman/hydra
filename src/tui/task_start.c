@@ -16,19 +16,73 @@ void new_task_attach(struct app *app) {
     }
 }
 
-static bool task_profile(struct app *app, const char *branch, char profile[TEXT]) {
-    char output[8192], title[TEXT];
+/* The agents `hydra agent list` reports available, after the project's
+ * default; "none" (a plain shell) is always last. */
+#define TASK_AGENTS 16
+struct task_agents { char names[TASK_AGENTS][32]; const char *options[TASK_AGENTS]; size_t count; };
+
+static void agents_add(struct task_agents *a, const char *name) {
+    size_t i;
+    if (a->count >= TASK_AGENTS) return;
+    for (i = 0; i < a->count; i++) if (!strcmp(a->names[i], name)) return;
+    copy_text(a->names[a->count], sizeof(a->names[a->count]), name);
+    a->options[a->count] = a->names[a->count];
+    a->count++;
+}
+
+static bool task_agents(struct app *app, struct task_agents *a) {
+    char output[8192], *line, *save = NULL;
     char *argv[] = {(char *)app->hydra, "agent", "list", NULL};
+    memset(a, 0, sizeof(*a));
     if (run_captured(app, argv, output, sizeof(output), 5000L)) {
         show_result(app, "Agent selection unavailable", output);
         return false;
     }
-    if (snprintf(title, sizeof(title), "Branch %s. Choose an available agent; none opens a shell", branch) >= (int)sizeof(title))
-        copy_text(title, sizeof(title), "Choose an available agent; none opens a shell");
-    show_result(app, title, output);
-    int status = prompt_text(app, "Agent profile (blank=project default, none=shell): ", profile, TEXT);
-    app->result_open = false;
-    return status == 0;
+    agents_add(a, "project default");
+    for (line = strtok_r(output, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        char name[32], available[16];
+        if (sscanf(line, "%31s %15s", name, available) == 2 && !strcmp(available, "yes") && strcmp(name, "none")) agents_add(a, name);
+    }
+    agents_add(a, "none");
+    return true;
+}
+
+/* The task name shows the branch it becomes as it is typed. */
+struct task_name_check { char hint[TEXT + 16]; };
+static bool task_name_valid(void *context, const char *text, char *error, size_t capacity) {
+    struct task_name_check *check = context;
+    char branch[TEXT];
+    if (!text[0]) { check->hint[0] = '\0'; snprintf(error, capacity, "A task needs a name"); return false; }
+    if (!task_branch_name(text, branch, sizeof(branch))) {
+        check->hint[0] = '\0';
+        snprintf(error, capacity, "Needs a letter or digit to name its branch");
+        return false;
+    }
+    snprintf(check->hint, sizeof(check->hint), "Branch: %s", branch);
+    return true;
+}
+
+/* One form: the task, its agent and its objective. */
+static bool task_form(struct app *app, char name[TEXT], char profile[TEXT], char *objective, size_t objective_size) {
+    struct task_agents agents;
+    struct task_name_check check = {"Becomes the branch and worktree name"};
+    struct kt_textinput name_input, objective_input;
+    struct kt_field fields[3];
+    if (!task_agents(app, &agents)) return false;
+    memset(fields, 0, sizeof(fields));
+    kt_textinput_init(&name_input, name, TEXT);
+    name_input.validate = task_name_valid; name_input.validate_context = &check;
+    kt_textinput_init(&objective_input, objective, objective_size);
+    objective_input.placeholder = "optional: leave empty to start with a conversation";
+    fields[0].kind = KT_FIELD_TEXT; fields[0].label = "Task"; fields[0].input = &name_input; fields[0].hint = check.hint;
+    fields[1].kind = KT_FIELD_CHOICE; fields[1].label = "Agent"; fields[1].options = agents.options;
+    fields[1].option_count = agents.count;
+    fields[2].kind = KT_FIELD_TEXT; fields[2].label = "Objective"; fields[2].input = &objective_input;
+    if (dialog_form_body(app, "New task", "Hydra creates the branch, its worktree and a terminal, and starts the agent there.",
+                         fields, 3) != 0) return false;
+    profile[0] = '\0';
+    if (fields[1].choice > 0 && fields[1].choice < agents.count) copy_text(profile, TEXT, agents.names[fields[1].choice]);
+    return true;
 }
 
 /* The guided local policy (lib/workflow_plan_proposal.sh) authorizes the
@@ -97,15 +151,14 @@ void new_task_action(struct app *app) {
         copy_text(app->notice, sizeof(app->notice), "Remote tasks start on their host; use hydra fleet task");
         return;
     }
-    if (prompt_text(app, "Task name: ", name, sizeof(name)) || !name[0]) return;
+    if (!task_form(app, name, profile, objective, sizeof(objective)) || !name[0]) return;
     if (!task_branch_name(name, branch, sizeof(branch))) {
         copy_text(app->notice, sizeof(app->notice), "Task name needs a letter or digit to name its branch; nothing started");
         return;
     }
-    if (!task_profile(app, branch, profile)) return;
-    if (prompt_text(app, "Objective (blank starts a conversation): ", objective, sizeof(objective))) return;
     if (profile[0]) { init[2] = "--profile"; init[3] = profile; }
     if (run_captured(app, init, output, sizeof(output), 15000L)) {
+        action_failed(app, "Registering this project did not finish", output);
         show_result(app, "Could not register this project", output);
         return;
     }
@@ -118,6 +171,7 @@ void new_task_action(struct app *app) {
     }
     argv[count] = NULL;
     if (run_captured(app, argv, output, sizeof(output), 60000L)) {
+        action_failed(app, "Starting a task did not finish", output);
         show_result(app, "Task did not start; inspect the reported outcome", output);
         return;
     }

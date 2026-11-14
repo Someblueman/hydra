@@ -428,6 +428,8 @@ struct kt_keymap kt_viewport_keymap(struct kt_viewport *viewport);
  * right (tab, shift+tab) move the focus and Enter or space presses the
  * focused button; a click presses the button under it. A destructive
  * question draws its border and its accepting button in the danger colour.
+ * Given fewer rows than kt_confirm_height, it drops its blank rows first so
+ * the body keeps as much room as there is.
  * Buttons are the caller's strings: the first two are cancel and accept as
  * set by init, and a third may be added for another way out (_CHOSEN). */
 #define KT_CONFIRM_BUTTONS 3
@@ -476,7 +478,9 @@ struct kt_keymap kt_confirm_keymap(struct kt_confirm *confirm);
  * shows its hint, or its error in its place. Submitting checks every text
  * field's validation and then the form's own, focuses the first field with
  * an error and reports _INVALID; otherwise _SUBMITTED. With a title the form
- * draws itself as a dialog panel, as kt_confirm does. */
+ * draws itself as a dialog panel, as kt_confirm does. `body`, when set, is a
+ * paragraph wrapped above the fields (what the form is for, what submitting
+ * does), counted by kt_form_height. */
 #define KT_FIELD_ERROR 96
 enum kt_field_kind { KT_FIELD_TEXT, KT_FIELD_CHOICE, KT_FIELD_TOGGLE };
 struct kt_field {
@@ -501,11 +505,12 @@ struct kt_form;
 typedef bool (*kt_form_validate_fn)(void *context, struct kt_form *form);
 struct kt_form_style {
     struct kt_style border, title, label, label_focused, hint, error, option, option_selected, field, prompt,
-        prompt_focused;
+        prompt_focused, body;
     struct kt_help_style hints;
 };
 struct kt_form {
     const char *title;            /* NULL: fields only, without a panel       */
+    const char *body;             /* NULL: no paragraph above the fields      */
     struct kt_field *fields;
     size_t count, focus;
     kt_form_validate_fn validate;

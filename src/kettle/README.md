@@ -389,7 +389,11 @@ struct kt_field *f = m->fields;                      /* the model's, like the in
 f[0].kind = KT_FIELD_TEXT; f[0].label = "Task name"; f[0].input = &m->name;
 f[1].kind = KT_FIELD_CHOICE; f[1].label = "Agent"; f[1].options = agents; f[1].option_count = 4;
 kt_form_init(&m->form, "New task", f, 2);            /* a title draws it as a dialog */
+m->form.body = "Starts a branch, its worktree and an agent.";  /* wrapped above the fields */
 ```
+
+`body` is optional: a paragraph that says what the form is for or what
+submitting does, wrapped to the inside width and counted by `kt_form_height`.
 
 **Modal stack.** Dialogs over the view: the base is drawn and restyled faint,
 so it reads as a backdrop at every colour profile, and input goes to the top

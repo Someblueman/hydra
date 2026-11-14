@@ -58,6 +58,7 @@ void clock_mark(void) { clock_seen = true; }
 
 static bool on_timer(struct app *app, const struct kt_msg *msg, struct kt_cmds *cmds) {
     if (msg->tag == WAKE_TAG) wake_timer_fired(msg->u.timer.id);
+    if (msg->tag == TOAST_TAG && app->toasts_ready) (void)kt_toasts_update(&app->toasts, msg, cmds);
     /* Ages on screen advance once a second, and only while one is shown. */
     if (msg->tag == TIMER_CLOCK && !app->clock_drawn) {
         kt_cmd_cancel(cmds, app->clock_timer);

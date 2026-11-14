@@ -132,6 +132,11 @@ bool key_applies(const struct app *app, enum key_action action);
 /* Refuses a table in which two bindings live together in one chain share a
  * chord, or one chord begins another; error names them. */
 bool key_chain_check(const struct kt_binding *bindings, size_t count, char *error, size_t size);
+/* Runs an action as its keys would. */
+void key_perform(struct app *app, enum key_action action);
+/* The table with the bindings that do not apply now taken out of scope, and
+ * the focused chain's scopes (the agent layer's left out). */
+uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]);
 /* Matches a key event against the focused chain and runs the action it is
  * bound to. False when the key is bound to nothing there. */
 bool key_dispatch(struct app *app, const struct kt_event *e);

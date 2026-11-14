@@ -137,7 +137,6 @@ src/tui/dashboard.c	dashboard_distribution	34
 src/tui/dashboard.c	dashboard_heads	26
 src/tui/dashboard.c	render_dashboard	49
 src/tui/evidence.c	native_evidence_tick	22
-src/tui/forms.c	form_draw	23
 src/tui/hosts.c	render_hosts	30
 src/tui/input.c	input_character	17
 src/tui/input.c	handle_mouse	43

@@ -48,7 +48,7 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "[Work]", 1000), "a second Escape returns to Work");
     write_input(session.master, "/", 1U);
-    result(wait_for_markers(&session, "INPUT TO HYDRA / text field", "Search heads:", 1000) && wait_for_raw(&session),
+    result(wait_for_marker(&session, "Search heads", 1000) && wait_for_raw(&session),
            "native search prompt keeps terminal input in raw mode");
     write_input(session.master, "unavailable\n", 12U);
     (void)wait_for_marker(&session, "Search: unavailable", 1000);

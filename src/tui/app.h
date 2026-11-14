@@ -4,6 +4,7 @@
 #include "keys.h"
 #include "../hydra_tui_workflow.h"
 #include "../kettle/kettle.h"
+#include "../kettle/components.h"
 #include <termios.h>
 #include <sys/types.h>
 #include <time.h>
@@ -20,6 +21,9 @@ struct modal {
     void *context;
 };
 #define MODAL_DEPTH 6
+#define FAILED_ACTIONS 8
+/* The tag of the toasts' timers. */
+#define TOAST_TAG 0x746f617374ULL
 struct native_workspace;
 struct statistics_view;
 struct native_terminals;
@@ -78,6 +82,14 @@ struct app {
     struct kt_cmds *cmds;
     struct modal modals[MODAL_DEPTH];
     size_t modal_count;
+    /* Dialogs on kettle's modal stack (forms.c), and the toasts that report
+     * an action's outcome without taking input. */
+    struct kt_modals dialogs;
+    struct kt_toasts toasts;
+    bool dialogs_ready, toasts_ready;
+    /* In-app actions that failed this session (actions.c), oldest first. */
+    struct failed_action { char title[TEXT]; char output[4096]; time_t at; } failed[FAILED_ACTIONS];
+    size_t failed_count;
     unsigned long long modal_frame_at, clock_timer;
     unsigned service_serial;
     /* Captured actions in progress (action_capture.c). */

@@ -575,13 +575,25 @@ static void test_session_failure(void) {
            "invalid fixture directory fails before launch and preserves the terminal");
 }
 
+/* The whole of a small file equals text. */
+static bool file_has(const char *path, const char *text) {
+    char buffer[4096];
+    size_t length;
+    FILE *file = fopen(path, "r");
+    if (!file) return false;
+    length = fread(buffer, 1U, sizeof(buffer) - 1U, file);
+    buffer[length] = '\0';
+    fclose(file);
+    return !strcmp(buffer, text);
+}
+
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal")) return;
     result(wait_for_raw(&session), "small list enters raw mode");
     (void)wait_for_model(&session);
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads:", 1000);
+    (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "feature\n", 8U);
     (void)wait_for_marker(&session, "Search: feature", 1000);
     write_input(session.master, "jj", 2U);
@@ -598,10 +610,13 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     char large_paste[8300];
     size_t paste_offset;
     const char mouse[] = "\033[<0;12;4M";
-    char spawn_path[128], spawned[16384] = "";
+    char spawn_path[128], group_path[128], spawned[16384] = "";
     FILE *spawn_file;
     snprintf(spawn_path, sizeof(spawn_path), "/tmp/hydra-pty-spawn-argv-%ld", (long)getpid());
+    snprintf(group_path, sizeof(group_path), "/tmp/hydra-pty-group-argv-%ld", (long)getpid());
     (void)unlink(spawn_path);
+    (void)unlink(group_path);
+    (void)setenv("HYDRA_TEST_GROUP_ARGV", group_path, 1);
     (void)setenv("TMUX", "test", 1);
     (void)setenv("FAKE_TMUX_CURRENT_SESSION", "hydra-feature-live", 1);
     (void)setenv("HYDRA_TEST_SPAWN_ARGV", spawn_path, 1);
@@ -609,6 +624,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     (void)unsetenv("TMUX");
     (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
     (void)unsetenv("HYDRA_TEST_SPAWN_ARGV");
+    (void)unsetenv("HYDRA_TEST_GROUP_ARGV");
     if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     (void)wait_for_model(&session);
@@ -623,7 +639,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "[Work]", 1000), "Escape returns to the head list");
     write_input(session.master, "/", 1U);
-    result(wait_for_marker(&session, "Search heads:", 1000), "keyboard search prompt is reachable");
+    result(wait_for_marker(&session, "Search heads", 1000), "keyboard search prompt is reachable");
     write_input(session.master, "FEATURE-STALE\n", 14U);
     result(wait_for_marker(&session, "Search: FEATURE-STALE", 1000),
            "keyboard-only search is case-insensitive and returns to raw mode");
@@ -631,14 +647,14 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(wait_for_marker(&session, "Details: feature-stale", 1000),
            "filtered navigation and detail stay on the visible head");
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads:", 1000);
+    (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "does-not-exist\n", 15U);
     (void)wait_for_marker(&session, "Search: does-not-exist", 1000);
     write_input(session.master, "\r", 1U);
     result(wait_for_marker(&session, "no matching head selected", 1000),
            "head actions are disabled when the search has no match");
     write_input(session.master, "/", 1U);
-    (void)wait_for_marker(&session, "Search heads:", 1000);
+    (void)wait_for_marker(&session, "Search heads", 1000);
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "HYDRA / ", 1000),
            "keyboard-only search can be cleared");
@@ -668,18 +684,19 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "HYDRA / ", 1000), "keyboard help closes in raw mode");
     write_input(session.master, ":", 1U);
-    result(wait_for_marker(&session, "Action search:", 1000), "dashboard action search is reachable");
+    result(wait_for_marker(&session, "Commands", 1000), "dashboard action search is reachable");
     write_input(session.master, "dashboard\n", 10U);
     result(wait_for_marker(&session, "FAKE DASHBOARD", 1000), "dashboard delegates to the shell CLI");
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "HYDRA / ", 1000), "dashboard returns to native raw mode");
     write_input(session.master, ":", 1U);
-    (void)wait_for_marker(&session, "Action search:", 1000);
+    (void)wait_for_marker(&session, "Commands", 1000);
     write_input(session.master, "spawn\n", 6U);
-    (void)wait_for_marker(&session, "Task name:", 1000);
-    write_input(session.master, "Feature Native\n", 15U);
-    result(wait_for_marker(&session, "Branch feature-native.", 1000), "a task name with spaces shows its derived branch");
-    write_input(session.master, "codex\n", 6U);
+    (void)wait_for_marker(&session, "New task", 1000);
+    write_input(session.master, "Feature Native", 14U);
+    result(wait_for_marker(&session, "Branch: feature-native", 1000), "a task name with spaces shows its derived branch");
+    /* One form: Tab to the agent, the next option (codex), Tab to the objective, Enter starts. */
+    write_input(session.master, "\t\033[C\t", 5U);
     (void)wait_for_marker(&session, "Objective", 1000);
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "Task \"Feature Native\" started on branch feature-native", 2000),
@@ -699,19 +716,18 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);
-    (void)wait_for_marker(&session, "Group for selected heads:", 1000);
+    (void)wait_for_marker(&session, "Group marked heads", 1000);
     write_input(session.master, "release\n", 8U);
-    result(wait_for_marker(&session,
-           "FAKE GROUP group create release feature-live feature-stale feature-unavailable", 1000),
-           "bulk group assignment delegates explicit selected branches to the shell CLI");
-    write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "bulk group returns to native raw mode");
+    result(wait_for_marker(&session, "Grouped the marked heads", 2000) && file_has(group_path,
+           "group\ncreate\nrelease\nfeature-live\nfeature-stale\nfeature-unavailable\n"),
+           "bulk group assignment delegates explicit selected branches to the shell CLI, captured");
+    (void)unlink(group_path);
     write_input(session.master, "A", 1U);
     (void)wait_for_marker(&session, "3 marked", 1000);
     write_input(session.master, "x", 1U);
-    result(wait_for_marker(&session, "Remove 3 heads (feature-live, feature-stale, feature-unavailable)?", 1000),
+    result(wait_for_markers(&session, "Remove 3 heads", "feature-unavailable)?", 1000),
            "bulk removal confirms the exact targets inside the UI");
-    write_input(session.master, "y\n", 2U);
+    write_input(session.master, "y", 1U);
     result(wait_for_marker(&session, "Removed 2 heads; skipped the current session", 3000),
            "bulk removal delegates non-current branches, preserves the current session and reports in place");
     write_input(session.master, "\n", 1U);

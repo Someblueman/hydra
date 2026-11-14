@@ -51,30 +51,50 @@ static void agent_until(struct kt_session *s, const char *needle, double seconds
 }
 
 /* Screen row y without trailing spaces. */
-static const char *trimmed_row(struct kt_session *s, int y, char *row, size_t capacity) {
-    size_t n = strlen(kt_row(s, y, row, capacity));
-    while (n && row[n - 1] == ' ') n--;
-    row[n] = 0;
-    return row;
-}
-
-/* The row of the text field's title. */
+/* The policy question's dialog: the row of its title and the columns of its
+ * side borders, from the corners of that row. */
+static int dialog_left, dialog_right;
 static int form_top(struct kt_session *s) {
     char row[1024];
-    int y = 0;
-    while (y < s->screen.rows && !strstr(kt_row(s, y, row, sizeof(row)), "INPUT TO HYDRA / text field")) y++;
-    CHECK(y < s->screen.rows, "text field visible");
+    int y = 0, x;
+    while (y < s->screen.rows && !strstr(kt_row(s, y, row, sizeof(row)), "Review proposal")) y++;
+    CHECK(y < s->screen.rows, "policy question visible");
+    for (x = 0; x < s->screen.cols && strcmp(s->screen.cells[y * s->screen.cols + x].text, "\xe2\x95\xad"); x++) {}
+    dialog_left = x;
+    for (x = dialog_left + 1; x < s->screen.cols && strcmp(s->screen.cells[y * s->screen.cols + x].text, "\xe2\x95\xae"); x++) {}
+    dialog_right = x;
+    CHECK(dialog_left < dialog_right && dialog_right < s->screen.cols, "policy question framed");
     return y;
 }
 
-/* The text field's prompt rows, trimmed and joined with single spaces. */
+/* A row of the dialog's inside, without its leading and trailing blanks. */
+static const char *dialog_row(struct kt_session *s, int y, char *row, size_t capacity) {
+    size_t n = 0;
+    int x;
+    char *start;
+    for (x = dialog_left + 1; x < dialog_right; x++) {
+        const char *t = s->screen.cells[y * s->screen.cols + x].text;
+        size_t len = strlen(t);
+        if (!len) { t = " "; len = 1; }
+        if (n + len + 1 >= capacity) break;
+        memcpy(row + n, t, len);
+        n += len;
+    }
+    row[n] = 0;
+    while (n && row[n - 1] == ' ') row[--n] = 0;
+    for (start = row; *start == ' '; start++) {}
+    memmove(row, start, strlen(start) + 1);
+    return row;
+}
+
+/* The question's rows, trimmed and joined with single spaces. */
 static void form_prompt(struct kt_session *s, char *joined, size_t capacity) {
     char row[1024];
     size_t used = 0;
     int y;
     joined[0] = 0;
-    for (y = form_top(s) + 1; y < s->screen.rows && trimmed_row(s, y, row, sizeof(row))[0] != '_'; y++)
-        used += (size_t)snprintf(joined + used, capacity - used, "%s%s", used ? " " : "", row);
+    for (y = form_top(s) + 1; y < s->screen.rows && !strstr(dialog_row(s, y, row, sizeof(row)), "Cancel"); y++)
+        if (row[0]) used += (size_t)snprintf(joined + used, capacity - used, "%s%s", used ? " " : "", row);
     CHECK(used < capacity, "prompt rows fit");
 }
 
@@ -84,7 +104,7 @@ static void form_prompt(struct kt_session *s, char *joined, size_t capacity) {
 static bool form_words_whole(struct kt_session *s) {
     static const char *const phrases[] = {"Review with local policy:", "writes only in heads the plan spawns,",
         "1 worker, 4 heads, 60 minutes, 1 MiB artifacts, 1 GiB free disk, no retries or repairs.",
-        "The plan carries its prompts and assets; nothing is committed to your checkout.", "No execution yet. y/N:"};
+        "The plan carries its prompts and assets; nothing is committed to your checkout.", "No execution yet."};
     char joined[4096];
     size_t i;
     form_prompt(s, joined, sizeof(joined));
@@ -117,7 +137,7 @@ static void open_conversation(struct kt_session *s) {
     CHECK(form_words_whole(s), "policy prompt wraps at words (80 columns)");
     kt_resize(s, 140, 40);
     U("Review with local policy", 5);
-    S("y\r");
+    S("y");
     U("Revision 1 / DRAFT", 5);
 }
 
@@ -164,20 +184,21 @@ static void returned_is_blocked(struct kt_session *s) {
     U("This revision was returned for changes", 3);
     S("E");
     U("returned for changes; nothing runs", 3);
-    CHECK(!kt_contains(s, "INPUT TO HYDRA / execution approval"), "a returned revision offers no approval");
+    CHECK(!kt_contains(s, "Execute plan"), "a returned revision offers no approval");
     REFUSE("workflow", "plan", "proposal", "planner");
 }
 
+/* Approval is one action: E on a revision that is not validated yet asks
+ * once, validates exactly that revision and runs it when it is ready. */
 static void approve_revision(struct kt_session *s) {
     char pattern[4096];
     write_draft("Revised after requested changes");
     U("Revision 2 / DRAFT", 10);
-    S("V");
-    U("READY / awaiting", 30);
     S("E");
-    U("INPUT TO HYDRA / execution approval", 3);
-    U("Execute planner revision 2", 3);
+    U("Approve plan", 3);
+    U("Approve and run planner revision 2?", 3);
     S("y");
+    U("Approved revision 2; validating it, then it runs", 5);
     kt_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/*/run-id", f.home);
     {
         double deadline = kt_now() + 30;

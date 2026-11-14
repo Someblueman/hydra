@@ -192,7 +192,7 @@ static void interactive_prompt(struct app *app, char prefix) {
         if (app->view == 1 || app->view == 2) app->view = 0;
         retarget_selection(app);
     }
-    else execute_palette(app, query);
+    else palette_open(app);
 }
 
 static bool fleet_key(struct app *app, char key) {

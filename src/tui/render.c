@@ -124,9 +124,12 @@ bool frame_begin(struct app *app, bool headless) {
     return true;
 }
 
+static void overlays(struct app *app);
+
 /* Deterministic rendering prints the frame as text; the loop presents its own. */
 void frame_end(struct app *app, unsigned frame, bool headless) {
     int y;
+    overlays(app);
     if (!headless) return;
     printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
     for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL); putchar('\n'); }
@@ -668,30 +671,76 @@ static void render_recovery(struct app *app) {
 
 /* The agent-pane commands with the chords bound to them now, and where to
  * change them. A keys file that was not applied as written is named. */
+/* Overlays over the finished view: the help and the output viewer, each a
+ * dialog panel over the view dimmed behind it, then the toasts. Dialogs that
+ * wait for an answer (forms.c) are drawn after these, on top. */
+static struct kt_rect overlay_panel(struct app *app, const char *title, int width, int height, const char *hints) {
+    struct kt_modals backdrop;
+    struct kt_rect whole = {0, 0, app->frame.width, app->frame.height}, panel;
+    kt_modals_init(&backdrop);
+    kt_restyle(&app->frame, whole, backdrop.backdrop);
+    if (width > whole.width - 2) width = whole.width - 2;
+    if (height > whole.height - 2) height = whole.height - 2;
+    panel = (struct kt_rect){(whole.width - width) / 2, (whole.height - height) / 2, width, height};
+    kt_fill(&app->frame, panel, KT_BASE);
+    kt_panel_styled(&app->frame, panel, title, KT_FOCUS, KT_STRONG);
+    if (hints && width > 8) {
+        int length = kt_text_width(hints);
+        if (length > width - 4) length = width - 4;
+        kt_text(&app->frame, (struct kt_rect){panel.x + width - length - 2, panel.y + height - 1, length, 1}, hints, KT_MUTED);
+    }
+    return (struct kt_rect){panel.x + 2, panel.y + 1, width - 4, height - 2};
+}
+
 /* Help for where the user is, generated from the binding table: the keys
  * file and any problem with it first, then every key of the focused chain
  * that applies, grouped, then the chords that work while typing to an agent.
  * It scrolls with j / k, the arrows and the page keys. */
-static void render_help(struct app *app) {
+static void overlay_help(struct app *app) {
     const struct native_keys *keys = native_keys(app);
     struct kt_canvas view;
-    struct kt_rect area;
-    int rows, total;
-    style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
-    style(app, TONE_MUTED);
-    linef(app, "Keys file %s; hydra tui --print-keys lists every key.", keys->path[0] ? keys->path : "(none)");
-    style(app, TONE_BASE);
-    if (keys->problem[0]) paragraph(app, keys->problem, KT_WARNING);
-    if (app->line < app->limit) linef(app, "");
-    area = (struct kt_rect){app->content_x, app->line, app->content_width, app->limit - app->line};
-    if (area.height < 1 || area.width < 1) return;
-    total = key_help(app, NULL, area, 0);
-    rows = area.height;
+    struct kt_rect inside;
+    int rows, total, top;
+    inside = overlay_panel(app, "Keyboard", app->cols >= 100 ? 96 : app->cols - 2, app->rows - 2,
+                           app->ascii ? " up/down scroll | ? or esc close " : " \xe2\x86\x91/\xe2\x86\x93 scroll \xe2\x80\xa2 ? or esc close ");
+    if (inside.width < 4 || inside.height < 3) return;
+    kt_text(&app->frame, (struct kt_rect){inside.x, inside.y, inside.width, 1}, "KEYBOARD HELP", KT_STRONG);
+    kt_text(&app->frame, (struct kt_rect){inside.x, inside.y + 1, inside.width, 1},
+            keys->problem[0] ? keys->problem : "hydra tui --print-keys lists every key; keys.conf in $HYDRA_HOME/tui sets your own.",
+            keys->problem[0] ? KT_WARNING : KT_MUTED);
+    top = inside.y + 3;
+    rows = inside.y + inside.height - top;
+    if (rows < 1) return;
+    total = key_help(app, NULL, (struct kt_rect){0, 0, inside.width, rows}, 0);
     if (app->help_scroll > total - rows) app->help_scroll = total > rows ? total - rows : 0;
-    if (!kt_canvas_view(&view, &app->frame, area)) return;
-    (void)key_help(app, &view, (struct kt_rect){0, 0, area.width, area.height}, app->help_scroll);
+    if (!kt_canvas_view(&view, &app->frame, (struct kt_rect){inside.x, top, inside.width, rows})) return;
+    (void)key_help(app, &view, (struct kt_rect){0, 0, inside.width, rows}, app->help_scroll);
     app->help_more = total > rows;
-    app->line = app->limit;
+}
+
+static void render_result(struct app *app);
+
+/* The output viewer: a command's captured output, wrapped and scrolled. */
+static void overlay_result(struct app *app) {
+    struct kt_rect inside = overlay_panel(app, app->result_title, app->cols >= 100 ? 96 : app->cols - 2, app->rows - 2,
+        app->ascii ? " up/down scroll | esc close " : " \xe2\x86\x91/\xe2\x86\x93 scroll \xe2\x80\xa2 esc close ");
+    int x = app->content_x, width = app->content_width, line = app->line, limit = app->limit;
+    if (inside.width < 4 || inside.height < 1) return;
+    app->content_x = inside.x; app->content_width = inside.width;
+    app->line = inside.y; app->limit = inside.y + inside.height;
+    render_result(app);
+    app->content_x = x; app->content_width = width; app->line = line; app->limit = limit;
+}
+
+static void overlays(struct app *app) {
+    if (!app->frame.cells) return;
+    if (app->help) overlay_help(app);
+    else if (app->result_open) overlay_result(app);
+    if (app->toasts_ready && app->toasts.count) {
+        struct kt_rect area = {0, 0, app->frame.width - 1, app->frame.height - 3};
+        kt_toasts_place(&app->toasts, area);
+        kt_toasts_view(&app->toasts, &app->frame, area);
+    }
 }
 
 void help_scroll(struct app *app, int rows) {
@@ -712,8 +761,6 @@ static void render_result(struct app *app) {
 
 static void render_content(struct app *app) {
     if (app->view == 6 && native_setup_active(app)) { native_setup_render(app); return; }
-    if (app->result_open) { render_result(app); return; }
-    if (app->help) { render_help(app); return; }
     switch (app->view) {
         case 0: render_list(app); break;
         case 1: render_head_detail(app); break;
@@ -793,8 +840,6 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
     static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
     const struct head *head = selected_head(app);
     if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
-    if (app->result_open) return app->result_title;
-    if (app->help) return "HELP";
     if (app->view == 0) snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project");
     else if (app->view == 1) detail_title(app, head, out, size);
     else snprintf(out, size, "%s", names[app->view] ? names[app->view] : tab_labels[app->view]);
@@ -807,7 +852,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = true;
-    if (!app->help && !app->diagnostics && !app->result_open) {
+    if (!app->diagnostics) {
         if (render_workspace_view(app, frame, headless)) return;
     }
     if (!frame_begin(app, headless)) return;
@@ -816,7 +861,6 @@ void render(struct app *app, unsigned frame, bool headless) {
     if (app->rows >= 6) kt_panel_styled(&app->frame, (struct kt_rect){0, 2, app->frame.width, app->frame.height - 4},
                                         panel_title(app, title, sizeof(title)), KT_BORDER, KT_STRONG);
     app->line = 3;
-    app->help_more = false;
     style(app, TONE_BASE);
     render_content(app);
     app->limit = app->rows;

@@ -90,6 +90,8 @@ void native_workspace_mode(struct app *app, int mode) {
     if (w->initialized[mode]) { w->layout=w->saved[mode]; w->zoom=w->saved_zoom[mode]; }
     else { workspace_layout(&w->layout,mode); w->layout.focus=3; w->zoom=false; }
     w->mode=mode; app->view=7;
+    /* The monitor offers the requests waiting on its runs. */
+    if (mode==2) native_attention_read(app);
     /* Explicit plan/monitor navigation keeps keys in Hydra, not the agent. */
     if (mode!=0) w->layout.focus=6;
     native_workspace_show_terminal(app,false);

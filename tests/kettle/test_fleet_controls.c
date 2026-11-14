@@ -52,11 +52,13 @@ static void launch(struct kt_session *s) {
     kt_send(s, "j");
     kt_until(s, "req-2", 3);
 }
+/* The control's confirmation names the task; y accepts it. */
 static void confirm(struct kt_session *s, const char *key, const char *word) {
     kt_send(s, key);
-    kt_until(s, "INPUT TO HYDRA", 3);
-    kt_send(s, word);
-    kt_send(s, "\r");
+    kt_until(s, "remote task", 3);
+    CHECK(kt_contains(s, word[0] == 'a' ? "Approve" : word[0] == 'r' && word[1] == 'e' && word[2] == 'j' ? "Reject" :
+                      word[0] == 'r' ? "Resume" : "Cancel"), "the confirmation names the control");
+    kt_send(s, "y");
     kt_pump(s, .5);
 }
 static void mutations(char *out, size_t capacity) {
@@ -135,11 +137,11 @@ int main(void) {
     CHECK(strstr(lines, expected), "resume exact task/spec");
     mutations(before, sizeof(before));
     kt_send(&s, "Y");
-    kt_until(&s, "INPUT TO HYDRA", 3);
+    kt_until(&s, "remote task", 3);
     kt_write(mode, "stale");
     kt_sleep(2.2);
     kt_pump(&s, .4);
-    kt_send(&s, "approve\r");
+    kt_send(&s, "y");
     kt_pump(&s, .5);
     kt_until(&s, "Task evidence changed during confirmation", 3);
     unchanged(before);
@@ -148,11 +150,11 @@ int main(void) {
     launch(&s);
     mutations(before, sizeof(before));
     kt_send(&s, "Y");
-    kt_until(&s, "INPUT TO HYDRA", 3);
+    kt_until(&s, "remote task", 3);
     kt_write(mode, "changed");
     kt_sleep(2.2);
     kt_pump(&s, .4);
-    kt_send(&s, "approve\r");
+    kt_send(&s, "y");
     kt_pump(&s, .5);
     kt_until(&s, "Task evidence changed during confirmation", 3);
     unchanged(before);
