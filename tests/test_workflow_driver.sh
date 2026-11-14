@@ -250,6 +250,9 @@ plan_succeeded() { [ "$(sed -n '1p' "$plan_dir/state")" = succeeded ]; }
 WAIT_FOR_TIMEOUT=120 wait_for "the plan run to finish" plan_succeeded
 assert_success $? "the original driver completes the run"
 wait "$plan_resume" 2>/dev/null || true
+# The driver publishes the state before it appends the terminal event.
+plan_terminal_event() { grep -q '"type":"run.succeeded"' "$plan_dir/events.jsonl"; }
+WAIT_FOR_TIMEOUT=30 wait_for "the run's terminal event" plan_terminal_event
 assert_equal 1 "$(grep -c '"type":"run.running"' "$plan_dir/events.jsonl")" "one driver ran the plan"
 assert_equal 0 "$(grep -c '"type":"run.recovered"' "$plan_dir/events.jsonl")" "the live run was never recovered by another driver"
 assert_equal 1 "$(grep -c '"type":"run.succeeded"' "$plan_dir/events.jsonl")" "the run records one terminal event"
