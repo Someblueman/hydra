@@ -753,8 +753,10 @@ One interaction model applies everywhere:
 | `l` / `h` | Expand / collapse the selected run in Work and Overview |
 | `Esc` | One step back: details to the list, close help, clear the search |
 | `n` | Start a new task (branch, worktree, terminal and agent) |
-| `a` | Talk to the selected agent inside Workspace |
-| `x` | Remove the selected or marked heads after an in-app confirmation |
+| `a` | Talk to the selected agent inside Workspace (a remote head attaches through `hydra fleet attach`) |
+| `x` | Remove the selected or marked heads after an in-app confirmation; on a remote head, interrupt its agent |
+| `L`, `r` | Location filter (all, local, remote, each host); observe a remote host again |
+| `Y` / `N` / `R` / `X` | On a remote task row: approve, reject, resume, cancel, each confirmed |
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
 | `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
@@ -789,7 +791,8 @@ are not measured for sessions. `T` changes the range, `/` finds a branch, agent
 or head, `!` keeps sessions declared failed or blocked, and Enter shows one
 session's evidence. The workflow runs page shows recorded runs with their steps,
 timing, retries and tokens (`M` for metrics, `[` `]` for one workflow, `g` for the
-run's graph). `hydra workflow statistics-json` exports both.
+run's graph, `C` for remote cohorts, `L` for the location filter). `hydra
+workflow statistics-json` exports both.
 
 Hosts, the last tab of local work, adds a remote machine without leaving the control
 centre: `A` asks for the SSH destination and a name, then walks through the guided
@@ -803,7 +806,8 @@ candidates with filters for state, source, platform and label (`s`, `S`, `P`,
 fingerprints and revocation, the source changes (`c`) and the reviewed intent
 (`i`) with per-host apply progress. `Q` qualifies, `r` reviews a compatible
 candidate into an intent, and `a` shows the exact `hydra fleet enroll apply
---confirm DIGEST` command and runs it once you type the start of that digest.
+--confirm DIGEST` command and runs it once you confirm the dialog that names
+that digest (it defaults to Cancel).
 Revoked identities can be inspected, not reviewed. See
 [onboarding in the control centre](FLEET.md#onboarding-in-the-control-centre).
 
