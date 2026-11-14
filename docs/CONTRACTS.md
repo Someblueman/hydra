@@ -305,6 +305,49 @@ is recorded as `retirement/<spawn-step>/{state,detail}` (`retired`, `kept` or
 `head.retire_failed`, after the terminal run event; retirement never changes the
 run result. Heads of work and compose steps are never retired automatically.
 
+A compiled plan run also records `plan-hooks.tsv`, one line per exec step on a
+head its spawn steps create: `step<TAB>agent<TAB>head` for an agent step,
+`step<TAB>command<TAB>head<TAB>check` for a step that owns a command check and
+`step<TAB>run<TAB>head` for any other command. After an agent step succeeds,
+the driver commits everything it left in that worktree (`git add -A`, so
+`.gitignore` applies; no commit hooks or signing; author from the repository's
+Git configuration, else `Hydra <hydra@localhost>`) with the subject
+`Hydra plan <plan-id>: <step>`, and records the head commit in
+`attempt-N/commit` (also offered as the step's `commit` output unless the
+command wrote that file). A failed commit fails the step with
+`step.commit_failed`. Commands record `attempt-N/head-commit` before and
+`head-commit-after` after they run. `workflow-plan head-commit <run-dir>
+<branch>` prints the last succeeded agent step's commit on that branch when every
+later command on it started and ended there. The result review then shows the
+diff of that commit as `verified_commit`, with `tip_moved` when the branch has
+moved since, or `checks_on_commit: false` when a command ran elsewhere.
+
+Plan schema 1 additively accepts the check method `command` (earlier releases
+reject it as `unsupported_evaluation`). Its step must be an argv exec step on a
+head the plan spawns, and its subject the `commit` output of an agent step on
+that head. After the command exits 0, Hydra itself writes the report (a version
+1 report whose `subject_sha256` is the digest of that commit output, claiming
+every requirement the check owns, with the evidence `<argv> exited 0 on commit
+<sha>`), first removing whatever the command wrote at that path. It refuses,
+failing the step with `step.check_unbound`, unless the command started and ended
+on the commit its subject names.
+
+The short plan form `{"plan": "simple-1", ...}` (`hydra plan schema` prints it)
+is accepted wherever a draft is: `propose` checks its shape, and `validate` and
+`compile` lower it, before validation, to an ordinary schema 1 plan that the
+compiled artifact holds, so digests, admission, runtime, evidence and review are
+those of schema 1. Lowering is a function of the draft and the policy envelope:
+one headless spawn step `spawn-worker` creating the worker branch (`worker`, else
+`<id>-work`, where `id` defaults to the objective's first words), an exec step
+per agent step (the policy's single `profile:` tool unless the step names one;
+inline prompt; outputs `summary` and `commit`) and per run step (argv), each
+needing the previous step unless it lists `needs`; a command check for every run
+step `done_when` names, whose subject is the commit of the last agent step it
+depends on; requirements `done-1`, `done-2`, ...; and an envelope with exactly
+the tools used, writes `<worker>:*`, one head, parallelism 1, the summed step
+timeouts (default 1800 seconds per agent step and 600 per run step) and the
+policy's artifact and disk bounds.
+
 Integration manifests bind the target, initial target ref, ordered immutable
 candidates, gates, merge output, verification result, approval, and recovery action.
 Promotion revalidates those bindings under a project lock, updates only a local ref,

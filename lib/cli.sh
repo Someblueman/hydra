@@ -65,6 +65,8 @@ Commands:
                               overview, reconcile, watch, tui, task (see fleet help)
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
   capabilities      Print machine-readable Hydra and agent capabilities
+  plan              Review, approve and follow a plan an agent proposed
+                    Usage: hydra plan --help (the short plan format: hydra plan schema)
   workflow          Run or inspect finite, recoverable workflow definitions
                     Usage: hydra workflow list
                            hydra workflow <show|validate|dry-run|run> <id|path>
@@ -356,6 +358,10 @@ main() {
         workflow)
             shift
             cmd_workflow "$@"
+            ;;
+        plan)
+            shift
+            cmd_plan "$@"
             ;;
         lifecycle)
             shift

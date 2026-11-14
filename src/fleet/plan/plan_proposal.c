@@ -46,6 +46,19 @@ static json_object *missing_members(json_object *proposal) {
     (void)snprintf(message + strlen(message), sizeof(message) - strlen(message), "; obtain the format from workflow plan schema");
     return plan_failure("workflow plan propose", "invalid_proposal", message, PROPOSAL_FIX);
 }
+/* A short-form draft is checked for its own shape; the policy is applied when it is validated. */
+static json_object *simple_shape(json_object *proposal) {
+    json_object *errors = json_object_new_array(), *lowered = plan_simple_lower(proposal, NULL, errors), *result = NULL;
+    if (!lowered) {
+        json_object *first = json_object_array_get_idx(errors, 0);
+        char message[1024];
+        (void)snprintf(message, sizeof(message), "%s: %s", f_string(first, "path") ? f_string(first, "path") : "$",
+                       f_string(first, "message") ? f_string(first, "message") : "the draft is not a simple-1 plan");
+        result = plan_failure("workflow plan propose", "invalid_proposal", message, "correct the draft against hydra plan schema, then publish it again");
+    }
+    json_object_put(lowered); json_object_put(errors);
+    return result;
+}
 /* Store a strict, bounded proposal. This does not validate policy, compile,
  * approve or execute anything; those remain separate public operations. */
 json_object *plan_proposal_copy(const char *input, const char *output, const char *assets) {
@@ -56,7 +69,9 @@ json_object *plan_proposal_copy(const char *input, const char *output, const cha
         json_object_put(proposal);
         return plan_failure("workflow plan propose", "invalid_proposal", "expected a bounded JSON plan with an objective and steps; obtain the format from workflow plan schema", PROPOSAL_FIX);
     }
-    if ((result = missing_members(proposal))) {
+    if (plan_simple(proposal)) result = simple_shape(proposal);
+    else result = missing_members(proposal);
+    if (result) {
         json_object_put(proposal);
         return result;
     }

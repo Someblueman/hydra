@@ -441,6 +441,12 @@ EOF
                 fi
             elif ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit-after"; then
                 _ws_code=1
+            elif [ "$_ws_hook_kind" = command ] &&
+                ! workflow_plan_tool command-report "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" >/dev/null; then
+                # Hydra writes a command check's report from the exit status
+                # and the commit the command ran on.
+                _ws_code=1
+                workflow_event "$_wss_dir" "$_wss_id" step.check_unbound
             fi
         fi
         # Outputs the step command wrote with the user's umask become run

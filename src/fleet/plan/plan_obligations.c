@@ -387,7 +387,7 @@ static json_object *declared(json_object *obligation) {
     const char *domain = f_string(row, "domain"), *method = f_string(f_field(row, "evaluation"), "method");
     json_object_object_add(row, "derived", json_object_new_boolean(false));
     f_string_add(row, "structural_status", "structurally_satisfiable");
-    f_string_add(row, "semantic_status", ((!domain || !strcmp(domain, "feature")) && method && !strcmp(method, "executable")) ? "not_assessed" : "semantic_review_required");
+    f_string_add(row, "semantic_status", ((!domain || !strcmp(domain, "feature")) && method && (!strcmp(method, "executable") || !strcmp(method, "command"))) ? "not_assessed" : "semantic_review_required");
     return row;
 }
 

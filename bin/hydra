@@ -118,6 +118,11 @@ _load_libs_for_cmd() {
             _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
                 workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow
             ;;
+        plan)
+            _load_runtime_libs
+            _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
+                workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow cmd_plan
+            ;;
         lifecycle|outcome|wait|adapter|resume|notify)
             _load_runtime_libs
             _load_libs notify operations cmd_evidence

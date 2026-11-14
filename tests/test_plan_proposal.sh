@@ -11,7 +11,7 @@ test_count=0 pass_count=0 fail_count=0
 e2e="$root/e2e"
 cleanup() {
     if [ -x "$e2e/bin/tmux" ]; then
-        for e2e_head in bundle-worker planner; do
+        for e2e_head in bundle-worker planner greet-work moved-work; do
             (cd "$e2e/repo" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" kill "$e2e_head" --force) >/dev/null 2>&1
         done
         PATH="$e2e/bin:$PATH" tmux kill-server >/dev/null 2>&1
@@ -220,6 +220,45 @@ assert_equal "$commit" "$("$HYDRA_FLEET_BIN" workflow-plan head-commit "$run_dir
 assert_equal succeeded "$(sed -n '1p' "$run_dir/steps/repo-checks/state")" 'the repository check ran on the worker head after implementation'
 assert_equal '' "$(git status --porcelain)" 'the source checkout is still clean after the run'
 assert_equal 1 "$(git rev-list --count HEAD)" 'the run committed nothing to the source'
+
+# The short form: make check is the only check, and its evidence is that the
+# command exited 0 on the commit the agent step left.
+sed 's/"plan": "simple-1",/"plan": "simple-1", "worker": "greet-work",/' "$REPO/tests/fixtures/plan-simple/draft.json" > "$worktree/simple.json"
+(cd "$worktree" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" plan propose simple.json >/dev/null)
+assert_success $? 'the planning agent publishes a short plan'
+"$HYDRA_BIN" workflow plan proposal planner --local-policy > "$e2e/projection"
+"$HYDRA_BIN" workflow plan compile "$draft" "$policy" "$e2e/simple.json" --assets-dir "$assets" > "$e2e/simple-compile.json"
+assert_success $? 'the short plan compiles under the guided policy'
+simple="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$e2e/simple-compile.json")"
+PATH="$e2e/bin:$PATH" "$HYDRA_BIN" workflow plan run "$e2e/simple.json" --accept "$simple" > "$e2e/simple-run.out" 2> "$e2e/simple-run.err"
+assert_success $? 'the short plan runs'
+simple_run="$(sed -n '1p' "$e2e/simple-run.out")"
+greet="$("$HYDRA_BIN" path greet-work)"
+greet_commit="$(git -C "$greet" rev-parse HEAD)"
+"$HYDRA_BIN" workflow plan result "$simple_run" > "$e2e/simple-result.json"
+grep -q '"verdict":"pass"' "$e2e/simple-result.json" && grep -q "\"evidence\":\"make check exited 0 on commit $greet_commit\"" "$e2e/simple-result.json"
+assert_success $? 'the built-in check binds make check to the worker commit'
+simple_dir="$runs/$simple_run"
+assert_equal "$greet_commit" "$(cat "$simple_dir/steps/implement/attempt-1/artifacts/commit")" 'the verified deliverable is the worker commit'
+if git -C "$greet" ls-files --error-unmatch greeting.txt tests/greeting.sh >/dev/null 2>&1; then check=0; else check=1; fi
+assert_success "$check" 'the checked commit contains the worker changes'
+# A check whose command moves the head it checks proves nothing: no report.
+sed -e 's/"plan": "simple-1",/"plan": "simple-1", "worker": "moved-work",/' \
+    -e 's/"run": \["make", "check"\]/"run": ["git", "commit", "--allow-empty", "-q", "-m", "moved"]/' \
+    "$REPO/tests/fixtures/plan-simple/draft.json" > "$worktree/simple.json"
+(cd "$worktree" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" plan propose simple.json >/dev/null)
+"$HYDRA_BIN" workflow plan proposal planner --local-policy > "$e2e/projection"
+"$HYDRA_BIN" workflow plan compile "$draft" "$policy" "$e2e/moved.json" --assets-dir "$assets" > "$e2e/moved-compile.json"
+moved="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$e2e/moved-compile.json")"
+PATH="$e2e/bin:$PATH" "$HYDRA_BIN" workflow plan run "$e2e/moved.json" --accept "$moved" > "$e2e/moved-run.out" 2>&1
+assert_failure $? 'a check that moves its head fails the run'
+moved_run="$(sed -n '1p' "$e2e/moved-run.out")"
+assert_equal failed "$(sed -n '1p' "$runs/$moved_run/steps/check/state")" 'the check step fails'
+grep -q '"type":"step.check_unbound"' "$runs/$moved_run/events.jsonl"
+assert_success $? 'the run records that the check was not bound to its commit'
+if [ ! -e "$runs/$moved_run/steps/check/attempt-1/outputs/report.json" ]; then check=0; else check=1; fi
+assert_success "$check" 'no report stands for the unbound check'
+for e2e_head in greet-work moved-work; do PATH="$e2e/bin:$PATH" "$HYDRA_BIN" kill "$e2e_head" --force >/dev/null 2>&1; done
 cd "$root" || exit 1
 printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

@@ -46,7 +46,11 @@ static json_object *compile_command(const char *plan_path, const char *policy_pa
     char digest[65];
     plan = plan_read(plan_path); policy = plan_read(policy_path);
     if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
-    else compiled = compile_plan(plan, policy, source, assets_dir, errors);
+    else {
+        json_object *lowered = plan_lowered(plan, policy, errors);
+        json_object_put(plan); plan = lowered;
+        if (plan) compiled = compile_plan(plan, policy, source, assets_dir, errors);
+    }
     if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
     if (compiled && output) {
         const char *text; json_object *canonical = plan_canonical(compiled);
@@ -277,6 +281,14 @@ static json_object *head_commit_command(char **argv, bool *printed) {
     return NULL;
 }
 
+static json_object *command_report_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_command_report(argv[1], argv[2], argv[3]) ?
+        plan_failure("workflow plan command-report", "check_unbound", "the check did not start and end on the commit it checks, or its plan is not the accepted one",
+                     "inspect the worker head: a command check must not move the head it runs on") :
+        f_success("workflow plan command-report", json_object_new_object());
+}
+
 static json_object *timeout_command(char **argv, bool *printed) {
     json_object *result = NULL;
     json_object *compiled = NULL;
@@ -420,6 +432,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"roles", 2, roles_command},
         {"hooks", 2, hooks_command},
         {"head-commit", 3, head_commit_command},
+        {"command-report", 4, command_report_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},

@@ -327,6 +327,7 @@ static void obligation_cases(void) {
     obligations = plan_obligations_reviews(plan); assert(json_object_array_length(obligations) == 2); json_object_put(obligations); json_object_put(plan); json_object_put(policy);
 }
 #include "test_plan_bundle.inc"
+#include "test_plan_simple.inc"
 /* validate reports diagnostics, and projects coverage and obligations, for a
  * draft that fails validation; a missing or mistyped member must not abort. */
 static void expect_cli(const char *root, json_object *plan, json_object *policy, const char *assets, const char *code) {
@@ -378,7 +379,7 @@ int main(void) {
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
-    bundle_cases(root); missing_member_cases(root);
+    bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases();
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));

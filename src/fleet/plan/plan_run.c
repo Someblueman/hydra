@@ -1,10 +1,16 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Facts the run driver needs about a compiled plan's steps, and the commit a
  * worker head reached. Only already admitted artifacts are read here. */
@@ -108,4 +114,87 @@ int plan_head_commit(const char *run, json_object *plan, const char *branch, cha
     }
     if (agent < 0) return -1;
     return commands_on(run, steps, agent, branch, commit) ? 0 : -2;
+}
+
+static json_object *check_record(json_object *plan, const char *id) {
+    int index = plan_index(f_field(plan, "checks"), id);
+    return index < 0 ? NULL : json_object_array_get_idx(f_field(plan, "checks"), (size_t)index);
+}
+static json_object *owned_requirements(json_object *plan, const char *check) {
+    json_object *requirements = f_field(plan, "requirements"), *ids = json_object_new_array();
+    for (size_t i = 0; i < json_object_array_length(requirements); i++) {
+        json_object *requirement = json_object_array_get_idx(requirements, i);
+        const char *owner = f_string(requirement, "check");
+        if (owner && !strcmp(owner, check)) json_object_array_add(ids, json_object_new_string(f_string(requirement, "id")));
+    }
+    return ids;
+}
+/* The command text for the evidence line, bounded. */
+static void command_text(json_object *step, char *out, size_t size) {
+    json_object *argv = f_field(f_field(step, "args"), "argv");
+    size_t used = 0;
+    out[0] = '\0';
+    for (size_t i = 0; i < json_object_array_length(argv) && used + 1 < size; i++) {
+        int n = snprintf(out + used, size - used, "%s%s", i ? " " : "", f_text(json_object_array_get_idx(argv, i)));
+        if (n < 0) break;
+        used += (size_t)n;
+    }
+}
+static bool recorded_equals(const char *attempt, const char *name, const char *commit) {
+    char path[F_PATH], *value = f_path(path, sizeof(path), attempt, name) ? NULL : f_read(path, 128);
+    bool equal = false;
+    if (value) {
+        value[strcspn(value, "\r\n")] = '\0';
+        equal = !strcmp(value, commit);
+    }
+    free(value);
+    return equal;
+}
+/* The commit the subject names, when the step started and ended on it. */
+static bool subject_commit(const char *attempt, const char *input, char commit[65]) {
+    char path[F_PATH], *text = NULL;
+    bool bound;
+    if (snprintf(path, sizeof(path), "%s/inputs/%s", attempt, input) >= (int)sizeof(path) || !(text = f_read(path, 128))) return false;
+    text[strcspn(text, "\r\n")] = '\0';
+    bound = (task_hex(text, 40) || task_hex(text, 64)) && !f_copy(commit, 65, text);
+    free(text);
+    return bound && recorded_equals(attempt, "head-commit", commit) && recorded_equals(attempt, "head-commit-after", commit);
+}
+static json_object *command_evidence(json_object *plan, json_object *check, json_object *step, const char *commit, const char *subject) {
+    json_object *report = json_object_new_object();
+    char command[1024], evidence[1200];
+    command_text(step, command, sizeof(command));
+    (void)snprintf(evidence, sizeof(evidence), "%s exited 0 on commit %s", command, commit);
+    json_object_object_add(report, "schema_version", json_object_new_int(1));
+    f_string_add(report, "verdict", "pass");
+    f_string_add(report, "subject_sha256", subject);
+    json_object_object_add(report, "requirements", owned_requirements(plan, f_string(check, "id")));
+    f_string_add(report, "evidence", evidence);
+    return report;
+}
+static int write_report(json_object *report, const char *path) {
+    const char *text = json_object_to_json_string_ext(report, JSON_C_TO_STRING_PLAIN);
+    return f_write(path, text, strlen(text), true);
+}
+
+/* Called only after the step's command exited 0. The report path is removed
+ * first, so whatever the command wrote there never stands as the report. */
+int plan_command_report(const char *run, const char *step, const char *attempt) {
+    json_object *compiled = plan_run_definition(run), *plan = f_field(compiled, "plan"), *check, *declaration, *report = NULL;
+    char path[F_PATH], input[F_PATH], commit[65], subject[65];
+    const char *id = plan_command_check(plan, step), *file, *name;
+    int status = -1, index = plan_index(f_field(plan, "steps"), step);
+    check = id ? check_record(plan, id) : NULL;
+    name = f_string(check, "input");
+    declaration = f_field(f_field(f_field(f_field(f_field(compiled, "data"), "steps"), step), "outputs"), f_string(check, "report"));
+    file = f_string(declaration, "path");
+    if (!check || index < 0 || !file || !task_path(file) || snprintf(path, sizeof(path), "%s/outputs/%s", attempt, file) >= (int)sizeof(path)) goto done;
+    if (unlink(path) && errno != ENOENT) goto done;
+    if (!plan_id(name) || !subject_commit(attempt, name, commit) ||
+        snprintf(input, sizeof(input), "%s/inputs/%s", attempt, name) >= (int)sizeof(input) || f_hash(input, subject)) goto done;
+    report = command_evidence(plan, check, json_object_array_get_idx(f_field(plan, "steps"), (size_t)index), commit, subject);
+    status = write_report(report, path);
+done:
+    json_object_put(report); json_object_put(compiled);
+    return status;
 }

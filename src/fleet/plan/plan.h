@@ -12,6 +12,8 @@
 #define PLAN_ASSET_LIMIT (64U * 1024U)
 #define PLAN_ASSETS 16U
 #define PLAN_INPUT_PREFIX "@input/"
+/* The short plan form an agent writes; lowered to schema 1 before validation. */
+#define PLAN_SIMPLE_FORM "simple-1"
 /* All returned JSON objects are owned by the caller. Diagnostics accumulate in
  * a caller-owned array; no validation function executes proposed operations. */
 json_object *plan_cli(int argc, char **argv);
@@ -106,6 +108,17 @@ int plan_preview(json_object *compiled, FILE *out);
 bool plan_spawns(json_object *steps, const char *head);
 /* The ID of the check with method command that step reports, or NULL. */
 const char *plan_command_check(json_object *plan, const char *step);
+/* Whether draft uses the short form ("plan": "simple-1"). */
+bool plan_simple(json_object *draft);
+/* Returns the caller-owned schema 1 plan a simple-1 draft stands for, or NULL
+ * with diagnostics. policy may be NULL to check the draft's shape only. */
+json_object *plan_simple_lower(json_object *draft, json_object *policy, json_object *errors);
+/* A caller-owned schema 1 plan for draft: lowered when it is simple-1, else a
+ * new reference to draft itself. NULL with diagnostics on error. */
+json_object *plan_lowered(json_object *draft, json_object *policy, json_object *errors);
+/* Writes the report of the command check a step owns into attempt/outputs,
+ * from the commit the step ran on; refuses when it did not run on its subject. */
+int plan_command_report(const char *run, const char *step, const char *attempt);
 /* Prints the run driver's per-step hooks for exec steps on spawned heads. */
 int plan_hooks(json_object *compiled, FILE *out);
 /* The commit the last succeeded agent step on branch recorded: 0 when every
