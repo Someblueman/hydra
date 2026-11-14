@@ -18,23 +18,45 @@ project, creates the head and opens agent input in the same workspace. Opening
 Hydra alone does not start work. Provider sign-in and permission prompts remain
 visible in the agent pane; existing repository trust checks still apply.
 
-For a plan, ask the agent to author a draft using `hydra workflow plan schema` and
-publish it with `hydra workflow plan propose <draft.json>` from its head. Press
-`Ctrl-]` to return input to Hydra, `B` for the plan, and `P` to review the
-proposal with the bounded local policy. `V` validates and compiles it; `E` requires
-the exact displayed digest before execution. Republished drafts invalidate prior
-validation. The agent writes the worker's instructions inline (`prompt`) and
-publishes any custom file, such as a verifier script, with
-`propose <draft.json> --asset NAME=FILE`; both travel inside the compiled plan,
-so nothing is committed to your checkout while planning. Verification runs the
-repository's own checks on the worker head. `I` retains explicit file import for
-expert use (a draft's sibling `assets/` directory supplies its assets). The guided local
-policy allows sh, git, make and the head's own agent profile, writes only inside
-heads the plan spawns, one worker, four heads, 3600 seconds, 1 MiB of artifacts
-and a 1 GiB free-space floor, with no retries or repairs. Validation reads the
-checkout Hydra runs in at its current commit; commit or stash tracked changes
-there first. The plan's own prompt and assets never need to exist there. The policy governs the compiled workflow, not the agent process's OS
-permissions. Agent proposals alone never authorize execution.
+For a plan, the agent started for a task is asked to plan with you first. It
+writes a short plan (`hydra plan schema`) and publishes it from its head with
+`hydra plan propose plan.json`; Hydra checks it against the project's plan
+policy at once and prints anything the agent must fix. You then review and
+approve it yourself:
+
+1. `hydra plan show` prints the plan in words: each step, the worker's full
+   instructions, the commands that run, "changes only branch X", the limits in
+   minutes, what counts as done and the text of any script the plan carries.
+2. `hydra plan approve` shows it again and asks `Run revision N of this plan?`.
+   One `y` runs exactly that revision; a republished plan is a new revision that
+   needs approving again. Automation passes `--accept` with the digest
+   `hydra plan show --json` prints; `HYDRA_NONINTERACTIVE` never approves.
+3. `hydra plan status` follows the run. The worker agent works on its own new
+   branch, Hydra commits what it changed, and each check passes when its
+   command exits 0 on that commit.
+4. `hydra plan review` shows the verdict, the worker's commits and diff, and the
+   checks with their logs.
+5. `hydra land <worker>` merges exactly the verified commit into your checkout's
+   current branch after you confirm. It refuses while your checkout has
+   uncommitted changes to tracked files or when the worker branch has moved
+   since its checks ran, never pushes, then removes the worker head and keeps
+   its branch.
+
+None of these needs a value copied: without a head or run ID they use the
+current or only proposal and the most recent plan run. Approving, running a
+plan and changing the policy are refused from inside an agent's head (where
+`HYDRA_HEAD_ID` or `HYDRA_INSTANCE_ID` is set); this guards against an obedient
+agent approving its own plan and is not a security boundary, since the agent
+runs as you. `hydra plan policy` shows the project's plan policy (by default sh,
+git, make and the planning head's own agent profile, writes only inside branches
+the plan creates, one step at a time, at most 60 minutes and four heads, 1 MiB of
+artifacts, a 1 GiB free-space floor, no retries or repairs) and
+`--allow-tool <tool>`, `--remove-tool <tool>` and `--reset` change it. Approval
+reads the checkout Hydra runs in at its current commit; commit or stash tracked
+changes there first. Once a plan runs, changes to your checkout do not affect
+it. The policy governs the compiled workflow, not the agent process's OS
+permissions. The control centre shows the same plan and approval; expert plans
+are described under [Advanced plans](workflows.md#advanced-plans).
 
 Interactive `spawn` and `spawn --resume` now open agent input inside the native
 control centre; without the optional native TUI they print the head's context and
@@ -146,7 +168,16 @@ hydra workflow requests run_ID --json
 hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
 hydra workflow resume run_ID
 
-# Local objective plans (optional native helper; compile from clean source)
+# Plans an agent proposes (optional native helper)
+hydra plan schema                     # the short plan format
+hydra plan show [HEAD] [--technical | --json]
+hydra plan approve [HEAD]             # one y on the revision shown
+hydra plan status [RUN_ID]
+hydra plan review [RUN_ID] [--json]
+hydra land WORKER [--into BRANCH] [--dry-run] [--keep-head]
+hydra plan policy [--allow-tool TOOL | --remove-tool TOOL | --reset]
+
+# Advanced plans: the full schema, explicit policies and compiled artifacts
 hydra workflow plan schema
 hydra workflow plan validate ../plan.json ../policy.json [--assets-dir ../assets]
 hydra workflow plan compile ../plan.json ../policy.json ../compiled.json [--assets-dir ../assets]

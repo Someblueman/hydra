@@ -52,8 +52,8 @@ and [usability testing](docs/USABILITY-TESTING.md).
 - **Coordinate work.** Run finite workflows with named inputs, sealed outputs,
   durable approval waits and bounded retries. Exchange messages, declare file
   scopes, and detect collisions between heads.
-- **Deliver an objective.** Let an agent propose a local plan, inspect its compiled
-  scope, and run it with independent checks of the final code or report.
+- **Deliver an objective.** Let an agent propose a short plan, read and approve it
+  in one step, and land the commit its checks verified.
 - **Review and integrate.** Inspect diffs and provenance, run verification gates,
   and use guarded integration commands to assemble changes.
 
@@ -174,17 +174,29 @@ workflows, and recovery behavior.
 
 ## Plan an objective
 
-The optional native helper supports `hydra workflow plan`: discover the JSON
-schema, validate an agent-authored proposal, compile and review an immutable
-DAG, then execute it with an exact acceptance digest. Retrieve the final
-verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
-require bound validation, hand off collected Git commits, and support bounded
-candidate repair.
-Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
-Planning does not call a model itself; an ordinary agent authors the proposal
-through the CLI. Plans carry their own inline agent prompts and proposal assets,
-bound by the acceptance digest, so planning never commits to your checkout. See the
-the [planning examples](examples/planning/README.md).
+Ask an agent in a head to plan the work with you. It writes a short plan
+(`hydra plan schema` prints the format on one screen): the objective, the
+steps, the command that checks the work and what counts as done, and publishes
+it with `hydra plan propose plan.json`. Hydra checks it against the project's
+plan policy at once and tells the agent what to fix. Then, from your own
+terminal:
+
+```sh
+hydra plan show       # the plan in words: steps, instructions, commands, limits
+hydra plan approve    # shows it again and asks once; runs exactly that revision
+hydra plan status     # follow the run
+hydra plan review     # the result: verdict, the worker's commit and diff, checks
+hydra land <worker>   # merge the verified commit into your current branch
+```
+
+Every step runs on one new worker branch; Hydra commits the agent's changes
+there and a check passes when its command exits 0 on that commit. Nothing runs
+without your approval of the exact revision shown, a republished plan needs
+approving again, and landing is a local merge you confirm, never a push.
+Approving from inside an agent's head is refused. See
+[workflows](docs/workflows.md#objective-planning) for the flow and its advanced
+plans (`hydra workflow plan`: the full schema, custom checks, schema 2,
+obligations, repair and reuse) and the [planning examples](examples/planning/README.md).
 
 ## Documentation
 
