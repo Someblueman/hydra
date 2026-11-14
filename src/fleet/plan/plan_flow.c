@@ -1,10 +1,17 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
 #include "fleet/review_result.h"
 #include "fleet/task/task.h"
+#include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* The short planning flow's native helpers: checking a draft against the
  * project policy, the project policy itself, and the result review as text.
@@ -120,6 +127,29 @@ json_object *plan_policy_text_cli(int argc, char **argv) {
     printf("  Artifacts: at most %lld KiB; free disk needed: %d MiB\n", (long long)(json_object_get_int64(f_field(env, "artifact_bytes")) / 1024),
            json_object_get_int(f_field(env, "disk_mb")));
     json_object_put(policy);
+    return NULL;
+}
+
+/* detach <stdin-file> <program> [<argument>...]: starts program in a session
+ * of its own, with stdin read from the file and stdout and stderr on
+ * /dev/null and hangups ignored, and prints its PID. A terminal that closes
+ * afterwards cannot signal it, as it would a background job of the shell that
+ * started it (whose native helpers would then stop mid-step). */
+json_object *plan_detach_cli(int argc, char **argv) {
+    int input = argc >= 3 ? open(argv[1], O_RDONLY | O_NOFOLLOW) : -1;
+    pid_t pid;
+    if (input < 0) return plan_failure("workflow plan detach", "invalid_arguments", "use detach <stdin-file> <program> [<argument>...] with a readable file", "run hydra plan approve");
+    pid = fork();
+    if (pid == 0) {
+        int null = open("/dev/null", O_WRONLY);
+        if (setsid() < 0 || null < 0 || dup2(input, STDIN_FILENO) < 0 || dup2(null, STDOUT_FILENO) < 0 || dup2(null, STDERR_FILENO) < 0) _exit(127);
+        (void)signal(SIGHUP, SIG_IGN); (void)signal(SIGINT, SIG_DFL); (void)signal(SIGTERM, SIG_DFL); (void)signal(SIGPIPE, SIG_DFL);
+        execvp(argv[2], argv + 2);
+        _exit(127);
+    }
+    close(input);
+    if (pid < 0) return plan_failure("workflow plan detach", "spawn_failed", "could not start the detached process", "check the process limit, then approve again");
+    printf("%ld\n", (long)pid);
     return NULL;
 }
 

@@ -139,11 +139,12 @@ cmd_plan_show() {
     if ! cmd_plan_compile "$_cps_branch" "$_cps_tmp"; then rm -rf "$_cps_tmp"; return 1; fi
     case "$_cps_mode" in
         technical) workflow_plan_tool preview "$_cps_tmp/compiled.json" ;;
-        json) workflow_plan_tool show "$_cps_tmp/compiled.json" ;;
+        json) workflow_plan_tool summary "$_cps_tmp/compiled.json" --json ;;
         *)
-            printf 'Plan proposed by %s, revision %s\n\n' "$_cps_branch" "$_cpc_revision"
-            workflow_plan_tool preview "$_cps_tmp/compiled.json"
+            printf 'Proposed by %s, revision %s\n\n' "$_cps_branch" "$_cpc_revision"
+            workflow_plan_tool summary "$_cps_tmp/compiled.json"
             printf '\nApprove exactly this revision with: hydra plan approve %s\n' "$_cps_branch"
+            printf 'Request changes by telling the agent; the technical view is hydra plan show --technical.\n'
             ;;
     esac
     _cps_status=$?
@@ -167,14 +168,17 @@ cmd_plan_launch() {
             cli_error plan launch_in_progress 'this revision is already being launched' 'follow it with hydra plan status'
             return 1 ;;
     esac
-    # The owner outlives this command: it ignores hangups and interrupts and
-    # holds no terminal descriptors. Approval from this terminal already passed
-    # the agent-environment guard, so the owner is not refused for it.
+    # The owner outlives this command in a session of its own, ignoring
+    # hangups and holding no terminal descriptors, so closing this terminal
+    # cannot stop it. Approval from here already passed the agent-environment
+    # guard, so the owner is not refused for it.
     (
         cd "$5" || exit 1
-        trap '' HUP INT
-        HYDRA_PLAN_ALLOW_AGENT=1 exec nohup "$HYDRA_BIN_PATH" workflow plan --workspace-owner "$1" "$2" "$3" < "$4" > /dev/null 2>&1
-    ) &
+        HYDRA_PLAN_ALLOW_AGENT=1 workflow_plan_tool detach "$4" "$HYDRA_BIN_PATH" workflow plan --workspace-owner "$1" "$2" "$3"
+    ) > /dev/null || {
+        cli_error plan launch_failed 'the plan could not be started' 'approve it again'
+        return 1
+    }
     _cpl_tries=0
     while [ "$_cpl_tries" -lt 120 ]; do
         _cpl_status="$(workflow_plan_launch_status "$1")"
@@ -225,8 +229,8 @@ cmd_plan_approve() {
             return 1
         fi
     else
-        printf 'Plan proposed by %s, revision %s\n\n' "$_cpa_branch" "$_cpc_revision"
-        workflow_plan_tool preview "$_cpa_tmp/compiled.json"
+        printf 'Proposed by %s, revision %s\n\n' "$_cpa_branch" "$_cpc_revision"
+        workflow_plan_tool summary "$_cpa_tmp/compiled.json"
         printf '\nRun revision %s of this plan? [y/N] ' "$_cpc_revision"
         IFS= read -r _cpa_answer || _cpa_answer=""
         case "$_cpa_answer" in

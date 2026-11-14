@@ -411,7 +411,8 @@ typedef json_object *(*flow_call)(int argc, char **argv);
 static flow_call flow_command(const char *name) {
     static const struct { const char *name; flow_call call; } flows[] = {
         {"check", plan_check_cli}, {"policy-for", plan_policy_for_cli}, {"policy-tool", plan_policy_tool_cli},
-        {"policy-text", plan_policy_text_cli}, {"review-text", plan_review_text_cli},
+        {"policy-text", plan_policy_text_cli}, {"review-text", plan_review_text_cli}, {"summary", plan_summary_cli},
+        {"detach", plan_detach_cli},
     };
     for (size_t i = 0; i < sizeof(flows) / sizeof(flows[0]); i++)
         if (!strcmp(name, flows[i].name)) return flows[i].call;

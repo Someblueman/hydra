@@ -125,6 +125,12 @@ json_object *plan_policy_for_cli(int argc, char **argv);
 json_object *plan_policy_tool_cli(int argc, char **argv);
 json_object *plan_policy_text_cli(int argc, char **argv);
 json_object *plan_review_text_cli(int argc, char **argv);
+json_object *plan_detach_cli(int argc, char **argv);
+/* The readable plan (plan_summary.c): a caller-owned schema 1 projection of a
+ * valid compiled artifact, or NULL; its text; and the summary command. */
+json_object *plan_summary(json_object *compiled);
+void plan_summary_text(json_object *summary);
+json_object *plan_summary_cli(int argc, char **argv);
 /* Prints the run driver's per-step hooks for exec steps on spawned heads. */
 int plan_hooks(json_object *compiled, FILE *out);
 /* The commit the last succeeded agent step on branch recorded: 0 when every

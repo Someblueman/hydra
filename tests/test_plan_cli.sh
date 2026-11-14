@@ -78,11 +78,31 @@ assert_success $? 'a valid revision is accepted at publication'
 
 hydra plan show > "$root/show.out"
 assert_success $? 'the user shows the only proposal without naming it'
-grep -q 'revision 2' "$root/show.out"
+grep -q 'Proposed by planner, revision 2' "$root/show.out"
 assert_success $? 'the review names the revision'
+# The readable plan: steps in words, the worker's instructions in full, the
+# command, what may change, limits in minutes and what counts as done.
+for text in 'What runs, in order:' '  1. spawn-worker: Create the worker branch greeting-work (no terminal)' \
+    '  2. implement: The codex agent works on greeting-work, for at most 30 minutes; then Hydra commits what it changed' \
+    '       | Create greeting.txt with a friendly greeting and tests/greeting.sh that fails unless it is non-empty.' \
+    '  3. check: Runs make check on greeting-work, for at most 10 minutes' \
+    '  done-1  make check passes with the new test  (checked by check)' \
+    'Changes: only branch greeting-work, which this plan creates. Your checkout and other branches are not touched.' \
+    'Limits: at most 40 minutes in total; 1 head; 1 step at a time; no retries' \
+    'Policy (bound to this approval): tools sh, git, make, profile:codex; at most 60 minutes and 4 heads per plan'; do
+    grep -Fqx "$text" "$root/show.out" || { printf 'missing summary line: %s\n' "$text" >&2; false; }
+    assert_success $? "the plan summary shows: $text"
+done
+if grep -q 'obligations\|legacy_projection\|Source fingerprint' "$root/show.out"; then check=1; else check=0; fi
+assert_success "$check" 'the summary leaves the machinery to the technical view'
+hydra plan show --technical | grep -q '^Acceptance digest: [0-9a-f]\{64\}$'
+assert_success $? 'the technical preview remains available'
 hydra plan show --json > "$root/show.json"
 digest="$(sed -n 's/.*"sha256":"\([0-9a-f]\{64\}\)".*/\1/p' "$root/show.json" | head -n 1)"
 assert_equal 64 "${#digest}" 'automation reads the revision digest'
+grep -q '"schema_version":1,"plan":"add-a-greeting-file-and"' "$root/show.json" &&
+    grep -q '"kind":"agent"' "$root/show.json" && grep -q '"only_new_branches":true' "$root/show.json"
+assert_success $? 'the summary has a stable machine-readable form'
 
 # The agent cannot approve its own plan: a guard, not a security boundary.
 HYDRA_HEAD_ID=head_00000000000000000000 hydra plan approve --accept "$digest" > "$root/agent.out" 2>&1

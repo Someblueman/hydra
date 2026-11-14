@@ -773,6 +773,27 @@ detached (ignoring hangups and interrupts, without terminal descriptors) and
 prints the run ID once the receipt exists. `review` prints the result review
 through `workflow-plan review-text <run-dir> <project-dir> [--json]`.
 
+The readable plan is `workflow-plan summary <compiled.json> [--json]` (`hydra
+plan show`; `--technical` keeps the earlier preview, `--json` the projection).
+The projection, for the TUI and automation, is the envelope's `data` object,
+schema 1, for a valid compiled artifact only: `plan`, `objective`, `sha256` (the
+acceptance digest), `questions`, `context`; `steps[]` in plan order, each with
+`id`, `kind` (`worker`, `agent`, `command`, or the plan kind otherwise),
+`head`, `needs`, `minutes` (timeout rounded up), `text` (one line), `checks`
+(the requirement IDs it proves) and, for an agent step, `profile`,
+`instructions` (the full inline prompt) or `instructions_input`, and `commits`
+(whether Hydra commits after it), for a command step `argv`; `done_when[]`
+(`id`, `criterion`, `check`); `checks[]` (`id`, `method`, `step`,
+`definition`); `changes` (`branches` the plan creates, declared `writes`,
+`only_new_branches`); `limits` (`minutes`, `heads`, `parallel_steps`,
+`retries`, `repairs`, `tools`, and `policy` with the granted `tools`, `writes`,
+`minutes` and `heads`); `scripts[]` (`name`, `path`, and `text` for proposal
+assets) and `repository_files[]` (`name`, `path`). Members may be added.
+
+`hydra plan approve` starts the owner through `workflow-plan detach
+<stdin-file> <program> [<argument>...]`, which runs it in a session of its own
+with hangups ignored and prints its PID.
+
 `hydra plan approve`, `hydra workflow plan run` and the launch owner refuse with
 `agent_environment` when `HYDRA_HEAD_ID` or `HYDRA_INSTANCE_ID` is set, as it is
 inside an agent's head, unless `HYDRA_PLAN_ALLOW_AGENT=1` (or `approve
