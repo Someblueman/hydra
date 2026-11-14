@@ -199,6 +199,9 @@ static void run_reaches_planner(struct kt_session *s) {
     agent_until(s, needle, 90);
     agent_input(text, sizeof(text));
     CHECK(hf_count(text, "started. Follow it") == 1, "the launch message is typed once");
+    /* The dependencies pane follows the revision's recorded run, not the preview. */
+    U("plan-fixture / succeeded", 15);
+    CHECK(!kt_contains(s, "awaiting-approval"), "the finished run's graph no longer awaits approval");
 }
 
 static void owner_recorded_notices(void) {
