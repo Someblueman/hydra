@@ -390,8 +390,8 @@ bool native_review_key(struct app *app, char key)
     struct native_review *review = app->review;
     if (!native_review_active(app)) return false;
     switch (key) {
-        case 'j': case 'B': scroll_review(review, 1); break;
-        case 'k': case 'A': scroll_review(review, -1); break;
+        case 'j': scroll_review(review, 1); break;
+        case 'k': scroll_review(review, -1); break;
         case 'g': review->scroll = 0U; break;
         case 'G': review->scroll = review->lines ? review->lines - 1U : 0U; break;
         case 'f': review->references = !review->references; review->identity_view = false; review->preview = false; review->scroll = 0U; break;

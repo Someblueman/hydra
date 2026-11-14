@@ -153,6 +153,7 @@ void column(struct app *app, int x, int width, struct kt_style tone, const char 
 /* One line of the content area, in a style. */
 static void line_text(struct app *app, struct kt_style tone, const char *text) {
     if (app->line >= app->limit) return;
+    if (app->help_skip > 0) { app->help_skip--; return; }
     text_at(app, app->content_x, app->content_width, tone, text);
     app->line++;
 }
@@ -679,7 +680,7 @@ static void help_agent_keys(struct app *app) {
     if (keys->problem[0]) paragraph(app, keys->problem, KT_WARNING);
 }
 
-static void render_help(struct app *app) {
+static void render_help_text(struct app *app) {
     const char *sep = dot(app);
     style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
     if (app->rows < 20) {
@@ -713,6 +714,31 @@ static void render_help(struct app *app) {
     section(app, "OTHER");
     linef(app, "H  hosts: A adds a remote machine over SSH; Enter continues its setup");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
+}
+
+/* Help scrolls with j / k, the arrows and the page keys: the first
+ * help_scroll lines are skipped as it is drawn. Scrolling past the end
+ * leaves skips over, which bring the scroll back so the last line stays at
+ * the bottom; text below the area says the help goes on. */
+static void render_help(struct app *app) {
+    int first = app->line;
+    app->help_skip = app->help_scroll;
+    render_help_text(app);
+    if (app->help_skip > 0) {
+        int rows = app->limit - first, drawn = app->line - first;
+        app->help_scroll -= app->help_skip + (rows - drawn > 0 ? rows - drawn : 0);
+        if (app->help_scroll < 0) app->help_scroll = 0;
+        app->help_skip = 0;
+        app->line = first;
+        render_help(app);
+        return;
+    }
+    if (app->line >= app->limit) app->help_more = true;
+}
+
+void help_scroll(struct app *app, int rows) {
+    app->help_scroll += rows;
+    if (app->help_scroll < 0) app->help_scroll = 0;
 }
 
 /* Command output wraps instead of clipping; j/k scroll by wrapped rows. */
@@ -852,7 +878,7 @@ static const char *hint_line(struct app *app) {
     bool narrow = app->cols < 70;
     const char *hints;
     if (app->result_open) return "Enter or Esc closes  j/k scroll";
-    if (app->help) return "? or Esc closes help";
+    if (app->help) return app->help_more || app->help_scroll ? "j/k scroll  ? or Esc closes help" : "? or Esc closes help";
     hints = view_hints(app, narrow);
     if (hints) return hints;
     return app->fleet ? fleet_hints(app, narrow) : local_hints(app, narrow);
@@ -891,6 +917,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     if (app->rows >= 6) kt_panel_styled(&app->frame, (struct kt_rect){0, 2, app->frame.width, app->frame.height - 4},
                                         panel_title(app, title, sizeof(title)), KT_BORDER, KT_STRONG);
     app->line = 3;
+    app->help_more = false;
     style(app, TONE_BASE);
     render_content(app);
     app->limit = app->rows;

@@ -190,7 +190,7 @@ int main(void) {
     S("\033");
     kt_pump(&s, .2);
     CHECK(!kt_contains(&s, "INPUT TO HYDRA / text field"), "form dismiss");
-    S("\t\t\t"); /* plan review panes, navigation, agent */
+    S("\t"); /* leaving input focused navigation; Tab goes on to the agent */
     U("INPUT TO AGENT", 3);
     S("sleep 15\r");
     kt_pump(&s, .2);
@@ -222,7 +222,7 @@ int main(void) {
     S("\r");
     kt_pump(&s, .5);
     proof(one, "draft-proof", "draft");
-    S("\035\t\tj");
+    S("\035j");
     kt_pump(&s, .2);
     S("a");
     U("INPUT TO AGENT", 3);
@@ -239,7 +239,7 @@ int main(void) {
     kt_pump(&s, .1);
     S("\034S");
     U("Two attached agents", 3);
-    S("\035");
+    S("\034n");
     S("printf 'multi-two' > multi-proof");
     kt_pump(&s, .2);
     CHECK(hf_count(kt_text(&s), "ATTACHED") == 2, "two attached panes");
@@ -274,7 +274,7 @@ int main(void) {
     kt_pump(&s, .2);
     history(kt_text(&s), hist_a, sizeof(hist_a));
     CHECK(*hist_a, "first agent history");
-    S("\035");
+    S("\034n");
     S("i=0; while [ \"$i\" -lt 50 ]; do echo HISTORY_B:$i; i=$((i+1)); done\r");
     kt_pump(&s, .4);
     S("\034[kkkkk\034n");

@@ -48,9 +48,12 @@ static void reconnect(struct app *app, struct native_terminal *t) {
     else copy_text(app->notice,sizeof(app->notice),"Original instance unavailable; select current work explicitly");
 }
 
-/* Leaving input keeps the view open; closing ends only this client's view. */
+/* Leaving input keeps the view open where it is: focus goes back to the
+ * navigation, and the narrow arrangement keeps showing the agent beside it
+ * (it shows the side that holds focus, and navigation is on neither side).
+ * Closing ends only this client's view. */
 static void leave_input(struct app *app) {
-    native_workspace_focus_next(app);
+    app->workspace->layout.focus=1;
     if (!native_terminal_focused(app))
         copy_text(app->notice,sizeof(app->notice),"Keys go to Hydra; the agent view stays open");
 }

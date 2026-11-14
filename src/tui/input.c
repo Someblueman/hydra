@@ -161,9 +161,12 @@ static void horizontal_arrow(struct app *app, int direction) {
     if (app->view == 5) { (void)workflow_key(app, direction > 0 ? 'l' : 'h'); return; }
     select_tab(app, direction);
 }
-static void selection_arrow(struct app *app, char key, int direction) {
+/* Up and Down reach Attention and its review as the j / k they mean; the
+ * letters A and B are keys of their own, never arrows. */
+static void selection_arrow(struct app *app, int direction) {
     if (app->result_open) { if (direction < 0 && app->result_scroll) app->result_scroll--; else if (direction > 0) app->result_scroll++; return; }
-    if (app->view == 9) (void)native_attention_key(app, key);
+    if (app->help) { help_scroll(app, direction); return; }
+    if (app->view == 9) (void)native_attention_key(app, direction > 0 ? 'j' : 'k');
     else move_selection(app, direction);
 }
 /* PgUp/PgDn page read-only output: the result overlay or the Details
@@ -172,6 +175,7 @@ static void page_output(struct app *app, bool up) {
     size_t *rows = app->result_open ? &app->result_scroll : app->view == 1 && app->preview ? &app->preview_back : NULL;
     size_t page = app->rows > 12 ? (size_t)app->rows / 2U : 6U;
     bool back = app->result_open ? !up : up;
+    if (app->help) { help_scroll(app, up ? -(int)page : (int)page); return; }
     if (!rows) return;
     if (back) *rows += page;
     else *rows = *rows > page ? *rows - page : 0;
@@ -252,7 +256,8 @@ static bool overlay_key(struct app *app, char key) {
         return true;
     }
     if (app->help) {
-        app->help = false;
+        if (key == 'j' || key == 'k') { help_scroll(app, key == 'j' ? 1 : -1); return true; }
+        app->help = false; app->help_scroll = 0;
         return key == '?' || key == 27;
     }
     return false;
@@ -322,7 +327,7 @@ static void head_key(struct app *app, char key) {
         case 'x': remove_key_action(app); break;
         case 'G': group_key(app); break;
         case 't': cycle_theme(app); break;
-        case '?': app->help = !app->help; break;
+        case '?': app->help = !app->help; app->help_scroll = 0; break;
         case 27: go_back(app); break;
         default: break;
     }
@@ -340,14 +345,14 @@ static void handle_key(struct app *app, char key) {
  * else; over the result overlay only the keys that scroll it act. */
 static bool overlay_takes(struct app *app, const struct kt_event *e) {
     bool scrolls = e->key == KT_KEY_UP || e->key == KT_KEY_DOWN || e->key == KT_KEY_PAGE_UP || e->key == KT_KEY_PAGE_DOWN;
-    if (app->help) { app->help = false; return true; }
+    if (app->help && !(scrolls && !e->mods)) { app->help = false; app->help_scroll = 0; return true; }
     return app->result_open && !scrolls;
 }
 
 static void arrow_key(struct app *app, uint32_t key) {
     switch (key) {
-        case KT_KEY_UP: selection_arrow(app, 'A', -1); break;
-        case KT_KEY_DOWN: selection_arrow(app, 'B', 1); break;
+        case KT_KEY_UP: selection_arrow(app, -1); break;
+        case KT_KEY_DOWN: selection_arrow(app, 1); break;
         case KT_KEY_RIGHT: horizontal_arrow(app, 1); break;
         case KT_KEY_LEFT: horizontal_arrow(app, -1); break;
         case KT_KEY_PAGE_UP: page_output(app, true); break;

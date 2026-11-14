@@ -105,6 +105,15 @@ contains "confidence: verified-local-help" "$test_root/diagnostics.out" "diagnos
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination.out"
 contains "Approvals   1 of 2 approved" "$test_root/coordination.out" "coordination focuses on selected head"
 contains "single agent session" "$test_root/coordination.out" "coordination explains what there is to coordinate"
+"$tui" --headless-fixture "$fixture" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-empty.tsv" \
+    --size 80x24 --view attention > "$test_root/attention-no-runs.out"
+contains "no workflow runs yet, so nothing is waiting" "$test_root/attention-no-runs.out" \
+    "attention in a project without workflow runs says so"
+if grep -q 'unavailable' "$test_root/attention-no-runs.out"; then
+    assert_success 1 "attention without workflow runs is not reported as unavailable"
+else
+    assert_success 0 "attention without workflow runs is not reported as unavailable"
+fi
 "$tui" --headless-fixture "$fixture" --size 54x12 --view recovery > "$test_root/recovery.out"
 contains "RECOVERY  4 findings" "$test_root/recovery.out" "narrow recovery board renders"
 contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"

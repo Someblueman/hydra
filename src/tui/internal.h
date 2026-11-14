@@ -470,6 +470,8 @@ void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);
+/* Scrolls the help text by rows (negative: up). */
+void help_scroll(struct app *app, int rows);
 void render(struct app *app, unsigned frame, bool headless);
 bool head_matches(const struct head *head, const char *search);
 struct head *selected_head(struct app *app);

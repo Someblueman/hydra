@@ -188,16 +188,21 @@ static void attach_and_type(int cycle, const char *marker) {
     save("attached", cycle);
 }
 
-/* Ctrl-] leaves input: Hydra keys no longer reach the agent; plain Tab
- * cycles focus back to the agent, and the Ctrl-\ Tab chord leaves as well. */
-static void leave_input(int cycle) {
+/* Ctrl-] leaves input: Hydra keys no longer reach the agent, and the
+ * conversation stays on screen at every width that shows navigation beside
+ * it (80 columns and wider), in every layout. Plain Tab cycles focus back to
+ * the agent, and the Ctrl-\ Tab chord leaves as well. */
+static void leave_input(int cycle, const char *marker) {
     int cursor;
     int i;
     kt_send(&s, "\035");
     kt_pump(&s, .3);
     if (kt_contains(&s, "INPUT TO AGENT")) fail_with("Ctrl-] left input");
+    if (s.screen.cols >= 80 && !kt_contains(&s, marker))
+        fail_with("leaving input hid the conversation");
     cursor = agent_cursor();
-    kt_send(&s, "k");
+    /* Focus is on navigation: k and j move its selection up and back. */
+    kt_send(&s, "kj");
     kt_pump(&s, .3);
     CHECK(agent_cursor() == cursor, "Hydra keys do not reach the agent after leaving");
     save("left", cycle);
@@ -530,7 +535,7 @@ int main(void) {
         kt_format(marker, sizeof(marker), "MARK_%zu", i * 1000 + 7);
         layout(&cycles[i]);
         attach_and_type((int)i, marker);
-        leave_input((int)i);
+        leave_input((int)i, marker);
         close_view((int)i, marker);
     }
     disconnected_client();

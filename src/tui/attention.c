@@ -699,11 +699,27 @@ static void render_detail(struct app *app, const struct native_attention *view)
     linef(app, "Request: %s  Binding: %s", item->request, item->binding);
     linef(app, "Route: %s  navigable=%s", item->route_kind, item->navigable); linef(app, "Revision SHA256: %s", item->revision); linef(app, "Identity SHA256: %s", item->identity);
 }
+/* A project whose workflow read succeeded with no runs has nothing for the
+ * attention read to find (that read then fails for want of run storage):
+ * the list is empty for a known reason, not unavailable. */
+static bool attention_no_runs(const struct app *app, const struct native_attention *view)
+{
+    if (app->fleet || !app->workflows || app->workflow_stale || app->workflows->run_count) return false;
+    return !view || !view->have_good;
+}
 void render_attention(struct app *app)
 {
     struct native_attention *view = app->attention;
     const char *sep;
     if (native_review_render(app)) return;
+    if (attention_no_runs(app, view)) {
+        linef(app, "ATTENTION  nothing needs you");
+        style(app, TONE_MUTED);
+        paragraph(app, "This project has no workflow runs yet, so nothing is waiting for a decision. "
+                  "Approvals, failed checks and results to review appear here once a run needs you.", KT_MUTED);
+        style(app, TONE_BASE);
+        return;
+    }
     if (!view) { linef(app, "ATTENTION / loading"); return; }
     if (view->detail && item_selected(view)) { render_detail(app, view); return; }
     sep = dot(app);
@@ -721,7 +737,7 @@ void render_attention(struct app *app)
 static bool attention_move(struct native_attention *view, char key)
 {
     size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), at;
-    int direction = key == 'j' || key == 'B' || key == ']' ? 1 : key == 'k' || key == 'A' || key == '[' ? -1 : 0;
+    int direction = key == 'j' ? 1 : key == 'k' ? -1 : 0;
     if (!direction) return false;
     if (!n) return true;
     at = current_row(view, rows, n);
@@ -775,6 +791,8 @@ bool native_attention_key(struct app *app, char key)
     struct native_attention *view = app->attention; bool handled = true;
     if (!view) return false;
     if (native_review_key(app, key) || open_review(app, key)) return true;
+    /* While a review is open, [ and ] review the previous or next item. */
+    if (native_review_active(app) && (key == '[' || key == ']')) key = key == ']' ? 'j' : 'k';
     if (attention_move(view, key)) { sync_review(app); return true; }
     if (key == '\r' || key == '\n') attention_enter(view);
     else if (key == 's' && item_selected(view)) toggle_seen(app, view);

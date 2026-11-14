@@ -8,9 +8,11 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
            "attention view counts the items that need the user");
     result(wait_for_marker(&session, "Approval needed", 1000), "attention rows read as sentences");
     result(wait_for_marker(&session, "NEW", 1000), "new attention item is visible");
+    write_input(session.master, "BB]]", 4U);
+    sleep_ms(150);
     write_input(session.master, "\r", 1U);
     result(wait_for_marker(&session, "Route: workflow-request  navigable=1", 1000),
-           "attention detail shows exact route kind");
+           "letters A, B, [ and ] do not move the attention selection (Enter still opens the first item)");
     write_input(session.master, "s", 1U);
     result(wait_for_marker(&session, "Marked seen", 1000), "marking seen gives visible feedback in the detail view");
     result(wait_for_marker(&session, "Seen, but still needs your decision", 1000), "a seen approval still needs a decision");
@@ -190,4 +192,25 @@ static void test_attention_failure(const char *tui, const char *hydra, const cha
     close_session(&session);
 cleanup:
     unlink(path); unlink(seen); unsetenv("HYDRA_ATTENTION_FIXTURE"); unsetenv("HYDRA_TEST_SEEN_FILE");
+}
+
+/* Help longer than the screen scrolls: j and the arrows reach its last
+ * section at 80x24, k and Page Up come back to its title. */
+static void test_help_scroll(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    int i;
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open help terminal")) return;
+    result(wait_for_raw(&session), "help terminal enters raw mode");
+    (void)wait_for_model(&session);
+    write_input(session.master, "1?", 2U);
+    result(wait_for_markers(&session, "KEYBOARD HELP", "j/k scroll", 1000), "help that does not fit says it scrolls");
+    for (i = 0; i < 40; i++) write_input(session.master, i % 2 ? "j" : "\033[B", i % 2 ? 1U : 3U);
+    result(wait_for_marker(&session, "t  theme (terminal / dark / light)", 1000), "scrolling reaches the last help line at 80x24");
+    write_input(session.master, "\033[5~kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk", 46U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 1000), "scrolling back reaches the help title");
+    write_input(session.master, "\033", 1U);
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "Esc closes the scrolled help");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "help scroll exits with terminal restored");
+    close_session(&session);
 }

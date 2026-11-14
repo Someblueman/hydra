@@ -193,7 +193,11 @@ static bool keys_over_overlays(void) {
     ok = ok && !f.app->result_open;
     type(&f, "?");
     ok = ok && f.app->help;
-    type(&f, "\033[A");
+    /* Help scrolls with the arrows and closes with Esc; nothing else acts. */
+    type(&f, "\033[B\033[B\033[A");
+    ok = ok && f.app->help && f.app->help_scroll == 1;
+    type(&f, "\033");
+    kt_test_advance(f.test, 20);
     ok = ok && !f.app->help && !f.app->marked_count && f.app->view == 0;
     fixture_close(&f);
     return ok;
@@ -243,7 +247,7 @@ int main(void) {
         {hints_follow_keys, "hints name the chords in effect and drop unbound actions"},
         {stalled_sequence, "a stalled escape sequence is neither Escape nor the keys of its tail"},
         {escape_then_key, "Escape acts after 20 ms; Escape then a key handles both"},
-        {keys_over_overlays, "arrow and page keys scroll the result overlay and only close help"},
+        {keys_over_overlays, "arrow and page keys scroll the result overlay and the help, which Esc closes"},
         {prompt_takes_input, "a prompt reads its text through the loop; paste cannot submit"},
         {frames_are_few, "a burst of keys is one frame; a resize erases nothing"}
     };
