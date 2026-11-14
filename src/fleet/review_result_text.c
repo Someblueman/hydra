@@ -285,6 +285,21 @@ static void commits(struct out *o, json_object *rows)
         say(o, "  Note: %zu commit%s landed on the branch after the step finished.", later, later == 1 ? "" : "s");
 }
 
+static void uncommitted(struct out *o, json_object *changes)
+{
+    json_object *paths = f_field(changes, "uncommitted_paths");
+    int count = json_object_get_int(f_field(changes, "uncommitted_count"));
+    if (!json_object_get_boolean(f_field(changes, "uncommitted_changes")))
+        return;
+    say(o, "  Not landable as is: the worker head has %d uncommitted or untracked path%s that branch %s does not contain",
+        count, count == 1 ? "" : "s", text(changes, "branch", "?"));
+    say(o, "  (not in the diff below; landing the branch now would leave %s behind):", count == 1 ? "it" : "them");
+    for (size_t i = 0; i < rr_length(paths); i++)
+        say(o, "    %s", f_text(json_object_array_get_idx(paths, i)));
+    if (count > (int)rr_length(paths))
+        say(o, "    ... and %d more", count - (int)rr_length(paths));
+}
+
 static void changes(struct out *o, json_object *changes)
 {
     json_object *files = f_field(changes, "files"), *rows = f_field(changes, "commits");
@@ -300,8 +315,7 @@ static void changes(struct out *o, json_object *changes)
         rr_length(rows), rr_length(rows) == 1 ? "" : "s", rr_length(files), rr_length(files) == 1 ? "" : "s", added, deleted);
     say(o, "  Base %.12s -> tip %.12s", text(changes, "base", "?"), text(changes, "tip", "?"));
     commits(o, rows);
-    if (json_object_get_boolean(f_field(changes, "uncommitted_changes")))
-        say(o, "  Note: the worker head has uncommitted changes that are not shown here.");
+    uncommitted(o, changes);
     for (size_t i = 0; i < rr_length(files); i++) {
         json_object *row = json_object_array_get_idx(files, i);
         say(o, "  file  +%-5s -%-5s %s", text(row, "added", "?"), text(row, "deleted", "?"), text(row, "path", "?"));
@@ -319,13 +333,19 @@ static void next(struct out *o, json_object *next, const char *verdict)
     json_object *cleanup = f_field(next, "cleanup");
     say(o, "");
     say(o, "NEXT");
-    if (f_string(next, "land")) {
+    if (f_string(next, "keep")) {
+        say(o, "  Not landable as is. To keep the worker's uncommitted and untracked work, commit it on its branch");
+        say(o, "  (review git status there first), then land the branch yourself; Hydra never merges for you:");
+        say(o, "    %s", f_string(next, "keep"));
+        if (f_string(next, "land"))
+            say(o, "    %s", f_string(next, "land"));
+    } else if (f_string(next, "land")) {
         say(o, "  %s the worker branch yourself; Hydra never merges for you:",
             strcmp(verdict, "pass") ? "When it is ready, land" : "Land");
         say(o, "    %s", f_string(next, "land"));
     }
     if (rr_length(cleanup))
-        say(o, "  After landing, remove the plan's heads:");
+        say(o, "  After landing, remove the plan's heads (each refuses while its worktree has uncommitted or untracked files):");
     for (size_t i = 0; i < rr_length(cleanup); i++)
         say(o, "    %s", f_text(json_object_array_get_idx(cleanup, i)));
     say(o, "  Dismiss: Esc returns to the attention list, where s marks the item seen.");

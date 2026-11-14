@@ -72,7 +72,7 @@ static void run_result_next(const struct app *app, size_t run, char *out, size_t
                  !strcmp(app->workflows->runs[run].state, "succeeded") ? "Result delivered" : "Run finished");
         return;
     }
-    snprintf(out, size, "Worker branch %.120s holds the result: review (: diff)%sland (hydra land %.120s)%sdismiss (x removes the worker head, keeps the branch)",
+    snprintf(out, size, "Worker branch %.120s holds the result: review (: diff)%sland (git merge --no-ff %.120s)%sdismiss (x removes the worker head, keeps the branch)",
              worker->branch, dot(app), worker->branch, dot(app));
 }
 

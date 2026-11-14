@@ -194,8 +194,13 @@ its kind and role, state, attempts, duration and head, and what comes next.
 When the run succeeds, fails or is cancelled, verifier heads are retired with
 `hydra kill --protect-untracked` after their evidence is sealed in the run record;
 their branches are kept, and a verifier head with changes is kept for you to
-review. Worker heads stay until you land (`hydra land <worker>`) or dismiss (`x`,
-which removes the head and keeps its branch) the result. Each retirement is a run
+review. Worker heads stay until you land or dismiss (`x`, which removes the head
+and keeps its branch) the result. Land a worker branch yourself from your
+checkout with `git merge --no-ff <worker>`. Only committed work is on the
+branch: when the worker's worktree still has uncommitted or untracked files, the
+result review says it is not landable as is, lists them, and gives the commit to
+run in that worktree first. Remove a plan's heads with
+`hydra kill <head> --protect-untracked`, which refuses while such files remain. Each retirement is a run
 event (`head.retired`, `head.retire_skipped`, `head.retire_failed`); a failed
 retirement is reported and never changes the run result.
 
