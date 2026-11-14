@@ -147,9 +147,9 @@ static void statistics(void) {
     keys_answered(&s, "Statistics");
     U("Latest attempts average", 6);
     CHECK(!HAS("Loading statistics..."), "the sample replaces the loading line");
-    /* Twelve refreshes in a row, then a key that changes the view. */
+    /* Twelve refreshes (ctrl+r) in a row, then a key that changes the view. */
     kt_write(calls, "");
-    S("rrrrrrrrrrrrT");
+    S("\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12\x12T");
     U("24 hours", PROMPT);
     kt_pump(&s, 4);
     most = reads_overlapping("workflow:statistics-data", &started);
@@ -161,7 +161,7 @@ static void statistics(void) {
     U("WORKFLOWS", PROMPT);
     keys_answered(&s, "graph");
     kt_close(&s, "q", 0, 0);
-    puts("PASS statistics: the view opens at once, r and g never wait, refreshes run one at a time");
+    puts("PASS statistics: the view opens at once, ctrl+r and g never wait, refreshes run one at a time");
 }
 
 static void preview(void) {

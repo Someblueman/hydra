@@ -1,0 +1,21 @@
+FRAME 1 60x20
+ ◆ hydra  5 Recovery 6 Flows  7 Stats  …        STATISTICS 
+                                                           
+ Sessions  Runs ─────────────── all recorded · all heads   
+ Head sessions ─────────────────── 1 of 5 · newest first   
+  HEAD                 AGENT     STATE       LENGTH        
+▌ fix-login-timeout    codex     ● open      1h00m         
+  docs-refresh         opencode  ✓ ended     2h00m         
+  docs-refresh         opencode  ↻ replaced  2h00m         
+  nightly-import       codex     ▲ ended     1h00m         
+  old-experiment       -         ✓ ended     --            
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+  ● live   Head sessions · all recorded · all heads        
+ ↑/↓ select • enter evidence • ? help • q quit             

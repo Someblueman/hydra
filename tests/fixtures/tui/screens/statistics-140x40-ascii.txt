@@ -1,41 +1,41 @@
 FRAME 1 140x40
  # hydra  1 Work  2 Details  3 Overview  4 Attention  5 Recovery  6 Workflows   7 Statistics   8 Workspace  9 Hosts             STATISTICS 
                                                                               Local / 3 heads / 1 running / 3 need attention / 4 to repair 
-SCOPE -----------------  RUNS ---------------------  RUNNING ------------------  NEED ATTENTION -----------  RETRIES --------------------- 
-                           1                           0                           0                           0                           
-  all recorded                                                                     failed, blocked or                                      
-  T changes the range      in this scope               steps right now             unknown                     repeated attempts           
+ Sessions  Runs ------------------------------------------------------------------------------------------- all recorded / all workflows   
                                                                                                                                            
-  Workflow: all           Latest attempts average 258.7s over 3 timed steps, longest 636s                                                  
-  [ ] chooses one        RUN OUTCOMES / recorded -------------------------------  RUN CREATION / 7 x 24h --------------------------------- 
-  Location: all                                                                                                                            
-  L cycles / C cohorts     Succeeded    1   ##################################      -6d   0   ..........................................   
-  0 undated                Failed       0   ..................................      -5d   0   ..........................................   
-  0 outside range          Running      0   ..................................      -4d   0   ..........................................   
-  Timing 3/3               Queued       0   ..................................      -3d   0   ..........................................   
-  Attempts 3/3             Blocked      0   ..................................      -2d   0   ..........................................   
-                           Cancelled    0   ..................................      -1d   0   ..........................................   
-  Agent tokens             Unknown      0   ..................................      -0d   1   ##########################################   
-  in      3.85M                                                                                                                            
-  cached  3.74M          RUNS / newest creation first ------------------------------------------------------------------------------------ 
-  out     23.0k                                                                                                                            
-  1 of 1 reported          > kill-dry-run                              succeeded           09-07 13:30 UTC   3.85M in / 23.0k out          
-  cost not reported                                                                                                                        
+  Runs                              Running                           Need attention                    Retries                            
+  1                                 0                                 0                                 0                                  
+  in this scope                     steps right now                   failed, blocked or unknown        repeated attempts                  
                                                                                                                                            
-  CPU and memory: not                                                                                                                      
-  measured for local                                                                                                                       
-  steps (no task                                                                                                                           
-  receipt); remote task                                                                                                                    
-  receipts report them                                                                                                                     
-  (C cohorts).                                                                                                                             
+ Latest attempts average 258.7s over 3 timed steps, longest 636s. Timing 3/3, Attempts 3/3, 0 undated, 0 outside range.                    
+ Agent tokens in 3.85M, cached 3.74M, out 23.0k (1 of 1 agent steps reported); cost not reported. CPU and memory: not measured.            
                                                                                                                                            
-  0 resets filters                                                                                                                         
+ Runs created, last 7 days                              Run outcomes                                                                       
+ -6d   0                                                Succeeded     1   ########################################                         
+ -5d   0                                                Failed        0                                                                    
+ -4d   0                                                Running       0                                                                    
+ -3d   0                                                Queued        0                                                                    
+ -2d   0                                                Blocked       0                                                                    
+ -1d   0                                                Cancelled     0                                                                    
+ -0d   1  ##########################################    Unknown       0                                                                    
+                                                                                                                                           
+ Workflow runs --------------------------------------------------------------------------------------------------- 1 of 1 / newest first   
+  RUN                          STATE                CREATED          TOKENS                   ID                                           
+> kill-dry-run                 + succeeded          09-07 13:30 UTC  3.85M in / 23.0k out     run_bbbbbbbbbbbbbbbbbbbb                     
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
-  09-07 14:00 UTC                                                                                                                          
-                           1/1 / Enter evidence / g graph                                                                                  
                                                                                                                                            
- Recorded workflow runs / all recorded / all work                                                                                          
- ^/v select | enter evidence | s sessions/runs | g graph | T range | ! needs you only | M metric | C remote cohorts | ? help | q quit      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live   Workflow runs / all recorded / all workflows                                                                                    
+ ^/v select | enter evidence | [/] sessions/runs | T range | / filter | g graph | w workflow | M metric | L location | ? help | q quit     

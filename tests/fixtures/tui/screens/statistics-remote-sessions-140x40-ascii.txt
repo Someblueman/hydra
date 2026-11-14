@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work  2 Details  3 Overview  4 Attention  5 Recovery  6 Workflows   7 Statistics   8 Workspace  9 Hosts             STATISTICS 
+                                                                              Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Sessions  Runs  Cohorts -------------------------------------------------------------------------------------- all recorded / all heads   
+                                                                                                                                           
+  Sessions                          Active                            Quiet                             Unobserved                         
+  5                                 1h05m                             1h13m                             3h42m                              
+  1 open now                        inferred from output              inferred, 53% of observed         no Hydra open                      
+                                                                                                                                           
+ Observed 38% of 6h00m session time; 10m00s reported by adapters, the rest inferred from terminal output.                                  
+ Known: Length 4/5, Observed 2/5, 1 undated, 0 outside range. Tokens and cost are not measured for sessions.                               
+                                                                                                                                           
+ Sessions started, last 7 days                          By agent                                                                           
+ -6d   0                                                codex         2 sessions   active 25m00s                                           
+ -5d   0                                                opencode      2 sessions   active 40m00s                                           
+ -4d   0                                                not recorded  1 session    active --                                               
+ -3d   0                                                                                                                                   
+ -2d   0                                                                                                                                   
+ -1d   1  ##############----------------------------                                                                                       
+ -0d   3  ##########################################                                                                                       
+                                                                                                                                           
+ Head sessions --------------------------------------------------------------------------------------------------- 1 of 5 / newest first   
+  HEAD                 AGENT     STATE       STARTED      LENGTH  ACTIVE  QUIET    OUTCOME                                                 
+> fix-login-timeout    codex     * open      09-07 13:00  1h00m   25m00s  23m00s   --                                                      
+  docs-refresh         opencode  + ended     09-07 10:00  2h00m   40m00s  50m00s   done                                                    
+  docs-refresh         opencode  r replaced  09-07 08:00  2h00m   --      --       --                                                      
+  nightly-import       codex     ! ended     09-06 13:06  1h00m   --      --       headless                                                
+  old-experiment       -         + ended     --           --      --      --       abandoned                                               
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live   Head sessions / all recorded / all heads                                                                                        
+ ^/v select | enter evidence | [/] pages | T range | / filter | g open head | C cohorts | L location | : more actions | ? help | q quit    

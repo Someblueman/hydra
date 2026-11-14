@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  3 Overview 4 Attention 5 Recovery 6 Flows  7 Stats  …     STATISTICS 
+                  Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Sessions  Runs ─────────────────────────────────── all recorded · all heads   
+ 5 sessions · 1 open · active 1h05m · quiet 1h13m · inferred                   
+                                                                               
+ Head sessions ─────────────────────────────────────── 1 of 5 · newest first   
+  HEAD                 AGENT     STATE       STARTED      LENGTH  ACTIVE       
+▌ fix-login-timeout    codex     ● open      09-07 13:00  1h00m   25m00s       
+  docs-refresh         opencode  ✓ ended     09-07 10:00  2h00m   40m00s       
+  docs-refresh         opencode  ↻ replaced  09-07 08:00  2h00m   --           
+  nightly-import       codex     ▲ ended     09-06 13:06  1h00m   --           
+  old-experiment       -         ✓ ended     --           --      --           
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   Head sessions · all recorded · all heads                            
+ ↑/↓ select • enter evidence • [/] sessions/runs • T range • ? help • q quit   

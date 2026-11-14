@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work  2 Details  3 Overview  4 Attention  5 Recovery  6 Workflows   7 Statistics   8 Workspace  9 Hosts             STATISTICS 
+                                                                   Local · no agent work yet · Remote · 1 head on 3 hosts (1 disconnected) 
+ Hosts ─────────────────────────────────────────────────────────────────────────────────────────────── latest fleet response · all hosts   
+                                                                                                                                           
+  Responded                         Failed                            Reported heads                    Remote history                     
+  2                                 1                                 1                                 --                                 
+  latest response                   no response                       from hosts that responded         workflow, CPU, memory, cost        
+                                                                                                                                           
+ 2 responded   1 failed   1 reported heads. Failed hosts have unknown head counts; remote history, CPU, memory and cost are unavailable.   
+                                                                                                                                           
+ Hosts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 of 3   
+  HOST                     STATE        HEADS                                                                                              
+▌ builder                  responded    1                                                                                                  
+  empty                    responded    0                                                                                                  
+  offline                  failed       --                                                                                                 
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ◌ loading   Hosts · latest fleet response · all hosts                                                                                    
+ ↑/↓ select • enter evidence • / filter • ! needs you only • 0 reset filters • : more actions • esc back • ? help • q quit                 

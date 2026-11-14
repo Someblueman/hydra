@@ -140,8 +140,8 @@ awk -F '\t' '$1=="S" && $3=="build" {start=($7=="-")}
     END {exit !(start && attempt)}' "$viz_tmp/missing-statistics.tsv"
 "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --statistics-fixture "$viz_tmp/missing-statistics.tsv" \
     --view statistics --ascii --size 140x40 > "$viz_tmp/statistics.out"
-grep -q 'Timing 2/4' "$viz_tmp/statistics.out"
-grep -q 'Attempts 3/4' "$viz_tmp/statistics.out"
+grep -Fq 'Timing 2/4, Attempts 3/4,' "$viz_tmp/statistics.out"
+grep -Fq 'over 2 timed steps' "$viz_tmp/statistics.out"
 "$viz_build/test-statistics" "$viz_tmp/missing-statistics.tsv" "$viz_run" > "$viz_tmp/metrics.txt"
 awk '$1==0 {q=($2==4 && $3==3)} $1==1 {e=($2==1 && $3==0 && $4==0)}
      $1==3 {r=($2==1 && $3==0 && $4==0)} END {exit !(q && e && r)}' "$viz_tmp/metrics.txt"

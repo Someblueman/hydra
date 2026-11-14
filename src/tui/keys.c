@@ -17,6 +17,8 @@
 #define G_PLAN "Planning"
 #define G_RUNS "Runs"
 #define G_ALL "Everywhere"
+#define G_STATS "Stats"
+#define G_FILTER "Filter"
 #define ROW(id, key_scope, key_name, text, key_group, rank) \
     [id] = {.name = key_name, .label = text, .action = id, .scope = key_scope, .group = key_group, .priority = rank}
 #define T KEY_SCOPE_TERMINAL
@@ -77,21 +79,30 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_ATTENTION_PAGE_DOWN, KEY_SCOPE_ATTENTION, "attention.page-down", "scroll", "Attention", 4),
     ROW(KEY_ATTENTION_PAGE_UP, KEY_SCOPE_ATTENTION, "attention.page-up", "scroll", "Attention", 4),
 
-    ROW(KEY_STATS_UP, KEY_SCOPE_STATISTICS, "statistics.up", "select", "Statistics", 9),
-    ROW(KEY_STATS_DOWN, KEY_SCOPE_STATISTICS, "statistics.down", "select", "Statistics", 9),
-    ROW(KEY_STATS_OPEN, KEY_SCOPE_STATISTICS, "statistics.open", "evidence", "Statistics", 8),
-    ROW(KEY_STATS_PAGE, KEY_SCOPE_STATISTICS, "statistics.page", "sessions/runs", "Statistics", 7),
-    ROW(KEY_STATS_GRAPH, KEY_SCOPE_STATISTICS, "statistics.graph", "graph", "Statistics", 6),
-    ROW(KEY_STATS_RANGE, KEY_SCOPE_STATISTICS, "statistics.range", "range", "Statistics", 5),
-    ROW(KEY_STATS_ATTENTION, KEY_SCOPE_STATISTICS, "statistics.attention", "needs you only", "Statistics", 4),
-    ROW(KEY_STATS_RESET, KEY_SCOPE_STATISTICS, "statistics.reset", "reset filters", "Statistics", 3),
-    ROW(KEY_STATS_METRIC, KEY_SCOPE_STATISTICS, "statistics.metric", "metric", "Statistics", 4),
-    ROW(KEY_STATS_WORKFLOW_PREVIOUS, KEY_SCOPE_STATISTICS, "statistics.workflow-previous", "workflow", "Statistics", 2),
-    ROW(KEY_STATS_WORKFLOW_NEXT, KEY_SCOPE_STATISTICS, "statistics.workflow-next", "workflow", "Statistics", 2),
-    ROW(KEY_STATS_FIND, KEY_SCOPE_STATISTICS, "statistics.find", "find", "Statistics", 3),
-    ROW(KEY_STATS_COHORTS, KEY_SCOPE_STATISTICS, "statistics.cohorts", "remote cohorts", "Statistics", 5),
-    ROW(KEY_STATS_LOCATION, KEY_SCOPE_STATISTICS, "statistics.location", "location", "Statistics", 4),
-    ROW(KEY_STATS_REFRESH, KEY_SCOPE_STATISTICS, "statistics.refresh", "refresh", "Statistics", -1),
+    ROW(KEY_STATS_UP, KEY_SCOPE_STATISTICS, "statistics.up", "select", G_STATS, 9),
+    ROW(KEY_STATS_DOWN, KEY_SCOPE_STATISTICS, "statistics.down", "select", G_STATS, 9),
+    ROW(KEY_STATS_OPEN, KEY_SCOPE_STATISTICS, "statistics.open", "evidence", G_STATS, 8),
+    ROW(KEY_STATS_PAGE_PREVIOUS, KEY_SCOPE_STATISTICS, "statistics.page-previous", "sessions/runs", G_STATS, 7),
+    ROW(KEY_STATS_PAGE_NEXT, KEY_SCOPE_STATISTICS, "statistics.page-next", "sessions/runs", G_STATS, 7),
+    ROW(KEY_STATS_RANGE, KEY_SCOPE_STATISTICS, "statistics.range", "range", G_STATS, 6),
+    ROW(KEY_STATS_FILTER, KEY_SCOPE_STATISTICS, "statistics.filter", "filter", G_STATS, 5),
+    ROW(KEY_STATS_GRAPH, KEY_SCOPE_STATISTICS, "statistics.graph", "graph", G_STATS, 5),
+    ROW(KEY_STATS_PANE, KEY_SCOPE_STATISTICS, "statistics.pane", "pane", G_STATS, 4),
+    ROW(KEY_STATS_WORKFLOW, KEY_SCOPE_STATISTICS, "statistics.workflow", "workflow", G_STATS, 4),
+    ROW(KEY_STATS_METRIC, KEY_SCOPE_STATISTICS, "statistics.metric", "metric", G_STATS, 4),
+    ROW(KEY_STATS_COHORTS, KEY_SCOPE_STATISTICS, "statistics.cohorts", "cohorts", G_STATS, 3),
+    ROW(KEY_STATS_LOCATION, KEY_SCOPE_STATISTICS, "statistics.location", "location", G_STATS, 3),
+    ROW(KEY_STATS_ATTENTION, KEY_SCOPE_STATISTICS, "statistics.attention", "needs you only", G_STATS, 2),
+    ROW(KEY_STATS_RESET, KEY_SCOPE_STATISTICS, "statistics.reset", "reset filters", G_STATS, 2),
+    ROW(KEY_STATS_FILTER_UP, KEY_SCOPE_STATS_FILTER, "statistics.filter-up", "select", G_FILTER, 5),
+    ROW(KEY_STATS_FILTER_DOWN, KEY_SCOPE_STATS_FILTER, "statistics.filter-down", "select", G_FILTER, 5),
+    ROW(KEY_STATS_FILTER_KEEP, KEY_SCOPE_STATS_FILTER, "statistics.filter-keep", "keep filter", G_FILTER, 9),
+    ROW(KEY_STATS_FILTER_CLEAR, KEY_SCOPE_STATS_FILTER, "statistics.filter-clear", "clear filter", G_FILTER, 8),
+    ROW(KEY_STATS_PAGE, KEY_SCOPE_STATISTICS, "statistics.page", "sessions/runs", G_STATS, -1),
+    ROW(KEY_STATS_WORKFLOW_PREVIOUS, KEY_SCOPE_STATISTICS, "statistics.workflow-previous", "workflow", G_STATS, -1),
+    ROW(KEY_STATS_WORKFLOW_NEXT, KEY_SCOPE_STATISTICS, "statistics.workflow-next", "workflow", G_STATS, -1),
+    ROW(KEY_STATS_FIND, KEY_SCOPE_STATISTICS, "statistics.find", "find", G_STATS, -1),
+    ROW(KEY_STATS_REFRESH, KEY_SCOPE_STATISTICS, "statistics.refresh", "refresh", G_STATS, -1),
 
     ROW(KEY_HOSTS_UP, KEY_SCOPE_HOSTS, "hosts.up", "select", "Hosts", 9),
     ROW(KEY_HOSTS_DOWN, KEY_SCOPE_HOSTS, "hosts.down", "select", "Hosts", 9),
@@ -186,7 +197,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_VIEW_CYCLE, KEY_SCOPE_JUMPS, "view.cycle", "next view", G_ALL, -1),
     ROW(KEY_VIEW_WORKSPACE, KEY_SCOPE_JUMPS, "view.workspace", "workspace", G_ALL, -1),
     ROW(KEY_VIEW_OVERVIEW, KEY_SCOPE_JUMPS, "view.overview", "overview", G_ALL, -1),
-    ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_JUMPS, "view.workflows", "workflows", G_ALL, -1),
+    ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_FLOW_JUMP, "view.workflows", "workflows", G_ALL, -1),
     ROW(KEY_VIEW_HOSTS, KEY_SCOPE_JUMPS, "view.hosts", "hosts", G_ALL, -1),
     ROW(KEY_VIEW_ATTENTION, KEY_SCOPE_JUMPS, "view.attention", "attention", G_ALL, -1),
     ROW(KEY_VIEW_STATS, KEY_SCOPE_JUMPS, "view.stats", "statistics", G_ALL, -1),
@@ -208,9 +219,12 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
 enum { MODE_BOTH, MODE_LOCAL, MODE_RETIRED };
 static const unsigned char key_modes[KEY_ACTIONS] = {
     [KEY_REVIEW_SUPPLY_LOG] = MODE_BOTH,
-    [KEY_STATS_PAGE] = MODE_LOCAL, [KEY_STATS_GRAPH] = MODE_LOCAL, [KEY_STATS_RANGE] = MODE_LOCAL,
-    [KEY_STATS_METRIC] = MODE_LOCAL, [KEY_STATS_WORKFLOW_PREVIOUS] = MODE_LOCAL, [KEY_STATS_WORKFLOW_NEXT] = MODE_LOCAL,
+    [KEY_STATS_PAGE_PREVIOUS] = MODE_LOCAL, [KEY_STATS_PAGE_NEXT] = MODE_LOCAL, [KEY_STATS_GRAPH] = MODE_LOCAL,
+    [KEY_STATS_RANGE] = MODE_LOCAL, [KEY_STATS_METRIC] = MODE_LOCAL, [KEY_STATS_WORKFLOW] = MODE_LOCAL,
     [KEY_STATS_COHORTS] = MODE_LOCAL, [KEY_STATS_LOCATION] = MODE_LOCAL,
+    /* Stats pages are [ ], its filter is typed after /, ctrl+r reads again. */
+    [KEY_STATS_PAGE] = MODE_RETIRED, [KEY_STATS_WORKFLOW_PREVIOUS] = MODE_RETIRED, [KEY_STATS_WORKFLOW_NEXT] = MODE_RETIRED,
+    [KEY_STATS_FIND] = MODE_RETIRED, [KEY_STATS_REFRESH] = MODE_RETIRED,
     [KEY_WS_ATTACH] = MODE_RETIRED, [KEY_HEADS_ATTACH] = MODE_RETIRED, [KEY_HEADS_INTERRUPT] = MODE_RETIRED,
 };
 
@@ -242,10 +256,14 @@ static const char default_keys[] =
     "review.previous-item = [\nreview.next-item = ]\nreview.reload = r\n"
     "attention.up = up, k\nattention.down = down, j\nattention.open = enter\nattention.review = r\nattention.seen = s\n"
     "attention.page-down = space, pgdn\nattention.page-up = b, pgup\n"
-    "statistics.up = up, k\nstatistics.down = down, j\nstatistics.open = enter\nstatistics.page = s\n"
-    "statistics.graph = g\nstatistics.range = T\nstatistics.attention = !\nstatistics.reset = 0\n"
-    "statistics.metric = M\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
-    "statistics.find = /\nstatistics.cohorts = C\nstatistics.location = L\nstatistics.refresh = r\n"
+    "statistics.up = up, k\nstatistics.down = down, j\nstatistics.open = enter\n"
+    "statistics.page-previous = [\nstatistics.page-next = ]\nstatistics.range = T\nstatistics.filter = /\n"
+    "statistics.graph = g\nstatistics.pane = tab, shift+tab\nstatistics.workflow = w\nstatistics.metric = M\n"
+    "statistics.cohorts = C\nstatistics.location = L\nstatistics.attention = !\nstatistics.reset = 0\n"
+    "statistics.filter-up = up\nstatistics.filter-down = down\nstatistics.filter-keep = enter\n"
+    "statistics.filter-clear = esc\n"
+    "statistics.page = s\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
+    "statistics.find = /\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
     "hosts.retry = r\nhosts.onboarding = O\n"
     "recovery.up = up, k\nrecovery.down = down, j\nrecovery.check = enter\nrecovery.remove = x\nrecovery.explain = d\n"

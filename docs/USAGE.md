@@ -736,7 +736,7 @@ status and the keys that apply. Below 100 columns the tab bar uses short labels
 do not flicker. Session states use plain words: `running`, `terminal gone`,
 `stopped` and `unknown`; internal tokens stay behind `d` (technical details).
 Statistics (`D`) reads recorded workflow runs: `M` cycles the metric pages, `C`
-opens the remote cohorts page (steps that ran as fleet tasks grouped by host,
+opens the Cohorts page (steps that ran as fleet tasks grouped by host,
 placement, generation and provider, with the receipts' wall, CPU, peak RSS and
 transport bytes), and `L` cycles the location filter between all, local, remote
 and each recorded host. Unmeasured values read `unknown` with their reason, never
@@ -771,7 +771,8 @@ duration) rather than by a terminal, and `p` shows that step's live output.
 Overview centres on the selected or active run: its steps, where each ran, and
 what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
 
-Statistics (`D`) has two pages; `s` switches between them. Head sessions lists
+Statistics (`D`) has up to three pages, Sessions, Runs and Cohorts; `[` and `]`
+go between them. Head sessions lists
 every start or resume of a head in this project, newest first, with its agent,
 state (`open`, `ended`, or `replaced` when a resume took over), start, length
 and how long its terminal was active or quiet; a project without workflow runs
@@ -787,12 +788,18 @@ their owners report exact status, which counts where it exists. A finished
 session is kept as a small summary with the project, so it stays listed after
 `hydra kill` and its terminal activity does not accumulate in the head's
 records. Tokens and cost
-are not measured for sessions. `T` changes the range, `/` finds a branch, agent
-or head, `!` keeps sessions declared failed or blocked, and Enter shows one
-session's evidence. The workflow runs page shows recorded runs with their steps,
-timing, retries and tokens (`M` for metrics, `[` `]` for one workflow, `g` for the
-run's graph, `C` for remote cohorts, `L` for the location filter). `hydra
-workflow statistics-json` exports both.
+are not measured for sessions. `T` changes the range, `/` filters by branch,
+agent or head as you type (Enter keeps the filter, Esc clears it), `!` keeps
+sessions declared failed or blocked, `0` resets every filter, and Enter shows one
+session's evidence: beside the list when the terminal is wide enough (Tab moves
+between the two), in its place otherwise. `g` shows the session's head in Details,
+and Esc comes back. A filter that hides everything says so ("Nothing matches the
+filters"), which is not the same as nothing recorded. The workflow runs page shows
+recorded runs with their steps, timing, retries and tokens (`M` for metrics, `w`
+for one workflow at a time, `g` for the run's graph). When steps ran as remote
+tasks a third page, Cohorts, groups them (`C` also opens it), and `L` cycles the
+location filter, which the page strip shows as a chip. `ctrl+r` reads the sample
+again. `hydra workflow statistics-json` exports both.
 
 Hosts, the last tab of local work, adds a remote machine without leaving the control
 centre: `A` asks for the SSH destination and a name, then walks through the guided

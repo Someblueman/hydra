@@ -1,15 +1,12 @@
 FRAME 1 80x24
  ◆ hydra  3 Overview 4 Attention 5 Recovery 6 Flows  7 Stats  …     STATISTICS 
                   Local · 3 heads · 1 running · 3 need attention · 4 to repair 
-RUNS ────────────  RUNNING ─────────  NEED ATTENTION ──  RETRIES ───────────── 
-  1                  0                  0                  0                   
-                     steps right        failed,                                
-  in this scope      now                blocked or...      repeated attempts   
+ Runs ───────────────────────────────────────── all recorded · all workflows   
+ 1 run · 3 steps · 0 need attention · tokens in 3.85M · timing 3/3             
                                                                                
- Avg 258.7s over 3 steps, max 636s; tokens in 3.85M, cached 3.74M, out 23.0k   
-RUNS / newest creation first ───────────────────────────────────────────────── 
-                                                                               
-  > kill-dry-run                     succeeded           09-07 13:30 UTC       
+ Workflow runs ─────────────────────────────────────── 1 of 1 · newest first   
+  RUN                          STATE                CREATED                    
+▌ kill-dry-run                 ✓ succeeded          09-07 13:30 UTC            
                                                                                
                                                                                
                                                                                
@@ -19,7 +16,10 @@ RUNS / newest creation first ─────────────────
                                                                                
                                                                                
                                                                                
-  1/1 / Enter evidence / g graph                                               
                                                                                
- Recorded workflow runs · all recorded · all work                              
- ↑/↓ select • enter evidence • g graph • T range • ? help • q quit             
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   Workflow runs · all recorded · all workflows                        
+ ↑/↓ select • enter evidence • T range • / filter • g graph • ? help • q quit  

@@ -10,7 +10,8 @@
  * which key_chain_check enforces for the built-in table and every keys file. */
 
 #define CHAIN_BASE (KEY_SCOPE_TERMINAL | KEY_SCOPE_GLOBAL)
-#define CHAIN_VIEW (CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_VIEW_ARROWS)
+#define CHAIN_JUMPS (KEY_SCOPE_JUMPS | KEY_SCOPE_FLOW_JUMP)
+#define CHAIN_VIEW (CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_VIEW_ARROWS)
 /* Every chain includes the agent layer's chords: they are Hydra's in every
  * view, so no key of a view may start one of them. */
 const uint32_t key_chains[KEY_CHAINS] = {
@@ -18,15 +19,17 @@ const uint32_t key_chains[KEY_CHAINS] = {
     [KEY_CHAIN_DETAIL] = CHAIN_VIEW | KEY_SCOPE_DETAIL,
     [KEY_CHAIN_OVERVIEW] = CHAIN_VIEW | KEY_SCOPE_OVERVIEW,
     [KEY_CHAIN_RECOVERY] = CHAIN_VIEW | KEY_SCOPE_RECOVERY,
-    [KEY_CHAIN_WORKFLOWS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_WORKFLOWS,
+    [KEY_CHAIN_WORKFLOWS] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_WORKFLOWS,
     [KEY_CHAIN_HOSTS] = CHAIN_VIEW | KEY_SCOPE_HOSTS,
-    [KEY_CHAIN_WORKSPACE] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_WORKSPACE,
-    [KEY_CHAIN_MONITOR] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_WORKSPACE | KEY_SCOPE_MONITOR,
-    [KEY_CHAIN_STATISTICS] = CHAIN_VIEW | KEY_SCOPE_STATISTICS,
+    [KEY_CHAIN_WORKSPACE] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_WORKSPACE,
+    [KEY_CHAIN_MONITOR] = CHAIN_BASE | CHAIN_JUMPS | KEY_SCOPE_WORKSPACE | KEY_SCOPE_MONITOR,
+    /* Stats: Tab moves between its panes and w is its workflow filter. */
+    [KEY_CHAIN_STATISTICS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEW_ARROWS | KEY_SCOPE_STATISTICS,
     [KEY_CHAIN_ATTENTION] = CHAIN_VIEW | KEY_SCOPE_ATTENTION,
     [KEY_CHAIN_REVIEW] = CHAIN_BASE | KEY_SCOPE_REVIEW,
     [KEY_CHAIN_HELP] = KEY_SCOPE_TERMINAL | KEY_SCOPE_HELP,
     [KEY_CHAIN_RESULT] = KEY_SCOPE_TERMINAL | KEY_SCOPE_RESULT,
+    [KEY_CHAIN_STATS_FILTER] = KEY_SCOPE_TERMINAL | KEY_SCOPE_STATS_FILTER,
 };
 
 static enum key_chain_id view_chain(const struct app *app) {
@@ -36,6 +39,7 @@ static enum key_chain_id view_chain(const struct app *app) {
     if (app->view < 0 || app->view > 9) return KEY_CHAIN_HEADS;
     if (app->view == 7 && native_workspace_monitoring((struct app *)app)) return KEY_CHAIN_MONITOR;
     if (app->view == 9 && native_review_active(app)) return KEY_CHAIN_REVIEW;
+    if (app->view == 8 && statistics_typing(app)) return KEY_CHAIN_STATS_FILTER;
     return views[app->view];
 }
 
@@ -122,10 +126,6 @@ static bool recovery_removable(const struct app *app) {
         !strcmp(app->model.recovery[app->recovery_selected].kind, "orphan-worktree");
 }
 
-static bool runs_page(const struct app *app) {
-    return app->statistics && app->statistics->model && !statistics_sessions_shown(app);
-}
-
 static bool heads_applies(const struct app *app, enum key_action action) {
     bool list = app->view == 0 || app->view == 4;
     switch (action) {
@@ -156,18 +156,13 @@ bool key_applies(const struct app *app, enum key_action action) {
         return heads_applies(app, action);
     if ((action >= KEY_REMOTE_APPROVE && action <= KEY_REMOTE_CANCEL) || action == KEY_HEADS_RETRY)
         return remote_applies(app, action);
+    if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) return statistics_applies(app, action);
     switch (action) {
     case KEY_RECOVERY_REMOVE: return recovery_removable(app);
     case KEY_ATTENTION_PAGE_DOWN: case KEY_ATTENTION_PAGE_UP: return native_attention_detail_open(app);
     case KEY_RECOVERY_CHECK: case KEY_RECOVERY_EXPLAIN: return app->model.recovery_count > 0;
     case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return hosts_setup_selected(app, &record);
-    case KEY_STATS_GRAPH: case KEY_STATS_METRIC: case KEY_STATS_WORKFLOW_PREVIOUS: case KEY_STATS_WORKFLOW_NEXT:
-    case KEY_STATS_COHORTS: case KEY_STATS_LOCATION:
-        return runs_page(app);
     case KEY_HOSTS_RETRY: case KEY_HEADS_LOCATION: return location_applies(app, action);
-    case KEY_STATS_PAGE:
-        return !app->fleet && app->statistics && app->statistics->model &&
-            (app->statistics->model->session_count || statistics_sessions_shown(app));
     case KEY_BACK: return app->view != 0 || app->search[0] || app->location[0] || app->preview || app->diagnostics;
     default: return true;
     }
@@ -192,10 +187,6 @@ static uint32_t action_key(enum key_action action) {
         [KEY_REVIEW_NEXT_ITEM] = ']', [KEY_REVIEW_RELOAD] = 'r',
         [KEY_ATTENTION_UP] = 'k', [KEY_ATTENTION_DOWN] = 'j', [KEY_ATTENTION_OPEN] = '\r',
         [KEY_ATTENTION_REVIEW] = 'r', [KEY_ATTENTION_SEEN] = 's', [KEY_ATTENTION_PAGE_DOWN] = ' ', [KEY_ATTENTION_PAGE_UP] = 'b',
-        [KEY_STATS_UP] = 'k', [KEY_STATS_DOWN] = 'j', [KEY_STATS_OPEN] = '\r', [KEY_STATS_PAGE] = 's',
-        [KEY_STATS_GRAPH] = 'g', [KEY_STATS_RANGE] = 'T', [KEY_STATS_ATTENTION] = '!', [KEY_STATS_RESET] = '0',
-        [KEY_STATS_METRIC] = 'M', [KEY_STATS_WORKFLOW_PREVIOUS] = '[', [KEY_STATS_WORKFLOW_NEXT] = ']',
-        [KEY_STATS_FIND] = '/', [KEY_STATS_COHORTS] = 'C', [KEY_STATS_LOCATION] = 'L', [KEY_STATS_REFRESH] = 'r',
         [KEY_HOSTS_UP] = 'k', [KEY_HOSTS_DOWN] = 'j', [KEY_HOSTS_OPEN] = '\r', [KEY_HOSTS_ADD] = 'A',
         [KEY_HOSTS_EDIT] = 'e', [KEY_HOSTS_REMOVE] = 'x', [KEY_HOSTS_RETRY] = 'r', [KEY_HOSTS_ONBOARDING] = 'O',
         [KEY_RECOVERY_UP] = 'k', [KEY_RECOVERY_DOWN] = 'j', [KEY_RECOVERY_CHECK] = '\r',
@@ -242,6 +233,7 @@ void key_perform(struct app *app, enum key_action action) {
     uint32_t key = action_key(action);
     if (action == KEY_REFRESH) { refresh_all(app); return; }
     if (action == KEY_PALETTE) { palette_open(app); return; }
+    if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) { statistics_perform(app, action); return; }
     if (key == SHIFT_TAB) input_named(app, KT_KEY_TAB, KT_MOD_SHIFT);
     else if (key >= KT_KEY_UP) input_named(app, key, 0);
     else if (key) input_character(app, (char)key);
@@ -282,6 +274,8 @@ static void applying(const struct app *app, struct kt_binding *rows) {
     if (remote_head_selected(app) && !app->marked_count) rows[KEY_HEAD_REMOVE].label = "interrupt";
     if (app->view == 7 && head_selected(app) && !(app->workspace && app->workspace->run_selected))
         rows[KEY_WS_OPEN].label = "details";
+    rows[KEY_STATS_GRAPH].label = statistics_graph_label(app);
+    rows[KEY_STATS_PAGE_PREVIOUS].label = rows[KEY_STATS_PAGE_NEXT].label = statistics_page_label(app);
 }
 
 uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]) {

@@ -277,7 +277,6 @@ static bool view_key(struct app *app, char key) {
     if (key == 27 && app->view == 9) { go_back(app); return true; }
     if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
-    if (app->view == 8 && statistics_key(app, key)) return true;
     if (app->view == 7 && workspace_key(app, key)) return true;
     if (app->view == 5 && workflow_key(app, key)) return true;
     if (select_view(app, key)) return true;
@@ -443,6 +442,7 @@ static void view_key_event(struct app *app, const struct kt_event *e) {
         return;
     }
     if (e->mods == KT_MOD_ALT && e->bytes[0] == '\033' && e->key < KT_KEY_UP) { dispatch_byte(app, 27); return; }
+    if (app->view == 8 && statistics_filter_event(app, e)) return;
     if (e->key < KT_KEY_SEQUENCE) (void)key_dispatch(app, e);
 }
 
@@ -479,5 +479,6 @@ void input_paste(struct app *app, const char *bytes, size_t length, bool truncat
         (void)native_onboarding_event(app, &e);
         return;
     }
+    if (statistics_paste(app, bytes, length)) return;
     copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
 }

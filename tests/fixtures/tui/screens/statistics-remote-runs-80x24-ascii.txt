@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  3 Overview 4 Attention 5 Recovery 6 Flows  7 Stats  ..    STATISTICS 
+                  Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Sessions  Runs  Cohorts ---------------------- all recorded / all workflows   
+ 3 runs / 7 steps / 0 need attention / tokens in 3.97M / timing 6/7            
+                                                                               
+ Workflow runs --------------------------------------- 1 of 3 / newest first   
+  RUN                          STATE                CREATED                    
+> kill-dry-run                 + succeeded          09-07 13:30 UTC            
+  task-handoff                 * running            09-07 13:00 UTC            
+  task-handoff                 + succeeded          09-07 12:00 UTC            
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  * live   Workflow runs / all recorded / all workflows                        
+ ^/v select | enter evidence | [/] pages | T range | ? help | q quit           

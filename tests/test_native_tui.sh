@@ -196,32 +196,44 @@ contains " 7 Stats " "$test_root/stats-tabs.out" "statistics keeps the shared ta
 contains "STATISTICS" "$test_root/stats-tabs.out" "statistics names itself in the top bar"
 # Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
-contains "Agent tokens" "$test_root/stats-usage.out" "statistics scope panel names agent tokens"
-contains "in      3.85M" "$test_root/stats-usage.out" "input tokens are summed across the scope"
-contains "cached  3.74M" "$test_root/stats-usage.out" "cached input tokens are summed across the scope"
+contains "Agent tokens" "$test_root/stats-usage.out" "statistics notes name agent tokens"
+contains "Agent tokens in 3.85M" "$test_root/stats-usage.out" "input tokens are summed across the scope"
+contains "cached 3.74M" "$test_root/stats-usage.out" "cached input tokens are summed across the scope"
 contains "cost not reported" "$test_root/stats-usage.out" "unreported cost stays unknown instead of zero"
-contains "CPU and memory: not" "$test_root/stats-usage.out" "unmeasured resources are explained, not truncated"
+contains "CPU and memory: not measured." "$test_root/stats-usage.out" "unmeasured resources are explained, not truncated"
 contains "3.85M in / 23.0k out" "$test_root/stats-usage.out" "the run table shows per-run tokens"
 ! grep -Fq "Tokens / cost: not m" "$test_root/stats-usage.out"
 assert_success $? "the old truncated resource note is gone"
+! grep -Fq "Sessions  Runs" "$test_root/stats-usage.out"
+assert_success $? "a sample older than head sessions has no sessions page"
 # Head sessions (schema 6): a sample without runs opens on them; inferred
 # times are labelled, unobserved time is its own number, unknown is "--".
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6-sessions.tsv" --size 140x40 --view statistics > "$test_root/stats-sessions.out"
-contains "HEAD SESSIONS / newest start first" "$test_root/stats-sessions.out" "statistics opens on head sessions when there are no runs"
+contains "Head sessions ───" "$test_root/stats-sessions.out" "statistics opens on head sessions when there are no runs"
 contains "Observed 38% of 6h00m session time; 10m00s reported by adapters, the rest inferred from terminal output" "$test_root/stats-sessions.out" "session coverage and its sources are stated"
 contains "inferred, 53% of observed" "$test_root/stats-sessions.out" "the quiet share is labelled as inferred"
-contains "Unobserved      3h42m" "$test_root/stats-sessions.out" "unobserved time is shown apart from quiet"
-contains "docs-refresh                    opencode replaced 09-07 08:00 UTC  2h00m    active --        quiet --" "$test_root/stats-sessions.out" "an unobserved session shows unknown activity"
-contains "old-experiment                  -        ended    unknown date     --" "$test_root/stats-sessions.out" "an undated session shows unknown length"
-contains "SESSIONS STARTED / 7 x 24h" "$test_root/stats-sessions.out" "sessions per day are charted"
-contains "s shows runs (0)" "$test_root/stats-sessions.out" "the sessions page names the runs page"
+contains "Unobserved" "$test_root/stats-sessions.out" "unobserved time has its own tile"
+contains "3h42m" "$test_root/stats-sessions.out" "unobserved time is shown apart from quiet"
+contains "docs-refresh         opencode  ↻ replaced  09-07 08:00  2h00m   --      --" "$test_root/stats-sessions.out" "an unobserved session shows unknown activity"
+contains "old-experiment       -         ✓ ended     --           --      --" "$test_root/stats-sessions.out" "an undated session shows unknown length"
+contains "Sessions started, last 7 days" "$test_root/stats-sessions.out" "sessions per day are charted"
+contains "By agent" "$test_root/stats-sessions.out" "sessions are counted by agent"
+contains " Sessions  Runs ─" "$test_root/stats-sessions.out" "the sessions page names the runs page in its strip"
+contains "▌ fix-login-timeout" "$test_root/stats-sessions.out" "the selected session carries the bar"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" --size 140x40 --view statistics > "$test_root/stats-mixed.out"
-contains "RUNS / newest creation first" "$test_root/stats-mixed.out" "a sample with runs opens on runs"
-contains "s sessions/runs" "$test_root/stats-mixed.out" "the runs page offers head sessions"
+contains "Workflow runs ───" "$test_root/stats-mixed.out" "a sample with runs opens on runs"
+contains "[/] sessions/runs" "$test_root/stats-mixed.out" "the runs page offers head sessions"
+contains "w workflow" "$test_root/stats-mixed.out" "the runs page offers the workflow filter"
+# Nothing recorded is told apart from filtered out (the PTY suite types a
+# filter); an empty sample draws no tile and no chart.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6-empty.tsv" --size 140x40 --view statistics > "$test_root/stats-empty.out"
-contains "No head sessions recorded yet" "$test_root/stats-empty.out" "an empty sample says nothing was recorded"
-! grep -Fq "7 x 24h" "$test_root/stats-empty.out"
+contains "No sessions recorded yet" "$test_root/stats-empty.out" "an empty sample says nothing was recorded"
+! grep -Fq "Nothing matches the filters" "$test_root/stats-empty.out"
+assert_success $? "an empty sample is not called filtered out"
+! grep -Fq "last 7 days" "$test_root/stats-empty.out"
 assert_success $? "an empty sample draws no chart"
+! grep -Fq "Unobserved" "$test_root/stats-empty.out"
+assert_success $? "an empty sample draws no tiles"
 # Golden frames of every view at 140x40 and 80x24, in Unicode and ASCII: the
 # frame (top bar, titled rules, status chip, generated footer) is pinned.
 # Regenerate with the same command when a change to a screen is intended.
@@ -238,20 +250,57 @@ for golden_view in heads detail coordination recovery overview workflows hosts w
         done
     done
 done
-# Samples without sessions render exactly as they did before sessions existed.
+# Golden Stats frames: head sessions at every layout (tiles and charts,
+# tiles, summary line, list only), an empty sample, and the fleet's hosts.
+for golden_case in sessions:v6-sessions:140x40 sessions:v6-sessions:100x30 sessions:v6-sessions:80x24 \
+    sessions:v6-sessions:60x20 empty:v6-empty:80x24; do
+    golden_name="${golden_case%%:*}"; golden_rest="${golden_case#*:}"
+    for golden_mode in plain ascii; do
+        golden_flag=
+        [ "$golden_mode" = ascii ] && golden_flag=--ascii
+        "$tui" $golden_flag --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-${golden_rest%%:*}.tsv" \
+            --size "${golden_rest##*:}" --view statistics > "$test_root/golden.out"
+        cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/statistics-$golden_name-${golden_rest##*:}-$golden_mode.txt"
+        assert_success $? "golden Stats frame $golden_name at ${golden_rest##*:} ($golden_mode)"
+    done
+done
+# Golden Stats frames of a sample with sessions, runs and remote steps: the
+# three pages ([ from Runs is Sessions, C is Cohorts) and the location chip.
+for golden_case in remote-runs:140x40: remote-runs:80x24: remote-sessions:140x40:[ remote-cohorts:140x40:C \
+    remote-cohorts:80x24:C remote-location:140x40:CLL remote-location:80x24:CLL; do
+    golden_name="${golden_case%%:*}"; golden_rest="${golden_case#*:}"; golden_size="${golden_rest%%:*}"
+    for golden_mode in plain ascii; do
+        golden_flag=
+        [ "$golden_mode" = ascii ] && golden_flag=--ascii
+        "$tui" $golden_flag --keys "${golden_rest#*:}" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6-remote.tsv" \
+            --size "$golden_size" --view statistics > "$test_root/golden.out"
+        cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/statistics-$golden_name-$golden_size-$golden_mode.txt"
+        assert_success $? "golden Stats frame $golden_name at $golden_size ($golden_mode)"
+    done
+done
+"$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v2.tsv" --size 140x40 --view statistics > "$test_root/golden.out"
+cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/statistics-fleet-140x40-plain.txt"
+assert_success $? "golden Stats frame of the fleet's hosts"
+# Samples without sessions (schemas 2 and 4) keep the runs page alone.
 for stats_case in v2:80x24 v2:140x40 v4:80x24 v4:140x40; do
     "$tui" --ascii --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-${stats_case%%:*}.tsv" --size "${stats_case##*:}" --view statistics > "$test_root/stats-same.out"
     cmp -s "$test_root/stats-same.out" "$repo_root/tests/fixtures/tui/statistics-${stats_case%%:*}-${stats_case##*:}.txt"
-    assert_success $? "statistics ${stats_case%%:*} at ${stats_case##*:} is unchanged without sessions"
+    assert_success $? "statistics ${stats_case%%:*} at ${stats_case##*:} matches its golden frame"
 done
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
-contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
-# Schema 5 remote rows: the scope panel reports what remote task receipts measured
-# and keeps local steps unmeasured; the location filter is visible.
+contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the summary line"
+# Schema 5 remote rows: the runs page reports what remote task receipts
+# measured and keeps local steps unmeasured; the strip offers the Cohorts
+# page, and no location chip is shown while every location is.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size 140x40 --view statistics > "$test_root/stats-remote.out"
 contains "Remote CPU 5.5s" "$test_root/stats-remote.out" "remote receipts' CPU is reported with its coverage"
-contains "Location: all" "$test_root/stats-remote.out" "the location filter is shown in the scope panel"
+contains " Runs  Cohorts " "$test_root/stats-remote.out" "the strip offers the cohorts page"
 contains "C cohorts" "$test_root/stats-remote.out" "the cohorts page is announced"
+! grep -Fq "location: " "$test_root/stats-remote.out"
+assert_success $? "no location chip while every location is shown"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" --size 140x40 --view statistics > "$test_root/stats-local.out"
+! grep -Fq "Cohorts" "$test_root/stats-local.out"
+assert_success $? "a sample without remote steps has no cohorts page"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
 contains " 8 Workspace " "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
 contains "PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is named in the top bar"

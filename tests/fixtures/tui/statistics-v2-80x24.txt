@@ -1,25 +1,25 @@
 FRAME 1 80x24
  # hydra  3 Overview 4 Attention 5 Recovery 6 Flows  7 Stats  ..    STATISTICS 
                   Local / 3 heads / 1 running / 3 need attention / 4 to repair 
-RUNS ------------  RUNNING ---------  NEED ATTENTION --  RETRIES ------------- 
-  8                  1                  3                  3                   
-                     steps right        failed,                                
-  in this scope      now                blocked or...      repeated attempts   
+ Runs ----------------------------------------- all recorded / all workflows   
+ 8 runs / 11 steps / 3 need attention / timing 6/11                            
                                                                                
- Latest attempts average 95.0s over 6 timed steps, longest 120s                
-RUNS / newest creation first ------------------------------------------------- 
-                                                                               
-  > visualization-proof              running             09-07 13:30 UTC       
-    release-check                    succeeded           09-07 13:00 UTC       
-    recovery-check                   failed              09-07 12:00 UTC       
-    recovery-check                   recovery-required   09-07 08:00 UTC       
-    release-check                    succeeded           09-06 13:00 UTC       
-    release-check                    succeeded           09-05 14:00 UTC       
-    release-check                    cancelled           08-28 04:00 UTC       
-    imported-work                    -                   unknown date          
+ Workflow runs --------------------------------------- 1 of 8 / newest first   
+  RUN                          STATE                CREATED                    
+> visualization-proof          * running            09-07 13:30 UTC            
+  release-check                + succeeded          09-07 13:00 UTC            
+  recovery-check               x failed             09-07 12:00 UTC            
+  recovery-check               ! recovery-required  09-07 08:00 UTC            
+  release-check                + succeeded          09-06 13:00 UTC            
+  release-check                + succeeded          09-05 14:00 UTC            
+  release-check                - cancelled          08-28 04:00 UTC            
+  imported-work                ? -                  unknown date               
                                                                                
                                                                                
-  1/8 / Enter evidence / g graph                                               
                                                                                
- Recorded workflow runs / all recorded / all work                              
- ^/v select | enter evidence | g graph | T range | ? help | q quit             
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  * live   Workflow runs / all recorded / all workflows                        
+ ^/v select | enter evidence | T range | / filter | g graph | ? help | q quit  

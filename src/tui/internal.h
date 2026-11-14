@@ -75,6 +75,12 @@ struct statistics_view {
     bool sessions, sessions_chosen;
     size_t session_rows[HS_SESSIONS], session_count, session_selected;
     char session_id[80];
+    /* typing: the filter has the keys (statistics_input.c); evidence_focus:
+     * the evidence beside the list has them; head_open: g showed a
+     * session's head in Details, so Esc there comes back. received: when
+     * the sample arrived, for the status line's freshness. */
+    bool typing, evidence_focus, head_open;
+    time_t received;
 };
 /* RETURNED: the user requested changes to this exact draft; it cannot be
  * validated or executed until the agent publishes a different draft. */
@@ -304,7 +310,16 @@ bool native_terminal_wants(struct app *app, const struct kt_event *e);
 void native_terminal_event(struct app *app, const struct kt_event *e);
 bool native_terminal_paste(struct app *app, const char *bytes, size_t length);
 void statistics_toggle(struct app *app);
-bool statistics_key(struct app *app, char key);
+/* Stats actions from the binding table: whether one applies now, running
+ * it, and the graph key's label for the page shown. */
+bool statistics_applies(const struct app *app, enum key_action action);
+void statistics_perform(struct app *app, enum key_action action);
+const char *statistics_graph_label(const struct app *app);
+const char *statistics_page_label(const struct app *app);
+/* While the Stats filter is typed, text keys and paste edit it. */
+bool statistics_typing(const struct app *app);
+bool statistics_filter_event(struct app *app, const struct kt_event *e);
+bool statistics_paste(struct app *app, const char *bytes, size_t length);
 bool statistics_back(struct app *app);
 bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
@@ -321,8 +336,6 @@ typedef bool (*dialog_final_fn)(int result);
 int dialog_run(struct app *app, const struct kt_modal *dialog, dialog_final_fn final);
 bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
-bool render_statistics_runs(struct app *app, unsigned frame, bool headless);
-bool statistics_runs_key(struct app *app, char key);
 /* The head sessions page and what the two pages share (statistics_sessions.c). */
 bool statistics_sessions_shown(const struct app *app);
 void statistics_sessions_default(struct statistics_view *v);
@@ -502,7 +515,6 @@ void statistics_count(uint64_t value, bool known, char *out, size_t size);
 void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
 void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
 int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, struct kt_style tone, const char *text);
-void statistics_scope_notes(struct kt_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
 void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
 void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
 void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct hs_model *m, const struct hs_step *s);

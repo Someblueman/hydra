@@ -120,13 +120,16 @@ static bool help_lists_chain(void) {
     struct kt_canvas canvas;
     const struct native_keys *k = native_keys(app);
     static char screen[141 * 120 + 1];
+    static struct kt_binding rows[KEY_ACTIONS];
     size_t i, used = 0;
     int height;
     bool ok;
+    /* A sample with sessions, runs and remote steps: every Stats key applies. */
     set_chain(app, 8, false, false);
+    if (load_statistics_fixture(app, "tests/fixtures/tui/statistics-v6-remote.tsv") != 0) { free(app); return false; }
     height = key_help(app, NULL, (struct kt_rect){0, 0, 140, 120}, 0);
     ok = height > 4 && height <= 120 && kt_init(&canvas, cells, sizeof(cells) / sizeof(cells[0]), 140, 120, false);
-    if (!ok) { free(app); return false; }
+    if (!ok) { statistics_destroy(app); free(app); return false; }
     kt_clear(&canvas, KT_BASE);
     (void)key_help(app, &canvas, (struct kt_rect){0, 0, 140, 120}, 0);
     for (i = 0; i < 140U * 120U && used + 1 < sizeof(screen); i++) {
@@ -134,12 +137,40 @@ static bool help_lists_chain(void) {
         if (i % 140U == 139U) screen[used++] = '\n';
     }
     screen[used] = '\0';
+    /* The labels as shown now: some name what applies (the pages key). */
+    (void)key_applying(app, rows);
     for (i = KEY_VIEW_ACTIONS; i < KEY_ACTIONS; i++) {
         uint32_t chain = key_chains[KEY_CHAIN_STATISTICS] & ~(uint32_t)KEY_SCOPE_TERMINAL;
         if (!(k->bindings[i].scope & chain) || !key_applies(app, (enum key_action)i)) continue;
-        if (!strstr(screen, k->bindings[i].label)) { fprintf(stderr, "help lacks %s\n", k->bindings[i].name); ok = false; }
+        if (!strstr(screen, rows[i].label)) { fprintf(stderr, "help lacks %s\n", k->bindings[i].name); ok = false; }
     }
-    ok = ok && strstr(screen, "While typing to an agent") && strstr(screen, "leave input") && strstr(screen, "Statistics");
+    ok = ok && strstr(screen, "While typing to an agent") && strstr(screen, "leave input") && strstr(screen, "Stats");
+    if (!ok) fprintf(stderr, "help (%d rows):\n%s\n", height, screen);
+    statistics_destroy(app);
+    free(app);
+    return ok;
+}
+
+/* Stats owns w (workflow filter), tab (pane) and [ ] (pages): the Workflows
+ * jump and the view-changing Tab are not in its chain. While its filter is
+ * typed only the filter's keys are live, and its footer says so. */
+static bool stats_keys_owned(void) {
+    struct app *app = app_new(false);
+    uint32_t chain = key_chains[KEY_CHAIN_STATISTICS];
+    char shown[64], text[1024] = "";
+    bool ok = !(chain & KEY_SCOPE_FLOW_JUMP) && !(chain & KEY_SCOPE_VIEWS) && (chain & KEY_SCOPE_JUMPS) &&
+        (key_chains[KEY_CHAIN_HEADS] & KEY_SCOPE_FLOW_JUMP);
+    ok = ok && key_text(app, KEY_STATS_WORKFLOW, shown, sizeof(shown)) && !strcmp(shown, "w");
+    ok = ok && key_text(app, KEY_STATS_PANE, shown, sizeof(shown)) && !strcmp(shown, "Tab");
+    ok = ok && key_text(app, KEY_STATS_PAGE_PREVIOUS, shown, sizeof(shown)) && !strcmp(shown, "[");
+    ok = ok && key_text(app, KEY_STATS_PAGE_NEXT, shown, sizeof(shown)) && !strcmp(shown, "]");
+    if (!statistics_init(app)) { free(app); return false; }
+    set_chain(app, 8, false, false);
+    app->statistics->typing = true;
+    ok = ok && key_chain(app) == KEY_CHAIN_STATS_FILTER && footer_text(app, 80, text, sizeof(text)) &&
+        strstr(text, "keep filter") && strstr(text, "clear filter") && !strstr(text, "q quit");
+    if (!ok) fprintf(stderr, "stats keys: %s\n", text);
+    statistics_destroy(app);
     free(app);
     return ok;
 }
@@ -164,8 +195,6 @@ static bool old_keys_file_loads(void) {
     return ok;
 }
 
-/* Fleet mode leaves local-only actions live nowhere, so they reach neither
- * its footer nor its help. */
 /* The fleet entry opens the one control centre filtered to remote work: it
  * keeps every key of local work (a talks to or attaches, x removes or
  * interrupts), leaves out only the local statistics pages, and the rows that
@@ -174,10 +203,41 @@ static bool fleet_drops_local(void) {
     struct app *app = app_new(true), *local = app_new(false);
     const struct native_keys *k = native_keys(app), *l = native_keys(local);
     bool ok = k->bindings[KEY_TASK_NEW].scope && k->bindings[KEY_HEAD_REMOVE].scope && k->bindings[KEY_HEADS_TALK].scope &&
-        !k->bindings[KEY_STATS_PAGE].scope && !k->bindings[KEY_STATS_COHORTS].scope && l->bindings[KEY_STATS_COHORTS].scope &&
+        !k->bindings[KEY_STATS_PAGE_NEXT].scope && l->bindings[KEY_STATS_PAGE_NEXT].scope &&
+        !k->bindings[KEY_STATS_COHORTS].scope && l->bindings[KEY_STATS_COHORTS].scope &&
+        !k->bindings[KEY_STATS_LOCATION].scope && l->bindings[KEY_STATS_LOCATION].scope &&
         !k->bindings[KEY_HEADS_ATTACH].scope && !k->bindings[KEY_HEADS_INTERRUPT].scope &&
         !l->bindings[KEY_HEADS_ATTACH].scope && !l->bindings[KEY_HEADS_INTERRUPT].scope;
     free(app); free(local);
+    return ok;
+}
+
+/* A keys file written by 3.0 --print-keys names Statistics rows whose jobs
+ * moved ([ ] pages, the typed filter, ctrl+r): it still loads without a
+ * problem, those rows are live nowhere, and the new keys keep their
+ * defaults. */
+static bool released_stats_names_load(void) {
+    static const char text[] = "statistics.page = s\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
+        "statistics.find = /\nstatistics.refresh = r\nstatistics.cohorts = C\nstatistics.location = L\n";
+    char path[] = "/tmp/hydra-keymap-test-XXXXXX";
+    struct app *app = app_new(false);
+    const struct native_keys *k;
+    char shown[64];
+    int fd = mkstemp(path);
+    bool ok = fd >= 0 && write(fd, text, sizeof(text) - 1U) == (ssize_t)(sizeof(text) - 1U);
+    if (fd >= 0) (void)close(fd);
+    setenv("HYDRA_TUI_KEYS", path, 1);
+    native_keys_load(app, true);
+    unsetenv("HYDRA_TUI_KEYS");
+    (void)unlink(path);
+    k = native_keys(app);
+    ok = ok && !k->problem[0] && !k->bindings[KEY_STATS_PAGE].scope && !k->bindings[KEY_STATS_FIND].scope &&
+        !k->bindings[KEY_STATS_WORKFLOW_NEXT].scope && !k->bindings[KEY_STATS_REFRESH].scope &&
+        key_text(app, KEY_STATS_PAGE_NEXT, shown, sizeof(shown)) && !strcmp(shown, "]") &&
+        key_text(app, KEY_STATS_FILTER, shown, sizeof(shown)) && !strcmp(shown, "/") &&
+        key_text(app, KEY_STATS_COHORTS, shown, sizeof(shown)) && !strcmp(shown, "C");
+    if (!ok) fprintf(stderr, "released statistics keys: %s\n", k->problem);
+    free(app);
     return ok;
 }
 
@@ -188,8 +248,10 @@ int main(void) {
     result(conflict_refused(), "a key bound twice in one chain is refused, naming both actions");
     result(footers_fit(), "every footer fits 40 to 140 columns and keeps help and quit");
     result(help_lists_chain(), "help lists every binding of its chain and the agent-layer chords");
+    result(stats_keys_owned(), "Stats owns w, tab and [ ], and its typed filter has only the filter's keys");
     result(old_keys_file_loads(), "a keys file with the first version's names still loads");
+    result(released_stats_names_load(), "a 3.0 keys file with the retired Statistics names still loads");
     result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics; retired rows are live nowhere");
-    printf("Passed: %d checks, Failed: %d\n", 8 - failures, failures);
+    printf("Passed: %d checks, Failed: %d\n", 10 - failures, failures);
     return failures ? 1 : 0;
 }

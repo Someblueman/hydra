@@ -237,18 +237,8 @@ src/tui/render.c	status_line	27
 src/tui/review.c	native_review_hints	26
 src/tui/review.c	render_lead	31
 src/tui/selection.c	move_selection	19
-src/tui/statistics_cohorts.c	statistics_cohorts_render	16
 src/tui/statistics_cohorts.c	statistics_remote_text	16
-src/tui/statistics_input.c	statistics_filter_key	20
-src/tui/statistics_input.c	statistics_runs_key	30
-src/tui/statistics_model.c	statistics_move	22
-src/tui/statistics_model.c	statistics_runs_move	22
 src/tui/statistics_model.c	statistics_runs_visible	34
-src/tui/statistics_model.c	statistics_visible	34
-src/tui/statistics_render.c	render_statistics_runs	115
-src/tui/statistics_render.c	statistics_fleet	60
-src/tui/statistics_render.c	statistics_run_detail	19
-src/tui/statistics_render.c	statistics_run_table	18
 src/tui/terminals.c	native_terminal_attach	21
 src/tui/terminals.c	native_terminals_pump	31
 src/tui/workflow_model.c	accept_workflows	29
@@ -317,8 +307,6 @@ tests/kettle/test_plan_workspace.c	main	28
 tests/kettle/test_pty.c	shell_test	25
 tests/kettle/test_pty.c	workspace	25
 tests/kettle/test_statistics_pty.c	fleet_statistics	16
-tests/kettle/test_statistics_pty.c	local_statistics	47
-tests/kettle/test_statistics_pty.c	remote_cohorts	51
 tests/kettle/test_workflow_controls.c	lines_subset	19
 tests/kettle/test_workflow_controls.c	main	146
 tests/kettle/test_workflow_controls.c	run_index	19
