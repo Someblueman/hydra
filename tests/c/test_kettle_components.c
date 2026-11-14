@@ -408,6 +408,214 @@ static void list_mouse(void) {
     CHECK(!strcmp(row(0), "   Nothing here"));
 }
 
+/* ---- table --------------------------------------------------------------- */
+
+static const struct kt_table_column head_columns[] = {
+    {"HEAD", KT_MIN(12), KT_ALIGN_LEFT}, {"STATUS", KT_FIXED(10), KT_ALIGN_LEFT}, {"REP", KT_FIXED(4), KT_ALIGN_RIGHT}};
+
+static void head_cell(void *context, size_t row, size_t column, struct kt_table_cell *cell) {
+    static const char *const status[] = {"running", "terminal gone", "stopped"};
+    (void)context;
+    if (column == 0) cell->text = heads[row];
+    if (column == 1) { cell->text = status[row % 3]; cell->color = row % 3 == 1 ? KT_COLOR_WARNING : KT_DEFAULT; }
+    if (column == 2) cell->text = row ? "\xe2\x80\x94" : "done";
+}
+
+static struct kt_table table_under_test;
+
+static void table_view(void) {
+    struct kt_table *t = &table_under_test;
+    struct kt_rect parts[KT_TABLE_COLUMNS];
+    kt_table_init(t, head_columns, 3, head_cell, NULL, HEADS);
+    t->sortable = true;
+    t->sort_column = 1;
+    kt_table_place(t, (struct kt_rect){1, 0, 36, 5});
+    /* Columns by constraint after the bar's two columns, a gap of two. */
+    kt_table_columns(t, t->area, parts);
+    CHECK(parts[0].x == 3 && parts[1].x == parts[0].x + parts[0].width + 2 && parts[2].width == 4);
+    CHECK(parts[2].x + parts[2].width == 1 + 36 - 2);
+    blank(40, 6, true);
+    kt_table_view(t, &canvas, t->area);
+    CHECK(!strcmp(row(0), "   HEAD            STATUS \xe2\x96\xb2     REP"));
+    CHECK(cell(26, 0)->foreground == KT_COLOR_ACCENT);
+    /* Cells are cut with an ellipsis per column; colours come from the cell. */
+    CHECK(!strcmp(row(1), " \xe2\x96\x8c feature-live    running     done \xe2\x94\x83"));
+    CHECK(!strcmp(row(2), "   feature-stale   terminal \xe2\x80\xa6     \xe2\x80\x94 \xe2\x94\x83"));
+    CHECK(cell(20, 2)->foreground == KT_COLOR_WARNING);
+    CHECK(!strncmp(row(3), "   feature-unava\xe2\x80\xa6", 19));
+}
+
+static void table_keys(void) {
+    struct kt_table *t = &table_under_test;
+    struct kt_msg down = key('j', 0), end = key('G', 0), sort = key('s', 0), reverse = key('S', 0);
+    struct kt_msg heading = mouse(20, 0, 0), click = mouse(5, 2, 0);
+    CHECK(kt_table_update(t, &down, NULL) == KT_TABLE_MOVED && t->selected == 1);
+    CHECK(kt_table_update(t, &end, NULL) == KT_TABLE_MOVED && t->selected == HEADS - 1 && t->top == HEADS - 4);
+    CHECK(kt_table_update(t, &down, NULL) == KT_TABLE_HANDLED);
+    /* Sorting is asked for, not done: the next column, then the order. */
+    CHECK(kt_table_update(t, &sort, NULL) == KT_TABLE_SORTED && t->sort_column == 2 && !t->sort_descending);
+    CHECK(kt_table_update(t, &reverse, NULL) == KT_TABLE_SORTED && t->sort_column == 2 && t->sort_descending);
+    CHECK(kt_table_update(t, &sort, NULL) == KT_TABLE_SORTED && t->sort_column == 0);
+    CHECK(kt_table_update(t, &heading, NULL) == KT_TABLE_SORTED && t->sort_column == 1 && !t->sort_descending);
+    CHECK(kt_table_update(t, &heading, NULL) == KT_TABLE_SORTED && t->sort_descending);
+    blank(40, 6, true);
+    kt_table_view(t, &canvas, t->area);
+    CHECK(strstr(row(0), "STATUS \xe2\x96\xbc") != NULL);
+    CHECK(kt_table_update(t, &click, NULL) == KT_TABLE_MOVED && t->selected == t->top + 1);
+    CHECK(kt_table_update(t, &click, NULL) == KT_TABLE_CHOSEN);
+    t->sortable = false;
+    CHECK(kt_table_update(t, &sort, NULL) == KT_TABLE_IGNORED);
+    kt_table_set_count(t, 0);
+    CHECK(t->selected == KT_NONE && kt_table_update(t, &down, NULL) == KT_TABLE_HANDLED);
+    blank(40, 6, true);
+    kt_table_view(t, &canvas, t->area);
+    CHECK(!strcmp(row(1), "   Nothing here"));
+}
+
+/* ---- viewport ------------------------------------------------------------ */
+
+static const char *const prose[] = {
+    "The quick brown fox jumps over the lazy dog.", "", "short", "averyveryverylongwordthatmustbecut", "one two three"};
+
+static size_t prose_line(void *context, size_t index, struct kt_span *spans, size_t capacity) {
+    (void)context;
+    if (!capacity) return 0;
+    spans[0].text = prose[index];
+    spans[0].style = index == 2 ? KT_INK(KT_COLOR_ACCENT, KT_BOLD) : KT_INK(KT_COLOR_TEXT, 0);
+    if (index != 4 || capacity < 2) return 1;
+    spans[0].text = "one tw";
+    spans[1].text = "o three";
+    spans[1].style = KT_INK(KT_COLOR_DANGER, 0);
+    return 2;
+}
+
+static size_t numbered(void *context, size_t index, struct kt_span *spans, size_t capacity) {
+    static char text[64][16];
+    (void)context;
+    if (!capacity) return 0;
+    snprintf(text[index % 64], sizeof(text[0]), "line %zu", index);
+    spans[0].text = text[index % 64];
+    spans[0].style = KT_BASE;
+    return 1;
+}
+
+static void viewport_wrap(void) {
+    struct kt_viewport v;
+    struct kt_msg down = key('j', 0), up = key('k', 0), bottom = key('G', 0), top = key('g', 0);
+    kt_viewport_init(&v, prose_line, NULL, 5);
+    v.wrap = true;
+    kt_viewport_place(&v, (struct kt_rect){0, 0, 11, 4});
+    /* Ten columns of text and one for the scroll bar. */
+    CHECK(kt_viewport_line_rows(&v, 0, 10) == 5 && kt_viewport_line_rows(&v, 1, 10) == 1);
+    CHECK(kt_viewport_line_rows(&v, 3, 10) == 4 && kt_viewport_line_rows(&v, 4, 10) == 2);
+    blank(12, 5, true);
+    kt_viewport_view(&v, &canvas, v.area);
+    /* Wrapped at blanks; the scroll bar counts lines. */
+    CHECK(!strcmp(row(0), "The quick \xe2\x94\x83") && !strcmp(row(1), "brown fox \xe2\x94\x82"));
+    CHECK(!strcmp(row(2), "jumps over\xe2\x94\x82") && !strcmp(row(3), "the lazy  \xe2\x94\x82"));
+    CHECK(kt_viewport_update(&v, &up, NULL) == KT_VIEWPORT_HANDLED && v.top == 0 && v.top_row == 0);
+    CHECK(kt_viewport_update(&v, &down, NULL) == KT_VIEWPORT_HANDLED && v.top == 0 && v.top_row == 1);
+    /* The end: the last line's last row at the bottom edge, and no further. */
+    CHECK(kt_viewport_update(&v, &bottom, NULL) == KT_VIEWPORT_HANDLED && kt_viewport_at_bottom(&v));
+    CHECK(v.top == 3 && v.top_row == 2 && kt_viewport_percent(&v) == 100);
+    CHECK(kt_viewport_update(&v, &down, NULL) == KT_VIEWPORT_HANDLED && v.top == 3 && v.top_row == 2);
+    blank(12, 5, true);
+    kt_viewport_view(&v, &canvas, v.area);
+    /* A word longer than the width is cut between cells; runs keep their style across a break. */
+    CHECK(!strncmp(row(0), "dthatmustb", 10) && !strncmp(row(1), "ecut ", 5));
+    CHECK(!strncmp(row(2), "one two ", 8) && !strncmp(row(3), "three ", 6));
+    CHECK(cell(6, 2)->foreground == KT_COLOR_DANGER && cell(0, 2)->foreground == KT_COLOR_TEXT);
+    CHECK(cell(0, 3)->foreground == KT_COLOR_DANGER);
+    CHECK(kt_viewport_update(&v, &up, NULL) == KT_VIEWPORT_HANDLED && v.top == 3 && v.top_row == 1);
+    CHECK(kt_viewport_update(&v, &top, NULL) == KT_VIEWPORT_HANDLED && v.top == 0 && kt_viewport_percent(&v) == 0);
+    /* Taller: the place is kept and clamped. */
+    kt_viewport_place(&v, (struct kt_rect){0, 0, 11, 30});
+    CHECK(v.top == 0 && kt_viewport_at_bottom(&v));
+}
+
+static struct kt_viewport follower;
+
+static void viewport_follow(void) {
+    struct kt_viewport *v = &follower;
+    struct kt_msg up = key(KT_KEY_UP, 0), end = key(KT_KEY_END, 0), page = key(KT_KEY_PAGE_UP, 0);
+    struct kt_msg half = key('d', KT_MOD_CTRL);
+    kt_viewport_init(v, numbered, NULL, 3);
+    v->follow = true;
+    kt_viewport_place(v, (struct kt_rect){0, 0, 10, 4});
+    CHECK(v->at_end && v->top == 0);
+    /* Following: new lines keep the end in view. */
+    kt_viewport_set_count(v, 10);
+    CHECK(v->top == 6 && v->at_end);
+    kt_viewport_set_count(v, 12);
+    CHECK(v->top == 8);
+    blank(10, 4, true);
+    kt_viewport_view(v, &canvas, v->area);
+    CHECK(!strcmp(row(3), "line 11  \xe2\x94\x83"));
+    /* Scrolling up leaves the end: more lines do not move the view. */
+    CHECK(kt_viewport_update(v, &up, NULL) == KT_VIEWPORT_HANDLED && v->top == 7 && !v->at_end);
+    kt_viewport_set_count(v, 20);
+    CHECK(v->top == 7);
+    CHECK(kt_viewport_update(v, &page, NULL) == KT_VIEWPORT_HANDLED && v->top == 4);
+    CHECK(kt_viewport_update(v, &half, NULL) == KT_VIEWPORT_HANDLED && v->top == 6);
+    CHECK(kt_viewport_percent(v) == 6 * 100 / 17);
+    CHECK(kt_viewport_update(v, &end, NULL) == KT_VIEWPORT_HANDLED && v->top == 16 && v->at_end);
+    kt_viewport_set_count(v, 21);
+    CHECK(v->top == 17);
+    /* Fewer lines than rows; none at all. */
+    kt_viewport_set_count(v, 2);
+    CHECK(v->top == 0);
+    kt_viewport_set_count(v, 0);
+    CHECK(v->top == 0 && kt_viewport_at_bottom(v));
+    blank(10, 4, true);
+    kt_viewport_view(v, &canvas, v->area);
+    CHECK(!strcmp(row(0), ""));
+}
+
+static void viewport_sideways(void) {
+    struct kt_viewport *v = &follower;
+    struct kt_msg right = key('l', 0), left = key('h', 0);
+    /* Clipped lines scroll sideways, no further than the widest one shown. */
+    kt_viewport_set_count(v, 4);
+    v->scrollbar = false;
+    CHECK(kt_viewport_update(v, &right, NULL) == KT_VIEWPORT_HANDLED && v->left == 0);
+    v->area.width = 4;
+    CHECK(kt_viewport_update(v, &right, NULL) == KT_VIEWPORT_HANDLED && v->left == 2);
+    blank(10, 4, true);
+    kt_viewport_view(v, &canvas, v->area);
+    CHECK(!strcmp(row(1), "ne 1"));
+    CHECK(kt_viewport_update(v, &left, NULL) == KT_VIEWPORT_HANDLED && v->left == 0);
+    v->wrap = true;
+    CHECK(kt_viewport_update(v, &left, NULL) == KT_VIEWPORT_IGNORED);
+}
+
+static void viewport_canvas(void) {
+    static struct kt_cell source_cells[20 * 6];
+    struct kt_canvas source;
+    struct kt_viewport v;
+    struct kt_msg down = key(KT_KEY_DOWN, 0), wheel = mouse(1, 1, 65), right = key(KT_KEY_RIGHT, 0);
+    CHECK(kt_init(&source, source_cells, 20 * 6, 20, 6, true));
+    kt_clear(&source, KT_BASE);
+    kt_text(&source, (struct kt_rect){0, 0, 20, 1}, "row zero \xe7\x95\x8c", KT_STRONG);
+    kt_text(&source, (struct kt_rect){0, 5, 20, 1}, "row five is longer", KT_MUTED);
+    kt_viewport_init(&v, NULL, NULL, 0);
+    kt_viewport_set_canvas(&v, &source);
+    v.scrollbar = false;
+    kt_viewport_place(&v, (struct kt_rect){0, 0, 10, 3});
+    blank(12, 4, true);
+    kt_viewport_view(&v, &canvas, v.area);
+    /* The wide character would be cut by the edge: a blank instead. */
+    CHECK(!strcmp(row(0), "row zero") && cell(0, 0)->attributes == KT_BOLD);
+    CHECK(kt_viewport_update(&v, &down, NULL) == KT_VIEWPORT_HANDLED && v.top == 1);
+    CHECK(kt_viewport_update(&v, &wheel, NULL) == KT_VIEWPORT_HANDLED && v.top == 3);
+    blank(12, 4, true);
+    kt_viewport_view(&v, &canvas, v.area);
+    CHECK(!strcmp(row(2), "row five i") && cell(0, 2)->foreground == KT_COLOR_MUTED);
+    CHECK(kt_viewport_update(&v, &right, NULL) == KT_VIEWPORT_HANDLED && v.left == 8);
+    blank(12, 4, true);
+    kt_viewport_view(&v, &canvas, v.area);
+    CHECK(!strcmp(row(2), " is longer"));
+}
+
 int main(void) {
     fuzzy();
     ranking();
@@ -419,11 +627,17 @@ int main(void) {
     list_view();
     list_filter();
     list_mouse();
+    table_view();
+    table_keys();
+    viewport_wrap();
+    viewport_follow();
+    viewport_sideways();
+    viewport_canvas();
     if (failures) {
         fprintf(stderr, "components: %d check(s) failed\n", failures);
         return 1;
     }
-    puts("components: fuzzy match and rank, wrapping, chord hints, short and full help, scroll arithmetic and the "
-         "list passed");
+    puts("components: fuzzy match and rank, wrapping, chord hints, short and full help, scroll arithmetic, the "
+         "list, the table and the viewport passed");
     return 0;
 }

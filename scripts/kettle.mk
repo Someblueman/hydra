@@ -9,7 +9,7 @@ CORE = canvas color theme draw layout plot graph present workspace unicode outpu
 # The optional POSIX runtime (program.h) and its headless test driver (testing.h).
 RUNTIME = program program_frame program_child program_posix testing
 # Components (components.h): built on the runtime's messages and commands.
-COMPONENTS = component fuzzy help textinput list
+COMPONENTS = component fuzzy help textinput list table viewport
 SOURCES = $(addprefix src/kettle/,$(addsuffix .c,$(CORE)))
 OBJECTS = $(addprefix build/,$(addsuffix .o,$(CORE)))
 RUNTIME_OBJECTS = $(addprefix build/,$(addsuffix .o,$(RUNTIME)))

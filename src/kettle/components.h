@@ -301,4 +301,120 @@ bool kt_list_select(struct kt_list *list, size_t index);
 uint32_t kt_list_scope(const struct kt_list *list);
 struct kt_keymap kt_list_keymap(struct kt_list *list);
 
+/* ---- table -------------------------------------------------------------- */
+
+/* A column: its heading, how it shares the width (layout.h constraints) and
+ * how its cells align. */
+struct kt_table_column { const char *title; struct kt_constraint width; enum kt_align align; };
+/* One cell as the callback describes it. `color` KT_DEFAULT is the row's
+ * text colour; attrs are added to it. The text is borrowed, as for lists. */
+struct kt_table_cell { const char *text; kt_color color; unsigned attrs; };
+typedef void (*kt_table_cell_fn)(void *context, size_t row, size_t column, struct kt_table_cell *cell);
+#define KT_TABLE_COLUMNS 16
+
+/* Rows of columns from the caller's data, with a header, the list's
+ * selection and scrolling, cells cut with an ellipsis where they do not fit,
+ * and a sort indicator. Sorting is the application's: 's' (or a click on a
+ * heading) asks for the next column or the clicked one, 'S' (or a second
+ * click) reverses the order; the table records the choice in sort_column
+ * and sort_descending, reports _SORTED, and the application reorders its
+ * data. Columns past KT_TABLE_COLUMNS are not shown. */
+enum kt_table_action {
+    KT_TABLE_UP, KT_TABLE_DOWN, KT_TABLE_PAGE_UP, KT_TABLE_PAGE_DOWN, KT_TABLE_TOP, KT_TABLE_BOTTOM,
+    KT_TABLE_CHOOSE, KT_TABLE_SORT, KT_TABLE_REVERSE, KT_TABLE_ACTIONS
+};
+enum kt_table_result { KT_TABLE_IGNORED, KT_TABLE_HANDLED, KT_TABLE_MOVED, KT_TABLE_CHOSEN, KT_TABLE_SORTED };
+enum { KT_TABLE_SCOPE_BROWSE = 1, KT_TABLE_SCOPE_SORTABLE = 2 };
+struct kt_table_style {
+    struct kt_style header, sort, cell, cell_selected, selection, bar, bar_unfocused, status, empty, scrollbar, thumb;
+};
+struct kt_table {
+    const struct kt_table_column *columns;
+    size_t column_count;
+    kt_table_cell_fn cell;
+    void *context;
+    size_t count, selected, top;     /* rows; selected is KT_NONE when empty  */
+    size_t sort_column;              /* KT_NONE: unsorted                     */
+    bool sort_descending, sortable;
+    bool focused, header, status_line, scrollbar;
+    int gap;                         /* columns between columns; default 2    */
+    const char *empty;
+    struct kt_rect area;
+    struct kt_table_style style;
+    struct kt_binding keys[KT_TABLE_ACTIONS];
+    struct kt_keymap_state chord;
+};
+void kt_table_init(struct kt_table *table, const struct kt_table_column *columns, size_t column_count,
+                   kt_table_cell_fn cell, void *context, size_t count);
+/* The data changed; the selection is kept in range. */
+void kt_table_set_count(struct kt_table *table, size_t count);
+enum kt_table_result kt_table_update(struct kt_table *table, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_table_view(const struct kt_table *table, struct kt_canvas *canvas, struct kt_rect area);
+void kt_table_place(struct kt_table *table, struct kt_rect area);
+/* Where each column is drawn in an area: `parts` holds column_count
+ * rectangles (at most KT_TABLE_COLUMNS), the header row's. */
+void kt_table_columns(const struct kt_table *table, struct kt_rect area, struct kt_rect *parts);
+uint32_t kt_table_scope(const struct kt_table *table);
+struct kt_keymap kt_table_keymap(struct kt_table *table);
+
+/* ---- viewport ----------------------------------------------------------- */
+
+/* A line of a viewport, as styled runs: the callback fills at most
+ * `capacity` spans and returns how many. Texts are borrowed until the call
+ * that asked returns. */
+typedef size_t (*kt_viewport_line_fn)(void *context, size_t index, struct kt_span *spans, size_t capacity);
+#define KT_VIEWPORT_SPANS 32
+
+/* Scrollable read-only text: lines of styled runs from a callback, or the
+ * rows of a canvas the application drew (kt_viewport_set_canvas). Lines are
+ * clipped, with left and right scrolling sideways, or wrapped at blanks
+ * (`wrap`; a canvas is always clipped). With `follow`, a viewport scrolled to
+ * the end stays at the end as lines are added (kt_viewport_set_count), the
+ * way a log is read; scrolling up leaves the end and scrolling back to it
+ * returns. A scroll bar shows where the view is. Keys: arrows and j/k,
+ * pgup/pgdn and b/space, half pages with ctrl+u/ctrl+d, g/G and home/end; the
+ * mouse wheel scrolls three rows. */
+enum kt_viewport_action {
+    KT_VIEWPORT_UP, KT_VIEWPORT_DOWN, KT_VIEWPORT_PAGE_UP, KT_VIEWPORT_PAGE_DOWN, KT_VIEWPORT_HALF_UP,
+    KT_VIEWPORT_HALF_DOWN, KT_VIEWPORT_TOP, KT_VIEWPORT_BOTTOM, KT_VIEWPORT_LEFT, KT_VIEWPORT_RIGHT,
+    KT_VIEWPORT_ACTIONS
+};
+enum kt_viewport_result { KT_VIEWPORT_IGNORED, KT_VIEWPORT_HANDLED };
+enum { KT_VIEWPORT_SCOPE_SCROLL = 1, KT_VIEWPORT_SCOPE_SIDEWAYS = 2 };
+struct kt_viewport_style { struct kt_style scrollbar, thumb; };
+struct kt_viewport {
+    kt_viewport_line_fn line;
+    void *context;
+    const struct kt_canvas *source;  /* when set, its rows are the lines      */
+    size_t count;                    /* lines                                 */
+    size_t top;                      /* first line shown                      */
+    int top_row;                     /* rows of it scrolled off, when wrapped */
+    int left;                        /* columns scrolled off, when clipped    */
+    bool wrap, follow, scrollbar;
+    bool at_end;                     /* following the end now                 */
+    struct kt_rect area;
+    struct kt_viewport_style style;
+    struct kt_binding keys[KT_VIEWPORT_ACTIONS];
+    struct kt_keymap_state chord;
+};
+void kt_viewport_init(struct kt_viewport *viewport, kt_viewport_line_fn line, void *context, size_t count);
+/* Shows the rows of `source` instead; NULL goes back to the callback. */
+void kt_viewport_set_canvas(struct kt_viewport *viewport, const struct kt_canvas *source);
+/* The text changed: `count` lines now. Following, the end stays in view. */
+void kt_viewport_set_count(struct kt_viewport *viewport, size_t count);
+enum kt_viewport_result kt_viewport_update(struct kt_viewport *viewport, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_viewport_view(const struct kt_viewport *viewport, struct kt_canvas *canvas, struct kt_rect area);
+void kt_viewport_place(struct kt_viewport *viewport, struct kt_rect area);
+/* Scrolls by rows (negative up), to the top, or to the end. */
+void kt_viewport_scroll(struct kt_viewport *viewport, long rows);
+void kt_viewport_top(struct kt_viewport *viewport);
+void kt_viewport_bottom(struct kt_viewport *viewport);
+bool kt_viewport_at_bottom(const struct kt_viewport *viewport);
+/* Rows a line takes at a width: 1 clipped, its wrapped rows otherwise. */
+int kt_viewport_line_rows(const struct kt_viewport *viewport, size_t index, int width);
+/* How far down the view is, 0 to 100, by lines. */
+int kt_viewport_percent(const struct kt_viewport *viewport);
+uint32_t kt_viewport_scope(const struct kt_viewport *viewport);
+struct kt_keymap kt_viewport_keymap(struct kt_viewport *viewport);
+
 #endif
