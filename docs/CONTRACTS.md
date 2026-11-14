@@ -264,6 +264,18 @@ that step's materialized input; plain workflow definitions pass it unchanged.
 `tracked_changes` or `unreadable_content`) and `recovery` fields; tracked changes
 also carry `changed_paths` (at most ten) and `changed_count`. The envelope's
 `error.recovery` repeats the first diagnostic's recovery when one is present.
+`workflow plan run` admission reports why it refused before anything runs:
+`digest_mismatch` (the `--accept` value is not a full 64-character digest, or is
+not this artifact's; the expected digest is not printed), `source_changed` (the
+artifact recompiles to another digest, with the moved source commit named when
+that is the cause, or no longer compiles, with the compile `diagnostics` in
+`data`), `branch_exists` (a spawn branch already exists locally or on `origin`,
+named), `invalid_source` (spawn branches cannot be checked), `materialize_failed`
+(the admitted definition cannot be staged) and `invalid_or_stale_plan` (the
+artifact cannot be read or is not a supported compilation). The shell's
+`head_exists` (durable head state) is unchanged. Every planning error carries a
+`recovery` for its own command; `invalid_or_stale_plan` remains the catch-all of
+commands that fail without a specific reason.
 Structured v3 reports require each obligation's `measurements` evidence to contain
 at least one finite JSON integer or floating-point observation. Narrative strings,
 nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence

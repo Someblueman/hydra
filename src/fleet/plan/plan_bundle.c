@@ -88,16 +88,17 @@ json_object *plan_assets_load(json_object *plan, const char *directory, json_obj
     }
     return assets;
 }
+#define ASSET_FIX "publish again with each --asset NAME=FILE naming a distinct plan ID and a regular text file"
 json_object *plan_proposal_asset(const char *name, const char *file, const char *directory) {
     char path[F_PATH]; json_object *text = NULL; const char *bytes; int length;
     if (!plan_id(name))
-        return f_error("workflow plan propose", "invalid_asset", "asset names are plan IDs: lowercase letters, digits and single - or _ separators");
+        return plan_failure("workflow plan propose", "invalid_asset", "asset names are plan IDs: lowercase letters, digits and single - or _ separators", ASSET_FIX);
     text = text_file(open(file, O_RDONLY | O_NOFOLLOW | O_NONBLOCK));
-    if (!text) return f_error("workflow plan propose", "invalid_asset", "each --asset must name a regular UTF-8 text file of at most 64 KiB without NUL bytes; symlinks are refused");
+    if (!text) return plan_failure("workflow plan propose", "invalid_asset", "each --asset must name a regular UTF-8 text file of at most 64 KiB without NUL bytes; symlinks are refused", ASSET_FIX);
     bytes = json_object_get_string(text); length = json_object_get_string_len(text);
     if (f_path(path, sizeof(path), directory, name) || f_write(path, bytes, (size_t)length, false)) {
         json_object_put(text);
-        return f_error("workflow plan propose", "invalid_asset", "asset names must be unique and the proposal must be writable");
+        return plan_failure("workflow plan propose", "invalid_asset", "asset names must be unique and the proposal must be writable", ASSET_FIX);
     }
     json_object_put(text); return f_success("workflow plan propose", json_object_new_object());
 }

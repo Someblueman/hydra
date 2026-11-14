@@ -112,8 +112,10 @@ assert_success $? 'a refused asset preserves the previous draft and assets'
 dd if=/dev/zero bs=65537 count=1 2>/dev/null | tr '\000' 'a' > "$root/oversized-asset"
 "$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal --asset verifier="$root/oversized-asset" >/dev/null 2>&1
 assert_failure $? 'an asset over 64 KiB is refused'
-"$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal >/dev/null 2>&1
+"$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal > "$root/asset.out" 2>&1
 assert_failure $? 'a draft naming an unpublished asset is refused'
+if grep -q '"recovery":"publish again with one --asset NAME=FILE' "$root/asset.out" && ! grep -q 'head availability' "$root/asset.out"; then check=0; else check=1; fi
+assert_success "$check" 'the refusal tells the agent how to publish, not how to run a plan'
 "$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal --asset verifier="$root/verifier.sh" --asset extra="$root/verifier.sh" > "$root/asset.out" 2>&1
 assert_failure $? 'an asset no data input references is refused'
 grep -q asset_mismatch "$root/asset.out"

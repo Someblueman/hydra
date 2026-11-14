@@ -101,6 +101,11 @@ int plan_digest(json_object *value, char digest[65]) {
     if (canonical && mkdtemp(scratch)) { status = task_json_hash(canonical, scratch, digest); f_remove_tree(scratch); }
     json_object_put(canonical); return status;
 }
+json_object *plan_failure(const char *command, const char *code, const char *message, const char *recovery) {
+    json_object *result = f_error(command, code, message);
+    f_string_add(f_field(result, "error"), "recovery", recovery);
+    return result;
+}
 void plan_error(json_object *errors, const char *path, const char *code, const char *message) {
     json_object *entry;
     if (json_object_array_length(errors) >= 128) return;

@@ -38,6 +38,8 @@ json_object *plan_bundle_assets(json_object *files);
 bool plan_json_unique(const char *text);
 json_object *plan_canonical(json_object *value);
 void plan_error(json_object *errors, const char *path, const char *code, const char *message);
+/* A failed planning command envelope whose recovery is the next step for that command. */
+json_object *plan_failure(const char *command, const char *code, const char *message, const char *recovery);
 void plan_obligation_error(json_object *errors, const char *path, const char *code,
                            const char *message, const char *obligation,
                            const char *counterexample);
@@ -85,8 +87,16 @@ int plan_recipe_digest(json_object *compiled, const char *check, char digest[65]
 enum plan_verdict plan_report(json_object *compiled, json_object *check,
                               json_object *report, const char *subject);
 int plan_materialize(json_object *compiled, const char *directory);
+/* Why an accepted artifact may not run. STALE fills errors with the diagnostics
+ * of recompiling it against source; CHANGED recompiled to another digest. When
+ * fresh is not NULL it receives the caller-owned recompiled artifact, if any. */
+enum plan_admission { PLAN_ADMITTED, PLAN_DIGEST_FORMAT, PLAN_UNDIGESTIBLE, PLAN_DIGEST_MISMATCH, PLAN_STALE, PLAN_CHANGED };
+enum plan_admission plan_admission(json_object *compiled, const char *source, const char *accepted, json_object *errors, json_object **fresh);
 int plan_admit(json_object *compiled, const char *source, const char *accepted);
-int plan_heads_available(json_object *compiled, const char *source);
+#define PLAN_REF 128
+/* 0 when no spawn branch exists in source, locally or as origin's; 1 when one
+ * does and -1 when one cannot be checked, with conflict naming that ref. */
+int plan_heads_available(json_object *compiled, const char *source, char conflict[PLAN_REF]);
 int plan_finish(const char *run);
 json_object *plan_delivery(const char *run);
 /* Borrows a successful plan_delivery result; prints its verification evidence. */

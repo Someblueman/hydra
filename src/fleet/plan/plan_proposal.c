@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#define PROPOSAL_FIX "correct the draft against hydra workflow plan schema, then publish it again with hydra workflow plan propose"
 static json_object *referenced_assets(json_object *proposal) {
     json_object *inputs = f_field(f_field(proposal, "data"), "inputs"), *names = json_object_new_object();
     if (!json_object_is_type(inputs, json_type_object)) return names;
@@ -43,7 +44,7 @@ static json_object *missing_members(json_object *proposal) {
     }
     if (!missing) return NULL;
     (void)snprintf(message + strlen(message), sizeof(message) - strlen(message), "; obtain the format from workflow plan schema");
-    return f_error("workflow plan propose", "invalid_proposal", message);
+    return plan_failure("workflow plan propose", "invalid_proposal", message, PROPOSAL_FIX);
 }
 /* Store a strict, bounded proposal. This does not validate policy, compile,
  * approve or execute anything; those remain separate public operations. */
@@ -53,7 +54,7 @@ json_object *plan_proposal_copy(const char *input, const char *output, const cha
     if (!proposal || !f_string(proposal, "objective") ||
         !plan_list(f_field(proposal, "steps"), 1, PLAN_STEPS)) {
         json_object_put(proposal);
-        return f_error("workflow plan propose", "invalid_proposal", "expected a bounded JSON plan with an objective and steps; obtain the format from workflow plan schema");
+        return plan_failure("workflow plan propose", "invalid_proposal", "expected a bounded JSON plan with an objective and steps; obtain the format from workflow plan schema", PROPOSAL_FIX);
     }
     if ((result = missing_members(proposal))) {
         json_object_put(proposal);
@@ -61,11 +62,11 @@ json_object *plan_proposal_copy(const char *input, const char *output, const cha
     }
     if (assets && (problem = asset_mismatch(proposal, assets))) {
         json_object_put(proposal);
-        return f_error("workflow plan propose", "asset_mismatch", problem);
+        return plan_failure("workflow plan propose", "asset_mismatch", problem, "publish again with one --asset NAME=FILE for each asset the draft's data.inputs names, and no others");
     }
     const char *text = json_object_to_json_string_ext(proposal, JSON_C_TO_STRING_PLAIN);
     if (!text || strlen(text) > PLAN_LIMIT || f_write(output, text, strlen(text), false))
-        result = f_error("workflow plan propose", "write_failed", "could not preserve the proposal in a new private file");
+        result = plan_failure("workflow plan propose", "write_failed", "could not preserve the proposal in a new private file", "check free space and permissions under HYDRA_HOME, then publish again");
     else result = f_success("workflow plan propose", json_object_new_object());
     json_object_put(proposal);
     return result;
