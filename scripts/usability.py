@@ -707,7 +707,7 @@ def result_review(j: Journey) -> None:
     # Overview's run panel: the finished run, its worker and what to do next.
     j.keys(b"\x1b\x1b3")
     j.see_all("RUN / plan run ux-greeting", "succeeded")
-    j.see_all("Worker branch ux-worker holds the result", "git merge --no-ff ux-worker")
+    j.see_all("Worker branch ux-worker holds the result", "hydra land ux-worker")
     j.see("dismiss")
     j.see("(retired)")
     # Work groups the run's heads under the planning conversation that launched it.
