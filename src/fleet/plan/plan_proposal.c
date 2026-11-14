@@ -1,6 +1,7 @@
 #include "fleet/plan/plan.h"
 #include "fleet/support/files.h"
 #include <dirent.h>
+#include <stdio.h>
 #include <string.h>
 
 static json_object *referenced_assets(json_object *proposal) {
@@ -28,6 +29,22 @@ static const char *asset_mismatch(json_object *proposal, const char *directory) 
         problem = "a data.inputs entry names an asset that was not published; pass --asset NAME=FILE for each asset the draft references";
     json_object_put(names); return problem;
 }
+/* The members workflow plan schema requires of every plan; validation reports
+ * any of them that is absent, so publication refuses such a draft as well. */
+static json_object *missing_members(json_object *proposal) {
+    static const char *const required[] = {"schema_version", "id", "objective", "context", "assumptions", "questions",
+                                           "deliverables", "requirements", "checks", "steps", "data", "envelope"};
+    char message[512] = "the draft lacks required plan members:";
+    size_t i; bool missing = false;
+    for (i = 0; i < sizeof(required) / sizeof(required[0]); i++) {
+        if (f_field(proposal, required[i])) continue;
+        (void)snprintf(message + strlen(message), sizeof(message) - strlen(message), "%s %s", missing ? "," : "", required[i]);
+        missing = true;
+    }
+    if (!missing) return NULL;
+    (void)snprintf(message + strlen(message), sizeof(message) - strlen(message), "; obtain the format from workflow plan schema");
+    return f_error("workflow plan propose", "invalid_proposal", message);
+}
 /* Store a strict, bounded proposal. This does not validate policy, compile,
  * approve or execute anything; those remain separate public operations. */
 json_object *plan_proposal_copy(const char *input, const char *output, const char *assets) {
@@ -37,6 +54,10 @@ json_object *plan_proposal_copy(const char *input, const char *output, const cha
         !plan_list(f_field(proposal, "steps"), 1, PLAN_STEPS)) {
         json_object_put(proposal);
         return f_error("workflow plan propose", "invalid_proposal", "expected a bounded JSON plan with an objective and steps; obtain the format from workflow plan schema");
+    }
+    if ((result = missing_members(proposal))) {
+        json_object_put(proposal);
+        return result;
     }
     if (assets && (problem = asset_mismatch(proposal, assets))) {
         json_object_put(proposal);

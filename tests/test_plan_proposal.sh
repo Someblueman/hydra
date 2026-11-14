@@ -46,6 +46,19 @@ for input in '{"objective":"x","objective":"y","steps":[{}]}' '{"broken":' '{"ob
     cmp -s "$head/planning/draft.json" "$root/original.json"
     assert_success $? 'rejected publication preserves the previous draft'
 done
+# A draft without a member the schema requires is refused by name, and
+# validation of the same file reports it instead of aborting.
+sed '/^  "requirements": \[/,/^  \],/d' "$REPO/tests/fixtures/plan/plan.json" > "$root/no-requirements.json"
+"$HYDRA_BIN" workflow plan propose "$root/no-requirements.json" --branch proposal > "$root/missing.out" 2>&1
+assert_failure $? 'a draft without requirements cannot be published'
+if grep -q '"code":"invalid_proposal"' "$root/missing.out" && grep -q 'lacks required plan members: requirements;' "$root/missing.out"; then check=0; else check=1; fi
+assert_success "$check" 'the refusal names the missing member'
+cmp -s "$head/planning/draft.json" "$root/original.json"
+assert_success $? 'a draft missing a required member preserves the previous draft'
+"$HYDRA_BIN" workflow plan validate "$root/no-requirements.json" "$REPO/tests/fixtures/plan/policy.json" > "$root/missing.json" 2>&1
+assert_equal 1 "$?" 'validation of a draft without requirements fails without aborting'
+if grep -q '"path":"requirements","code":"invalid_collection"' "$root/missing.json"; then check=0; else check=1; fi
+assert_success "$check" 'validation names the missing requirements collection'
 dd if=/dev/zero bs=262145 count=1 2>/dev/null | tr '\000' ' ' > "$root/oversized.json"
 "$HYDRA_BIN" workflow plan propose "$root/oversized.json" --branch proposal >/dev/null 2>&1
 assert_failure $? 'oversized input is refused before replacement'

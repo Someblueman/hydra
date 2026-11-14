@@ -637,8 +637,10 @@ exact qualified commit; local checks do not publish or grant release-write acces
 strict, bounded JSON draft under the selected head's `planning/draft.json`. Without
 `--branch`, the current Git branch identifies the head. Head and instance identity
 from an agent launcher must match the current recorded owner. The head lock
-serializes replacement; malformed input preserves the previous draft. A proposal
-is durable input, not a validation, approval, or execution receipt.
+serializes replacement; malformed input preserves the previous draft. A draft that
+lacks a member `workflow plan schema` requires of every plan is refused with
+`invalid_proposal`, naming the missing members, so publication and validation agree
+on it. A proposal is durable input, not a validation, approval, or execution receipt.
 Repeatable `--asset NAME=FILE` publishes at most 16 private asset copies (regular
 UTF-8 text files of at most 64 KiB, no symlinks) in `planning/assets/` beside the
 draft; each publication replaces the whole set, and a draft whose asset
