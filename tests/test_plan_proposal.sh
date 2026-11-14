@@ -177,6 +177,9 @@ assert_equal 64 "${#first}" 'the first revision has an acceptance digest'
 "$HYDRA_BIN" workflow plan show "$e2e/first.json" > "$e2e/first.txt"
 grep -q 'prompt text: Inline worker brief (bundle-marker-1)' "$e2e/first.txt" && grep -q 'Input verifier: carried by this plan as assets/verifier' "$e2e/first.txt"
 assert_success $? 'the approval preview shows the inline prompt and the carried asset'
+grep -Fqx '      | test -s greeting.txt' "$e2e/first.txt" &&
+    grep -Fq '      | printf '"'"'{"schema_version":1,"verdict":"pass",' "$e2e/first.txt"
+assert_success $? 'the approval preview shows the text of the script the plan carries'
 "$HYDRA_BIN" workflow plan explain "$e2e/first.json" | grep -q '"prompt":{"bytes":'
 assert_success $? 'explain summarizes the inline prompt'
 sed 's/make check passed in the worker head/make check passed in the worker head (revision 2)/' "$bundle/verifier.sh" > "$worktree/verifier.sh"
