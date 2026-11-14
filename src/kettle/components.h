@@ -535,7 +535,8 @@ struct kt_keymap kt_form_keymap(struct kt_form *form);
  * the inactive ones lose their padding, and then only those around the
  * active tab are shown, with an arrow at each side that hides some. tab and
  * ']' select the next tab, shift+tab and '[' the previous, 1 to 9 a tab by
- * number; a click selects the tab under it. */
+ * number (a number with no tab is ignored); a click selects the tab under
+ * it. */
 struct kt_tab { const char *label, *badge; kt_color badge_color; };
 enum kt_tabs_action { KT_TABS_NEXT, KT_TABS_PREVIOUS, KT_TABS_JUMP, KT_TABS_ACTIONS = KT_TABS_JUMP + 9 };
 enum kt_tabs_result { KT_TABS_IGNORED, KT_TABS_HANDLED, KT_TABS_CHANGED };

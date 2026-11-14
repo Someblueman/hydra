@@ -773,7 +773,7 @@ static void tabs(void) {
     CHECK(kt_tabs_update(&t, &previous, NULL) == KT_TABS_CHANGED && t.active == 5);
     CHECK(kt_tabs_update(&t, &five, NULL) == KT_TABS_CHANGED && t.active == 4);
     CHECK(kt_tabs_update(&t, &five, NULL) == KT_TABS_HANDLED);
-    CHECK(kt_tabs_update(&t, &nine, NULL) == KT_TABS_HANDLED && t.active == 4);
+    CHECK(kt_tabs_update(&t, &nine, NULL) == KT_TABS_IGNORED && t.active == 4);
     {
         struct kt_msg details = mouse(9, 0, 0), below = mouse(9, 1, 0);
         CHECK(kt_tabs_update(&t, &details, NULL) == KT_TABS_CHANGED && t.active == 1);

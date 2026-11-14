@@ -81,8 +81,10 @@ struct kt_rect kt_tabs_rect(const struct kt_tabs *t, struct kt_rect area, size_t
 
 /* ---- input -------------------------------------------------------------- */
 
+/* A number past the last tab is left to the application. */
 static enum kt_tabs_result go(struct kt_tabs *t, size_t index) {
-    if (index >= t->count || index == t->active) return KT_TABS_HANDLED;
+    if (index >= t->count) return KT_TABS_IGNORED;
+    if (index == t->active) return KT_TABS_HANDLED;
     t->active = index;
     return KT_TABS_CHANGED;
 }
