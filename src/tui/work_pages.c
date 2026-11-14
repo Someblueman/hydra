@@ -49,15 +49,17 @@ static void run_lead(struct app *app, struct kt_rect r, size_t run, const size_t
     const struct workflow_run *wr = &app->workflows->runs[run];
     struct kt_style tone;
     const char *mark = work_state_glyph(app, wr->state, &tone);
-    char text[TEXT + 96];
+    char text[TEXT + 96], cut[TEXT + 96];
     size_t i, at = 0;
     for (i = 0; i < n; i++) if (!strcmp(app->workflows->nodes[indices[i]].state, "running") && !at) at = i + 1;
-    /* The state first, so a narrow pane keeps it; the run's name last. */
+    /* The state first, so a narrow pane keeps it; the run's name last, cut
+     * with an ellipsis where the pane ends. */
     snprintf(text, sizeof(text), "%s", wr->state);
     if (at) text_append(text, sizeof(text), "%sstep %zu of %zu", dot(app), at, n);
     text_append(text, sizeof(text), "%s%s %s", dot(app), run_label_kind(wr), wr->name);
+    fit_text(app, text, r.width > 3 ? (size_t)(r.width - 3) : 1U, cut, sizeof(cut));
     kt_text(&app->frame, (struct kt_rect){r.x, r.y, 1, 1}, mark, tone);
-    kt_text(&app->frame, (struct kt_rect){r.x + 2, r.y, r.width - 2, 1}, text, KT_STRONG);
+    kt_text(&app->frame, (struct kt_rect){r.x + 2, r.y, r.width - 2, 1}, cut, KT_STRONG);
 }
 
 static void run_graph(struct app *app, struct kt_rect r, size_t run, const size_t *indices, size_t n) {

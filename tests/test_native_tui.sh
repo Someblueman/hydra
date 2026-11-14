@@ -233,6 +233,10 @@ for view in heads detail coordination inbox; do
     contains "? help" "$test_root/footer.out" "$view keeps actions visible"
 done
 
+# The help dialog's keys-file sentence wraps at 80 columns rather than being cut.
+"$tui" --headless-fixture "$fixture" --size 80x24 --view heads --keys '?' > "$test_root/help-narrow.out"
+contains 'your own.' "$test_root/help-narrow.out" "the help dialog's keys-file sentence is whole at 80 columns"
+
 # Column separators and panel edges must be invariant across varying values.
 awk 'BEGIN {FS = OFS = "\t"}
 $1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}

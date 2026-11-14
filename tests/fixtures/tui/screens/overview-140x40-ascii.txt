@@ -2,7 +2,7 @@ FRAME 1 140x40
  # hydra  1 Work   2 Inbox 11   3 Hosts   4 Stats                                                      this machine / 3 heads / 1 running  
                                                                                                                                            
  Heads ----------------------- 3  Conversation ------------------------ latest output / read-only  Details  Run -------------------------  
-  ~ feature-live       codex      run visualization-proof / running                                * running / step 2 of 4 / run visualiz  
+  ~ feature-live       codex      run visualization-proof / running                                * running / step 2 of 4 / run visu...   
   ! feature-stale      claude                                                                                                              
   ? feature-unavail... shell      Running step build; its output is in the conversation            +--------------------+     +---------   
  >> * run visualiza... 1/4                                                                         | prepare            |--+->| build      

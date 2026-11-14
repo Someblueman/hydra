@@ -9,8 +9,5 @@ contrast	*	#5f87af on #eeeeee	light border tone for section headings and caption
 contrast	*	#008700 on #eeeeee	light success tone (status words, graph edges) reads at 4.05:1; palette decision for the I4 pass
 contrast	*	#af5f00 on #eeeeee	light warning tone reads at 4.06:1; palette decision for the I4 pass
 contrast	*	#8a8a8a on #eeeeee	light muted tone (title bar, inactive tabs, footers) reads at 2.98:1 against the 3.0 secondary-text floor; palette decision for the I4 pass
-clip-area	hosts*--hosts-*-140x40	d by ssh (/	the setup step list's note column (the trust step's known_hosts path) is cut at the detail pane's edge without an ellipsis at 140 columns
-clip-area	hosts--hosts-entry--*-140x40	step 2 of 4 · run	the Run page's state line is cut at the side pane's edge without an ellipsis at 140 columns
-clip-area	work--help--*-80x24	tui sets	the help dialog's keys-file sentence is one row, cut at 80 columns
 clip-area	work--technical-details--*-80x24	source: /tmp/hydra/state/head	the technical page's last visible row continues below the pane, which scrolls; the lint cannot see the rest
 hint-repeat	work--inbox-terminal-stopped--*-140x40	'R restarts it'	the Inbox detail repeats the selected item's two lines, its key hint included; hint consolidation (U8)

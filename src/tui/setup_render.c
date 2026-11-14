@@ -124,11 +124,15 @@ static void step_row(struct app *app, struct pen *p, const struct setup_step *st
     snprintf(line, sizeof(line), "%s %-24s %s", running ? spinner(app, app->setup) : setup_status_mark(status, app->ascii), label,
              setup_status_label(status));
     if (shown && selected) { column(app, 0, width, KT_SELECTED, ""); bar(app, true, true); }
+    /* A wide pane puts the note beside the step; a note too long for the
+     * row wraps under it instead, as on a narrow pane. */
     if (width >= 90) {
-        char detail[300];
+        char detail[600];
         snprintf(detail, sizeof(detail), "%-52.52s %s", line, step->detail);
-        pen_emit(p, 1, selected ? KT_SELECTED : step_tone(status), detail, strlen(detail));
-        return;
+        if (kt_text_width(detail) < width) {
+            pen_emit(p, 1, selected ? KT_SELECTED : step_tone(status), detail, strlen(detail));
+            return;
+        }
     }
     pen_emit(p, 1, selected ? KT_SELECTED : step_tone(status), line, strlen(line));
     if (step->detail[0]) pen_text(p, 5, KT_MUTED, step->detail);

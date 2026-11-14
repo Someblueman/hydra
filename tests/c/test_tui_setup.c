@@ -322,6 +322,10 @@ static void screen_case(struct app *app, const struct screen_case *c, int cols, 
     /* Drawn inside Hosts: the view is Hosts and the top bar shows its tab;
      * the steps and their screen are in the detail, approvals in a modal. */
     check(contains_all(all, c->must, 4) && contains_none(all, c->never, 3) && app->view == 6 && top_bar_has(first, " Hosts "), name);
+    /* A step's note is whole: the host-key step's known_hosts path is not
+     * cut at the pane's edge. */
+    snprintf(name, sizeof(name), "%s step notes at %dx%d are not cut", c->label, cols, rows);
+    check(!strstr(all, "verified by ssh (") || strstr(all, "known_hosts)"), name);
 }
 
 static void hub_case(struct app *app, int cols, int rows) {

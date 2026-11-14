@@ -570,15 +570,15 @@ static void overlay_help(struct app *app) {
     const struct native_keys *keys = native_keys(app);
     struct kt_canvas view;
     struct kt_rect inside;
-    int rows, total, top;
+    int rows, total, top, said;
     inside = overlay_panel(app, "Keyboard", app->cols >= 100 ? 96 : app->cols - 2, app->rows - 2,
                            app->ascii ? " up/down scroll | ? or esc close " : " \xe2\x86\x91/\xe2\x86\x93 scroll \xe2\x80\xa2 ? or esc close ");
     if (inside.width < 4 || inside.height < 3) return;
     kt_text(&app->frame, (struct kt_rect){inside.x, inside.y, inside.width, 1}, "KEYBOARD HELP", KT_STRONG);
-    kt_text(&app->frame, (struct kt_rect){inside.x, inside.y + 1, inside.width, 1},
-            keys->problem[0] ? keys->problem : "hydra tui --print-keys lists every key; keys.conf in $HYDRA_HOME/tui sets your own.",
-            keys->problem[0] ? KT_WARNING : KT_MUTED);
-    top = inside.y + 3;
+    /* The keys file sentence wraps rather than being cut on a narrow screen. */
+    said = statistics_wrap(&app->frame, inside.x, inside.y + 1, inside.width, 3, keys->problem[0] ? KT_WARNING : KT_MUTED,
+                           keys->problem[0] ? keys->problem : "hydra tui --print-keys lists every key; keys.conf in $HYDRA_HOME/tui sets your own.");
+    top = inside.y + 2 + (said > 1 ? said : 1);
     rows = inside.y + inside.height - top;
     if (rows < 1) return;
     total = key_help(app, NULL, (struct kt_rect){0, 0, inside.width, rows}, 0);
