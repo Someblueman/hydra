@@ -47,20 +47,26 @@ static json_object *step_checks(json_object *plan, const char *step) {
     }
     return ids;
 }
+static bool headless(json_object *args) {
+    const char *mode = f_string(args, "terminal_mode");
+    return mode && !strcmp(mode, "headless");
+}
+static void command_text(char *text, size_t size, json_object *args, const char *head, int64_t limit) {
+    char command[1024];
+    command_line(f_field(args, "argv"), command, sizeof(command));
+    (void)snprintf(text, size, "Runs %s on %s, for at most %lld minute%s", command, head ? head : "the checkout", (long long)limit, limit == 1 ? "" : "s");
+}
 static void step_text(json_object *row, const char *kind, json_object *args, json_object *steps) {
-    char text[1400], command[1024];
+    char text[1400];
     const char *head = f_string(args, "head") ? f_string(args, "head") : f_string(args, "branch");
     int64_t limit = minutes(json_object_get_int64(f_field(args, "timeout")));
     if (!strcmp(kind, "worker"))
-        (void)snprintf(text, sizeof(text), "Create the worker branch %s%s", head, f_string(args, "terminal_mode") &&
-                       !strcmp(f_string(args, "terminal_mode"), "headless") ? " (no terminal)" : "");
+        (void)snprintf(text, sizeof(text), "Create the worker branch %s%s", head, headless(args) ? " (no terminal)" : "");
     else if (!strcmp(kind, "agent"))
         (void)snprintf(text, sizeof(text), "The %s agent works on %s, for at most %lld minute%s%s", f_string(args, "profile"), head,
                        (long long)limit, limit == 1 ? "" : "s", plan_spawns(steps, head) ? "; then Hydra commits what it changed" : "");
-    else if (!strcmp(kind, "command")) {
-        command_line(f_field(args, "argv"), command, sizeof(command));
-        (void)snprintf(text, sizeof(text), "Runs %s on %s, for at most %lld minute%s", command, head ? head : "the checkout", (long long)limit, limit == 1 ? "" : "s");
-    } else (void)snprintf(text, sizeof(text), "A %s step", kind);
+    else if (!strcmp(kind, "command")) command_text(text, sizeof(text), args, head, limit);
+    else (void)snprintf(text, sizeof(text), "A %s step", kind);
     f_string_add(row, "text", text);
 }
 static json_object *summary_step(json_object *compiled, json_object *step) {
