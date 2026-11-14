@@ -236,7 +236,7 @@ void remove_key_action(struct app *app) {
 
 /* Order preserves first-substring-match selection after exact and prefix
  * matches. Arguments are literal argv entries. */
-enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE };
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_IMPORT };
 struct palette_action {
     const char *name;
     const char *command;
@@ -260,7 +260,8 @@ static const struct palette_action palette[] = {
     {"git diff", "diff", NULL, ACTION_HEAD},
     {"approvals", "gate", "status", ACTION_HEAD},
     {"recovery inspect", "doctor", NULL, ACTION_GLOBAL},
-    {"dashboard", "dashboard", NULL, ACTION_GLOBAL}
+    {"dashboard", "dashboard", NULL, ACTION_GLOBAL},
+    {"import plan files", NULL, NULL, ACTION_IMPORT}
 };
 
 static const struct palette_action *match_palette(const char *query) {
@@ -285,6 +286,7 @@ void execute_palette(struct app *app, const char *query) {
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
     if (chosen->scope == ACTION_SPAWN) { new_task_action(app); return; }
     if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
+    if (chosen->scope == ACTION_IMPORT) { native_plan_import(app); return; }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
     if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;

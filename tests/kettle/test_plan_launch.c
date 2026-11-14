@@ -141,7 +141,7 @@ int main(void) {
     hf_commit_init(&f);
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
-    S("I");
+    S(":import\r");
     U("Draft JSON path:", 3);
     S(draft);
     S("\r");
@@ -268,7 +268,7 @@ int main(void) {
     U("worker plan-smoke", 15);
     S("k");
     U("Recorded branch reference", 3);
-    U("Enter evidence / h parent / Tab panes", 3);
+    U("enter open", 3); /* the generated footer: Enter opens the run's evidence */
     CHECK(!kt_contains(&s, "worker plan-smoke"), "a run collapses when its head is no longer selected");
     S("kh");
     kt_pump(&s, 2.5);
@@ -276,7 +276,7 @@ int main(void) {
     S("l");
     U("plan-fixture · succeeded", 3);
     S("j");
-    U("Enter evidence / h parent / Tab panes", 3);
+    U("enter open", 3); /* the generated footer: Enter opens the run's evidence */
     for (i = 0; i < 3; i++) {
         kt_resize(&s, sizes[i][0], sizes[i][1]);
         kt_pump(&s, .3);

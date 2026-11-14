@@ -102,7 +102,7 @@ static bool sessions_key(struct app *app, char key) {
     else if (key == '\r' || key == '\n') v->detail = !v->detail && v->session_count;
     else if (key == 'r') statistics_request(app);
     else if (strchr("Mg[]", key)) copy_text(app->notice, sizeof(app->notice), "That key is for workflow runs; s shows them");
-    else if (strchr(":pac AxGd", key)) copy_text(app->notice, sizeof(app->notice), "Statistics is read-only; Enter evidence / s workflow runs / D back");
+    else if (strchr("pac AxGd", key)) copy_text(app->notice, sizeof(app->notice), "Statistics is read-only; Enter evidence / s workflow runs / D back");
     else return false;
     statistics_visible(app);
     return true;
@@ -157,29 +157,6 @@ static uint64_t observed_seconds(const struct hs_session *s) {
 }
 
 /* The runs page when the sample also has sessions: s must stay visible. */
-static const char *runs_hints_with_sessions(int width) {
-    if (width < 100) return "D back  s sessions  T range  / find  Enter evidence  g graph  ? help  q quit";
-    if (width < 126) return "D back  s sessions  M metric  T range  / find  Enter evidence  g graph  ? help  q quit";
-    return "D or Esc back  s head sessions  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit";
-}
-
-/* Footer hints of the view; the runs page names sessions only when the
- * sample has some. */
-const char *statistics_hints(const struct app *app, int width) {
-    const struct statistics_view *v = app->statistics;
-    bool sessions = !app->fleet && v && v->model && v->model->session_count;
-    if (statistics_sessions_shown(app)) {
-        if (width < 48) return "D back  s runs  ? help  q quit";
-        if (width < 112) return "D back  s runs  T range  / find  Enter evidence  ? help  q quit";
-        return "D or Esc back  s workflow runs  T range  ! attention only  / find  Enter evidence  r refresh  ? help  q quit";
-    }
-    if (width < 48) return "D back  M metric  ? help  q quit";
-    if (width < 65) return "D back  M metric  / find  Enter  ? help  q quit";
-    if (sessions) return runs_hints_with_sessions(width);
-    if (width < 100) return "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit";
-    return "D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit";
-}
-
 /* ---- drawing ------------------------------------------------------------- */
 
 static void text_card(struct kt_canvas *c, int x, int width, const char *title, const char *value,
@@ -450,7 +427,7 @@ static bool render_sessions(struct app *app, unsigned frame, bool headless) {
     chrome_header(app, &c, stale ? "STATISTICS (STALE)" : "STATISTICS");
     sessions_body(app, &c, c.width, c.height, &summary);
     sessions_status(app, status, sizeof(status));
-    chrome_footer(app, &c, status, (v->stale || v->model->warnings) ? KT_WARNING : KT_MUTED, statistics_hints(app, c.width));
+    chrome_footer(app, &c, status, (v->stale || v->model->warnings) ? KT_WARNING : KT_MUTED, NULL);
     frame_end(app, frame, headless);
     return true;
 }

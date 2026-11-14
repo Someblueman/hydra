@@ -7,10 +7,11 @@
 /* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
  * panes inside the workspace), arrows select, Enter opens, Esc steps back.
  * The loop delivers decoded events; input_event sends each to the layer that
- * owns it, and the views' single-character key handlers are reached through
- * one translation at the end of this file. */
+ * owns it. Keys for the views go through the binding table (bindings.c):
+ * a key acts only when the focused chain binds it, and the action reaches
+ * the view's handler as the key it stands for (input_character and
+ * input_named). */
 
-static void handle_key(struct app *app, char key);
 
 /* Views that load their own data when opened. */
 static void enter_view_refresh(struct app *app, int view) {
@@ -247,20 +248,24 @@ static bool select_view(struct app *app, char key) {
     return false;
 }
 
+static void result_key(struct app *app, char key) {
+    if (key == '\r' || key == '\n' || key == ' ' || key == 27) { app->result_open = false; app->notice[0] = '\0'; }
+    else if (key == 'j') app->result_scroll++;
+    else if (key == 'k' && app->result_scroll) app->result_scroll--;
+    else if (key == 'q') app->running = false;
+}
+
+/* j / k scroll help; any other key closes it, and acts unless it was the
+ * help key or Esc. */
+static bool help_key(struct app *app, char key) {
+    if (key == 'j' || key == 'k') { help_scroll(app, key == 'j' ? 1 : -1); return true; }
+    app->help = false; app->help_scroll = 0;
+    return key == '?' || key == 27;
+}
+
 static bool overlay_key(struct app *app, char key) {
-    if (app->result_open) {
-        if (key == '\r' || key == '\n' || key == ' ' || key == 27) { app->result_open = false; app->notice[0] = '\0'; }
-        else if (key == 'j') app->result_scroll++;
-        else if (key == 'k' && app->result_scroll) app->result_scroll--;
-        else if (key == 'q') app->running = false;
-        return true;
-    }
-    if (app->help) {
-        if (key == 'j' || key == 'k') { help_scroll(app, key == 'j' ? 1 : -1); return true; }
-        app->help = false; app->help_scroll = 0;
-        return key == '?' || key == 27;
-    }
-    return false;
+    if (app->result_open) { result_key(app, key); return true; }
+    return app->help && help_key(app, key);
 }
 
 /* Hosts: A adds a host, e / x edit or remove an unfinished setup; head
@@ -273,7 +278,7 @@ static bool hosts_key(struct app *app, char key) {
         else native_setup_remove(app, record);
         return true;
     }
-    if (!key || !strchr("/:pac xGd", key)) return false;
+    if (!key || !strchr("/pac xGd", key)) return false;
     copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
     return true;
 }
@@ -333,7 +338,7 @@ static void head_key(struct app *app, char key) {
     }
 }
 
-static void handle_key(struct app *app, char key) {
+void input_character(struct app *app, char key) {
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
@@ -362,14 +367,27 @@ static void arrow_key(struct app *app, uint32_t key) {
 }
 
 /* Keys that arrive as an escape sequence: arrows, pages and Shift-Tab. */
-static void named_key(struct app *app, const struct kt_event *e) {
-    if (overlay_takes(app, e)) return;
+void input_named(struct app *app, uint32_t key, unsigned mods) {
+    struct kt_event e;
+    memset(&e, 0, sizeof(e));
+    e.type = KT_KEY; e.key = key; e.mods = mods;
+    if (overlay_takes(app, &e)) return;
     /* The statistics view drops its notice on any key, these included. */
     if (app->view == 8 && app->statistics && !app->result_open) app->notice[0] = '\0';
-    if (kt_event_is(e, KT_KEY_TAB, KT_MOD_SHIFT)) {
+    if (kt_event_is(&e, KT_KEY_TAB, KT_MOD_SHIFT)) {
         if (app->view == 7) native_workspace_focus_previous(app);
         else select_tab(app, -1);
-    } else if (!e->mods) arrow_key(app, e->key);
+    } else if (!mods) arrow_key(app, key);
+}
+
+/* One key for the binding table: a single character as itself, Escape as
+ * Escape. */
+static void dispatch_byte(struct app *app, char byte) {
+    struct kt_event e;
+    memset(&e, 0, sizeof(e));
+    e.type = KT_KEY; e.bytes[0] = byte; e.length = 1;
+    e.key = byte == 27 ? KT_KEY_ESCAPE : (uint32_t)(unsigned char)byte;
+    (void)key_dispatch(app, &e);
 }
 
 /* An escape sequence that stalled after "ESC [" must not turn into keys when
@@ -389,15 +407,14 @@ static bool sequence_tail(struct app *app, const struct kt_event *e) {
  * key; arrows, Shift-Tab and the page keys keep their own actions. */
 static void view_key_event(struct app *app, const struct kt_event *e) {
     if (sequence_tail(app, e)) return;
-    if (e->length == 1) { handle_key(app, e->bytes[0]); return; }
     if (e->mods == KT_MOD_ALT && e->length == 2 && e->bytes[0] == '\033') {
         if (e->bytes[1] == '[') { app->sequence_tail = true; return; }
-        handle_key(app, 27);
-        if (app->running) handle_key(app, e->bytes[1]);
+        dispatch_byte(app, 27);
+        if (app->running) dispatch_byte(app, e->bytes[1]);
         return;
     }
-    if (e->mods == KT_MOD_ALT && e->bytes[0] == '\033' && e->key < KT_KEY_UP) { handle_key(app, 27); return; }
-    if (e->key >= KT_KEY_UP && e->key < KT_KEY_SEQUENCE) named_key(app, e);
+    if (e->mods == KT_MOD_ALT && e->bytes[0] == '\033' && e->key < KT_KEY_UP) { dispatch_byte(app, 27); return; }
+    if (e->key < KT_KEY_SEQUENCE) (void)key_dispatch(app, e);
 }
 
 /* A key or mouse event from the terminal, sent to the layer that owns it: an

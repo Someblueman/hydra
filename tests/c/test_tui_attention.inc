@@ -195,7 +195,8 @@ cleanup:
 }
 
 /* Help longer than the screen scrolls: j and the arrows reach its last
- * section at 80x24, k and Page Up come back to its title. */
+ * group at 80x24 (the agent-layer chords), k and Page Up come back to its
+ * first (the keys of the view). */
 static void test_help_scroll(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     int i;
@@ -203,11 +204,12 @@ static void test_help_scroll(const char *tui, const char *hydra, const char *fak
     result(wait_for_raw(&session), "help terminal enters raw mode");
     (void)wait_for_model(&session);
     write_input(session.master, "1?", 2U);
-    result(wait_for_markers(&session, "KEYBOARD HELP", "j/k scroll", 1000), "help that does not fit says it scrolls");
+    result(wait_for_markers(&session, "KEYBOARD HELP", "Heads", 1000) && !wait_for_marker(&session, "send that key to the agent", 300),
+           "help opens on the view's own keys; at 80x24 the rest is below");
     for (i = 0; i < 40; i++) write_input(session.master, i % 2 ? "j" : "\033[B", i % 2 ? 1U : 3U);
-    result(wait_for_marker(&session, "t  theme (terminal / dark / light)", 1000), "scrolling reaches the last help line at 80x24");
+    result(wait_for_marker(&session, "send that key to the agent", 1000), "scrolling reaches the last help line at 80x24");
     write_input(session.master, "\033[5~kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk", 46U);
-    result(wait_for_marker(&session, "KEYBOARD HELP", 1000), "scrolling back reaches the help title");
+    result(wait_for_marker(&session, "Heads", 1000), "scrolling back reaches the first help group");
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "HYDRA / ", 1000), "Esc closes the scrolled help");
     write_input(session.master, "q", 1U);

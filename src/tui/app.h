@@ -131,9 +131,8 @@ struct app {
     char result_title[TEXT];
     char result_text[8192];
     size_t result_scroll;
-    /* Rows of the help text scrolled off its top, and rows still to skip
-     * while it is drawn (render.c). */
-    int help_scroll, help_skip;
+    /* Rows of the help text scrolled off its top (render.c). */
+    int help_scroll;
     bool help_more;
     bool result_open;
 };

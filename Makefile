@@ -280,8 +280,12 @@ $(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcri
 $(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup
+$(BUILD_DIR)/test-tui-keymap: tests/c/test_tui_keymap.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-keymap $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup
 	$(BUILD_DIR)/test-tui-input
+	$(BUILD_DIR)/test-tui-keymap
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
 	$(BUILD_DIR)/test-tui-transcript

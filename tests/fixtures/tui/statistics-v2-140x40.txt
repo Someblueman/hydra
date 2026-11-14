@@ -38,4 +38,4 @@ FRAME 1 140x40
 |                      | | 1/8 / Enter evidence / g graph                                                                                 |
 +----------------------+ +----------------------------------------------------------------------------------------------------------------+
  Recorded workflow runs / all recorded / all work                                                                                          
- D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit                         
+ ^/v select | enter evidence | g graph | T range | ! needs you only | 0 reset filters | M metric | / find | ? help | q quit                

@@ -153,7 +153,6 @@ void column(struct app *app, int x, int width, struct kt_style tone, const char 
 /* One line of the content area, in a style. */
 static void line_text(struct app *app, struct kt_style tone, const char *text) {
     if (app->line >= app->limit) return;
-    if (app->help_skip > 0) { app->help_skip--; return; }
     text_at(app, app->content_x, app->content_width, tone, text);
     app->line++;
 }
@@ -432,7 +431,8 @@ void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, str
         if (height < 3) hints = pending;
     }
     if (height >= 3) kt_text(c, (struct kt_rect){1, height - 2, c->width - 2, 1}, status, tone);
-    kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, hints, KT_MUTED);
+    if (hints) kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, hints, KT_MUTED);
+    else key_footer(app, c, (struct kt_rect){1, height - 1, c->width - 2, 1});
 }
 
 struct head_columns { int status_x, agent_x, reported_x, name_width; bool wide, medium; };
@@ -668,72 +668,30 @@ static void render_recovery(struct app *app) {
 
 /* The agent-pane commands with the chords bound to them now, and where to
  * change them. A keys file that was not applied as written is named. */
-static void help_agent_keys(struct app *app) {
-    const struct native_keys *keys = native_keys(app);
-    char text[1024];
-    key_hint(app, text, sizeof(text), " ",
-             "While typing to an agent (Esc and Tab go to it):|{terminal.leave} leaves input,|"
-             "{terminal.close} closes the view (the agent keeps running; a reopens it),|"
-             "{terminal.next} switches agent,|{terminal.history} scrolls history,|{app.quit} quits.|"
-             "hydra tui --print-keys lists every key; set your own in $HYDRA_HOME/tui/keys.conf.");
-    paragraph(app, text, KT_BASE);
-    if (keys->problem[0]) paragraph(app, keys->problem, KT_WARNING);
-}
-
-static void render_help_text(struct app *app) {
-    const char *sep = dot(app);
-    style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
-    if (app->rows < 20) {
-        linef(app, "Tab/Shift-Tab tabs or panes  arrows select  Enter open  Esc back");
-        linef(app, app->fleet ? "a attach  c interrupt  / search" : "n new task  a agent  x remove  / search  : actions");
-        linef(app, "t theme  ? close help  q quit");
-        return;
-    }
-    section(app, "MOVE AROUND");
-    linef(app, "Tab / Shift-Tab   next / previous tab; inside Workspace, next / previous pane");
-    linef(app, "Left / Right      previous / next tab       1-9  jump to a tab");
-    linef(app, "Up / Down, j / k  select                    Enter  open the selection");
-    linef(app, "Esc               one step back (details%slist, close help, clear search)", sep);
-    section(app, app->fleet ? "REMOTE HEADS" : "WORK");
-    if (app->fleet) {
-        linef(app, "a  attach to a remote terminal        c  interrupt the remote head (confirmed)");
-        linef(app, "/  search heads                       I  attention");
-    } else {
-        linef(app, "n  start a new task                   a  talk to the selected agent");
-        linef(app, "x  remove selected or marked heads    Space / A  mark one / all   G  group marked");
-        linef(app, "/  search                             :  more actions (diff, switch, approvals...)");
-        linef(app, "p  recent terminal output             d  technical details      c  coordination");
-        linef(app, "Enter / l / h  expand or collapse a run; its heads are listed inside it");
-    }
-    section(app, "WORKSPACE");
-    linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
-    help_agent_keys(app);
-    section(app, "PLANNING");
-    linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
-    linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
-    section(app, "OTHER");
-    linef(app, "H  hosts: A adds a remote machine over SSH; Enter continues its setup");
-    linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
-}
-
-/* Help scrolls with j / k, the arrows and the page keys: the first
- * help_scroll lines are skipped as it is drawn. Scrolling past the end
- * leaves skips over, which bring the scroll back so the last line stays at
- * the bottom; text below the area says the help goes on. */
+/* Help for where the user is, generated from the binding table: the keys
+ * file and any problem with it first, then every key of the focused chain
+ * that applies, grouped, then the chords that work while typing to an agent.
+ * It scrolls with j / k, the arrows and the page keys. */
 static void render_help(struct app *app) {
-    int first = app->line;
-    app->help_skip = app->help_scroll;
-    render_help_text(app);
-    if (app->help_skip > 0) {
-        int rows = app->limit - first, drawn = app->line - first;
-        app->help_scroll -= app->help_skip + (rows - drawn > 0 ? rows - drawn : 0);
-        if (app->help_scroll < 0) app->help_scroll = 0;
-        app->help_skip = 0;
-        app->line = first;
-        render_help(app);
-        return;
-    }
-    if (app->line >= app->limit) app->help_more = true;
+    const struct native_keys *keys = native_keys(app);
+    struct kt_canvas view;
+    struct kt_rect area;
+    int rows, total;
+    style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
+    style(app, TONE_MUTED);
+    linef(app, "Keys file %s; hydra tui --print-keys lists every key.", keys->path[0] ? keys->path : "(none)");
+    style(app, TONE_BASE);
+    if (keys->problem[0]) paragraph(app, keys->problem, KT_WARNING);
+    if (app->line < app->limit) linef(app, "");
+    area = (struct kt_rect){app->content_x, app->line, app->content_width, app->limit - app->line};
+    if (area.height < 1 || area.width < 1) return;
+    total = key_help(app, NULL, area, 0);
+    rows = area.height;
+    if (app->help_scroll > total - rows) app->help_scroll = total > rows ? total - rows : 0;
+    if (!kt_canvas_view(&view, &app->frame, area)) return;
+    (void)key_help(app, &view, (struct kt_rect){0, 0, area.width, area.height}, app->help_scroll);
+    app->help_more = total > rows;
+    app->line = app->limit;
 }
 
 void help_scroll(struct app *app, int rows) {
@@ -818,70 +776,11 @@ static void status_line(struct app *app, char *out, size_t size, struct kt_style
     *tone = fresh_tone;
 }
 
-/* Recovery offers x only for a clean leftover worktree the shell gc can remove. */
-static const char *recovery_hints(const struct app *app, bool narrow) {
-    bool removable = app->recovery_selected < app->model.recovery_count &&
-        !strcmp(app->model.recovery[app->recovery_selected].kind, "orphan-worktree");
-    if (narrow) return removable ? "Enter check  x remove  ? help  q quit" : "Enter check  d detail  ? help  q quit";
-    if (app->diagnostics) return removable ? "Enter run the check  x remove  d back to list  Esc back  ? help  q quit"
-                                           : "Enter run the check  d back to list  Esc back  ? help  q quit";
-    return removable ? "j/k select  Enter run the check  x remove  d explain  Esc back  ? help  q quit"
-                     : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
-}
-
-/* Hosts: the setup flow's own keys, or e / x on an unfinished setup row. */
-static const char *hosts_hints(struct app *app, bool narrow) {
-    if (native_setup_active(app)) return native_setup_hints(app, narrow);
-    if (hosts_setup_selected(app, &(size_t){0}))
-        return narrow ? "Enter continue  e edit  x remove  q quit"
-                      : "j/k select  Enter continue  e edit  x remove  A add a host  Esc back  ? help  q quit";
-    return narrow ? "Enter open  A add host  ? help  q quit" : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
-}
-
-/* Hints for views whose keys do not depend on local versus fleet mode. */
-static const char *view_hints(struct app *app, bool narrow) {
-    if (app->view == 9) {
-        if (native_review_active(app)) return "j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit";
-        return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
-    }
-    if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
-    if (app->view == 6) return hosts_hints(app, narrow);
-    if (app->view == 3) return recovery_hints(app, narrow);
-    return NULL;
-}
-
-static const char *fleet_hints(struct app *app, bool narrow) {
-    if (narrow) return "a attach  c interrupt  ? help  q quit";
-    return app->view == 1 ? "a attach  c interrupt  d technical  Esc back  ? help  q quit" : "Enter details  a attach  c interrupt  / search  Tab next tab  ? help  q quit";
-}
-
-/* Details of a headless head: its step output replaces the agent pane. */
-static const char *detail_hints(struct app *app, bool narrow) {
-    const struct head *head = selected_head(app);
-    if (app->diagnostics) return "d close technical details  Esc back  ? help  q quit";
-    if (head && head_headless(head)) return narrow ? "p step output  Esc back  ? help  q quit" : "p step output  x remove  d technical  : more  Esc back  ? help  q quit";
-    return narrow ? "a agent  p output  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
-}
-
-static const char *local_hints(struct app *app, bool narrow) {
-    if (app->view == 1) return detail_hints(app, narrow);
-    if ((app->view == 0 || app->view == 4) && app->run_row)
-        return narrow ? "Enter expand  j/k select  ? help  q quit" : "j/k select  Enter or l/h expand/collapse the run  C monitor  w workflows  ? help  q quit";
-    if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
-    if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  Tab next tab  ? help  q quit";
-    if (narrow) return "Enter open  n new  x remove  ? help  q quit";
-    return app->model.head_count ? "j/k select  Enter details  a agent  n new task  x remove  / search  : more  ? help  q quit"
-                                 : "n new task  : more actions  Tab next tab  ? help  q quit";
-}
-
+/* The footer is generated from the binding table (key_footer); the remote
+ * setup flow keeps its own hints while it owns input. NULL: generated. */
 static const char *hint_line(struct app *app) {
-    bool narrow = app->cols < 70;
-    const char *hints;
-    if (app->result_open) return "Enter or Esc closes  j/k scroll";
-    if (app->help) return app->help_more || app->help_scroll ? "j/k scroll  ? or Esc closes help" : "? or Esc closes help";
-    hints = view_hints(app, narrow);
-    if (hints) return hints;
-    return app->fleet ? fleet_hints(app, narrow) : local_hints(app, narrow);
+    if (app->view == 6 && native_setup_active(app)) return native_setup_hints(app, app->cols < 70);
+    return NULL;
 }
 
 static void detail_title(const struct app *app, const struct head *head, char *out, size_t size) {

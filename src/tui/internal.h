@@ -263,7 +263,6 @@ void statistics_sessions_default(struct statistics_view *v);
 void statistics_sessions_visible(struct app *app);
 void statistics_sessions_move(struct app *app, int direction);
 void statistics_select(struct app *app, size_t item);
-const char *statistics_hints(const struct app *app, int width);
 void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
 struct native_terminal *native_workspace_terminal(struct app *app, int pane);
@@ -390,6 +389,7 @@ bool native_plan_compile(struct app *app);
 void native_plan_returned(struct native_plan *p);
 void native_plan_execute(struct app *app);
 void native_plan_request_changes(struct app *app);
+void native_plan_import(struct app *app);
 bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);
@@ -427,6 +427,10 @@ int interactive_main(struct app *app);
 void loop_service(struct app *app, bool request);
 void input_event(struct app *app, const struct kt_event *e);
 void input_paste(struct app *app, const char *bytes, size_t length, bool truncated);
+/* A key for the views' own handlers, as bindings.c performs an action: a
+ * character, or a named key (an arrow, a page key, Tab) with modifiers. */
+void input_character(struct app *app, char key);
+void input_named(struct app *app, uint32_t key, unsigned mods);
 /* A frame that shows an age or elapsed time says so, to be redrawn as it advances. */
 void clock_mark(void);
 enum modal_event { MODAL_STOPPED, MODAL_INPUT, MODAL_WOKE };

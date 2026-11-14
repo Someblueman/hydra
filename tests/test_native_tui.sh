@@ -210,7 +210,7 @@ contains "SESSIONS STARTED / 7 x 24h" "$test_root/stats-sessions.out" "sessions 
 contains "s shows runs (0)" "$test_root/stats-sessions.out" "the sessions page names the runs page"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size 140x40 --view statistics > "$test_root/stats-mixed.out"
 contains "RUNS / newest creation first" "$test_root/stats-mixed.out" "a sample with runs opens on runs"
-contains "s head sessions" "$test_root/stats-mixed.out" "the runs page offers head sessions"
+contains "s sessions/runs" "$test_root/stats-mixed.out" "the runs page offers head sessions"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5-empty.tsv" --size 140x40 --view statistics > "$test_root/stats-empty.out"
 contains "No head sessions recorded yet" "$test_root/stats-empty.out" "an empty sample says nothing was recorded"
 ! grep -Fq "7 x 24h" "$test_root/stats-empty.out"
@@ -574,7 +574,13 @@ assert_equal "20" "$change_index" "changing state remains a complete native snap
 contains 'DESIRED' "$test_root/fleet.txt" 'fleet labels durable desired state explicitly'
 contains 'ovh' "$test_root/fleet.txt" 'fleet identifies remote hosts in their own column'
 contains 'feature' "$test_root/fleet.txt" 'fleet identifies the remote branch'
-contains 'a attach  c interrupt' "$test_root/fleet.txt" 'fleet advertises only remote-safe actions'
+contains 'a attach' "$test_root/fleet.txt" 'fleet advertises attaching'
+contains 'c interrupt' "$test_root/fleet.txt" 'fleet advertises interrupting'
+if tail -n 1 "$test_root/fleet.txt" | grep -Eq 'new task|remove|mark|group'; then
+    assert_success 1 'fleet advertises only remote-safe actions'
+else
+    assert_success 0 'fleet advertises only remote-safe actions'
+fi
 
 printf 'HYDRA_FLEET_TUI\t3\nT\tbuild\tresponded\t0\t-\tunreachable\tstale\t123\t4\nO\tbuild\ttask_abc\trun_xyz\tstep\tattempt-1\t/work\tnone\trecorded\tcancelled\tnone\t-\tinspect dependency\t123\t123\tfresh\t1\tready\tintegrity_verified\t0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\tconfirmed_stopped\tmanaged_commands\t123\treq-1\n' > "$test_root/fleet-v3.tsv"
 "$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view hosts --ascii --size 140x30 > "$test_root/fleet-v3-hosts.txt"
@@ -675,9 +681,15 @@ workspace.zoom = ctrl+\ z
 workspace.split = ctrl+\ S
 terminal.literal = ctrl+\ ctrl+\, ctrl+\ ctrl+]
 EOF
-keys_lines "$test_root/keys-default.conf" > "$test_root/keys-default.lines"
+# The agent-layer chords come first and keep their names and defaults; every
+# other key of the control centre follows, one action per line.
+keys_lines "$test_root/keys-default.conf" | head -n 14 > "$test_root/keys-default.lines"
 cmp -s "$test_root/keys-expected.lines" "$test_root/keys-default.lines"
 assert_success $? "default keys are Ctrl-] to leave and the Ctrl-\\ leader for the rest"
+for keys_action in heads.down task.new head.remove app.help app.exit view.attention statistics.range plan.execute; do
+    grep -q "^$keys_action = " "$test_root/keys-default.conf"
+    assert_success $? "the keys file lists $keys_action"
+done
 HYDRA_TUI_KEYS="$test_root/keys-default.conf" HYDRA_HOME="$keys_home" "$tui" --print-keys > "$test_root/keys-default-again.conf" 2> "$test_root/keys-again.err"
 assert_success $? "printed default keys are a valid keys file"
 cmp -s "$test_root/keys-default.conf" "$test_root/keys-default-again.conf"

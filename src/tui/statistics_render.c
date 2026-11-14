@@ -300,8 +300,7 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
     snprintf(status,sizeof(status),"%s%s",v->model && v->model->warnings ? "PARTIAL / " : "",v->error[0] ? v->error : app->notice[0] ? app->notice : v->model && v->model->warnings ? v->model->warning : scope);
     if (height>=25 && v->model && !app->fleet && width>=110)
         dashboard_text(&c,2,height-5,20,KT_MUTED,"%s",updated);
-    chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? KT_WARNING : KT_MUTED,
-        statistics_hints(app,width));
+    chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? KT_WARNING : KT_MUTED,NULL);
     frame_end(app,frame,headless);
     return true;
 }

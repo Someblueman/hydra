@@ -259,7 +259,7 @@ bool workflow_key(struct app *app, char key) {
     else if (key == 'J') { if (app->graph_y < 650) app->graph_y += 4; app->graph_follow = false; }
     else if (key == 'K') { app->graph_y = app->graph_y > 4 ? app->graph_y - 4 : 0; app->graph_follow = false; }
     else if (key == '\r' || key == '\n') app->graph_follow = true;
-    else if (strchr("/:pda cAxG", key)) copy_text(app->notice, sizeof(app->notice), "Workflow view is read-only; j/k nodes, [/] runs, h/l/J/K pan");
+    else if (strchr("/pda cAxG", key)) copy_text(app->notice, sizeof(app->notice), "Workflow view is read-only; j/k nodes, [/] runs, h/l/J/K pan");
     else return false;
     return true;
 }

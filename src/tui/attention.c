@@ -707,20 +707,26 @@ static bool attention_no_runs(const struct app *app, const struct native_attenti
     if (app->fleet || !app->workflows || app->workflow_stale || app->workflows->run_count) return false;
     return !view || !view->have_good;
 }
+static void render_no_runs(struct app *app)
+{
+    linef(app, "ATTENTION  nothing needs you");
+    paragraph(app, "This project has no workflow runs yet, so nothing is waiting for a decision. "
+              "Approvals, failed checks and results to review appear here once a run needs you.", KT_MUTED);
+}
+/* Before there is a list to show: no runs, or the first read in flight. */
+static bool render_placeholder(struct app *app, const struct native_attention *view)
+{
+    if (attention_no_runs(app, view)) render_no_runs(app);
+    else if (!view) linef(app, "ATTENTION / loading");
+    else return false;
+    return true;
+}
 void render_attention(struct app *app)
 {
     struct native_attention *view = app->attention;
     const char *sep;
     if (native_review_render(app)) return;
-    if (attention_no_runs(app, view)) {
-        linef(app, "ATTENTION  nothing needs you");
-        style(app, TONE_MUTED);
-        paragraph(app, "This project has no workflow runs yet, so nothing is waiting for a decision. "
-                  "Approvals, failed checks and results to review appear here once a run needs you.", KT_MUTED);
-        style(app, TONE_BASE);
-        return;
-    }
-    if (!view) { linef(app, "ATTENTION / loading"); return; }
+    if (render_placeholder(app, view)) return;
     if (view->detail && item_selected(view)) { render_detail(app, view); return; }
     sep = dot(app);
     linef(app, "ATTENTION  %u need you%s%u seen%s%u stale%s%u unknown", view->stale ? 0U : view->need_count, sep,
@@ -786,14 +792,18 @@ static void attention_enter(struct native_attention *view)
     if (view->on_group) { view->seen_open = !view->seen_open; view->scroll = 0U; return; }
     if (view->count) view->detail = !view->detail;
 }
+/* While a review is open, [ and ] review the previous or next item. */
+static char review_item_key(const struct app *app, char key)
+{
+    if (!native_review_active(app) || (key != '[' && key != ']')) return key;
+    return key == ']' ? 'j' : 'k';
+}
 bool native_attention_key(struct app *app, char key)
 {
     struct native_attention *view = app->attention; bool handled = true;
     if (!view) return false;
     if (native_review_key(app, key) || open_review(app, key)) return true;
-    /* While a review is open, [ and ] review the previous or next item. */
-    if (native_review_active(app) && (key == '[' || key == ']')) key = key == ']' ? 'j' : 'k';
-    if (attention_move(view, key)) { sync_review(app); return true; }
+    if (attention_move(view, review_item_key(app, key))) { sync_review(app); return true; }
     if (key == '\r' || key == '\n') attention_enter(view);
     else if (key == 's' && item_selected(view)) toggle_seen(app, view);
     else if (key == 27) { if (view->detail) { view->detail = false; settle_selection(view); } else app->view = 0; }

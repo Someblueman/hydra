@@ -454,8 +454,10 @@ static void custom_keys(void) {
     kt_pump(&s, .3);
     if (kt_contains(&s, "INPUT TO AGENT")) fail_with("the configured leave chord did not leave input");
     kt_send(&s, "?");
-    kt_until(&s, "Ctrl-B Tab leaves input", 3);
-    if (!kt_contains(&s, "Ctrl-B x closes the view")) fail_with("help does not name the configured keys");
+    kt_until(&s, "KEYBOARD HELP", 3);
+    if (!kt_contains(&s, "ctrl+b tab") || !kt_contains(&s, "ctrl+b x") || !kt_contains(&s, "leave input") ||
+        kt_contains(&s, "ctrl+]"))
+        fail_with("help does not name the configured keys");
     save("custom-keys-help", 96);
     kt_send(&s, "?");
     kt_send(&s, "\002x");

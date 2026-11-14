@@ -291,11 +291,11 @@ bool native_workspace_key(struct app *app, char key) {
         native_workspace_mode(app,2); w->layout.focus=6; return true;
     }
     if (w->layout.focus==1 && w->run_selected &&
-        w->nodes[w->tree.selected].value%(MAX_HEADS+1)==MAX_HEADS && strchr(":ac",key)) {
+        w->nodes[w->tree.selected].value%(MAX_HEADS+1)==MAX_HEADS && strchr("ac",key)) {
         copy_text(app->notice,sizeof(app->notice),"This run has no matching visible head; Enter opens its evidence");
         return true;
     }
-    if ((key == '\r' || key == '\n' || key == ':' || key == 'a' || key == 'c') &&
+    if ((key == '\r' || key == '\n' || key == 'a' || key == 'c') &&
         w->layout.focus == 1 && !w->tree.selected) {
         if (key == '\r' || key == '\n') {
             w->selection_initialized = true;
@@ -584,45 +584,13 @@ static const char *attached_label(struct app *app, const struct native_terminal 
     return out;
 }
 
-/* Plan keys follow the plan's state, so each step names the next useful one. */
-static const char *plan_hints(const struct app *app, int width) {
-    const struct native_plan *p = app->plan;
-    bool narrow = width < 100;
-    if (!p) return narrow ? "P proposal  I import  A conversation  ? help  q quit" :
-        "P review agent proposal  I import files  A conversation  C monitor  Tab pane  ? help  q quit";
-    switch (p->state) {
-    case PLAN_READY: return narrow ? "E execute  F request changes  A conversation  ? help  q quit" :
-        "E execute (confirm)  F request changes  V validate again  A conversation  C monitor  Tab pane  ? help  q quit";
-    case PLAN_INVALID: return narrow ? "F request changes  V validate  A conversation  ? help  q quit" :
-        "F request changes (sends the diagnostics)  V validate again  A conversation  Tab pane  ? help  q quit";
-    case PLAN_RETURNED: return narrow ? "Returned: awaiting the agent's revision  A conversation  q quit" :
-        "Returned for changes: awaiting the agent's revision  A conversation  C monitor  Tab pane  ? help  q quit";
-    default: return narrow ? "V validate  F request changes  A conversation  ? help  q quit" :
-        "V validate  F request changes  P reload proposal  A conversation  C monitor  Tab pane  ? help  q quit";
-    }
-}
-
-/* Hints for the compact, monitoring and plan layouts; NULL for the conversation layout. */
-static const char *layout_hints(const struct app *app, const struct native_workspace *w, int width) {
-    if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  a agent  ? help  q quit";
-    if (w->mode == 2) return width < 100 ? "Y approve  N reject  R resume  X cancel  A conversation  ? help  q quit" :
-        "[/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit";
-    if (w->mode == 1 || w->layout.focus == 5 || w->layout.focus == 6) return plan_hints(app, width);
-    return NULL;
-}
-
-/* buffer holds the hints that name configurable keys. */
+/* An attached agent view names the agent-layer chords in effect (they are
+ * read from the binding table through key_hint); every other focus has the
+ * generated footer (NULL). */
 static const char *workspace_hints(struct app *app, struct native_workspace *w, int width, char *buffer, size_t size) {
     struct native_terminal *t = native_workspace_terminal(app, w->layout.focus);
-    const char *layout;
     if (t && t->screen) { attached_hints(app, w, t, width, buffer, size); return buffer; }
-    if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
-    layout = layout_hints(app, w, width);
-    if (layout) return layout;
-    if (workspace_review_hidden(w) && !app->fleet) return "Tab pane  a agent  B plan review  n new task  ? help  q quit";
-    if (width < 100) return app->fleet ? "Tab pane  a attach  B plan  C monitor  ? help  q quit" : "Tab pane  a agent  n new task  B plan  C monitor  ? help  q quit";
-    return app->fleet ? "Tab pane  Enter select  a attach  H host  B plan  C monitor  z zoom  ? help  q quit" :
-        "Tab pane  Enter select  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
+    return NULL;
 }
 
 /* The compact layout's single bottom row: a chord being entered, else a
@@ -633,7 +601,8 @@ static void compact_footer(struct app *app, struct native_workspace *w, struct k
     char text[512];
     if (key_pending_text(app, text, sizeof(text))) kt_text(c, row, text, KT_STRONG);
     else if (app->notice[0] && !(t && t->screen)) kt_text(c, row, app->notice, KT_WARNING);
-    else kt_text(c, row, workspace_hints(app, w, c->width, text, sizeof(text)), KT_MUTED);
+    else if (workspace_hints(app, w, c->width, text, sizeof(text))) kt_text(c, row, text, KT_MUTED);
+    else key_footer(app, c, row);
 }
 
 bool render_native_workspace(struct app *app, unsigned frame, bool headless) {

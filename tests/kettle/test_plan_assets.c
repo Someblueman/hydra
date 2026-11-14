@@ -43,7 +43,7 @@ int main(void) {
     hf_commit_init(&f);
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
-    kt_send(&s, "I");
+    kt_send(&s, ":import\r");
     U("Draft JSON path:", 3);
     kt_send(&s, draft);
     kt_send(&s, "\r");

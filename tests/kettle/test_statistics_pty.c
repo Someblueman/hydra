@@ -245,7 +245,7 @@ static void session_pages(struct kt_session *p) {
     PS("s");
     PU("RUNS / newest creation first");
     PU("No matching recorded runs");
-    PU("s head sessions");
+    PU("s sessions/runs");
     PS("s");
     PU("HEAD SESSIONS / newest start first");
     kt_resize(p, 80, 24);
@@ -275,7 +275,7 @@ static void session_statistics(void) {
     U("HYDRA / PLAN TOGETHER");
     S("D");
     U("RUNS / newest creation first");
-    U("s head sessions");
+    U("s sessions/runs");
     U("> kill-dry-run");
     S("s");
     U("s shows runs (1)");

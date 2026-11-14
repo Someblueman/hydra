@@ -98,7 +98,7 @@ bool statistics_runs_key(struct app *app, char key) {
     else if(key=='\r' || key=='\n') { v->detail=!v->detail; v->step_scroll=0; }
     else if(key=='g') statistics_graph(app);
     else if(key=='r') statistics_request(app);
-    else if(strchr(":pac AxGd",key)) copy_text(app->notice,sizeof(app->notice),"Statistics is read-only; Enter evidence / g graph / D back");
+    else if(strchr("pac AxGd",key)) copy_text(app->notice,sizeof(app->notice),"Statistics is read-only; Enter evidence / g graph / D back");
     else return false;
     statistics_visible(app);
     return true;

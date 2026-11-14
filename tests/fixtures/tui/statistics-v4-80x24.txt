@@ -22,4 +22,4 @@ FRAME 1 80x24
 | 1/1 / Enter evidence / g graph                                              |
 +-----------------------------------------------------------------------------+
  Recorded workflow runs / all recorded / all work                              
- D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit    
+ ^/v select | enter evidence | g graph | T range | ? help | q quit             

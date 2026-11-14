@@ -2,9 +2,12 @@
 #include "internal.h"
 #include "task_name.h"
 
-static void plan_load_dialog(struct app *app) {
+/* Import plan files (the palette's "import plan files"): a draft and a
+ * policy loaded into the workspace's plan review. */
+void native_plan_import(struct app *app) {
     char path[4096], policy[4096];
-    if (app->fleet) return;
+    if (app->fleet || !native_workspace_init(app)) return;
+    if (app->view != 7) enter_view(app, 7);
     if (prompt_text(app, "Draft JSON path: ", path, sizeof(path)) || !path[0]) return;
     if (prompt_text(app, "Policy JSON path: ", policy, sizeof(policy)) || !policy[0]) return;
     (void)native_plan_load(app, path, policy);
@@ -62,7 +65,6 @@ static void plan_validate(struct app *app) {
 bool native_plan_key(struct app *app, char key) {
     switch (key) {
         case 'P': plan_agent_proposal(app); return true;
-        case 'I': plan_load_dialog(app); return true;
         case 'V': plan_validate(app); return true;
         case 'F': native_plan_request_changes(app); return true;
         case 'E': native_plan_execute(app); return true;
