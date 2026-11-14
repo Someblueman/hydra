@@ -300,6 +300,15 @@ static void uncommitted(struct out *o, json_object *changes)
         say(o, "    ... and %d more", count - (int)rr_length(paths));
 }
 
+static void moved(struct out *o, json_object *changes)
+{
+    if (json_object_get_boolean(f_field(changes, "tip_moved")))
+        say(o, "  Note: the branch has moved to %.12s since the checks ran; landing refuses until it is back at the verified commit.",
+            text(changes, "tip", "?"));
+    if (f_field(changes, "checks_on_commit") && !json_object_get_boolean(f_field(changes, "checks_on_commit")))
+        say(o, "  Note: a command ran on another commit than the one the agent step left, so no commit of this run is verified.");
+}
+
 static void changes(struct out *o, json_object *changes)
 {
     json_object *files = f_field(changes, "files"), *rows = f_field(changes, "commits");
@@ -311,9 +320,16 @@ static void changes(struct out *o, json_object *changes)
         return;
     }
     file_totals(files, &added, &deleted);
-    say(o, "CHANGES ON %s  (%zu commit%s, %zu file%s, +%lld -%lld; the branch as it is now)", text(changes, "branch", "?"),
-        rr_length(rows), rr_length(rows) == 1 ? "" : "s", rr_length(files), rr_length(files) == 1 ? "" : "s", added, deleted);
-    say(o, "  Base %.12s -> tip %.12s", text(changes, "base", "?"), text(changes, "tip", "?"));
+    if (f_string(changes, "verified_commit")) {
+        say(o, "CHANGES ON %s  (%zu commit%s, %zu file%s, +%lld -%lld; the commit the checks ran on)", text(changes, "branch", "?"),
+            rr_length(rows), rr_length(rows) == 1 ? "" : "s", rr_length(files), rr_length(files) == 1 ? "" : "s", added, deleted);
+        say(o, "  Base %.12s -> verified commit %.12s", text(changes, "base", "?"), text(changes, "verified_commit", "?"));
+    } else {
+        say(o, "CHANGES ON %s  (%zu commit%s, %zu file%s, +%lld -%lld; the branch as it is now)", text(changes, "branch", "?"),
+            rr_length(rows), rr_length(rows) == 1 ? "" : "s", rr_length(files), rr_length(files) == 1 ? "" : "s", added, deleted);
+        say(o, "  Base %.12s -> tip %.12s", text(changes, "base", "?"), text(changes, "tip", "?"));
+    }
+    moved(o, changes);
     commits(o, rows);
     uncommitted(o, changes);
     for (size_t i = 0; i < rr_length(files); i++) {

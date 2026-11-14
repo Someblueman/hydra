@@ -408,6 +408,21 @@ workflow_start_step() {
         else
             unset HYDRA_WORKFLOW_VALIDATION_FILE
         fi
+        # An exec step on one of a plan's own heads: commands record the commit
+        # they start on, agent steps are committed when they finish.
+        _ws_hook_kind="" _ws_hook_head="" _ws_tree=""
+        IFS="$(printf '\t')" read -r _ws_hook_kind _ws_hook_head _ws_hook_rest <<EOF
+$(workflow_plan_step_hook "$_wss_dir" "$_wss_id")
+EOF
+        if [ -n "$_ws_hook_kind" ]; then
+            if ! _ws_tree="$(workflow_plan_worktree "$_wss_dir" "$_ws_hook_head")" ||
+                { [ "$_ws_hook_kind" != agent ] && ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit"; }; then
+                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+                workflow_atomic_scalar "$_wss_sd/state" failed
+                workflow_event "$_wss_dir" "$_wss_id" step.failed worker_head_unavailable
+                exit 1
+            fi
+        fi
         # Attempt evidence is private; the step command keeps the user's umask.
         # Transcripts exist only once the command starts.
         hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
@@ -417,6 +432,17 @@ workflow_start_step() {
         if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
         trap - HUP INT TERM
         [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
+        if [ "$_ws_code" -eq 0 ] && [ -n "$_ws_tree" ]; then
+            if [ "$_ws_hook_kind" = agent ]; then
+                if ! workflow_plan_commit "$_wss_dir" "$_wss_id" "$_ws_tree" "$_wss_attempt_dir" \
+                    >>"$_wss_attempt_dir/stderr" 2>&1; then
+                    _ws_code=1
+                    workflow_event "$_wss_dir" "$_wss_id" step.commit_failed
+                fi
+            elif ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit-after"; then
+                _ws_code=1
+            fi
+        fi
         # Outputs the step command wrote with the user's umask become run
         # evidence; seal them privately like every other run record.
         hydra_private_tree "$_wss_attempt_dir/outputs" || true

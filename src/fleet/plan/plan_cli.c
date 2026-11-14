@@ -261,6 +261,22 @@ static json_object *roles_command(char **argv, bool *printed) {
     return NULL;
 }
 
+static json_object *hooks_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    if (compiled && !plan_hooks(compiled, stdout)) *printed = true;
+    json_object_put(compiled);
+    return NULL;
+}
+
+/* The commit a run's agent steps left on a worker head, as recorded. */
+static json_object *head_commit_command(char **argv, bool *printed) {
+    char path[F_PATH], commit[65];
+    json_object *compiled = f_path(path, sizeof(path), argv[1], "compiled.json") ? NULL : plan_read(path);
+    if (compiled && !plan_head_commit(argv[1], f_field(compiled, "plan"), argv[2], commit)) { puts(commit); *printed = true; }
+    json_object_put(compiled);
+    return NULL;
+}
+
 static json_object *timeout_command(char **argv, bool *printed) {
     json_object *result = NULL;
     json_object *compiled = NULL;
@@ -402,6 +418,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
         {"roles", 2, roles_command},
+        {"hooks", 2, hooks_command},
+        {"head-commit", 3, head_commit_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},

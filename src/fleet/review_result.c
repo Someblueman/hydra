@@ -625,6 +625,22 @@ static long long step_finished(const struct rr *r)
     return at;
 }
 
+/* The commit the run's agent step left on the worker head: the diff shows that
+ * commit, which is what the checks ran on and what landing merges, and says
+ * when the branch has moved on since. */
+static void bind_verified(const struct rr *r, json_object *out, const char *branch, const char *base, const char *tip,
+                          char *range, size_t size)
+{
+    char commit[65];
+    int bound = plan_head_commit(r->run, r->plan, branch, commit);
+    if (bound == -2)
+        json_object_object_add(out, "checks_on_commit", json_object_new_boolean(false));
+    if (bound || snprintf(range, size, "%s..%s", base, commit) >= (int)size)
+        return;
+    f_string_add(out, "verified_commit", commit);
+    json_object_object_add(out, "tip_moved", json_object_new_boolean(strcmp(tip, commit) != 0));
+}
+
 static json_object *review_changes(const struct rr *r)
 {
     json_object *out = json_object_new_object();
@@ -649,6 +665,7 @@ static json_object *review_changes(const struct rr *r)
     f_string_add(out, "state", "observed");
     f_string_add(out, "base", base);
     f_string_add(out, "tip", tip);
+    bind_verified(r, out, branch, base, tip, range, sizeof(range));
     json_object_object_add(out, "commits", commit_rows(r->repo, range, step_finished(r)));
     json_object_object_add(out, "files", file_rows(r->repo, range));
     diff_text(out, r->repo, range);

@@ -95,7 +95,7 @@ review review-data "$verify_row" > "$fixture/review.tsv"
 for text in 'RESULT  kill-dry-run  -  verdict PASS (verified)  -  run succeeded' 'WHAT WAS PRODUCED' \
     '  PASS    preview-targets - Dry run lists targets (check: check)' "    Ran: sh @input/verify  (@input/NAME is the run's sealed copy of that input)" \
     '      Passed: 2  Failed: 0  Total: 2' '      tokens in 3.85M, cached 3.74M, out 23.0k; cost not reported' \
-    'CHANGES ON kill-dry-worker  (2 commits, 2 files, +4 -0; the branch as it is now)' 'DIFF  (complete)' \
+    'CHANGES ON kill-dry-worker  (2 commits, 2 files, +4 -0; the commit the checks ran on)' 'DIFF  (complete)' \
     '  Land the worker branch yourself; Hydra never merges for you:' 'TECHNICAL DETAILS  (exact identity and retained-contract checks)' \
     'readiness: ready'; do
     grep -Fqx "TEXT$tab$text" "$fixture/review.tsv" || { printf 'missing review line: %s\n' "$text" >&2; exit 1; }

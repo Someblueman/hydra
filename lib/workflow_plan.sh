@@ -133,6 +133,10 @@ workflow_plan_initialize() {
     # retiring verifier heads when the run finishes.
     hydra_private_touch "$1/plan-roles.tsv" || return 1
     workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
+    # Exec steps on the plan's own heads: agent steps are followed by a commit,
+    # commands record the commit they ran on (see workflow_plan_step_hook).
+    hydra_private_touch "$1/plan-hooks.tsv" || return 1
+    workflow_plan_tool hooks "$1/compiled.json" > "$1/plan-hooks.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     workflow_plan_bindings_match "$1"
@@ -157,6 +161,60 @@ workflow_plan_bindings_match() (
     [ "$(sed -n '1p' "$_wpb_dir/parallelism")" = "$_wpb_parallel" ] &&
         [ "$(sed -n '1p' "$_wpb_dir/disk-mb")" = "$_wpb_disk" ] &&
         [ "$(sed -n '1p' "$_wpb_dir/max-heads")" = "$_wpb_heads" ]
+)
+
+# Usage: workflow_plan_step_hook <run-dir> <step>
+# Prints "<kind><TAB><head>[<TAB><check>]" for an exec step on one of the
+# plan's own heads (kind agent, command or run), or nothing.
+workflow_plan_step_hook() {
+    [ -f "$1/plan-hooks.tsv" ] || return 0
+    awk -F '\t' -v id="$2" '$1 == id { sub(/^[^\t]*\t/, ""); print; exit }' "$1/plan-hooks.tsv"
+}
+
+# Usage: workflow_plan_worktree <run-dir> <branch>
+# The worktree of the head the run's project records for branch.
+workflow_plan_worktree() {
+    _wpw_project="$(sed -n '1p' "$1/project-id")"
+    _wpw_head="$(state_v2_find_head_by_branch "$_wpw_project" "$2")" || return 1
+    _wpw_dir="$(state_v2_head_dir "$_wpw_project" "$_wpw_head")" || return 1
+    _wpw_tree="$(sed -n '1p' "$_wpw_dir/worktree" 2>/dev/null)"
+    [ -n "$_wpw_tree" ] && [ -d "$_wpw_tree" ] || return 1
+    printf '%s\n' "$_wpw_tree"
+}
+
+# Usage: workflow_plan_record_commit <worktree> <file>
+workflow_plan_record_commit() {
+    _wprc_commit="$(git -C "$1" rev-parse --verify HEAD 2>/dev/null)" || return 1
+    workflow_atomic_scalar "$2" "$_wprc_commit"
+}
+
+# Usage: workflow_plan_commit <run-dir> <step> <worktree> <attempt-dir>
+# After an agent step, commits whatever it left in its worker head (tracked,
+# new and deleted files, as .gitignore allows), so the checks, the review and
+# landing all refer to one commit. Commit hooks and signing are not run: the
+# plan's checks verify the work. A step that changed nothing records the head
+# commit as it is. The commit is also offered to the step as its "commit"
+# output, unless the step's command wrote that file itself.
+workflow_plan_commit() (
+    _wpc_dir="$1" _wpc_step="$2" _wpc_tree="$3" _wpc_attempt="$4"
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+    git -C "$_wpc_tree" add -A >/dev/null || exit 1
+    if ! git -C "$_wpc_tree" diff --cached --quiet; then
+        _wpc_plan="$(sed -n '1p' "$_wpc_dir/graph.tsv" | cut -f2)"
+        _wpc_run="$(sed -n '1p' "$_wpc_dir/run-id")"
+        set -- -c commit.gpgsign=false
+        [ -n "$(git -C "$_wpc_tree" config user.name 2>/dev/null)" ] || set -- "$@" -c user.name=Hydra
+        [ -n "$(git -C "$_wpc_tree" config user.email 2>/dev/null)" ] || set -- "$@" -c user.email=hydra@localhost
+        git -C "$_wpc_tree" "$@" commit --no-verify -q \
+            -m "Hydra plan $_wpc_plan: $_wpc_step" \
+            -m "Hydra committed what the agent step $_wpc_step of run $_wpc_run left in this worktree, so the plan's checks, its review and landing refer to this commit." \
+            >/dev/null || exit 1
+    fi
+    workflow_plan_record_commit "$_wpc_tree" "$_wpc_attempt/commit" || exit 1
+    if [ -n "${HYDRA_WORKFLOW_OUTPUTS_DIR:-}" ] && [ -d "$HYDRA_WORKFLOW_OUTPUTS_DIR" ] &&
+        [ ! -e "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" ] && [ ! -L "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" ]; then
+        cp "$_wpc_attempt/commit" "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" || exit 1
+    fi
 )
 
 workflow_plan_expired() {

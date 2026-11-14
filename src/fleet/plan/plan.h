@@ -102,5 +102,14 @@ json_object *plan_delivery(const char *run);
 /* Borrows a successful plan_delivery result; prints its verification evidence. */
 void plan_delivery_view(json_object *delivery);
 int plan_preview(json_object *compiled, FILE *out);
+/* Whether a spawn step among steps creates head. */
+bool plan_spawns(json_object *steps, const char *head);
+/* The ID of the check with method command that step reports, or NULL. */
+const char *plan_command_check(json_object *plan, const char *step);
+/* Prints the run driver's per-step hooks for exec steps on spawned heads. */
+int plan_hooks(json_object *compiled, FILE *out);
+/* The commit the last succeeded agent step on branch recorded: 0 when every
+ * later command on that head ran on it, -2 when one did not, -1 when none. */
+int plan_head_commit(const char *run, json_object *plan, const char *branch, char commit[65]);
 int plan_tui(json_object *compiled);
 #endif

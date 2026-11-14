@@ -206,7 +206,17 @@ grep -q 'bundle-marker-1' "$worker/received-prompt"
 assert_success $? 'the worker agent received the inline prompt'
 if [ -s "$worker/greeting.txt" ] && [ -f "$worker/tests/greeting.sh" ]; then check=0; else check=1; fi
 assert_success "$check" 'the worker changed its own head'
+# Hydra commits what the agent step left, so the checks ran on a commit.
+assert_equal 'Hydra plan add-greeting: implement' "$(git -C "$worker" log -1 --format=%s)" 'the agent step is committed on the worker branch'
+if git -C "$worker" ls-files --error-unmatch greeting.txt tests/greeting.sh >/dev/null 2>&1; then check=0; else check=1; fi
+assert_success "$check" 'the commit carries the worker changes'
+assert_equal '' "$(git -C "$worker" status --porcelain)" 'nothing the worker made is left uncommitted'
 run_dir="$HYDRA_HOME/state/v2/projects/$e2e_project/workflows/runs/$run"
+commit="$(git -C "$worker" rev-parse HEAD)"
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/implement/attempt-1/commit")" 'the agent step records the commit it left'
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/repo-checks/attempt-1/head-commit")" 'the repository check started on that commit'
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/verify/attempt-1/head-commit-after")" 'the verifier ended on that commit'
+assert_equal "$commit" "$("$HYDRA_FLEET_BIN" workflow-plan head-commit "$run_dir" bundle-worker)" 'the run binds the worker head to that commit'
 assert_equal succeeded "$(sed -n '1p' "$run_dir/steps/repo-checks/state")" 'the repository check ran on the worker head after implementation'
 assert_equal '' "$(git status --porcelain)" 'the source checkout is still clean after the run'
 assert_equal 1 "$(git rev-list --count HEAD)" 'the run committed nothing to the source'

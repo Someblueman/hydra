@@ -2,7 +2,7 @@
  * Included by test_plan.c, which provides fixture() and expect(). */
 #include <sys/stat.h>
 
-static const char *bundle_prompt = "Write the report.\nDo not commit.";
+static const char *bundle_prompt = "Write the report.\nHydra commits your changes when you finish.";
 static json_object *agent_plan(void) {
     json_object *plan = fixture(), *compose = json_object_array_get_idx(f_field(plan, "steps"), 1);
     json_object *outputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), "compose"), "outputs");
