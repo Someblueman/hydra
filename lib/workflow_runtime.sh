@@ -103,7 +103,8 @@ workflow_bindings_match() {
     [ "$(sed -n '1p' "$_wbm_dir/schema-version")" = 1 ] &&
     [ "$(sed -n '1p' "$_wbm_dir/project-id")" = "$(hydra_get_project_id)" ] &&
     git cat-file -e "$_wbm_base^{commit}" 2>/dev/null &&
-    [ "$(git rev-parse HEAD 2>/dev/null || true)" = "$_wbm_base" ] &&
+    # A compiled plan guards what it copied at admission instead of the checkout.
+    { [ -f "$_wbm_dir/compiled.json" ] || [ "$(git rev-parse HEAD 2>/dev/null || true)" = "$_wbm_base" ]; } &&
     [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ] &&
     [ "$(workflow_parse "$_wbm_dir/resolved.yml" runtime | git hash-object --stdin)" = "$(git hash-object "$_wbm_dir/graph.tsv")" ] &&
     workflow_data_bindings_match "$_wbm_dir" &&

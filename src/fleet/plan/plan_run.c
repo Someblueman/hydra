@@ -4,6 +4,8 @@
 #endif
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
+#include "fleet/support/process.h"
+#include "fleet/support/sha256.h"
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
@@ -196,5 +198,85 @@ int plan_command_report(const char *run, const char *step, const char *attempt) 
     status = write_report(report, path);
 done:
     json_object_put(report); json_object_put(compiled);
+    return status;
+}
+
+/* The check before every step and at the finish guards the plan as it was
+ * approved and the inputs the run copied at its start, not the live checkout:
+ * the compiled artifact must still have the accepted digest, the run's data
+ * manifest, definition and graph must be the ones recorded at admission, and
+ * each copied input must still have the digest its receipt and the plan bind.
+ * Everything is read and hashed in this process. A source checkout that moved
+ * since is recorded once as a warning in plan-warnings and never fails it. */
+#define GUARD_RECORD "plan-guard.json"
+static const char *const guarded_files[] = {"resolved.yml", "graph.tsv", "data.json", "parallelism", "disk-mb", "max-heads"};
+
+static bool run_file_digest(const char *run, const char *name, char digest[65]) {
+    char path[F_PATH];
+    return !f_path(path, sizeof(path), run, name) && !f_sha256_file(path, digest);
+}
+static json_object *guard_digests(const char *run) {
+    json_object *record = json_object_new_object();
+    char digest[65];
+    json_object_object_add(record, "schema_version", json_object_new_int(1));
+    for (size_t i = 0; i < sizeof(guarded_files) / sizeof(guarded_files[0]); i++) {
+        if (!run_file_digest(run, guarded_files[i], digest)) { json_object_put(record); return NULL; }
+        f_string_add(record, guarded_files[i], digest);
+    }
+    return record;
+}
+static bool accepted_artifact(const char *run, json_object *compiled) {
+    char path[F_PATH], digest[65], *accepted = NULL;
+    bool same = false;
+    if (compiled && !plan_digest(compiled, digest) && !f_path(path, sizeof(path), run, "plan-accepted") && (accepted = f_read(path, 128))) {
+        accepted[strcspn(accepted, "\r\n")] = '\0';
+        same = !strcmp(accepted, digest);
+    }
+    free(accepted);
+    return same;
+}
+/* Each input the run copied at its start, against its receipt and the plan. */
+static bool copied_inputs(const char *run, json_object *compiled) {
+    json_object *inputs = f_field(f_field(compiled, "data"), "inputs"), *receipt = task_read_record(run, "inputs.json");
+    bool intact = receipt != NULL || !inputs || !json_object_object_length(inputs);
+    json_object_object_foreach(inputs, name, declaration) {
+        json_object *sealed = f_field(f_field(receipt, "files"), name);
+        const char *bound = f_string(declaration, "sha256"), *recorded = f_string(sealed, "sha256");
+        char path[F_PATH], digest[65];
+        if (!intact) break;
+        intact = recorded && snprintf(path, sizeof(path), "%s/artifacts/%s", run, name) < (int)sizeof(path) &&
+            !f_sha256_file(path, digest) && !strcmp(digest, recorded) && (!bound || !strcmp(bound, recorded));
+    }
+    json_object_put(receipt);
+    return intact;
+}
+static void source_warning(const char *run, json_object *compiled) {
+    json_object *source = f_field(compiled, "source");
+    const char *root = f_string(source, "root"), *commit = f_string(source, "commit");
+    char path[F_PATH], line[256];
+    char *argv[] = {"rev-parse", "HEAD", NULL};
+    struct f_capture cap = {0};
+    if (!root || !commit || f_path(path, sizeof(path), run, "plan-warnings") || !access(path, F_OK)) return;
+    if (!task_git(root, argv, &cap) && cap.out && strncmp(cap.out, commit, strlen(commit))) {
+        cap.out[strcspn(cap.out, "\r\n")] = '\0';
+        (void)snprintf(line, sizeof(line), "source_moved\t%.64s\t%.64s\n", commit, cap.out);
+        (void)f_write(path, line, strlen(line), false);
+    }
+    f_capture_free(&cap);
+}
+
+int plan_run_guard(const char *run, bool record) {
+    char path[F_PATH];
+    json_object *compiled = f_path(path, sizeof(path), run, "compiled.json") ? NULL : plan_read(path);
+    json_object *data = f_path(path, sizeof(path), run, "data.json") ? NULL : plan_read(path);
+    json_object *digests = guard_digests(run), *recorded = NULL;
+    int status = -1;
+    if (!accepted_artifact(run, compiled) || !data || !json_object_equal(data, f_field(compiled, "data")) || !digests ||
+        !copied_inputs(run, compiled)) goto done;
+    if (record) status = task_write_json(run, GUARD_RECORD, digests, true);
+    else if ((recorded = task_read_record(run, GUARD_RECORD)) && json_object_equal(recorded, digests)) status = 0;
+    if (!status && !record) source_warning(run, compiled);
+done:
+    json_object_put(recorded); json_object_put(digests); json_object_put(data); json_object_put(compiled);
     return status;
 }

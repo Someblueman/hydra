@@ -134,6 +134,10 @@ void plan_summary_text(json_object *summary);
 json_object *plan_summary_cli(int argc, char **argv);
 /* Prints the run driver's per-step hooks for exec steps on spawned heads. */
 int plan_hooks(json_object *compiled, FILE *out);
+/* The run guard: 0 when run's compiled artifact still has the accepted digest
+ * and its data, definition, graph and copied inputs are those admitted. With
+ * record, writes the digests it compares against later instead. */
+int plan_run_guard(const char *run, bool record);
 /* The commit the last succeeded agent step on branch recorded: 0 when every
  * later command on that head ran on it, -2 when one did not, -1 when none. */
 int plan_head_commit(const char *run, json_object *plan, const char *branch, char commit[65]);

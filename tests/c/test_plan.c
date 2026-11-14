@@ -1,6 +1,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
+#include "fleet/support/sha256.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -379,7 +380,7 @@ int main(void) {
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
-    bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases();
+    bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases(); sha256_cases();
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));

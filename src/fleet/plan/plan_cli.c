@@ -281,6 +281,16 @@ static json_object *head_commit_command(char **argv, bool *printed) {
     return NULL;
 }
 
+static json_object *guard_command(char **argv, bool *printed) {
+    bool record = argv[2] != NULL;
+    (void)printed;
+    if (record && strcmp(argv[2], "--record")) return NULL;
+    return plan_run_guard(argv[1], record) ?
+        plan_failure("workflow plan guard", "stale_plan", "the run's compiled plan, definition, data or copied inputs are not the ones admitted",
+                     "inspect the run directory; nothing in it may change while the run lasts") :
+        f_success("workflow plan guard", json_object_new_object());
+}
+
 static json_object *command_report_command(char **argv, bool *printed) {
     (void)printed;
     return plan_command_report(argv[1], argv[2], argv[3]) ?
@@ -446,6 +456,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"hooks", 2, hooks_command},
         {"head-commit", 3, head_commit_command},
         {"command-report", 4, command_report_command},
+        {"guard", 2, guard_command},
+        {"guard", 3, guard_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},

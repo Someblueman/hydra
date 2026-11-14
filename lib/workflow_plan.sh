@@ -154,13 +154,24 @@ workflow_plan_initialize() {
     workflow_plan_tool hooks "$1/compiled.json" > "$1/plan-hooks.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
-    workflow_plan_bindings_match "$1"
+    # Admission compiled the plan afresh against the source moments ago; the
+    # run's definition must be exactly that plan's projection. Its digests are
+    # then recorded for the guard before every step.
+    workflow_plan_projection_match "$1" && workflow_plan_tool guard "$1" --record >/dev/null
 }
 
-workflow_plan_bindings_match() (
-    [ -f "$1/compiled.json" ] || exit 0
+# Usage: workflow_plan_bindings_match <run-dir>
+# The check before each step, at the finish and on resume: the plan as it was
+# approved and the inputs the run copied, never the live checkout (see
+# plan_run_guard). An untracked or changed file in the source does not stop a
+# running plan; a moved source commit is only recorded in plan-warnings.
+workflow_plan_bindings_match() {
+    [ -f "$1/compiled.json" ] || return 0
+    workflow_plan_tool guard "$1" >/dev/null
+}
+
+workflow_plan_projection_match() (
     _wpb_dir="$1"
-    workflow_plan_tool bindings "$_wpb_dir/compiled.json" "$(workflow_repo_root)" "$(sed -n '1p' "$_wpb_dir/plan-accepted")" >/dev/null || exit 1
     workflow_plan_tool data-match "$_wpb_dir/compiled.json" "$_wpb_dir" >/dev/null || exit 1
     _wpb_tmp="$(mktemp -d)" || exit 1
     trap 'rm -rf "$_wpb_tmp"' EXIT

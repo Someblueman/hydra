@@ -1,5 +1,6 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
+#include "fleet/support/sha256.h"
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
@@ -97,8 +98,10 @@ json_object *plan_canonical(json_object *value) {
     return json_object_get(value);
 }
 int plan_digest(json_object *value, char digest[65]) {
-    char scratch[] = "/tmp/hydra-plan-hash.XXXXXX"; json_object *canonical = plan_canonical(value); int status = -1;
-    if (canonical && mkdtemp(scratch)) { status = task_json_hash(canonical, scratch, digest); f_remove_tree(scratch); }
+    json_object *canonical = plan_canonical(value); int status = -1;
+    /* The same bytes task_json_hash digests, hashed in this process. */
+    const char *text = canonical ? json_object_to_json_string_ext(canonical, JSON_C_TO_STRING_PLAIN) : NULL;
+    if (text) { f_sha256_text(text, strlen(text), digest); status = 0; }
     json_object_put(canonical); return status;
 }
 json_object *plan_failure(const char *command, const char *code, const char *message, const char *recovery) {

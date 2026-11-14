@@ -81,3 +81,16 @@ static void command_check_cases(void) {
     expect(plan, policy, NULL);
     json_object_put(plan); json_object_put(policy);
 }
+/* The in-process SHA-256 behind plan digests and the run guard (FIPS 180-4 vectors). */
+static void sha256_cases(void) {
+    char digest[65], *million = malloc(1000000);
+    struct f_sha256 sha;
+    f_sha256_text("", 0, digest); assert(!strcmp(digest, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
+    f_sha256_text("abc", 3, digest); assert(!strcmp(digest, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+    f_sha256_text("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", 56, digest);
+    assert(!strcmp(digest, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"));
+    assert(million); memset(million, 'a', 1000000);
+    f_sha256_init(&sha); f_sha256_update(&sha, million, 1); f_sha256_update(&sha, million + 1, 999999); f_sha256_final(&sha, digest);
+    assert(!strcmp(digest, "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"));
+    free(million);
+}

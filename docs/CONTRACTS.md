@@ -305,6 +305,21 @@ is recorded as `retirement/<spawn-step>/{state,detail}` (`retired`, `kept` or
 `head.retire_failed`, after the terminal run event; retirement never changes the
 run result. Heads of work and compose steps are never retired automatically.
 
+A compiled plan is compiled once, at admission. Its run then records
+`plan-guard.json` (schema 1: the SHA-256 of `resolved.yml`, `graph.tsv`,
+`data.json`, `parallelism`, `disk-mb` and `max-heads`) once the definition is
+checked against the compiled projection. Before every step, at the finish and
+on resume, `workflow-plan guard <run-dir>` (in process, without child processes
+except one `git rev-parse`) requires that `compiled.json` still has the digest
+in `plan-accepted`, that `data.json` equals its `data`, that those digests are
+unchanged, and that every copied input under `artifacts/` still has the digest
+of its `inputs.json` receipt and of the plan's declaration; otherwise the step
+is `recovery-required` with `stale_plan`. The source checkout is not compared:
+untracked or changed files there never fail a run, and a moved `HEAD` is
+recorded once in `plan-warnings` as `source_moved<TAB>compiled-commit<TAB>head`.
+Resuming a compiled plan run likewise no longer requires the checkout to be at
+`base-commit`. Plan digests are computed in process with identical bytes.
+
 A compiled plan run also records `plan-hooks.tsv`, one line per exec step on a
 head its spawn steps create: `step<TAB>agent<TAB>head` for an agent step,
 `step<TAB>command<TAB>head<TAB>check` for a step that owns a command check and
