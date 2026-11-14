@@ -144,7 +144,10 @@ assert_equal ended "$(awk -F '\t' '$1 == "state" { print $2 }' "$summaries/$gamm
 delta_i="$(instance_of delta)"
 delta_dir="$(head_dir_of delta)"
 activity delta active 1
-"$hydra" adapter watch >/dev/null 2>&1
+# An observer reported ten seconds ago: it may still extend that interval over
+# the end. (A report in the same second as the end would already cover it.)
+watched_until=$(($(date +%s) - 10))
+printf 'HYDRA_ACTIVITY_COVERAGE\t1\t0\n%s\t%s\n' $((watched_until - 20)) "$watched_until" > "$project_dir/activity/coverage"
 "$hydra" kill delta >/dev/null 2>&1
 if [ -f "$summaries/$delta_i" ]; then status=1; else status=0; fi
 assert_success "$status" "a session whose coverage may still grow is not summarised yet"
