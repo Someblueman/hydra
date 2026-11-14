@@ -276,8 +276,12 @@ static void applying(const struct app *app, struct kt_binding *rows) {
     memcpy(rows, native_keys((struct app *)app)->bindings, sizeof(struct kt_binding) * KEY_ACTIONS);
     for (i = KEY_VIEW_ACTIONS; i < KEY_ACTIONS; i++)
         if (!key_applies(app, (enum key_action)i)) rows[i].scope = 0;
-    /* x interrupts a selected remote head's agent instead of removing it. */
+    /* x interrupts a selected remote head's agent instead of removing it;
+     * Enter in the workspace opens a selected head's details, or a run's
+     * evidence. */
     if (remote_head_selected(app) && !app->marked_count) rows[KEY_HEAD_REMOVE].label = "interrupt";
+    if (app->view == 7 && head_selected(app) && !(app->workspace && app->workspace->run_selected))
+        rows[KEY_WS_OPEN].label = "details";
 }
 
 uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]) {

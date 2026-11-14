@@ -701,9 +701,10 @@ bool native_review_render(struct app *app)
     top = app->line;
     review->lines = review_body(app, review);
     /* G can arrive in the same burst as a change of view, before that view's
-     * rows are known: it asks for the end, which settles on the last row. */
+     * rows are known: it asks for the end, which settles on the last screen. */
     if (review->lines && review->scroll >= review->lines) {
-        review->scroll = review->lines - 1U;
+        size_t visible = app->limit > top ? (size_t)(app->limit - top) : 1U;
+        review->scroll = review->lines > visible ? review->lines - visible : 0U;
         app->line = top;
         review->lines = review_body(app, review);
     }

@@ -122,7 +122,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_WS_DOWN, KEY_SCOPE_WORKSPACE, "workspace.down", "select", G_WORKSPACE, 9),
     ROW(KEY_WS_COLLAPSE, KEY_SCOPE_WORKSPACE, "workspace.collapse", "collapse/expand", G_WORKSPACE, -1),
     ROW(KEY_WS_EXPAND, KEY_SCOPE_WORKSPACE, "workspace.expand", "collapse/expand", G_WORKSPACE, -1),
-    ROW(KEY_WS_OPEN, KEY_SCOPE_WORKSPACE, "workspace.open", "details", G_WORKSPACE, 9),
+    ROW(KEY_WS_OPEN, KEY_SCOPE_WORKSPACE, "workspace.open", "open", G_WORKSPACE, 9),
     ROW(KEY_WS_PANE_NEXT, KEY_SCOPE_WORKSPACE, "workspace.pane-next", "pane", G_WORKSPACE, 10),
     ROW(KEY_WS_PANE_PREVIOUS, KEY_SCOPE_WORKSPACE, "workspace.pane-previous", "pane", G_WORKSPACE, 10),
     ROW(KEY_WS_TALK, KEY_SCOPE_WORKSPACE, "workspace.talk", "talk to agent", G_WORKSPACE, 9),
