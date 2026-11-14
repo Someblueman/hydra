@@ -152,26 +152,45 @@ static void run_heads(struct app *app, size_t run) {
     }
 }
 
+/* Where the recorded evidence goes under a summary of used rows: right
+ * under it, or (at least five rows) at the bottom of r when the summary
+ * leaves less. Returns its rows, 0 when there is no room or no record. */
+static int evidence_place(const struct app *app, struct kt_rect r, size_t used, int *top) {
+    int rows;
+    *top = r.y + 2 + (int)(used < (size_t)r.height ? used : (size_t)r.height);
+    rows = r.y + r.height - *top;
+    if (rows < 5 && r.height > 12) { *top = r.y + r.height - 5; rows = 5; }
+    return app->evidence && app->evidence->run[0] && rows >= 5 ? rows : 0;
+}
+
 /* The selected step's summary, then the recorded evidence in the rows left
- * (at least four; PgUp and PgDn page through it). */
+ * (at least four). The two read as one text: PgDn first brings the rest of
+ * a summary that does not fit into view (its Next row among them), then
+ * pages through the evidence; PgUp goes back the same way. */
 static void run_evidence(struct app *app, struct kt_rect r, const size_t *indices, size_t n) {
+    size_t *offset = &app->workspace->scroll[WORK_RUN], zero = 0, used, hidden, summary, record;
     char title[96];
-    size_t scroll = 0, used;
     struct kt_canvas c;
-    int top, rows;
+    int top, rows, area;
     app->workspace->evidence_rows = 0;
     if (r.height < 2) return;
     snprintf(title, sizeof(title), "%.60s", app->workflow_node < n ? app->workflows->nodes[indices[app->workflow_node]].id : "step");
-    work_rule(app, r, title, false, "evidence");
-    used = page_lines(app, (struct kt_rect){r.x, r.y + 1, r.width - 1, r.height - 1}, &scroll, step_evidence_draw);
-    top = r.y + 2 + (int)(used < (size_t)r.height ? used : (size_t)r.height);
-    rows = r.y + r.height - top;
-    if (rows < 5 && r.height > 12) { top = r.y + r.height - 5; rows = 5; }
-    if (!app->evidence || !app->evidence->run[0] || rows < 5 ||
-        !kt_canvas_view(&c, &app->frame, (struct kt_rect){r.x, top, r.width - 1, rows})) return;
+    used = page_lines(app, (struct kt_rect){r.x, r.y + 1, r.width - 1, r.height - 1}, &zero, step_evidence_draw);
+    rows = evidence_place(app, r, used, &top);
+    area = rows ? top - r.y - 1 : r.height - 1;
+    hidden = used > (size_t)area ? used - (size_t)area : 0;
+    summary = *offset < hidden ? *offset : hidden;
+    work_rule(app, r, title, false, summary < hidden ? "pgdn more" : "evidence");
+    if (hidden) {
+        kt_fill(&app->frame, (struct kt_rect){r.x, r.y + 1, r.width - 1, r.height - 1}, KT_BASE);
+        (void)page_lines(app, (struct kt_rect){r.x, r.y + 1, r.width - 1, area}, &summary, step_evidence_draw);
+    }
+    app->workspace->evidence_rows = rows ? rows - 1 : area;
+    if (!rows || !kt_canvas_view(&c, &app->frame, (struct kt_rect){r.x, top, r.width - 1, rows})) { *offset = summary; return; }
+    record = *offset - summary;
     kt_fill(&app->frame, (struct kt_rect){r.x, top, r.width - 1, rows}, KT_BASE);
-    native_workspace_evidence_text(app, &c, &app->workspace->scroll[WORK_RUN]);
-    app->workspace->evidence_rows = rows - 1;
+    native_workspace_evidence_text(app, &c, &record);
+    *offset = summary + record;
 }
 
 static void run_page(struct app *app, struct kt_rect r, bool focused) {

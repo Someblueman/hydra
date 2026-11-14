@@ -15,7 +15,7 @@ FRAME 1 80x24
                            tests         ✗ failed            -                 
                            review        ○ queued            -                 
                                                                                
-                          prepare ───────────────────────────────── evidence   
+                          prepare ──────────────────────────────── pgdn more   
                           Head    none                                         
                           Kind    spawn, attempt 1                             
                           Needs   -                                            

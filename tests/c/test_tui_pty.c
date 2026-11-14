@@ -1177,7 +1177,7 @@ static int selected_tests(const char *only, char **argv) {
     static const struct { const char *name; pty_case cases[3]; } groups[] = {
         {"layout", {test_workspace_layout, test_workspace_enter, NULL}},
         {"mouse", {test_mouse, NULL, NULL}},
-        {"visualization", {test_visualization, test_visualization_hosts, NULL}},
+        {"visualization", {test_visualization, test_visualization_short, test_visualization_hosts}},
         {"attention", {test_attention, test_inbox_decisions, NULL}},
         {"interaction", {test_small_list, test_interaction, NULL}},
         {"themes", {test_themes, NULL, NULL}},
@@ -1224,6 +1224,7 @@ int main(int argc, char **argv) {
     test_themes(argv[1], argv[2], argv[3]);
     test_mouse(argv[1], argv[2], argv[3]);
     test_visualization(argv[1], argv[2], argv[3]);
+    test_visualization_short(argv[1], argv[2], argv[3]);
     test_visualization_refresh(argv[1], argv[2], argv[3]);
     test_visualization_hosts(argv[1], argv[2], argv[3]);
     test_attention(argv[1], argv[2], argv[3]);

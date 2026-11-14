@@ -41,6 +41,29 @@ static void test_visualization(const char *tui, const char *hydra, const char *f
     close_session(&session);
 }
 
+/* At 80x24 the selected step's summary is taller than the rows the Run
+ * page leaves under its steps: the evidence rule says so, and PgDn on the
+ * focused page brings the rest into view, its Next row whole; PgUp goes
+ * back to the top. */
+static void test_visualization_short(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    setenv("HYDRA_TEST_OVERVIEW", "1", 1);
+    result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open short visualization terminal");
+    unsetenv("HYDRA_TEST_OVERVIEW");
+    (void)wait_for_model(&session);
+    result(wait_for_markers(&session, "STEP", "pgdn more", 6000), "a step summary taller than the Run page says PgDn shows more");
+    write_input(session.master, "\t", 1);
+    (void)wait_for_marker(&session, "step", 1000);
+    write_input(session.master, "\033[6~", 4);
+    result(wait_for_marker(&session, "conversation", 1000) && !session_visible(&session, "pgdn more"),
+           "PgDn on the Run page shows the rest of the step summary, its Next row whole");
+    write_input(session.master, "\033[5~", 4);
+    result(wait_for_marker(&session, "Head    none", 1000), "PgUp goes back to the top of the summary");
+    write_input(session.master, "q", 1);
+    result(wait_for_exit(&session) == 0, "short visualization exits normally");
+    close_session(&session);
+}
+
 static void test_visualization_refresh(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     char marker[] = "/tmp/hydra-viz-refresh.XXXXXX";
