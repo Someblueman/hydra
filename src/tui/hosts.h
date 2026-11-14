@@ -78,9 +78,6 @@ void hosts_move(struct app *app, int direction);
 /* Esc in Work after Enter followed a host there: back to Hosts, with the
  * location filter Work had before. */
 bool hosts_jump_return(struct app *app);
-/* On the Onboarding page: [ and ] back to Hosts, and the screen keys, while
- * its list is shown; false for a key the onboarding view takes. */
-bool hosts_onboarding_key(struct app *app, const struct kt_event *e);
 /* r: a fresh observation of the selected host, or of every host. */
 void hosts_retry_row(struct app *app);
 /* A setup opened or closed: the detail takes the focus, or gives it back. */

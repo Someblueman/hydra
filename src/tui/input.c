@@ -386,7 +386,7 @@ static void view_key_event(struct app *app, const struct kt_event *e) {
 
 /* A key or mouse event from the terminal, sent to the layer that owns it: an
  * agent pane holding input (or a chord of Hydra's own keys), Ctrl-C, a
- * setup modal on Hosts or the onboarding page, then the views. */
+ * setup modal on Hosts, a field of an onboarding form, then the views. */
 void input_event(struct app *app, const struct kt_event *e) {
     bool modal = hosts_modal_open(app);
     bool onboarding = !modal && native_onboarding_active(app) && app->view == 6;
@@ -399,7 +399,7 @@ void input_event(struct app *app, const struct kt_event *e) {
     if (e->type != KT_KEY) return;
     if (kt_event_is(e, 'c', KT_MOD_CTRL)) { terminal_request_stop(SIGINT); return; }
     if (modal) { native_setup_event(app, e); return; }
-    if (onboarding && !hosts_onboarding_key(app, e)) { (void)native_onboarding_event(app, e); return; }
+    if (onboarding && native_onboarding_text(app, e)) return;
     view_key_event(app, e);
 }
 
@@ -418,7 +418,7 @@ void input_paste(struct app *app, const char *bytes, size_t length, bool truncat
         e.type = KT_PASTE;
         e.length = length < sizeof(e.bytes) ? length : sizeof(e.bytes);
         memcpy(e.bytes, bytes, e.length);
-        (void)native_onboarding_event(app, &e);
+        (void)native_onboarding_text(app, &e);
         return;
     }
     if (statistics_paste(app, bytes, length)) return;

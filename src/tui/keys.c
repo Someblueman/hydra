@@ -23,6 +23,7 @@
 #define G_REVIEW "Review"
 #define G_HOSTS "Hosts"
 #define G_SETUP "Setup"
+#define G_ONBOARDING "Onboarding"
 #define ROW(id, key_scope, key_name, text, key_group, rank) \
     [id] = {.name = key_name, .label = text, .action = id, .scope = key_scope, .group = key_group, .priority = rank}
 #define T KEY_SCOPE_TERMINAL
@@ -134,6 +135,43 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_SETUP_CONTINUE, KEY_SCOPE_HOSTS_SETUP, "setup.continue", "continue", G_SETUP, 9),
     ROW(KEY_SETUP_CANCEL, KEY_SCOPE_HOSTS_SETUP, "setup.cancel", "cancel step", G_SETUP, 8),
     ROW(KEY_SETUP_BACKGROUND, KEY_SCOPE_HOSTS_SETUP, "setup.background", "background", G_SETUP, 8),
+#define O KEY_SCOPE_ONBOARDING
+#define OP KEY_SCOPE_ONBOARDING_PAGE
+    ROW(KEY_ONB_UP, O, "onboarding.up", "select", G_ONBOARDING, 9),
+    ROW(KEY_ONB_DOWN, O, "onboarding.down", "select", G_ONBOARDING, 9),
+    ROW(KEY_ONB_PAGE_UP, O, "onboarding.page-up", "page up/down", G_ONBOARDING, -1),
+    ROW(KEY_ONB_PAGE_DOWN, O, "onboarding.page-down", "page up/down", G_ONBOARDING, -1),
+    ROW(KEY_ONB_OPEN, O, "onboarding.open", "detail", G_ONBOARDING, 8),
+    ROW(KEY_ONB_FIND, O, "onboarding.find", "find", G_ONBOARDING, 7),
+    ROW(KEY_ONB_QUALIFY, O, "onboarding.qualify", "qualify", G_ONBOARDING, 7),
+    ROW(KEY_ONB_REVIEW, O, "onboarding.review", "review", G_ONBOARDING, 7),
+    ROW(KEY_ONB_INTENT, O, "onboarding.intent", "intent", G_ONBOARDING, 6),
+    ROW(KEY_ONB_CHANGES, O, "onboarding.changes", "changes", G_ONBOARDING, 5),
+    ROW(KEY_ONB_STATE, O, "onboarding.state", "state filter", G_ONBOARDING, 4),
+    ROW(KEY_ONB_SOURCE, O, "onboarding.source", "source filter", G_ONBOARDING, 3),
+    ROW(KEY_ONB_PLATFORM, O, "onboarding.platform", "platform filter", G_ONBOARDING, 3),
+    ROW(KEY_ONB_LABEL, O, "onboarding.label", "label filter", G_ONBOARDING, 3),
+    ROW(KEY_ONB_SEARCH, O, "onboarding.search", "search", G_ONBOARDING, 4),
+    ROW(KEY_ONB_CLEAR, O, "onboarding.clear", "clear filters", G_ONBOARDING, 3),
+    ROW(KEY_ONB_EXPORT, O, "onboarding.export", "open export", G_ONBOARDING, 2),
+    ROW(KEY_ONB_RELOAD, O, "onboarding.reload", "read again", G_ONBOARDING, 2),
+    ROW(KEY_ONB_PAGE_PREVIOUS, O, "onboarding.page-previous", "page", G_ONBOARDING, 2),
+    ROW(KEY_ONB_PAGE_NEXT, O, "onboarding.page-next", "page", G_ONBOARDING, 2),
+    ROW(KEY_ONB_SCROLL_UP, OP, "onboarding.scroll-up", "scroll", G_ONBOARDING, 6),
+    ROW(KEY_ONB_SCROLL_DOWN, OP, "onboarding.scroll-down", "scroll", G_ONBOARDING, 6),
+    ROW(KEY_ONB_SCROLL_PAGE_UP, OP, "onboarding.scroll-page-up", "page", G_ONBOARDING, 3),
+    ROW(KEY_ONB_SCROLL_PAGE_DOWN, OP, "onboarding.scroll-page-down", "page", G_ONBOARDING, 3),
+    ROW(KEY_ONB_CONTINUE, OP, "onboarding.continue", "back to the list", G_ONBOARDING, 8),
+    ROW(KEY_ONB_APPLY, KEY_SCOPE_ONBOARDING_INTENT, "onboarding.apply", "apply", G_ONBOARDING, 9),
+    ROW(KEY_ONB_STATUS, KEY_SCOPE_ONBOARDING_INTENT, "onboarding.status", "refresh status", G_ONBOARDING, 7),
+    ROW(KEY_ONB_CANCEL, KEY_SCOPE_ONBOARDING_RUNNING, "onboarding.cancel", "cancel", G_ONBOARDING, 9),
+    ROW(KEY_ONB_BACKGROUND, KEY_SCOPE_ONBOARDING_RUNNING, "onboarding.background", "back to Hosts", G_ONBOARDING, 8),
+    ROW(KEY_ONB_FIELD_NEXT, KEY_SCOPE_ONBOARDING_FORM, "onboarding.field-next", "field", G_ONBOARDING, 7),
+    ROW(KEY_ONB_FIELD_PREVIOUS, KEY_SCOPE_ONBOARDING_FORM, "onboarding.field-previous", "field", G_ONBOARDING, 7),
+    ROW(KEY_ONB_SUBMIT, KEY_SCOPE_ONBOARDING_FORM, "onboarding.submit", "next field", G_ONBOARDING, 9),
+    ROW(KEY_ONB_FORM_BACK, KEY_SCOPE_ONBOARDING_FORM, "onboarding.form-back", "back", G_ONBOARDING, 8),
+#undef O
+#undef OP
 
     ROW(KEY_HEADS_UP, KEY_SCOPE_WORK_LIST, "heads.up", "select", G_HEADS, 9),
     ROW(KEY_HEADS_DOWN, KEY_SCOPE_WORK_LIST, "heads.down", "select", G_HEADS, 9),
@@ -336,6 +374,19 @@ static const char default_keys[] =
     "view.attention = I\nview.stats = D\napp.theme = t\napp.actions = :\napp.refresh = ctrl+r\n"
     "app.back = esc\napp.help = ?\napp.exit = q\n";
 
+/* The Onboarding page's keys, apart so that each text stays within the
+ * length C99 compilers must accept. */
+static const char onboarding_keys[] =
+    "onboarding.up = up, k\nonboarding.down = down, j\nonboarding.page-up = pgup\nonboarding.page-down = pgdn\n"
+    "onboarding.open = enter\nonboarding.find = f\nonboarding.qualify = Q\nonboarding.review = r\nonboarding.intent = i\n"
+    "onboarding.changes = c\nonboarding.state = s\nonboarding.source = S\nonboarding.platform = P\nonboarding.label = l\n"
+    "onboarding.search = /\nonboarding.clear = x\nonboarding.export = o\nonboarding.reload = R\n"
+    "onboarding.page-previous = [\nonboarding.page-next = ]\n"
+    "onboarding.scroll-up = up, k\nonboarding.scroll-down = down, j\nonboarding.scroll-page-up = pgup\n"
+    "onboarding.scroll-page-down = pgdn\nonboarding.continue = enter\nonboarding.apply = a\nonboarding.status = s\n"
+    "onboarding.cancel = c\nonboarding.background = b\nonboarding.field-next = tab, down\n"
+    "onboarding.field-previous = shift+tab, up\nonboarding.submit = enter\nonboarding.form-back = esc\n";
+
 /* Fills rows with every action and its default chords. */
 static void default_bindings(struct kt_binding rows[KEY_ACTIONS]) {
     struct kt_keymap map = {rows, KEY_ACTIONS};
@@ -343,6 +394,7 @@ static void default_bindings(struct kt_binding rows[KEY_ACTIONS]) {
     size_t i;
     memcpy(rows, key_rows, sizeof(key_rows));
     (void)kt_keymap_configure(&map, default_keys, sizeof(default_keys) - 1U, error, sizeof(error));
+    (void)kt_keymap_configure(&map, onboarding_keys, sizeof(onboarding_keys) - 1U, error, sizeof(error));
     for (i = 0; i < KEY_ACTIONS; i++) rows[i].line = 0;
 }
 

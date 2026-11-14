@@ -5,7 +5,7 @@ FRAME 1 140x40
   ONBOARDING / candidates, qualification and enrollment                                                                                    
   2 candidates / export qualify-two.json                                                                                                   
     NAME / TARGET                  STATE                          SOURCE     PLATFORM         AGE                                          
-  > build                          qualified                      ssh        linux-x86_64     28d                                          
+  ▌ build                          qualified                      ssh        linux-x86_64     28d                                          
     other                          revoked                        ssh        unknown          28d                                          
                                                                                                                                            
                                                                                                                                            
@@ -36,6 +36,6 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   rows 1-2 of 2                                                                                                                            
-  Enter inspects; s/S/P/l filter state, source, platform, label; / searches; x clears; r reviews, i intent                                 
+                                                                                                                                           
   ● live                                                                                                                                   
- j/k select  Enter detail  f find  Q qualify  r review  i intent  c changes  s/S/P/l filters  [/] page  Esc back  q quit                   
+ ↑/↓ select • enter detail • f find • Q qualify • r review • i intent • c changes • s state filter • / search • ? help • q quit            

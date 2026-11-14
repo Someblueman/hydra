@@ -203,9 +203,6 @@ src/tui/main.c	main	71
 src/tui/main.c	render_fixture	29
 src/tui/model.c	load_model_stream	33
 src/tui/observations.c	native_observations_tick	79
-src/tui/onboarding_flow.c	list_key	19
-src/tui/onboarding_flow.c	move	20
-src/tui/onboarding_flow.c	screen_key	26
 src/tui/onboarding_headless.c	native_onboarding_fixture	25
 src/tui/onboarding_model.c	intent	21
 src/tui/plan_launch.c	native_plan_launch_tick	61

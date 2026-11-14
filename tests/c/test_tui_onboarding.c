@@ -322,14 +322,15 @@ static void hundred_case(struct app *app, int cols, int rows) {
 
 /* ---- Keys (no child ever starts here) ---- */
 
-/* Keys arrive as the terminal's decoder delivers them; a lone Escape is
- * reported once the input pauses, which the flush stands for. */
+/* Keys arrive as the terminal's decoder delivers them, through the path
+ * every key takes (the page's fields, then the binding table); a lone
+ * Escape is reported once the input pauses, which the flush stands for. */
 static void press(struct app *app, const char *keys) {
     struct kt_input decoder;
     struct kt_event e;
     kt_input_init(&decoder);
-    for (; *keys; keys++) if (kt_input_feed(&decoder, (unsigned char)*keys, &e)) (void)native_onboarding_event(app, &e);
-    if (kt_input_flush(&decoder, &e)) (void)native_onboarding_event(app, &e);
+    for (; *keys; keys++) if (kt_input_feed(&decoder, (unsigned char)*keys, &e)) input_event(app, &e);
+    if (kt_input_flush(&decoder, &e)) input_event(app, &e);
 }
 
 static void key_cases(struct app *app) {

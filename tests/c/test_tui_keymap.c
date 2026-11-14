@@ -7,6 +7,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "../../src/tui/internal.h"
+#include "../../src/tui/onboarding_flow.h"
 
 static int failures;
 
@@ -263,6 +264,36 @@ static bool old_screen_keys(void) {
     return ok;
 }
 
+/* The Onboarding page's keys are bindings too: each of its screens has its
+ * chain, the footer comes from it, and a form's fields keep every letter
+ * (no quit or help there, only the form's own keys). */
+static bool onboarding_keys(void) {
+    static const struct { enum onb_screen screen; enum key_chain_id chain; const char *shown, *absent; } cases[] = {
+        {ONB_SCREEN_LIST, KEY_CHAIN_ONBOARDING, "f find", "scroll"},
+        {ONB_SCREEN_DETAIL, KEY_CHAIN_ONBOARDING_PAGE, "scroll", "f find"},
+        {ONB_SCREEN_INTENT, KEY_CHAIN_ONBOARDING_INTENT, "s refresh status", "f find"},
+        {ONB_SCREEN_RUNNING, KEY_CHAIN_ONBOARDING_RUNNING, "esc cancel", "q quit"},
+        {ONB_SCREEN_SELECT, KEY_CHAIN_ONBOARDING_FORM, "enter next field", "q quit"},
+    };
+    struct app *app = app_new(false);
+    struct native_onboarding *s = native_onboarding_state(app);
+    char text[1024] = "";
+    size_t i;
+    bool ok = s != NULL;
+    set_chain(app, 6, false, false);
+    for (i = 0; ok && i < sizeof(cases) / sizeof(cases[0]); i++) {
+        s->open = true; s->screen = cases[i].screen;
+        s->job.active = cases[i].screen == ONB_SCREEN_RUNNING;
+        ok = key_chain(app) == cases[i].chain && footer_text(app, 140, text, sizeof(text)) &&
+            strstr(text, cases[i].shown) && !strstr(text, cases[i].absent);
+        if (!ok) fprintf(stderr, "onboarding screen %d: %s\n", (int)cases[i].screen, text);
+    }
+    if (s) s->job.active = false;
+    native_onboarding_destroy(app);
+    free(app);
+    return ok;
+}
+
 int main(void) {
     result(chains_unique(false), "no key has two meanings within a scope chain (local)");
     result(chains_unique(true), "no key has two meanings within a scope chain (fleet)");
@@ -275,6 +306,7 @@ int main(void) {
     result(released_stats_names_load(), "a 3.0 keys file with the retired Statistics names still loads");
     result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics; retired rows are live nowhere");
     result(old_screen_keys(), "the old screen letters work on every screen, stay out of the footer and are help's old keys");
-    printf("Passed: %d checks, Failed: %d\n", 11 - failures, failures);
+    result(onboarding_keys(), "the Onboarding page's screens have their own chains and footers; its forms keep every letter");
+    printf("Passed: %d checks, Failed: %d\n", 12 - failures, failures);
     return failures ? 1 : 0;
 }

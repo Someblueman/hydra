@@ -713,13 +713,6 @@ void screen_status(struct app *app, char *out, size_t size, struct kt_style *ton
     if (app->view == 6) hosts_status(app, out, size);
 }
 
-/* The footer is generated from the binding table (key_footer); the
- * onboarding page keeps its own hints while it owns input. NULL: generated. */
-static const char *hint_line(struct app *app) {
-    if (app->view == 6 && native_onboarding_active(app) && !hosts_modal_open(app)) return native_onboarding_hints(app, app->cols < 70);
-    return NULL;
-}
-
 /* Work and Stats draw their own frame; Inbox and Hosts draw inside this one,
  * Hosts' setup modal over all of it. */
 void render(struct app *app, unsigned frame, bool headless) {
@@ -738,7 +731,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     else hosts_render(app);
     app->limit = app->rows;
     screen_status(app, status, sizeof(status), &tone, headless);
-    chrome_footer(app, &app->frame, status, tone, hint_line(app));
+    chrome_footer(app, &app->frame, status, tone, NULL);
     if (app->view == 6) hosts_overlay(app);
     frame_end(app, frame, headless);
 }

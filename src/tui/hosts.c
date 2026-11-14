@@ -61,6 +61,7 @@ void hosts_focus_detail(struct app *app, bool focus) {
 bool hosts_modal_open(const struct app *app) { return app->view == 6 && native_setup_modal_open(app); }
 
 enum key_chain_id hosts_chain(const struct app *app) {
+    if (native_onboarding_active(app)) return native_onboarding_chain(app);
     return detail_focused(app) ? KEY_CHAIN_HOSTS_SETUP : KEY_CHAIN_HOSTS;
 }
 
@@ -605,24 +606,16 @@ bool hosts_perform(struct app *app, enum key_action action) {
     return true;
 }
 
-/* Esc: the open setup steps back, then the detail gives the list its place,
- * then the filter clears. */
+/* Esc: the Onboarding page steps back (to Hosts from its list), the open
+ * setup steps back, then the detail gives the list its place, then the
+ * filter clears. */
 bool hosts_back(struct app *app) {
     struct native_hosts *h = app->hosts;
+    if (native_onboarding_active(app)) { native_onboarding_back(app); return true; }
     if (detail_focused(app)) { native_setup_perform(app, KEY_BACK); return true; }
     if (!h) return false;
     if (h->detail_open) { h->detail_open = false; return true; }
     if (h->filter[0]) { h->filter[0] = '\0'; app->host_selected = 0; return true; }
-    return false;
-}
-
-/* The Onboarding page lets its list's [ and ] go back to Hosts, and the
- * digits change screens; every other key is the onboarding view's. */
-bool hosts_onboarding_key(struct app *app, const struct kt_event *e) {
-    const struct native_onboarding *o = app->onboarding;
-    if (!o || o->screen != ONB_SCREEN_LIST || e->mods) return false;
-    if (e->key == '[' || e->key == ']') { native_onboarding_close(app); return true; }
-    if (e->key >= '1' && e->key <= '4') { native_onboarding_close(app); return key_dispatch(app, e); }
     return false;
 }
 

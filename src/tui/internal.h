@@ -465,10 +465,19 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
  * the Hosts tab like setup; every action is a `hydra fleet ...` child. */
 bool native_onboarding_active(const struct app *app);
 void native_onboarding_open(struct app *app);
-bool native_onboarding_event(struct app *app, const struct kt_event *e);
+/* Text for a form's field and pastes; false for a key the binding table
+ * takes (the page's own keys, Esc, the agent-layer chords). */
+bool native_onboarding_text(struct app *app, const struct kt_event *e);
+/* The page's keys from the binding table: the chain of its screen, whether
+ * a key applies there, what it does, the labels that follow the screen, and
+ * Esc (a step back, or cancelling a command that runs). */
+enum key_chain_id native_onboarding_chain(const struct app *app);
+bool native_onboarding_applies(const struct app *app, enum key_action action, bool *applies);
+bool native_onboarding_perform(struct app *app, enum key_action action);
+void native_onboarding_labels(const struct app *app, struct kt_binding *rows);
+void native_onboarding_back(struct app *app);
 void native_onboarding_tick(struct app *app);
 void native_onboarding_render(struct app *app);
-const char *native_onboarding_hints(const struct app *app, bool narrow);
 /* The view closes (Esc on its list, [ or ]); a child that runs keeps running. */
 void native_onboarding_close(struct app *app);
 void native_onboarding_destroy(struct app *app);

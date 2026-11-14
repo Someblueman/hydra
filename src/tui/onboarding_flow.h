@@ -38,7 +38,6 @@ bool native_onboarding_active(const struct app *app);
 void native_onboarding_open(struct app *app);
 void native_onboarding_tick(struct app *app);
 void native_onboarding_render(struct app *app);
-const char *native_onboarding_hints(const struct app *app, bool narrow);
 void native_onboarding_destroy(struct app *app);
 /* Headless: open the view on recorded envelopes (an export, optionally an
  * intent/status envelope) at a named screen; no child runs. */
@@ -51,7 +50,7 @@ struct onb_field *onb_form_fields(struct native_onboarding *s);
 bool onb_form_key(struct native_onboarding *s, const struct kt_event *e);
 void onb_form_insert(struct native_onboarding *s, const struct kt_event *e);
 void onb_form_set(struct onb_field *f, const char *text);
-/* The job each screen leads to, for the hint line and the running label. */
+/* The job a screen leads to, for the running label. */
 void onb_job_label(enum onb_job kind, char *out, size_t size);
 /* Opens the detail screen of the selected row (a candidate or a source record). */
 void onb_open_detail(struct native_onboarding *s);

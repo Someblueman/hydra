@@ -323,7 +323,7 @@ static void fifty(int cols, int rows) {
     see(&s, "outcome unknown");
     capture(&s, "30-fifty");
     kt_repeat(&s, "\033[6~", 6);
-    kt_until(&s, "> fifty49", 6);
+    kt_until(&s, "\xe2\x96\x8c fifty49", 6);   /* the selection bar */
     see(&s, "of 50");
     capture(&s, "31-fifty-last");
     kt_send(&s, "s");

@@ -32,6 +32,14 @@ const uint32_t key_chains[KEY_CHAINS] = {
     [KEY_CHAIN_HELP] = KEY_SCOPE_TERMINAL | KEY_SCOPE_HELP,
     [KEY_CHAIN_RESULT] = KEY_SCOPE_TERMINAL | KEY_SCOPE_RESULT,
     [KEY_CHAIN_STATS_FILTER] = KEY_SCOPE_TERMINAL | KEY_SCOPE_STATS_FILTER,
+    /* The Onboarding page of Hosts: its list, its screens that scroll (the
+     * intent adds its own keys), a running command, and the forms, whose
+     * fields take every key but their own as text. */
+    [KEY_CHAIN_ONBOARDING] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_ONBOARDING,
+    [KEY_CHAIN_ONBOARDING_PAGE] = CHAIN_BASE | KEY_SCOPE_ONBOARDING_PAGE,
+    [KEY_CHAIN_ONBOARDING_INTENT] = CHAIN_BASE | KEY_SCOPE_ONBOARDING_PAGE | KEY_SCOPE_ONBOARDING_INTENT,
+    [KEY_CHAIN_ONBOARDING_RUNNING] = CHAIN_BASE | KEY_SCOPE_ONBOARDING_RUNNING,
+    [KEY_CHAIN_ONBOARDING_FORM] = KEY_SCOPE_TERMINAL | KEY_SCOPE_ONBOARDING_FORM,
 };
 
 static enum key_chain_id view_chain(const struct app *app) {
@@ -101,6 +109,7 @@ static bool heads_applies(const struct app *app, enum key_action action) {
 /* Inbox, Hosts and Work decide their own rows; false when action is not one of theirs. */
 static bool owner_applies(const struct app *app, enum key_action action, bool *applies) {
     if (action >= KEY_REVIEW_UP && action <= KEY_INBOX_LAST) { *applies = inbox_applies(app, action); return true; }
+    if (native_onboarding_applies(app, action, applies)) return true;
     if (hosts_applies(app, action, applies)) return true;
     return work_applies(app, action, applies);
 }
@@ -158,6 +167,7 @@ void key_perform(struct app *app, enum key_action action) {
     if (work_perform(app, action)) return;
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) { statistics_perform(app, action); return; }
     if (inbox_perform(app, action)) return;
+    if (native_onboarding_perform(app, action)) return;
     if (hosts_perform(app, action)) return;
     if (key >= KT_KEY_UP) input_named(app, key, 0);
     else if (key) input_character(app, (char)key);
@@ -201,6 +211,7 @@ static void applying(const struct app *app, struct kt_binding *rows) {
     rows[KEY_SETUP_CONTINUE].label = native_setup_label(app, KEY_SETUP_CONTINUE);
     rows[KEY_STATS_GRAPH].label = statistics_graph_label(app);
     rows[KEY_STATS_PAGE_PREVIOUS].label = rows[KEY_STATS_PAGE_NEXT].label = statistics_page_label(app);
+    native_onboarding_labels(app, rows);
 }
 
 uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]) {

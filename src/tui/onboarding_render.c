@@ -5,7 +5,8 @@
 #include "internal.h"
 #include "onboarding_flow.h"
 /* Onboarding screens. Values come from the CLI envelopes; the fixed
- * sentences say what each screen is and which command a key would run. */
+ * sentences say what each screen is and which command a key would run. The
+ * keys themselves are in the footer, from the binding table. */
 
 void onb_job_label(enum onb_job kind, char *out, size_t size) {
     static const char *const labels[] = {"", "Finding the onboarding records", "Discovering candidates (no connection)",
@@ -74,7 +75,7 @@ static void title(struct app *app, struct kt_style tone, const char *text) {
     linef(app, "%s", text);
     style(app, TONE_BASE);
 }
-static void footer(struct app *app, struct pen *p, const char *prompt, struct kt_style tone) {
+static void footer(struct app *app, struct pen *p) {
     struct native_onboarding *s = app->onboarding;
     size_t visible = p->bottom > p->top ? (size_t)(p->bottom - p->top) : 1U;
     s->more = p->more;
@@ -83,9 +84,9 @@ static void footer(struct app *app, struct pen *p, const char *prompt, struct kt
     s->scroll_limit = p->row > visible ? p->row - visible : 0U;
     app->line = app->limit - 2;
     if (p->more || p->skip)
-        column(app, 0, app->content_width, KT_MUTED, p->more ? (app->ascii ? "v more below: Down or PgDn scrolls" : "\xe2\x86\x93 more below: Down or PgDn scrolls") : "Up or PgUp scrolls back");
+        column(app, 0, app->content_width, KT_MUTED, p->more ? (app->ascii ? "v more below" : "\xe2\x86\x93 more below") : (app->ascii ? "^ more above" : "\xe2\x86\x91 more above"));
     app->line++;
-    column(app, 0, app->content_width, s->notice[0] ? KT_WARNING : tone, s->notice[0] ? s->notice : prompt);
+    if (s->notice[0]) column(app, 0, app->content_width, KT_WARNING, s->notice);
     app->line++;
 }
 static void revocation_pairs(struct pen *p, const struct onb_revocation *r) {
@@ -107,17 +108,21 @@ static struct kt_style typed_tone(enum onb_typed typed, bool selected) {
     if (typed == ONB_FAILED || typed == ONB_REVOKED || typed == ONB_CONFLICTING || typed == ONB_UNKNOWN) return KT_WARNING;
     return KT_BASE;
 }
+/* A row as every list draws it: the selected one filled, with the bar. */
 static void list_row(struct app *app, const struct onb_row *row, bool selected, long long now) {
     const struct onb_model *m = app->onboarding->model;
     int width = app->content_width, name_w = width >= 110 ? 30 : width >= 80 ? 22 : 16, state_w = width >= 110 ? 30 : 22;
-    char line[600], mark = selected ? '>' : ' ';
+    char line[600];
     struct onb_row_cells cells;
     onb_row_cells(m, row, now, &cells);
-    if (width >= 80) snprintf(line, sizeof(line), "%c %-*.*s %-*.*s %-10.10s %-14.14s %5s", mark, name_w, name_w, cells.name, state_w, state_w, cells.state,
+    if (width >= 80) snprintf(line, sizeof(line), "%-*.*s %-*.*s %-10.10s %-14.14s %5s", name_w, name_w, cells.name, state_w, state_w, cells.state,
                               cells.source, cells.platform, cells.age);
-    else snprintf(line, sizeof(line), "%c %-*.*s %-*.*s", mark, name_w, name_w, cells.name, state_w, state_w, cells.state);
-    if (selected) column(app, 0, width, KT_SELECTED, "");
-    column(app, 0, width, typed_tone(cells.typed, selected), line);
+    else snprintf(line, sizeof(line), "%-*.*s %-*.*s", name_w, name_w, cells.name, state_w, state_w, cells.state);
+    if (selected) {
+        column(app, 0, width, KT_SELECTED, "");
+        column(app, 0, 1, KT_SELECTED, app->ascii ? ">" : "\xe2\x96\x8c");
+    }
+    column(app, 2, width - 2, typed_tone(cells.typed, selected), line);
     app->line++;
 }
 static void list_summary(struct app *app, char *out, size_t size) {
@@ -168,8 +173,7 @@ static void render_list(struct app *app) {
     app->line = app->limit - 2;
     snprintf(header, sizeof(header), "rows %zu-%zu of %zu", start + 1, i, count);
     column(app, 0, width, KT_MUTED, header); app->line++;
-    column(app, 0, width, s->notice[0] ? KT_WARNING : KT_MUTED, s->notice[0] ? s->notice
-           : "Enter inspects; s/S/P/l filter state, source, platform, label; / searches; x clears; r reviews, i intent");
+    if (s->notice[0]) column(app, 0, width, KT_WARNING, s->notice);
     app->line++;
 }
 
@@ -264,7 +268,7 @@ static void render_detail(struct app *app) {
         revocation_pairs(&p, &r->revocation);
         if (!r->revocation.present) pen_text(&p, "A conflicting record (two names for one target, one name for two targets, or a target another name held before) is reported with its provenance and never imported; selecting it is an error.", KT_MUTED);
     } else if (!s->detail_record && s->detail_index < s->model->candidate_count) render_candidate(app, &p, &s->model->candidates[s->detail_index]);
-    footer(app, &p, "Esc back to the list", KT_MUTED);
+    footer(app, &p);
 }
 
 /* ---- Changes ---- */
@@ -328,7 +332,7 @@ static void render_changes(struct app *app) {
         snprintf(text, sizeof(text), "%s (%s) from %s: %s", r->name, r->target, r->source, r->revocation.present ? "identity revoked" : r->reason);
         pen_pair(&p, i ? "" : "Not imported", text, KT_WARNING);
     }
-    footer(app, &p, "Esc back to the list", KT_MUTED);
+    footer(app, &p);
 }
 
 /* ---- Forms ---- */
@@ -362,8 +366,8 @@ static void render_select(struct app *app) {
     field_row(app, s, ONB_SELECT_CONFIG, "SSH config file", "absolute path; empty: your usual SSH config");
     linef(app, "");
     if (s->problem[0]) paragraph(app, s->problem, KT_WARNING);
-    else paragraph(app, s->form_qualify ? "Enter on the last field runs hydra fleet qualify --require list --progress (a new export) --json with exactly these values. Esc goes back."
-                                        : "Enter on the last field runs hydra fleet discover --diff --json with exactly these values. Esc goes back.", KT_MUTED);
+    else paragraph(app, s->form_qualify ? "Enter on the last field runs hydra fleet qualify --require list --progress (a new export) --json with exactly these values."
+                                        : "Enter on the last field runs hydra fleet discover --diff --json with exactly these values.", KT_MUTED);
 }
 static void render_review(struct app *app) {
     struct native_onboarding *s = app->onboarding;
@@ -379,7 +383,7 @@ static void render_review(struct app *app) {
     field_row(app, s, ONB_REVIEW_PREFIX, "Install prefix", "exact absolute prefix on the host, required with a package");
     linef(app, "");
     if (s->problem[0]) paragraph(app, s->problem, KT_WARNING);
-    else paragraph(app, "Enter on the last field runs hydra fleet enroll review --json and shows the intent, its digest and the exact apply command. Esc goes back.", KT_MUTED);
+    else paragraph(app, "Enter on the last field runs hydra fleet enroll review --json and shows the intent, its digest and the exact apply command.", KT_MUTED);
 }
 
 /* ---- Intent ---- */
@@ -411,7 +415,7 @@ static void render_intent(struct app *app) {
     char text[700], when[48];
     title(app, KT_STRONG, "ENROLLMENT INTENT / bindings and per-host progress");
     pen_begin(&p, app, 2);
-    if (!in->loaded) { pen_text(&p, "No reviewed intent is loaded.", KT_BASE); footer(app, &p, "Esc back", KT_MUTED); return; }
+    if (!in->loaded) { pen_text(&p, "No reviewed intent is loaded.", KT_BASE); footer(app, &p); return; }
     onb_time_text(in->reviewed_at, when, sizeof(when));
     pen_pair(&p, "Intent digest", in->digest, KT_STRONG);
     pen_pair(&p, "Intent file", in->path, KT_BASE);
@@ -426,7 +430,7 @@ static void render_intent(struct app *app) {
     pen_pair(&p, "Apply command", text, KT_STRONG);
     pen_text(&p, open ? "a asks you to confirm the digest and then runs exactly that command: the CLI authenticates each host against its reviewed fingerprint, applies the recorded steps and records every row; rows already enrolled are skipped and a revoked binding is refused before any connection."
                       : "Every host is enrolled or revoked; the command has nothing left to apply.", KT_MUTED);
-    footer(app, &p, open ? "a apply (typed digest)  s refresh status  Esc back" : "s refresh status  Esc back", KT_MUTED);
+    footer(app, &p);
 }
 
 /* ---- Running and errors ---- */
@@ -461,7 +465,7 @@ static void render_error(struct app *app) {
     if (e->recovery[0]) pen_pair(&p, "Next", e->recovery, KT_BASE);
     if (!strcmp(e->code, "revoked")) pen_text(&p, "A revoked identity never enters a new intent or apply; it stays inspectable in the list.", KT_MUTED);
     if (!strcmp(e->code, "no_result")) pen_text(&p, "No result does not mean nothing happened: Enter reads the recorded enrollment status instead of retrying.", KT_MUTED);
-    footer(app, &p, !strcmp(e->code, "no_result") ? "Enter reads the recorded status  Esc back" : "Enter or Esc back to the list", KT_MUTED);
+    footer(app, &p);
 }
 
 void native_onboarding_render(struct app *app) {
@@ -475,15 +479,5 @@ void native_onboarding_render(struct app *app) {
         case ONB_SCREEN_INTENT: render_intent(app); break;
         case ONB_SCREEN_RUNNING: render_running(app); break;
         default: render_error(app); break;
-    }
-}
-
-const char *native_onboarding_hints(const struct app *app, bool narrow) {
-    switch (app->onboarding->screen) {
-        case ONB_SCREEN_LIST: return narrow ? "Enter detail  f find  Q qualify  r review  [/] page  Esc back" : "j/k select  Enter detail  f find  Q qualify  r review  i intent  c changes  s/S/P/l filters  [/] page  Esc back  q quit";
-        case ONB_SCREEN_SELECT: case ONB_SCREEN_REVIEW: return "Tab next field  Enter submit on the last field  Esc back";
-        case ONB_SCREEN_INTENT: return narrow ? "a apply  s status  Esc back" : "j/k scroll  a apply after confirming the digest  s refresh status  Esc back  q quit";
-        case ONB_SCREEN_RUNNING: return "Esc or c cancel  b back to Hosts";
-        default: return narrow ? "j/k scroll  Esc back" : "j/k scroll  Esc back to the list  q quit";
     }
 }
