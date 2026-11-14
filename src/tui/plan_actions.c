@@ -4,10 +4,10 @@
 #endif
 #include "internal.h"
 /* Every planning action the control centre performs, in one place. Screens
- * and keys call these; these call today's CLI underneath (hydra workflow plan
- * proposal | compile | run, through plan_input.c, plan_model.c,
- * plan_launch.c and plan_decide.c), so the CLI can change without touching
- * a screen.
+ * and keys call these; these call the CLI underneath: hydra workflow plan
+ * proposal | compile and the launch owner through plan_input.c, plan_model.c,
+ * plan_launch.c and plan_decide.c, and hydra plan review | status and
+ * hydra land directly, so the CLI can change without touching a screen.
  *
  * Approval is one action: it approves exactly the revision on screen. A
  * revision that is not validated yet is compiled now, and runs as soon as
@@ -24,7 +24,7 @@ void plan_action_request_changes(struct app *app) { native_plan_request_changes(
 static bool approve_draft_confirmed(struct app *app, const struct native_plan *p) {
     char body[1024];
     snprintf(body, sizeof(body), "Approve and run %s revision %u?\n\nHydra validates exactly this revision under the "
-             "guided policy and runs it as soon as validation is ready. If the draft or policy changes first, or "
+             "project's plan policy and runs it as soon as validation is ready. If the draft or policy changes first, or "
              "validation finds a problem, nothing runs.", p->proposal_head[0] ? p->proposal_head : "the imported plan",
              p->revision);
     return dialog_confirm(app, "Approve plan", body, "Approve", false);
@@ -64,4 +64,41 @@ void plan_actions_tick(struct app *app) {
     snprintf(app->notice, sizeof(app->notice), "Revision %u did not run: %s", revision,
              p->revision != revision ? "the draft changed after approval" :
              p->state == PLAN_INVALID ? "validation found problems (F sends them to the agent)" : "validation did not complete");
+}
+
+/* The result review of a plan run, as hydra plan review prints it. */
+void plan_action_review(struct app *app, const char *run) {
+    char output[65536], title[160];
+    char *argv[] = {(char *)app->hydra, "plan", "review", (char *)run, NULL};
+    snprintf(title, sizeof(title), "Result of %.120s", run);
+    if (run_captured(app, argv, output, sizeof(output), 30000L)) title[0] = '\0';
+    show_result(app, title[0] ? title : "Result review unavailable", output);
+}
+
+/* A plan run's steps and what to do next, as hydra plan status prints them. */
+void plan_action_status(struct app *app, const char *run) {
+    char output[16384];
+    char *argv[] = {(char *)app->hydra, "plan", "status", (char *)run, NULL};
+    bool failed = run_captured(app, argv, output, sizeof(output), 15000L) != 0;
+    show_result(app, failed ? "Run status unavailable" : "Run status", output);
+}
+
+/* Landing is one confirmed action: hydra land merges exactly the commit the
+ * run verified into the checkout's current branch, never pushes, and refuses
+ * while the checkout has tracked changes or the worker has moved. Without a
+ * terminal it asks nothing, so the confirmation is this dialog. */
+void plan_action_land(struct app *app, const char *worker) {
+    char output[8192], body[512];
+    char *argv[] = {(char *)app->hydra, "land", (char *)worker, NULL};
+    snprintf(body, sizeof(body), "Land %.120s?\n\nHydra merges the commit its checks verified into your current branch, "
+             "then removes the worker head and keeps its branch. Nothing is pushed.", worker);
+    if (!dialog_confirm(app, "Land result", body, "Land", false)) {
+        copy_text(app->notice, sizeof(app->notice), "Not landed; nothing was changed.");
+        return;
+    }
+    if (run_captured(app, argv, output, sizeof(output), 60000L)) {
+        show_result(app, "Not landed", output);
+        return;
+    }
+    show_result(app, "Landed", output);
 }
