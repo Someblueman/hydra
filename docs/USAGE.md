@@ -626,7 +626,10 @@ terminal did, not what the agent was waiting for, and the page labels them as
 inferred. Time nobody watched (no control centre open) is shown as unobserved,
 never as quiet, together with the share of session time that was observed; a
 value that is not known is `--`. Headless and remote heads are not observed:
-their owners report exact status, which counts where it exists. Tokens and cost
+their owners report exact status, which counts where it exists. A finished
+session is kept as a small summary with the project, so it stays listed after
+`hydra kill` and its terminal activity does not accumulate in the head's
+records. Tokens and cost
 are not measured for sessions. `T` changes the range, `/` finds a branch, agent
 or head, `!` keeps sessions declared failed or blocked, and Enter shows one
 session's evidence. The workflow runs page shows recorded runs with their steps,

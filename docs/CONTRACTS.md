@@ -93,6 +93,16 @@ Head history remains after teardown with `desired-state=stopped`.
 
 - Events are append-only JSON Lines schema v1 with ordered sequence numbers,
   correlated project/head/instance IDs, and repair/retention under the event lock.
+  A head's lifecycle events are in `heads/<head>/events/events.jsonl` (and its
+  archives); an interactive instance's `activity.changed` events are in its own
+  activity log, `heads/<head>/instances/<instance>/activity.jsonl`, a stream
+  with its own sequence numbers and `.next-sequence` cursor that
+  `event_verify_file`, `hydra-core validate-events` and `hydra state verify`
+  check the same way. An archive holds one contiguous run of sequence numbers,
+  so it cannot hold lifecycle events apart from activity; activity therefore has
+  its own log, whose events are removed (not archived) once a session summary
+  or checkpoint represents them (see the statistics feed below), while
+  lifecycle events keep the retention `hydra events retain` gives them.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.
@@ -108,14 +118,20 @@ Head history remains after teardown with `desired-state=stopped`.
   an inference from tmux window activity, never a statement about what an agent
   is waiting for. It is independent of observed status: it does not change
   `observed-status`, `hydra wait`, completion or liveness, and it is not a
-  notification event.
-- `hydra adapter activity <branch>` appends that event from canonical JSON on
-  stdin, `{"schema_version":1,"instance_id":"instance_...","kind":"activity","state":"active"|"quiet","since":<epoch>}`
+  notification event. In the instance's activity log each such event also
+  carries `"head_next_sequence":<n>` after its `sequence`: the head log's next
+  sequence number when it was recorded. It follows every head event numbered
+  below `n` and precedes the others, so the two logs read back in the order
+  they were written whatever the clock did.
+- `hydra adapter activity <branch>` appends that event to the current
+  instance's activity log from canonical JSON on stdin,
+  `{"schema_version":1,"instance_id":"instance_...","kind":"activity","state":"active"|"quiet","since":<epoch>}`
   (at most 1024 bytes). Malformed input, a non-current instance, a `since` in the
   future, and headless or stopped heads are rejected; a `since` before the
   instance started is moved to its start. Under the head's activity lock a state
   equal to the last recorded one (`instances/<instance>/activity-state`) is
-  dropped and reported as unchanged, so several observers record one change once.
+  dropped and reported as unchanged, so several observers record one change once,
+  and a head that teardown has marked `stopped` records nothing more.
 - `hydra adapter watch` records that an observer is watching the project's
   interactive heads now; recording a change does the same. Coverage is kept in
   `projects/<project>/activity/coverage`: a first line
@@ -132,8 +148,11 @@ Head history remains after teardown with `desired-state=stopped`.
   output has continued for 4 seconds. Only a change starts a recorder (at most
   two at a time, retried with backoff when refused), and `adapter watch` runs
   every 10 seconds while it observes. A head therefore records at most two
-  changes per 14 seconds; the stream stays subject to the per-event limit and
-  to `hydra events retain`. Headless, remote and fleet heads are never observed
+  changes per 14 seconds (about 35 an hour for a working agent, 514 at worst).
+  `adapter activity` and `adapter watch` also maintain the project's sessions
+  at most once every 600 seconds (64 heads per pass, taken in turn), which keeps
+  each activity log to its last hour or so; see the statistics feed below.
+  Headless, remote and fleet heads are never observed
   (their owners report exact status), and nothing is observed while no control
   centre is running.
 
@@ -397,7 +416,9 @@ row per head session of the project and a fourth field on the closing row,
 
 A head session is one instance of a head: it starts at `lifecycle.started` or
 `lifecycle.resumed` and ends at `lifecycle.torn-down`, or when a resume
-supersedes it. Its row is
+supersedes it. `hydra cleanup`, which marks a head whose tmux session is gone
+`stopped`, appends `lifecycle.torn-down` with payload `{"reconciled":true}`
+for its instance, so that session ends when it was found ended. Its row is
 `H<TAB>head<TAB>instance<TAB>branch<TAB>profile<TAB>terminal<TAB>state<TAB>started<TAB>ended<TAB>outcome<TAB>active<TAB>quiet<TAB>unobserved<TAB>reported`:
 `terminal` is `interactive` or `headless`, `state` is `open`, `ended` or
 `superseded`, `started` and `ended` are epochs, `outcome` is the declared
@@ -412,17 +433,62 @@ has `-` for active and quiet, and one that began before the coverage history
 (`unknown-before`), or whose start is no longer in the log, has `-` for all four.
 A branch name longer than 120 bytes is shortened.
 
-Rows are newest first and bounded: at most 256 sessions (the newest; an `X`
-warning row says so when there are more) of at most 512 heads. Sessions are
-derived from each head's `events/events.jsonl` and its unexpired archives, so a
-finished session stays countable after `hydra kill` (head history remains with
-`desired-state=stopped`) and after `hydra events retain` until the archive that
-holds its start expires. Symbolic links are not followed, torn and malformed
-lines are discarded, and an event file over 8 MiB is skipped with an `X` row.
-State is only read. What a head's events older than 120 seconds add up to is
-kept as a disposable checkpoint under `$HYDRA_HOME/cache/sessions/<project>/`
-(private, replaced atomically, ignored when it does not validate), so polling
-interprets only newer events.
+Rows are newest first (by start, then instance) and bounded: at most 256
+sessions (the newest; an `X` warning row says so when there are more). A
+finished session is read from its summary; any other is derived from its
+head's `events/events.jsonl`, unexpired archives and instance activity logs,
+starting from its session checkpoint, for at most 512 heads. Symbolic links are
+not followed, torn and malformed lines are discarded, and an event file over
+8 MiB is skipped with an `X` row. The feed only reads Hydra state. What a head's
+events older than 120 seconds add up to is also kept as a disposable checkpoint
+under `$HYDRA_HOME/cache/sessions/<project>/` (private, replaced atomically,
+ignored when it does not validate), so polling interprets only newer events.
+
+A session summary, `projects/<project>/sessions/<instance>` (private, written
+beside and renamed over), is `HYDRA_SESSION_SUMMARY<TAB>1` followed by one
+`key<TAB>value` line each for `head`, `instance`, `branch`, `profile`,
+`terminal`, `state` (`ended` or `superseded`), `started`, `ended`, `outcome`,
+`active`, `quiet`, `unobserved`, `reported` (the row's fields, `-` where
+unknown), `coverage` (`observed` when active and quiet are known,
+`unobserved` when nobody observed the session, `unknown` when its times are
+not known) and `summarised` (epoch). The feed prints it as the session's row,
+so the row is the same whether or not the session's events still exist and
+does not change when coverage history later moves past the session; an outcome
+declared after the summary is written is copied into it. A summary is written
+by the pass described next once the session has ended and its coverage can no
+longer change: when the newest coverage interval reaches past the session's
+end, or its last report is more than 45 seconds old. Teardown therefore
+summarises at once when nobody is watching, and otherwise a later pass does. Sessions that ended
+before summaries existed are derived from their events and are summarised by
+the next pass over their head. A session checkpoint,
+`heads/<head>/instances/<instance>/session-checkpoint`, holds what an
+unfinished session's events add up to through a head event and an activity
+event (`HYDRA_SESSION_CHECKPOINT<TAB>2<TAB>head-sequence`, one row, `Z<TAB>1`);
+activity older than 3600 seconds is folded into it. Once a summary or
+checkpoint is in place, the activity events it covers are removed from the
+instance's activity log; lifecycle events are never removed by this. A
+session whose checkpoint is unreadable or missing while its activity log has
+lost events has `-` for all four times and an `X` row, never a partial count.
+
+The pass, for one head, runs under the head's activity lock and then its event
+lock, so no recorder or event writer appends meanwhile. It runs after
+`lifecycle.torn-down` (teardown and `hydra cleanup`), after a resume, after
+`hydra events retain` (not `--dry-run`), and from the observer's recorder as
+described for `activity.changed`. It never runs on the control centre's refresh
+path. A head with an event file over 8 MiB is not summarised. A realistic
+observed head therefore keeps about an hour of activity (35 events, 15 KB) in
+its live log instead of 14 KB per hour of its life, and its event log holds
+only lifecycle events.
+
+At most 4096 summaries are read, the most recently written first; when there
+are more an `X` row says so, and the sessions not read are not derived again
+from what is left of their events. A malformed summary is skipped with an `X`
+row. Summaries are kept with the project, not the head: `hydra kill` keeps
+head history (`desired-state=stopped`), no `hydra gc` policy removes head or
+project state (they remove worktrees, context packs and integration archives),
+and a summary stays countable even if a head's state directory is deleted by
+hand. Hydra does not prune summaries; each is a few hundred bytes per finished
+session and goes only with the project's state.
 
 `workflow statistics-json` exports schema 5 feeds as export schema 3: the
 schema 2 document plus `sessions` with `count`, `open`, `undated`,
