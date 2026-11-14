@@ -131,6 +131,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking (control centre):** `hydra tui` has four screens instead of ten
+  tabs: 1 Work, 2 Inbox, 3 Hosts and 4 Stats (the keys `1` to `4`, or the
+  configurable `screen.*` chords while you type to an agent). The old
+  `--view` names open the screen or page that replaced them, and key names
+  from earlier keys files still load.
+  - **Work** replaces Heads, Details, Coordination, Overview, Workflows and
+    the Workspace layouts. The list of heads, their runs, remote tasks and
+    retired run heads sits beside the selected head's latest output, shown
+    read-only and captured once per refresh. Enter or `a` talks to the agent,
+    and `ctrl+]` leaves input with the conversation still drawn. A side pane
+    has three pages, switched with `[` and `]`; Tab moves between panes.
+    Details shows the head. Plan approves (`E`), requests changes (`F`),
+    lands the worker (`L`), reviews and shows the run's status. Run shows the
+    graph, the steps and the selected step's evidence, paged with PgUp/PgDn.
+    Below 120 columns the conversation and the pages share one pane. The
+    new-task form asks whether to plan first (the default) or just do it:
+    the objective then becomes the agent's first prompt on its own branch.
+  - **Inbox** replaces Attention and Recovery. One list holds everything
+    waiting for you, in sections ordered by what blocks work: Decisions,
+    Failed, Ready for review, Agents, Repairs, Your actions, and a collapsed
+    Seen group. Each item is acted on where it is listed, after a
+    confirmation:
+    - `Y`/`N` decide a request (on a remote host only while its observation
+      is fresh);
+    - `R` resumes a run or restarts a stopped terminal;
+    - `F` sends a failure or plan back;
+    - `L` lands a finished plan's worker;
+    - `c` runs a finding's check, and `x` removes a leftover worktree;
+    - `o` opens the item in Work, and Esc comes back.
+
+    The Inbox tab carries a badge with the number of items.
+  - **Stats** shows its pages (Sessions, Runs and, when the sample records
+    remote steps, Cohorts) on one frame. Four tiles sit above the charts and
+    tables, and Enter opens a row's evidence. `/` filters as you type, `w`
+    cycles the workflow filter and `L` the location filter. `g` opens a
+    session's head or a run in Work. An empty sample is told apart from one
+    the filters hide.
 - The control centre has a new frame: a dark theme by default (`--theme`,
   `HYDRA_TUI_THEME` and the palette still choose the terminal or light theme),
   a top bar with `◆ hydra`, numbered tabs and the view's title, titled rules
