@@ -275,8 +275,193 @@ static void text_input(void) {
     puts("PASS text input: typing, validation, word motions, limit, paste, scrolling, suggestions, click");
 }
 
+/* ---- timed components and modals ---------------------------------------- */
+
+enum { SPIN = 1, TOAST = 2, FORM_MODAL = 1 };
+
+struct timed {
+    struct kt_spinner spinner;
+    struct kt_toasts toasts;
+    struct kt_modals modals;
+    struct kt_form form;
+    struct kt_field fields[2];
+    struct kt_textinput name;
+    int ticks, expired, dismissed, submitted;
+    char last[64];
+};
+
+static void timed_init(struct timed *m) {
+    static const char *const agents[] = {"codex", "claude"};
+    memset(m, 0, sizeof(*m));
+    kt_spinner_init(&m->spinner, SPIN);
+    m->spinner.label = "working";
+    kt_toasts_init(&m->toasts, TOAST);
+    m->toasts.timeout_ms = 3000;
+    kt_modals_init(&m->modals);
+    kt_textinput_init(&m->name, NULL, 0);
+    m->fields[0].kind = KT_FIELD_TEXT; m->fields[0].label = "Task name"; m->fields[0].input = &m->name;
+    m->fields[1].kind = KT_FIELD_CHOICE; m->fields[1].label = "Agent";
+    m->fields[1].options = agents; m->fields[1].option_count = 2;
+    kt_form_init(&m->form, "New task", m->fields, 2);
+}
+
+static bool timed_modal(struct timed *m, const struct kt_msg *msg, struct kt_cmds *cmds) {
+    switch (kt_modals_update(&m->modals, msg, cmds)) {
+    case KT_MODALS_RESULT:
+        if (m->modals.result == KT_FORM_SUBMITTED) {
+            m->submitted++;
+            snprintf(m->last, sizeof(m->last), "%s", kt_textinput_value(&m->name));
+            kt_toasts_push(&m->toasts, cmds, KT_TOAST_SUCCESS, "Created");
+        }
+        if (m->modals.result == KT_FORM_SUBMITTED || m->modals.result == KT_FORM_CANCELLED) kt_modals_pop(&m->modals);
+        return true;
+    case KT_MODALS_IGNORED: return false;
+    default: return true;
+    }
+}
+
+static bool timed_key(struct timed *m, uint32_t key, struct kt_cmds *cmds) {
+    struct kt_modal modal;
+    switch (key) {
+    case 's': kt_spinner_start(&m->spinner, cmds); return true;
+    case 'x': kt_spinner_stop(&m->spinner, cmds); return true;
+    case 'h': kt_spinner_show(&m->spinner, !m->spinner.visible, cmds); return true;
+    case 't': kt_toasts_push(&m->toasts, cmds, KT_TOAST_INFO, "Saved"); return true;
+    case 'w': kt_toasts_push(&m->toasts, cmds, KT_TOAST_WARNING, "Careful"); return true;
+    case 'n':
+        kt_textinput_set(&m->name, "");
+        kt_form_focus(&m->form, 0);
+        modal = kt_form_modal(&m->form, FORM_MODAL, 40);
+        return kt_modals_push(&m->modals, &modal);
+    default: return false;
+    }
+}
+
+static bool timed_update(void *model, const struct kt_msg *msg, struct kt_cmds *cmds) {
+    struct timed *m = model;
+    enum kt_toasts_result toast;
+    if (msg->type == KT_MSG_RESIZE) {
+        struct kt_rect all = {0, 0, msg->u.resize.columns, msg->u.resize.rows};
+        kt_modals_place(&m->modals, all);
+        kt_toasts_place(&m->toasts, kt_rect_inset(all, 0, 1, 1, 0));
+        return true;
+    }
+    if (kt_spinner_update(&m->spinner, msg, cmds) == KT_SPINNER_HANDLED) { m->ticks++; return true; }
+    toast = kt_toasts_update(&m->toasts, msg, cmds);
+    m->expired += toast == KT_TOASTS_EXPIRED;
+    m->dismissed += toast == KT_TOASTS_DISMISSED;
+    if (toast != KT_TOASTS_IGNORED) return true;
+    if (timed_modal(m, msg, cmds)) return true;
+    return msg->type == KT_MSG_KEY && timed_key(m, msg->u.event.key, cmds);
+}
+
+static void timed_view(const void *model, struct kt_frame *frame) {
+    const struct timed *m = model;
+    struct kt_canvas *canvas = kt_frame_canvas(frame);
+    struct kt_rect all = {0, 0, kt_frame_columns(frame), kt_frame_rows(frame)};
+    kt_text(canvas, (struct kt_rect){0, 1, all.width, 1}, "base view", KT_STRONG);
+    kt_spinner_view(&m->spinner, canvas, (struct kt_rect){0, 0, 20, 1});
+    kt_toasts_view(&m->toasts, canvas, kt_rect_inset(all, 0, 1, 1, 0));
+    kt_modals_view(&m->modals, canvas, all);
+}
+
+static const struct kt_app timed_app = {NULL, timed_update, timed_view};
+
+static struct kt_test *timed_start(struct timed *m) {
+    struct kt_options options;
+    struct kt_test *t;
+    memset(&options, 0, sizeof(options));
+    options.escape_ms = 10;
+    timed_init(m);
+    t = kt_test_new(&timed_app, m, 50, 14, &options);
+    CHECK(t != NULL);
+    current = t;
+    return t;
+}
+
+static void spinner(void) {
+    static struct timed m;
+    struct kt_test *t = timed_start(&m);
+    /* Stopped: no frame, no timer, the loop sleeps until an event. */
+    CHECK(!strcmp(kt_test_row(t, 0), "working") && kt_test_sleep(t) == -1);
+    kt_test_type(t, "s");
+    CHECK(m.spinner.timer && kt_test_sleep(t) == 80);
+    CHECK(!strcmp(kt_test_row(t, 0), "\xe2\xa0\x8b working"));
+    kt_test_advance(t, 80 * 3);
+    CHECK(m.ticks == 3 && !strcmp(kt_test_row(t, 0), "\xe2\xa0\xb8 working"));
+    /* Hidden: the timer goes; shown again, it comes back. */
+    kt_test_type(t, "h");
+    CHECK(!m.spinner.timer && kt_test_sleep(t) == -1 && !strcmp(kt_test_row(t, 0), ""));
+    kt_test_advance(t, 1000);
+    CHECK(m.ticks == 3);
+    kt_test_type(t, "h");
+    CHECK(m.spinner.timer && kt_test_sleep(t) == 80);
+    kt_test_advance(t, 80);
+    CHECK(m.ticks == 4);
+    /* Stopped: idle again. */
+    kt_test_type(t, "x");
+    CHECK(!m.spinner.timer && kt_test_sleep(t) == -1);
+    kt_test_advance(t, 1000);
+    CHECK(m.ticks == 4 && !strcmp(kt_test_row(t, 0), "working"));
+    kt_test_free(t);
+    puts("PASS spinner: ticks only while running and shown, silent when stopped or hidden");
+}
+
+static void toasts(void) {
+    static struct timed m;
+    struct kt_test *t = timed_start(&m);
+    kt_test_type(t, "t");
+    CHECK(m.toasts.count == 1 && kt_test_sleep(t) == 3000);
+    CHECK(has(kt_test_row(t, 12), "\xe2\x96\x8c \xe2\x80\xa2 Saved"));
+    kt_test_advance(t, 1000);
+    kt_test_type(t, "w");
+    CHECK(has(kt_test_row(t, 11), "Saved") && has(kt_test_row(t, 12), "\xe2\x96\xb2 Careful"));
+    /* Each expires on its own time; then nothing is left to wake for. */
+    kt_test_advance(t, 2000);
+    CHECK(m.expired == 1 && m.toasts.count == 1 && !has(kt_test_screen(t), "Saved"));
+    kt_test_advance(t, 1000);
+    CHECK(m.expired == 2 && m.toasts.count == 0 && kt_test_sleep(t) == -1);
+    /* A fourth replaces the oldest, whose timer goes with it. */
+    kt_test_type(t, "tttw");
+    CHECK(m.toasts.count == 3 && m.toasts.items[2].kind == KT_TOAST_WARNING);
+    /* A click dismisses the one under it. */
+    kt_test_type(t, "\033[<0;48;13M");
+    CHECK(m.dismissed == 1 && m.toasts.count == 2);
+    kt_test_advance(t, 3000);
+    CHECK(m.expired == 4 && m.toasts.count == 0 && kt_test_sleep(t) == -1);
+    kt_test_free(t);
+    puts("PASS toasts: stacking, a timer each, replacement, click to dismiss, silent when none");
+}
+
+static void modal_form(void) {
+    static struct timed m;
+    struct kt_test *t = timed_start(&m);
+    kt_test_type(t, "n");
+    CHECK(m.modals.count == 1 && has(kt_test_screen(t), "New task"));
+    /* Keys and a paste go to the form, not the application below. */
+    kt_test_type(t, "s\033[200~fix login\033[201~");
+    CHECK(!strcmp(kt_textinput_value(&m.name), "sfix login") && !m.spinner.running);
+    kt_test_type(t, "\t\033[C");
+    CHECK(m.fields[1].choice == 1);
+    /* The base is still drawn, faint under the panel. */
+    CHECK(has(kt_test_row(t, 1), "base view"));
+    kt_test_type(t, "\r");
+    CHECK(m.submitted == 1 && !strcmp(m.last, "sfix login") && m.modals.count == 0 && m.toasts.count == 1);
+    /* Esc cancels the form; the stack is empty again. */
+    kt_test_type(t, "n\033");
+    kt_test_advance(t, 10);
+    CHECK(m.modals.count == 0 && m.submitted == 1);
+    kt_test_advance(t, 3000);
+    CHECK(kt_test_sleep(t) == -1);
+    kt_test_free(t);
+    puts("PASS modal stack: a form over the view takes keys and paste, submits and cancels");
+}
+
 int main(void) {
     list_keys();
     text_input();
+    spinner();
+    toasts();
+    modal_form();
     return 0;
 }

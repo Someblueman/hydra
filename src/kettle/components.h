@@ -206,6 +206,8 @@ void kt_textinput_place(struct kt_textinput *input, struct kt_rect area);
 const char *kt_textinput_value(const struct kt_textinput *input);
 /* Replaces the text, cut to the capacity and limit; the cursor goes to the end. */
 void kt_textinput_set(struct kt_textinput *input, const char *text);
+/* Runs the validation hook now; true when the text is valid. */
+bool kt_textinput_validate(struct kt_textinput *input);
 /* Inserts at the cursor as typing would; false when nothing fitted. */
 bool kt_textinput_insert(struct kt_textinput *input, const char *text, size_t length);
 /* The suggestion offered now, or NULL. */
@@ -416,5 +418,314 @@ int kt_viewport_line_rows(const struct kt_viewport *viewport, size_t index, int 
 int kt_viewport_percent(const struct kt_viewport *viewport);
 uint32_t kt_viewport_scope(const struct kt_viewport *viewport);
 struct kt_keymap kt_viewport_keymap(struct kt_viewport *viewport);
+
+/* ---- confirm ------------------------------------------------------------ */
+
+/* A question in a dialog panel: a title in its top edge, a body wrapped to
+ * its width, buttons at the bottom right and key hints in its bottom edge.
+ * y accepts and n or Esc cancels whatever button has the focus; left and
+ * right (tab, shift+tab) move the focus and Enter or space presses the
+ * focused button; a click presses the button under it. A destructive
+ * question draws its border and its accepting button in the danger colour.
+ * Buttons are the caller's strings: the first two are cancel and accept as
+ * set by init, and a third may be added for another way out (_CHOSEN). */
+#define KT_CONFIRM_BUTTONS 3
+enum kt_confirm_action { KT_CONFIRM_ACCEPT, KT_CONFIRM_CANCEL, KT_CONFIRM_PREVIOUS, KT_CONFIRM_NEXT,
+                         KT_CONFIRM_PRESS, KT_CONFIRM_ACTIONS };
+enum kt_confirm_result {
+    KT_CONFIRM_IGNORED, KT_CONFIRM_HANDLED,
+    KT_CONFIRM_ACCEPTED, KT_CONFIRM_CANCELLED,
+    KT_CONFIRM_CHOSEN          /* another button: `chosen` says which         */
+};
+struct kt_confirm_style {
+    struct kt_style border, border_destructive, title, body, button, button_focused, button_destructive;
+    struct kt_help_style hints;
+};
+struct kt_confirm {
+    const char *title, *body;
+    const char *buttons[KT_CONFIRM_BUTTONS];
+    size_t button_count;
+    size_t accept, cancel;     /* the buttons y and n press                    */
+    size_t focus;              /* the button Enter presses                     */
+    size_t chosen;             /* the button pressed last                      */
+    bool destructive;
+    struct kt_rect area;
+    struct kt_confirm_style style;
+    struct kt_binding keys[KT_CONFIRM_ACTIONS];
+    struct kt_keymap_state chord;
+};
+/* Buttons "cancel" then "accept", the focus on accept. The hint for y reads
+ * the accepting button's label in lower case ("y remove"). */
+void kt_confirm_init(struct kt_confirm *confirm, const char *title, const char *body, const char *accept,
+                     const char *cancel, bool destructive);
+enum kt_confirm_result kt_confirm_update(struct kt_confirm *confirm, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_confirm_view(const struct kt_confirm *confirm, struct kt_canvas *canvas, struct kt_rect area);
+void kt_confirm_place(struct kt_confirm *confirm, struct kt_rect area);
+/* Rows the dialog needs at a width, its border included. */
+int kt_confirm_height(const struct kt_confirm *confirm, int width);
+uint32_t kt_confirm_scope(const struct kt_confirm *confirm);
+struct kt_keymap kt_confirm_keymap(struct kt_confirm *confirm);
+
+/* ---- form --------------------------------------------------------------- */
+
+/* A sequence of labelled fields: text (a caller's struct kt_textinput),
+ * choice (one of the caller's options) and toggle. Tab and down move to the
+ * next field, shift+tab and up back; left and right change a choice, space
+ * or left and right flip a toggle; Enter submits and Esc cancels. Each field
+ * shows its hint, or its error in its place. Submitting checks every text
+ * field's validation and then the form's own, focuses the first field with
+ * an error and reports _INVALID; otherwise _SUBMITTED. With a title the form
+ * draws itself as a dialog panel, as kt_confirm does. */
+#define KT_FIELD_ERROR 96
+enum kt_field_kind { KT_FIELD_TEXT, KT_FIELD_CHOICE, KT_FIELD_TOGGLE };
+struct kt_field {
+    enum kt_field_kind kind;
+    const char *label, *hint;
+    struct kt_textinput *input;            /* TEXT: caller-owned, placed by the form  */
+    const char *const *options;            /* CHOICE: the options; TOGGLE: off, on    */
+    size_t option_count, choice;
+    bool on;                               /* TOGGLE                                  */
+    char error[KT_FIELD_ERROR];            /* set by validation or the application    */
+};
+enum kt_form_action { KT_FORM_NEXT, KT_FORM_PREVIOUS, KT_FORM_SUBMIT, KT_FORM_CANCEL, KT_FORM_LEFT, KT_FORM_RIGHT,
+                      KT_FORM_FLIP, KT_FORM_ACTIONS };
+enum kt_form_result {
+    KT_FORM_IGNORED, KT_FORM_HANDLED,
+    KT_FORM_CHANGED,      /* a field's value changed                          */
+    KT_FORM_SUBMITTED, KT_FORM_INVALID, KT_FORM_CANCELLED
+};
+enum { KT_FORM_SCOPE_FIELDS = 1, KT_FORM_SCOPE_CHOICE = 2, KT_FORM_SCOPE_TOGGLE = 4 };
+struct kt_form;
+/* Cross-field validation: set fields' errors and return false to refuse. */
+typedef bool (*kt_form_validate_fn)(void *context, struct kt_form *form);
+struct kt_form_style {
+    struct kt_style border, title, label, label_focused, hint, error, option, option_selected, field, prompt,
+        prompt_focused;
+    struct kt_help_style hints;
+};
+struct kt_form {
+    const char *title;            /* NULL: fields only, without a panel       */
+    struct kt_field *fields;
+    size_t count, focus;
+    kt_form_validate_fn validate;
+    void *validate_context;
+    struct kt_rect area;
+    struct kt_form_style style;
+    struct kt_binding keys[KT_FORM_ACTIONS];
+    struct kt_keymap_state chord;
+};
+/* Focuses the first field; the fields stay the caller's. */
+void kt_form_init(struct kt_form *form, const char *title, struct kt_field *fields, size_t count);
+enum kt_form_result kt_form_update(struct kt_form *form, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_form_view(const struct kt_form *form, struct kt_canvas *canvas, struct kt_rect area);
+void kt_form_place(struct kt_form *form, struct kt_rect area);
+/* Rows the form needs at a width, its panel included when it has a title. */
+int kt_form_height(const struct kt_form *form, int width);
+/* Runs every check as submitting does; true when nothing has an error. */
+bool kt_form_check(struct kt_form *form);
+void kt_form_focus(struct kt_form *form, size_t field);
+uint32_t kt_form_scope(const struct kt_form *form);
+struct kt_keymap kt_form_keymap(struct kt_form *form);
+
+/* ---- tabs --------------------------------------------------------------- */
+
+/* A tab bar: the active tab filled with the accent, the others muted, an
+ * optional badge after a label ("Attention 3"). When the tabs do not fit,
+ * the inactive ones lose their padding, and then only those around the
+ * active tab are shown, with an arrow at each side that hides some. tab and
+ * ']' select the next tab, shift+tab and '[' the previous, 1 to 9 a tab by
+ * number; a click selects the tab under it. */
+struct kt_tab { const char *label, *badge; kt_color badge_color; };
+enum kt_tabs_action { KT_TABS_NEXT, KT_TABS_PREVIOUS, KT_TABS_JUMP, KT_TABS_ACTIONS = KT_TABS_JUMP + 9 };
+enum kt_tabs_result { KT_TABS_IGNORED, KT_TABS_HANDLED, KT_TABS_CHANGED };
+struct kt_tabs_style { struct kt_style active, inactive, badge, badge_active, overflow; };
+struct kt_tabs {
+    const struct kt_tab *tabs;
+    size_t count, active;
+    struct kt_rect area;
+    struct kt_tabs_style style;
+    struct kt_binding keys[KT_TABS_ACTIONS];
+    struct kt_keymap_state chord;
+};
+void kt_tabs_init(struct kt_tabs *tabs, const struct kt_tab *items, size_t count);
+enum kt_tabs_result kt_tabs_update(struct kt_tabs *tabs, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_tabs_view(const struct kt_tabs *tabs, struct kt_canvas *canvas, struct kt_rect area);
+void kt_tabs_place(struct kt_tabs *tabs, struct kt_rect area);
+/* Where tab `index` is drawn in an area; an empty rectangle when hidden. */
+struct kt_rect kt_tabs_rect(const struct kt_tabs *tabs, struct kt_rect area, size_t index);
+uint32_t kt_tabs_scope(const struct kt_tabs *tabs);
+struct kt_keymap kt_tabs_keymap(struct kt_tabs *tabs);
+
+/* ---- spinner, progress, toasts ------------------------------------------ */
+
+/* A spinner ticks only while it is running and shown: kt_spinner_start and
+ * kt_spinner_stop say whether work is going on, kt_spinner_show whether the
+ * view draws it. Its repeating timer exists exactly while both hold, so a
+ * stopped or hidden spinner costs no wake-ups. */
+struct kt_spinner {
+    const char *const *frames;       /* Unicode frames; default braille dots   */
+    size_t frame_count;
+    const char *const *ascii_frames; /* for ASCII canvases; default | / - \   */
+    size_t ascii_count;
+    size_t frame;
+    unsigned interval_ms;            /* default 80                             */
+    uint64_t tag, timer;
+    bool running, visible;
+    const char *label;               /* drawn after the frame                  */
+    struct kt_style style, label_style;
+};
+enum kt_spinner_result { KT_SPINNER_IGNORED, KT_SPINNER_HANDLED };
+/* Visible and stopped. `tag` marks its timer messages. */
+void kt_spinner_init(struct kt_spinner *spinner, uint64_t tag);
+void kt_spinner_start(struct kt_spinner *spinner, struct kt_cmds *cmds);
+void kt_spinner_stop(struct kt_spinner *spinner, struct kt_cmds *cmds);
+void kt_spinner_show(struct kt_spinner *spinner, bool visible, struct kt_cmds *cmds);
+/* Advances on its own timer; everything else is ignored. */
+enum kt_spinner_result kt_spinner_update(struct kt_spinner *spinner, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_spinner_view(const struct kt_spinner *spinner, struct kt_canvas *canvas, struct kt_rect area);
+
+/* A determinate progress bar: eighths of a cell with block characters, whole
+ * cells of '#' on an ASCII canvas, an optional percentage after it. It has
+ * no input and no timer: the application sets the value. */
+struct kt_progress { double value; bool percent; struct kt_style fill, track, label; };
+void kt_progress_init(struct kt_progress *progress);
+/* Clamped to 0..1. */
+void kt_progress_set(struct kt_progress *progress, double value);
+void kt_progress_view(const struct kt_progress *progress, struct kt_canvas *canvas, struct kt_rect area);
+
+/* Notifications that stack in a corner and go away by themselves. Each one
+ * has its own one-shot timer for its timeout, so nothing ticks while they
+ * wait and nothing at all when there are none. At most `limit` (up to
+ * KT_TOASTS_MAX) show; a new one beyond that replaces the oldest. A click
+ * dismisses the one under it, toast.dismiss (unbound by default) the newest,
+ * as does kt_toasts_dismiss. Text is copied, cut at KT_TOAST_TEXT bytes. */
+#define KT_TOASTS_MAX 4
+#define KT_TOAST_TEXT 120
+enum kt_toast_kind { KT_TOAST_INFO, KT_TOAST_SUCCESS, KT_TOAST_WARNING, KT_TOAST_ERROR };
+struct kt_toast { char text[KT_TOAST_TEXT]; enum kt_toast_kind kind; uint64_t timer; };
+enum kt_toasts_action { KT_TOASTS_DISMISS, KT_TOASTS_ACTIONS };
+enum kt_toasts_result { KT_TOASTS_IGNORED, KT_TOASTS_HANDLED, KT_TOASTS_EXPIRED, KT_TOASTS_DISMISSED };
+struct kt_toasts_style { struct kt_style body, info, success, warning, error; };
+struct kt_toasts {
+    struct kt_toast items[KT_TOASTS_MAX];   /* oldest first                     */
+    size_t count, limit;                    /* limit default 3                  */
+    unsigned timeout_ms;                    /* default 4000                     */
+    int width;                              /* most columns per toast; 48       */
+    uint64_t tag;
+    struct kt_rect area;
+    struct kt_toasts_style style;
+    struct kt_binding keys[KT_TOASTS_ACTIONS];
+    struct kt_keymap_state chord;
+};
+void kt_toasts_init(struct kt_toasts *toasts, uint64_t tag);
+void kt_toasts_push(struct kt_toasts *toasts, struct kt_cmds *cmds, enum kt_toast_kind kind, const char *text);
+/* Removes the newest, or every one; their timers are cancelled. */
+void kt_toasts_dismiss(struct kt_toasts *toasts, struct kt_cmds *cmds);
+void kt_toasts_clear(struct kt_toasts *toasts, struct kt_cmds *cmds);
+enum kt_toasts_result kt_toasts_update(struct kt_toasts *toasts, const struct kt_msg *msg, struct kt_cmds *cmds);
+/* Stacked in the bottom-right corner of the area, newest lowest. */
+void kt_toasts_view(const struct kt_toasts *toasts, struct kt_canvas *canvas, struct kt_rect area);
+void kt_toasts_place(struct kt_toasts *toasts, struct kt_rect area);
+struct kt_keymap kt_toasts_keymap(struct kt_toasts *toasts);
+
+/* ---- command palette ---------------------------------------------------- */
+
+/* A dialog listing the application's bindings, filtered as one types
+ * (kt_fuzzy over the label and the name, matches highlighted, best first),
+ * each with its keys. Up and down (ctrl+p, ctrl+n) move, Enter chooses and
+ * Esc cancels; a click chooses. kt_palette_chosen then gives the binding,
+ * whose action the application performs as if its keys had been pressed.
+ * Bindings with a label are listed, with or without keys. */
+#define KT_PALETTE_MAX 128
+enum kt_palette_action { KT_PALETTE_UP, KT_PALETTE_DOWN, KT_PALETTE_CHOOSE, KT_PALETTE_CANCEL, KT_PALETTE_ACTIONS };
+enum kt_palette_result { KT_PALETTE_IGNORED, KT_PALETTE_HANDLED, KT_PALETTE_CHOSEN, KT_PALETTE_CANCELLED };
+struct kt_palette_style {
+    struct kt_style border, title, label, name, keys, match, selection, bar, empty;
+    struct kt_help_style hints;
+};
+struct kt_palette {
+    const char *title;
+    struct kt_help_source sources[KT_HELP_SOURCES];
+    size_t source_count;
+    struct kt_textinput query;
+    struct kt_match matches[KT_PALETTE_MAX];   /* index: position among listed bindings */
+    size_t match_count, selected, top;
+    int rows;                                  /* rows of results shown; default 10      */
+    const struct kt_binding *chosen;
+    struct kt_rect area;
+    struct kt_palette_style style;
+    struct kt_binding keys[KT_PALETTE_ACTIONS];
+    struct kt_keymap_state chord;
+};
+void kt_palette_init(struct kt_palette *palette, const char *title);
+/* What it lists, as for kt_help_set; also empties the query. */
+bool kt_palette_set(struct kt_palette *palette, const struct kt_help_source *sources, size_t count);
+enum kt_palette_result kt_palette_update(struct kt_palette *palette, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_palette_view(const struct kt_palette *palette, struct kt_canvas *canvas, struct kt_rect area);
+void kt_palette_place(struct kt_palette *palette, struct kt_rect area);
+int kt_palette_height(const struct kt_palette *palette, int width);
+const struct kt_binding *kt_palette_chosen(const struct kt_palette *palette);
+uint32_t kt_palette_scope(const struct kt_palette *palette);
+struct kt_keymap kt_palette_keymap(struct kt_palette *palette);
+
+/* ---- modal stack -------------------------------------------------------- */
+
+/* Dialogs over the application's view. The view draws the base and then the
+ * stack: the base is restyled with `backdrop` (faint text by default, which
+ * every colour profile can show, dim where there is no colour), and each
+ * modal is drawn centred over it, the top one last. Input (keys, mouse,
+ * pastes) goes to the top modal only; Esc that it leaves unhandled closes
+ * it. Other messages are offered to the top modal and, when it ignores them,
+ * reported as ignored so the application's own handling runs. A modal's
+ * outcome comes back as _RESULT with the modal's id and its component's
+ * result; the application decides what follows, usually kt_modals_pop.
+ *
+ * A modal is a component seen through three functions; kt_<name>_modal
+ * makes one for the confirm, the form, the palette and the help screen. */
+#define KT_MODALS_MAX 4
+typedef int (*kt_modal_update_fn)(void *component, const struct kt_msg *msg, struct kt_cmds *cmds);
+typedef void (*kt_modal_view_fn)(const void *component, struct kt_canvas *canvas, struct kt_rect area);
+typedef void (*kt_modal_place_fn)(void *component, struct kt_rect area);
+typedef int (*kt_modal_height_fn)(const void *component, int width);
+struct kt_modal {
+    uint32_t id;                  /* the application's name for it             */
+    void *component;
+    kt_modal_update_fn update;    /* returns the component's result            */
+    kt_modal_view_fn view;
+    kt_modal_place_fn place;      /* may be NULL                               */
+    kt_modal_height_fn measure;   /* rows at a width; NULL: `height`           */
+    int width, height;            /* preferred size; cut to the area           */
+};
+enum kt_modals_result {
+    KT_MODALS_IGNORED,    /* no modal, or a message the top one left alone     */
+    KT_MODALS_HANDLED,    /* taken by the top modal                            */
+    KT_MODALS_CLOSED,     /* Esc closed the top modal: `id` was its id         */
+    KT_MODALS_RESULT      /* the top modal had an outcome: `id`, `result`      */
+};
+struct kt_modals {
+    struct kt_modal stack[KT_MODALS_MAX];
+    size_t count;
+    struct kt_rect area;
+    struct kt_style backdrop;
+    uint32_t id;
+    int result;
+};
+void kt_modals_init(struct kt_modals *modals);
+/* False when the stack is full. The modal is placed at once. */
+bool kt_modals_push(struct kt_modals *modals, const struct kt_modal *modal);
+void kt_modals_pop(struct kt_modals *modals);
+const struct kt_modal *kt_modals_top(const struct kt_modals *modals);
+enum kt_modals_result kt_modals_update(struct kt_modals *modals, const struct kt_msg *msg, struct kt_cmds *cmds);
+void kt_modals_view(const struct kt_modals *modals, struct kt_canvas *canvas, struct kt_rect area);
+/* The area modals are centred in; every modal is placed again. */
+void kt_modals_place(struct kt_modals *modals, struct kt_rect area);
+/* Where modal `index` sits in an area. */
+struct kt_rect kt_modals_rect(const struct kt_modals *modals, size_t index, struct kt_rect area);
+struct kt_modal kt_confirm_modal(struct kt_confirm *confirm, uint32_t id, int width);
+struct kt_modal kt_form_modal(struct kt_form *form, uint32_t id, int width);
+struct kt_modal kt_palette_modal(struct kt_palette *palette, uint32_t id, int width);
+/* The full help in a panel titled "Keyboard"; its toggle and Esc report
+ * KT_HELP_CLOSED as the result. Width 0 fits two columns. */
+struct kt_modal kt_help_modal(struct kt_help *help, uint32_t id, int width);
 
 #endif

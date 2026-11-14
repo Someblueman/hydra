@@ -45,6 +45,8 @@ static const char *row(int y) {
     return row_buffer;
 }
 
+static bool starts(const char *text, const char *prefix) { return !strncmp(text, prefix, strlen(prefix)); }
+
 static const struct kt_cell *cell(int x, int y) { return &canvas.cells[y * canvas.stride + x]; }
 
 static struct kt_msg key(uint32_t code, unsigned mods) {
@@ -616,6 +618,314 @@ static void viewport_canvas(void) {
     CHECK(!strcmp(row(2), " is longer"));
 }
 
+/* ---- confirm ------------------------------------------------------------- */
+
+static void confirm(void) {
+    struct kt_confirm c;
+    struct kt_msg y = key('y', 0), n = key('n', 0), left = key(KT_KEY_LEFT, 0), enter = key(KT_KEY_ENTER, 0);
+    struct kt_msg tab = key(KT_KEY_TAB, 0), other = key('x', 0);
+    kt_confirm_init(&c, "Remove head", "Remove feature-live?\n\nCloses its terminal and deletes the worktree.",
+                    "Remove", "Cancel", true);
+    /* Body rows (a line, a blank line, two wrapped) and six of panel. */
+    CHECK(kt_confirm_height(&c, 40) == 4 + 6);
+    kt_confirm_place(&c, (struct kt_rect){1, 1, 40, 10});
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(!strncmp(row(1), " \xe2\x95\xad\xe2\x94\x80 Remove head \xe2\x94\x80", 22));
+    CHECK(!strcmp(row(3), " \xe2\x94\x82  Remove feature-live?                \xe2\x94\x82"));
+    CHECK(!strncmp(row(5), " \xe2\x94\x82  Closes its terminal and deletes", 37));
+    CHECK(!strcmp(row(8), " \xe2\x94\x82                   Cancel    Remove   \xe2\x94\x82"));
+    /* The hint names the accepting button; the border is the danger colour. */
+    CHECK(strstr(row(10), "y remove \xe2\x80\xa2 esc cancel \xe2\x94\x80\xe2\x95\xaf") != NULL);
+    CHECK(cell(1, 1)->foreground == KT_COLOR_DANGER && cell(32, 8)->background == KT_COLOR_DANGER);
+    CHECK(cell(23, 8)->background == KT_COLOR_SUNKEN);
+    CHECK(kt_confirm_update(&c, &other, NULL) == KT_CONFIRM_IGNORED);
+    CHECK(kt_confirm_update(&c, &y, NULL) == KT_CONFIRM_ACCEPTED && c.chosen == 1);
+    CHECK(kt_confirm_update(&c, &n, NULL) == KT_CONFIRM_CANCELLED && c.chosen == 0);
+    CHECK(kt_confirm_update(&c, &left, NULL) == KT_CONFIRM_HANDLED && c.focus == 0);
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(cell(23, 8)->background == KT_COLOR_ACCENT && cell(32, 8)->foreground == KT_COLOR_DANGER);
+    CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_CANCELLED);
+    CHECK(kt_confirm_update(&c, &tab, NULL) == KT_CONFIRM_HANDLED && c.focus == 1);
+    CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_ACCEPTED);
+    {
+        struct kt_msg on_cancel = mouse(24, 8, 0), on_body = mouse(10, 4, 0);
+        CHECK(kt_confirm_update(&c, &on_body, NULL) == KT_CONFIRM_HANDLED);
+        CHECK(kt_confirm_update(&c, &on_cancel, NULL) == KT_CONFIRM_CANCELLED);
+    }
+    /* A third button reports which it was. */
+    c.buttons[2] = "Keep";
+    c.button_count = 3;
+    c.focus = 2;
+    CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_CHOSEN && c.chosen == 2);
+}
+
+/* ---- form ---------------------------------------------------------------- */
+
+static bool needs_name(void *context, const char *text, char *error, size_t capacity) {
+    (void)context;
+    if (text[0]) return true;
+    snprintf(error, capacity, "A task needs a name");
+    return false;
+}
+
+static struct kt_textinput name_input;
+static struct kt_field fields[3];
+static struct kt_form form;
+
+static void form_setup(void) {
+    static const char *const agents[] = {"codex", "claude", "aider"};
+    memset(fields, 0, sizeof(fields));
+    kt_textinput_init(&name_input, NULL, 0);
+    name_input.validate = needs_name;
+    fields[0].kind = KT_FIELD_TEXT; fields[0].label = "Task name"; fields[0].input = &name_input;
+    fields[0].hint = "Becomes the branch and worktree name";
+    fields[1].kind = KT_FIELD_CHOICE; fields[1].label = "Agent"; fields[1].options = agents; fields[1].option_count = 3;
+    fields[2].kind = KT_FIELD_TOGGLE; fields[2].label = "Start now";
+    kt_form_init(&form, "New task", fields, 3);
+    form.keys[KT_FORM_SUBMIT].label = "create";
+}
+
+static void form_view(void) {
+    form_setup();
+    CHECK(kt_form_height(&form, 50) == 3 + 1 + 2 + 1 + 2 + 4);
+    kt_form_place(&form, (struct kt_rect){0, 0, 50, 13});
+    CHECK(name_input.focused && name_input.area.y == 3 && name_input.area.x == 3 && name_input.area.width == 44);
+    kt_textinput_set(&name_input, "fix-login-redirect");
+    blank(52, 14, true);
+    kt_form_view(&form, &canvas, form.area);
+    CHECK(!strncmp(row(0), "\xe2\x95\xad\xe2\x94\x80 New task \xe2\x94\x80", 18));
+    CHECK(!strcmp(row(2), "\xe2\x94\x82  Task name                                     \xe2\x94\x82"));
+    CHECK(starts(row(3), "\xe2\x94\x82  \xe2\x94\x83 fix-login-redirect "));
+    CHECK(!strncmp(row(4), "\xe2\x94\x82  Becomes the branch", 22));
+    CHECK(!strncmp(row(6), "\xe2\x94\x82  Agent", 10));
+    CHECK(starts(row(7), "\xe2\x94\x82  \xe2\x94\x83 codex  claude  aider "));
+    CHECK(starts(row(10), "\xe2\x94\x82  \xe2\x94\x83 [ ] off "));
+    CHECK(strstr(row(12), "enter create \xe2\x80\xa2 esc cancel \xe2\x94\x80\xe2\x95\xaf") != NULL);
+    CHECK(cell(3, 2)->attributes & KT_BOLD && cell(3, 6)->foreground == KT_COLOR_MUTED);
+    CHECK(cell(3, 3)->foreground == KT_COLOR_ACCENT && cell(10, 3)->background == KT_COLOR_SUNKEN);
+    CHECK(cell(5, 7)->attributes & KT_UNDERLINE && !(cell(12, 7)->attributes & KT_UNDERLINE));
+}
+
+static void form_keys(void) {
+    struct kt_msg tab = key(KT_KEY_TAB, 0), back = key(KT_KEY_TAB, KT_MOD_SHIFT), right = key(KT_KEY_RIGHT, 0);
+    struct kt_msg space = key(' ', 0), enter = key(KT_KEY_ENTER, 0), esc = key(KT_KEY_ESCAPE, 0);
+    struct kt_msg a = key('a', 0), erase = key('u', KT_MOD_CTRL);
+    CHECK(kt_form_update(&form, &right, NULL) == KT_FORM_HANDLED && name_input.cursor == name_input.length);
+    CHECK(kt_form_update(&form, &a, NULL) == KT_FORM_CHANGED && !strcmp(kt_textinput_value(&name_input), "fix-login-redirecta"));
+    CHECK(kt_form_update(&form, &tab, NULL) == KT_FORM_HANDLED && form.focus == 1 && !name_input.focused);
+    CHECK(kt_form_scope(&form) == (KT_FORM_SCOPE_FIELDS | KT_FORM_SCOPE_CHOICE));
+    CHECK(kt_form_update(&form, &right, NULL) == KT_FORM_CHANGED && fields[1].choice == 1);
+    CHECK(kt_form_update(&form, &a, NULL) == KT_FORM_IGNORED);
+    CHECK(kt_form_update(&form, &tab, NULL) == KT_FORM_HANDLED && form.focus == 2);
+    CHECK(kt_form_update(&form, &space, NULL) == KT_FORM_CHANGED && fields[2].on);
+    CHECK(kt_form_update(&form, &tab, NULL) == KT_FORM_HANDLED && form.focus == 0 && name_input.focused);
+    CHECK(kt_form_update(&form, &back, NULL) == KT_FORM_HANDLED && form.focus == 2);
+    /* An empty name: the error replaces the hint and the field gets the focus. */
+    kt_textinput_set(&name_input, "x");
+    CHECK(kt_form_update(&form, &enter, NULL) == KT_FORM_SUBMITTED);
+    kt_form_focus(&form, 0);
+    CHECK(kt_form_update(&form, &erase, NULL) == KT_FORM_CHANGED && !strcmp(fields[0].error, "A task needs a name"));
+    kt_form_focus(&form, 2);
+    CHECK(kt_form_update(&form, &enter, NULL) == KT_FORM_INVALID && form.focus == 0);
+    blank(52, 14, true);
+    kt_form_view(&form, &canvas, form.area);
+    CHECK(!strncmp(row(4), "\xe2\x94\x82  A task needs a name", 23) && cell(3, 4)->foreground == KT_COLOR_DANGER);
+    CHECK(kt_form_update(&form, &a, NULL) == KT_FORM_CHANGED && !fields[0].error[0]);
+    CHECK(kt_form_update(&form, &esc, NULL) == KT_FORM_CANCELLED);
+    /* The mouse focuses a field and picks an option. */
+    {
+        struct kt_msg agent = mouse(13, 7, 0), toggle = mouse(5, 10, 0);
+        CHECK(kt_form_update(&form, &agent, NULL) == KT_FORM_CHANGED && form.focus == 1 && fields[1].choice == 1);
+        CHECK(kt_form_update(&form, &toggle, NULL) == KT_FORM_CHANGED && form.focus == 2 && !fields[2].on);
+    }
+}
+
+/* ---- tabs ---------------------------------------------------------------- */
+
+static void tabs(void) {
+    static const struct kt_tab items[] = {{"Work", NULL, KT_DEFAULT}, {"Details", NULL, KT_DEFAULT},
+                                          {"Attention", "3", KT_COLOR_WARNING}, {"Recovery", "4", KT_DEFAULT},
+                                          {"Flows", NULL, KT_DEFAULT}, {"Stats", NULL, KT_DEFAULT}};
+    struct kt_tabs t;
+    struct kt_msg next = key(KT_KEY_TAB, 0), previous = key('[', 0), five = key('5', 0), nine = key('9', 0);
+    kt_tabs_init(&t, items, 6);
+    blank(60, 2, true);
+    kt_tabs_view(&t, &canvas, (struct kt_rect){0, 0, 60, 1});
+    CHECK(!strcmp(row(0), " Work  Details  Attention 3  Recovery 4  Flows  Stats"));
+    CHECK(cell(5, 0)->background == KT_COLOR_ACCENT && cell(6, 0)->background == KT_COLOR_SURFACE);
+    CHECK(cell(26, 0)->foreground == KT_COLOR_WARNING && cell(1, 0)->attributes & KT_BOLD);
+    /* Narrower: the inactive tabs lose their padding. */
+    blank(60, 2, true);
+    kt_tabs_view(&t, &canvas, (struct kt_rect){0, 0, 49, 1});
+    CHECK(!strcmp(row(0), " Work  Details Attention 3 Recovery 4 Flows Stats"));
+    /* Narrower still: a window around the active tab, arrows where tabs hide. */
+    t.active = 3;
+    blank(60, 2, true);
+    kt_tabs_view(&t, &canvas, (struct kt_rect){0, 0, 30, 1});
+    CHECK(!strcmp(row(0), "\xe2\x80\xb9  Recovery 4  Flows Stats"));
+    CHECK(kt_tabs_rect(&t, (struct kt_rect){0, 0, 30, 1}, 0).width == 0);
+    kt_tabs_place(&t, (struct kt_rect){0, 0, 60, 1});
+    CHECK(kt_tabs_update(&t, &next, NULL) == KT_TABS_CHANGED && t.active == 4);
+    CHECK(kt_tabs_update(&t, &next, NULL) == KT_TABS_CHANGED && t.active == 5);
+    CHECK(kt_tabs_update(&t, &next, NULL) == KT_TABS_CHANGED && t.active == 0);
+    CHECK(kt_tabs_update(&t, &previous, NULL) == KT_TABS_CHANGED && t.active == 5);
+    CHECK(kt_tabs_update(&t, &five, NULL) == KT_TABS_CHANGED && t.active == 4);
+    CHECK(kt_tabs_update(&t, &five, NULL) == KT_TABS_HANDLED);
+    CHECK(kt_tabs_update(&t, &nine, NULL) == KT_TABS_HANDLED && t.active == 4);
+    {
+        struct kt_msg details = mouse(9, 0, 0), below = mouse(9, 1, 0);
+        CHECK(kt_tabs_update(&t, &details, NULL) == KT_TABS_CHANGED && t.active == 1);
+        CHECK(kt_tabs_update(&t, &below, NULL) == KT_TABS_IGNORED);
+    }
+}
+
+/* ---- progress ------------------------------------------------------------ */
+
+static void progress(void) {
+    struct kt_progress p;
+    kt_progress_init(&p);
+    kt_progress_set(&p, 0.5);
+    blank(20, 2, true);
+    kt_progress_view(&p, &canvas, (struct kt_rect){0, 0, 15, 1});
+    /* Ten columns of bar: five whole cells, then the percentage. */
+    CHECK(!strcmp(row(0), "\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88       50%"));
+    CHECK(cell(0, 0)->foreground == KT_COLOR_ACCENT && cell(7, 0)->background == KT_COLOR_SUNKEN);
+    /* Eighths: 0.33 of ten cells is 26 eighths, three whole and a quarter. */
+    kt_progress_set(&p, 0.33);
+    p.percent = false;
+    blank(20, 2, true);
+    kt_progress_view(&p, &canvas, (struct kt_rect){0, 0, 10, 1});
+    CHECK(!strcmp(row(0), "\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x8e"));
+    kt_progress_set(&p, 7.0);
+    CHECK(p.value == 1.0);
+    kt_progress_set(&p, -1.0);
+    CHECK(p.value == 0.0);
+    /* ASCII: whole cells, a part from half a cell up. */
+    kt_progress_set(&p, 0.36);
+    blank(20, 2, false);
+    kt_progress_view(&p, &canvas, (struct kt_rect){0, 0, 10, 1});
+    CHECK(!strcmp(row(0), "####------"));
+}
+
+/* ---- palette ------------------------------------------------------------- */
+
+static void palette(void) {
+    static struct kt_palette p;
+    struct kt_help_source source = {app, ACTIONS, 1};
+    struct kt_msg n = key('n', 0), down = key(KT_KEY_DOWN, 0), enter = key(KT_KEY_ENTER, 0), esc = key(KT_KEY_ESCAPE, 0);
+    struct kt_msg t = key('t', 0);
+    app_keys();
+    kt_palette_init(&p, "Commands");
+    CHECK(kt_palette_set(&p, &source, 1) && p.match_count == ACTIONS);
+    p.rows = 5;
+    CHECK(kt_palette_height(&p, 50) == 11);
+    kt_palette_place(&p, (struct kt_rect){0, 0, 50, 11});
+    blank(52, 12, true);
+    kt_palette_view(&p, &canvas, p.area);
+    CHECK(starts(row(2), "\xe2\x94\x82  > type to filter "));
+    CHECK(starts(row(4), "\xe2\x94\x82 \xe2\x96\x8c open  go ") && strstr(row(4), "enter  \xe2\x94\x82"));
+    /* Typing filters and ranks; the label is highlighted. */
+    CHECK(kt_palette_update(&p, &n, NULL) == KT_PALETTE_HANDLED);
+    CHECK(kt_palette_update(&p, &t, NULL) == KT_PALETTE_HANDLED);
+    CHECK(p.match_count >= 1 && p.matches[0].index == NEW);
+    blank(52, 12, true);
+    kt_palette_view(&p, &canvas, p.area);
+    CHECK(starts(row(4), "\xe2\x94\x82 \xe2\x96\x8c new task  new ") && cell(4, 4)->attributes & KT_UNDERLINE);
+    CHECK(kt_palette_update(&p, &enter, NULL) == KT_PALETTE_CHOSEN && kt_palette_chosen(&p)->action == NEW);
+    CHECK(kt_palette_update(&p, &down, NULL) == KT_PALETTE_HANDLED);
+    CHECK(kt_palette_update(&p, &esc, NULL) == KT_PALETTE_CANCELLED);
+    /* Nothing matches. */
+    kt_textinput_set(&p.query, "zzz");
+    CHECK(kt_palette_update(&p, &t, NULL) == KT_PALETTE_HANDLED && p.match_count == 0);
+    CHECK(kt_palette_update(&p, &enter, NULL) == KT_PALETTE_HANDLED);
+    blank(52, 12, true);
+    kt_palette_view(&p, &canvas, p.area);
+    CHECK(strstr(row(4), "No matching command") != NULL);
+    /* A click chooses the row under it. */
+    CHECK(kt_palette_set(&p, &source, 1));
+    {
+        struct kt_msg third = mouse(10, 6, 0);
+        CHECK(kt_palette_update(&p, &third, NULL) == KT_PALETTE_CHOSEN && kt_palette_chosen(&p)->action == NEW);
+    }
+}
+
+/* ---- modal stack --------------------------------------------------------- */
+
+/* A modal that takes nothing itself. */
+static int passive_update(void *component, const struct kt_msg *msg, struct kt_cmds *cmds) {
+    (void)component; (void)msg; (void)cmds;
+    return 0;
+}
+static void passive_view(const void *component, struct kt_canvas *canvas, struct kt_rect area) {
+    (void)component;
+    kt_fill(canvas, area, KT_BASE);
+}
+
+static void modals(void) {
+    struct kt_modals m;
+    struct kt_confirm c;
+    struct kt_modal modal;
+    struct kt_rect r;
+    struct kt_msg y = key('y', 0), x = key('x', 0), esc = key(KT_KEY_ESCAPE, 0), timer;
+    memset(&timer, 0, sizeof(timer));
+    timer.type = KT_MSG_TIMER;
+    kt_modals_init(&m);
+    CHECK(kt_modals_update(&m, &y, NULL) == KT_MODALS_IGNORED && !kt_modals_top(&m));
+    kt_confirm_init(&c, "Remove head", "Remove it?", "Remove", "Cancel", false);
+    modal = kt_confirm_modal(&c, 7, 30);
+    kt_modals_place(&m, (struct kt_rect){0, 0, 60, 20});
+    CHECK(kt_modals_push(&m, &modal) && kt_modals_top(&m)->id == 7);
+    r = kt_modals_rect(&m, 0, m.area);
+    CHECK(r.width == 30 && r.height == 7 && r.x == 15 && r.y == 4);
+    CHECK(c.area.x == r.x && c.area.y == r.y);
+    /* Input goes to the top modal; what it leaves is swallowed, except Esc. */
+    CHECK(kt_modals_update(&m, &x, NULL) == KT_MODALS_HANDLED);
+    CHECK(kt_modals_update(&m, &timer, NULL) == KT_MODALS_IGNORED);
+    CHECK(kt_modals_update(&m, &y, NULL) == KT_MODALS_RESULT && m.id == 7 && m.result == KT_CONFIRM_ACCEPTED);
+    CHECK(kt_modals_update(&m, &esc, NULL) == KT_MODALS_RESULT && m.result == KT_CONFIRM_CANCELLED);
+    /* The backdrop: the base drawn first keeps its text, faint. */
+    blank(60, 20, true);
+    kt_text(&canvas, (struct kt_rect){0, 0, 60, 1}, "base text", KT_STRONG);
+    kt_modals_view(&m, &canvas, m.area);
+    CHECK(!strcmp(row(0), "base text") && cell(0, 0)->foreground == KT_COLOR_FAINT);
+    CHECK(cell(0, 0)->background == KT_COLOR_SURFACE && cell(0, 0)->attributes == KT_BOLD);
+    CHECK(cell(r.x + 3, r.y + 2)->foreground == KT_COLOR_TEXT);
+    kt_modals_pop(&m);
+    CHECK(!kt_modals_top(&m));
+    /* A modal that leaves Esc alone is closed by it. */
+    {
+        struct kt_help help;
+        struct kt_help_source source = {app, ACTIONS, 1};
+        struct kt_msg q = key('?', 0);
+        kt_help_init(&help);
+        CHECK(kt_help_set(&help, &source, 1));
+        modal = kt_help_modal(&help, 9, 0);
+        CHECK(modal.width == kt_help_full_width(&help, 2) + 6);
+        CHECK(kt_modals_push(&m, &modal));
+        CHECK(kt_modals_update(&m, &x, NULL) == KT_MODALS_HANDLED);
+        blank(60, 20, true);
+        kt_modals_view(&m, &canvas, m.area);
+        r = kt_modals_rect(&m, 0, m.area);
+        CHECK(strstr(row(r.y), "Keyboard") && strstr(row(r.y + r.height - 1), "?/esc close"));
+        CHECK(kt_modals_update(&m, &q, NULL) == KT_MODALS_RESULT && m.id == 9 && m.result == KT_HELP_CLOSED);
+    }
+    /* A modal that leaves Esc alone is closed by it; others under it stay. */
+    {
+        struct kt_modal passive = {3, NULL, passive_update, passive_view, NULL, NULL, 20, 5};
+        CHECK(kt_modals_push(&m, &passive) && m.count == 2);
+        CHECK(kt_modals_update(&m, &x, NULL) == KT_MODALS_HANDLED);
+        CHECK(kt_modals_update(&m, &esc, NULL) == KT_MODALS_CLOSED && m.id == 3 && m.count == 1);
+        CHECK(kt_modals_top(&m)->id == 9);
+        CHECK(kt_modals_push(&m, &passive) && kt_modals_push(&m, &passive) && kt_modals_push(&m, &passive));
+        CHECK(!kt_modals_push(&m, &passive));
+    }
+    modal.update = NULL;
+    kt_modals_pop(&m);
+    CHECK(!kt_modals_push(&m, &modal));
+}
+
 int main(void) {
     fuzzy();
     ranking();
@@ -633,11 +943,18 @@ int main(void) {
     viewport_follow();
     viewport_sideways();
     viewport_canvas();
+    confirm();
+    form_view();
+    form_keys();
+    tabs();
+    progress();
+    palette();
+    modals();
     if (failures) {
         fprintf(stderr, "components: %d check(s) failed\n", failures);
         return 1;
     }
     puts("components: fuzzy match and rank, wrapping, chord hints, short and full help, scroll arithmetic, the "
-         "list, the table and the viewport passed");
+         "list, table, viewport, confirm, form, tabs, progress bar, palette and modal stack passed");
     return 0;
 }

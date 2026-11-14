@@ -81,6 +81,11 @@ static void validate(struct kt_textinput *t) {
     if (t->validate) t->valid = t->validate(t->validate_context, kt_textinput_value(t), t->error, sizeof(t->error));
 }
 
+bool kt_textinput_validate(struct kt_textinput *t) {
+    validate(t);
+    return t->valid;
+}
+
 static bool extends(const char *suggestion, const char *text, size_t length) {
     size_t i;
     if (!suggestion || strlen(suggestion) <= length) return false;
