@@ -363,6 +363,13 @@ bool setup_status_finished(const char *status) {
     return !strcmp(status, "done") || !strcmp(status, "skipped");
 }
 
+bool setup_preflight_blocked(const struct setup_envelope *e) {
+    size_t i;
+    if (!strcmp(e->code, "prerequisite_missing")) return true;
+    for (i = 0; i < e->requirement_count; i++) if (e->requirements[i].blocking && strcmp(e->requirements[i].status, "ok")) return true;
+    return false;
+}
+
 const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e) {
     size_t i;
     for (i = 0; i < e->requirement_count; i++) {

@@ -769,7 +769,7 @@ One interaction model applies everywhere:
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Filter heads, search explicit actions |
 | `d` | Technical details on the Details page |
-| `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup, `O` opens onboarding |
+| `3` | Hosts: `A` adds a remote machine over SSH, Enter opens a host's work or continues its setup, `[`/`]` or `O` the Onboarding page |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
 
 Work lists the heads you started. Heads a workflow run created sit inside their
@@ -815,13 +815,22 @@ tasks a third page, Cohorts, groups them (`C` also opens it), and `L` cycles the
 location filter, which the page strip shows as a chip. `ctrl+r` reads the sample
 again. `hydra workflow statistics-json` exports both.
 
-Hosts, the last tab of local work, adds a remote machine without leaving the control
-centre: `A` asks for the SSH destination and a name, then walks through the guided
+Hosts (`3`) lists the machines Hydra can run agents on beside a detail pane: This
+machine (its heads, tmux and Hydra versions and the agents `hydra agent list`
+finds, read when Hosts opens), the observed remote hosts with their connection,
+head count and observation age, the setups not finished yet, and "+ Add a host".
+Enter on a host (or on This machine) opens its work in Work, filtered to it; Esc
+comes back to Hosts. `r` observes the hosts again and `/` filters the list. `A`
+opens a form for the SSH destination and a name, then walks through the guided
 `hydra remote setup` steps (host key, requirements, installing Hydra, agents and
-sign-in), showing each plan before anything changes. Unfinished setups are listed
-there and Enter continues one. See [guided remote setup](FLEET.md#guided-remote-setup).
+sign-in) in the detail pane, showing each plan before anything changes: the host
+key is trusted only by typing `yes`, and a plan is approved with `y` (Enter never
+approves; `n` or Esc declines). A running step shows its elapsed time; `c`
+cancels it and `b` or Esc leaves it running. Enter continues an unfinished setup,
+`e` edits one that has not changed the remote yet and `x` removes its record
+after showing what stays. See [guided remote setup](FLEET.md#guided-remote-setup).
 
-`O` on Hosts opens onboarding for hosts found through `hydra fleet discover`:
+The Onboarding page of Hosts (`]`, or `O`) opens onboarding for hosts found through `hydra fleet discover`:
 candidates with filters for state, source, platform and label (`s`, `S`, `P`,
 `l`, `/`), a detail with provenance, observation age, qualification result,
 fingerprints and revocation, the source changes (`c`) and the reviewed intent

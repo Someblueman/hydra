@@ -116,59 +116,59 @@ def fleet(s: Session) -> None:
     s.state("fleet-workspace", "HYDRA /", "[Workspace]")
     s.state("fleet-heads", "Heads: remote work", "feature-build", keys="1")
     s.state("fleet-overview", "HYDRA / OVERVIEW", "builder/feature-build", keys="o")
-    s.state("fleet-hosts", "HOSTS / latest list response", "builder", keys="H")
+    s.state("fleet-hosts", "Observed", "builder", keys="3")
     s.state("fleet-recovery", "RECOVERY", keys=BACK + "5", note="one tab bar for local and remote work: Recovery is 5")
     s.state("fleet-attention", "ATTENTION", "need you", keys="I")
 
 
 def hosts(s: Session) -> None:
     """The 2.9.0 guided remote setup through the Hosts tab (recorded envelopes)."""
-    s.state("hosts-entry", "press H for Hosts")
-    s.state("hosts-list", "+ Add a host", keys="H")
-    s.state("hosts-form", "ADD A REMOTE HOST", "deploy@ovh.example.net", keys="A" + "deploy@ovh.example.net\tovh")
-    s.state("hosts-trust-key", "TRUST THE HOST KEY OF ovh", "known_hosts", keys="\r\r")
+    s.state("hosts-entry", "1 Work")
+    s.state("hosts-list", "+ Add a host", "This machine", keys="3")
+    s.state("hosts-form", "Hydra connects with your own SSH", "deploy@ovh.example.net", keys="A" + "deploy@ovh.example.net\tovh")
+    s.state("hosts-trust-key", "Trust the host key of ovh?", "known_hosts", keys="\r\r")
     s.state("hosts-trust-key-wrong", "Type yes (the whole word)", keys="no\r")
-    s.state("hosts-requirements-blocked", "MISSING REQUIREMENTS ON ovh", "BLOCKS", keys="\x7f\x7fyes\r")
+    s.state("hosts-requirements-blocked", "Missing requirements on ovh", "BLOCKS", keys="\x7f\x7fyes\r")
     s.flag("git_fixed")
-    s.state("hosts-heads-paused", "HEADS CANNOT RUN ON ovh YET", "Enter continues setup anyway", keys="\r")
-    s.state("hosts-provision-plan", "REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", keys="\r")
+    s.state("hosts-heads-paused", "Heads cannot run on ovh yet", "Enter continues setup anyway", keys="\r")
+    s.state("hosts-provision-plan", "Install Hydra on ovh", "pinned: its digest is recorded", keys="\r")
     s.state("hosts-provision-declined", "Not approved: nothing was changed", keys="n")
-    s.state("hosts-provision-plan-again", "REVIEW: INSTALL HYDRA ON ovh", keys="\r")
-    s.state("hosts-agents", "AGENTS ON ovh", "Install claude", keys="y", timeout=15)
-    s.state("hosts-install-plan", "REVIEW: INSTALL claude ON ovh", "curl -fsSL https://claude.ai/install.sh", keys="j\r")
-    s.state("hosts-sign-in-handoff", "SIGN IN TO CLAUDE ON OVH", keys="y", timeout=15)
+    s.state("hosts-provision-plan-again", "Install Hydra on ovh", keys="\r")
+    s.state("hosts-agents", "Agents on ovh", "Install claude", keys="y", timeout=15)
+    s.state("hosts-install-plan", "Install claude on ovh", "curl -fsSL https://claude.ai/install.sh", keys="j\r")
+    s.state("hosts-sign-in-handoff", "Sign in to claude on ovh", keys="y", timeout=15)
     s.state("hosts-sign-in-terminal", "FAKE SIGN-IN: open", "Hydra: Sign in to claude", keys="\r")
     s.state("hosts-sign-in-return", "Press Enter to return to Hydra", keys="\r")
     s.state("hosts-sign-in-failed", "Sign-in did not finish", "Enter signs in again", keys="\r")
     s.keys("\r")
     s.driver.wait_for("FAKE SIGN-IN: open", timeout=10)
-    s.state("hosts-done", "ovh IS READY", keys="\r", timeout=15)
+    s.state("hosts-done", "ovh is ready", keys="\r", timeout=15)
     s.state("hosts-after", "+ Add a host", "set up", keys="\r")
 
 
 def entry(s: Session) -> None:
     """The control centre is up (keys sent earlier would be lost)."""
-    s.driver.wait_for("press H for Hosts", timeout=15)
+    s.driver.wait_for("1 Work", timeout=15)
 
 
 def hosts_changed_key(s: Session) -> None:
     entry(s)
-    s.state("hosts-key-changed", "THE HOST KEY CHANGED", "ssh-keygen -R", keys="HA" + "deploy@ovh.example.net\tovh\r\r", timeout=15)
+    s.state("hosts-key-changed", "The host key changed", "ssh-keygen -R", keys="3A" + "deploy@ovh.example.net\tovh\r\r", timeout=15)
 
 
 def hosts_unfinished(s: Session) -> None:
     entry(s)
-    s.state("hosts-unfinished-list", "Check requirements: blocked", keys="H", timeout=15)
+    s.state("hosts-unfinished-list", "Check requirements: blocked", keys="3", timeout=15)
     s.state("hosts-unfinished", "Check requirements: blocked", "e edit", keys="j")
-    s.state("hosts-remove-plan", "REMOVE THE SETUP RECORD OF ovh?", "Left on remote", keys="x")
+    s.state("hosts-remove-plan", "Remove the setup record of ovh?", "Left on remote", keys="x")
     s.state("hosts-kept", "Kept the setup record for ovh", keys="n")
-    s.state("hosts-duplicate", "ovh ALREADY HAS AN UNFINISHED SETUP", keys="A" + "deploy@ovh.example.net\tovh\r\r")
-    s.state("hosts-edit-form", "EDIT THE SETUP OF ovh", "deploy@ovh.example.net", keys="e")
+    s.state("hosts-duplicate", "ovh already has an unfinished setup", keys="A" + "deploy@ovh.example.net\tovh\r\r")
+    s.state("hosts-edit-form", "Edit the setup of ovh", "deploy@ovh.example.net", keys="e")
 
 
 def hosts_running(s: Session) -> None:
     entry(s)
-    s.state("hosts-running", "host key…", "c cancel", keys="HA" + "deploy@ovh.example.net\tovh\r\r", timeout=15,
+    s.state("hosts-running", "host key…", "c cancel", keys="3A" + "deploy@ovh.example.net\tovh\r\r", timeout=15,
             note="a step in progress with its elapsed time (time-varying)")
     s.state("hosts-cancelled", "Cancelled: Checking the host key", "Continue setup", keys="c")
 

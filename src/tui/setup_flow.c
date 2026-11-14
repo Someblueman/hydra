@@ -677,7 +677,7 @@ static const char *continue_label(const struct native_setup *s) {
     switch (s->screen) {
     case SETUP_SCREEN_STEPS: return s->selected ? "inspect" : "continue";
     case SETUP_SCREEN_KEY_CHANGED: return "check again";
-    case SETUP_SCREEN_PREFLIGHT: return s->paused ? "continue anyway" : "continue";
+    case SETUP_SCREEN_PREFLIGHT: return s->paused ? "continue anyway" : setup_preflight_blocked(s->current) ? "check again" : "continue";
     case SETUP_SCREEN_AGENTS: return "run";
     case SETUP_SCREEN_UNKNOWN: return "reconcile";
     case SETUP_SCREEN_HANDOFF: return "hand over";

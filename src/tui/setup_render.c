@@ -232,12 +232,6 @@ static void render_key_changed(struct app *app, struct native_setup *s) {
     footer(app, &p, "Hydra never accepts a changed key; there is no option to do so here.", KT_MUTED);
 }
 
-static bool blocking(const struct setup_envelope *e) {
-    size_t i;
-    for (i = 0; i < e->requirement_count; i++) if (e->requirements[i].blocking && strcmp(e->requirements[i].status, "ok")) return true;
-    return false;
-}
-
 static void requirement_row(struct app *app, struct pen *p, const struct setup_requirement *r) {
     const char *status = r->blocking && strcmp(r->status, "ok") ? "BLOCKS" : r->status;
     struct kt_style tone = !strcmp(r->status, "ok") ? KT_SUCCESS : KT_WARNING;
@@ -274,7 +268,7 @@ static void render_preflight(struct app *app, struct native_setup *s) {
     struct pen p;
     char text[300];
     size_t i;
-    bool blocked = blocking(e) || !strcmp(e->code, "prerequisite_missing");
+    bool blocked = setup_preflight_blocked(e);
     if (s->paused) { render_paused(app, s); return; }
     snprintf(text, sizeof(text), "%s on %.120s", blocked ? "Missing requirements" : "Requirements", s->name);
     title(app, blocked ? KT_WARNING : KT_STRONG, text);
