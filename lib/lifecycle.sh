@@ -96,7 +96,30 @@ lifecycle_set_outcome() {
     _lifecycle_release_head_lock
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
         lifecycle.declared "$_lso_actor_kind" "$_lso_actor_id" \
-        "{\"outcome\":\"$(json_escape "$_lso_outcome")\"}" >/dev/null
+        "{\"outcome\":\"$(json_escape "$_lso_outcome")\"}" >/dev/null || return 1
+    # An outcome declared after the session was summarised updates the summary.
+    if [ -f "$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/sessions/$LIFECYCLE_INSTANCE_ID" ] &&
+        _lifecycle_sessions_loaded; then
+        session_summary_set_outcome "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
+            "$_lso_outcome" || echo "Warning: the session summary still names the earlier outcome" >&2
+    fi
+}
+
+# Session summaries live with the statistics feed; the CLI loads them on use.
+_lifecycle_sessions_loaded() {
+    command -v session_maintain_head >/dev/null 2>&1 && return 0
+    command -v _load_lib >/dev/null 2>&1 || return 1
+    _load_lib workflow_sessions
+    command -v session_maintain_head >/dev/null 2>&1
+}
+
+# Summarises the head's finished sessions and trims the activity they cover
+# (see session_maintain_head). A session whose observer coverage may still
+# grow is summarised by a later pass. Never fails the step that ended it.
+# Usage: lifecycle_summarise_sessions <project-id> <head-id>
+lifecycle_summarise_sessions() {
+    _lifecycle_sessions_loaded || return 0
+    session_maintain_head "$1" "$2" >/dev/null 2>&1 || true
 }
 
 lifecycle_set_observed() {
@@ -423,5 +446,6 @@ lifecycle_finish_teardown() {
         "$HYDRA_BIN_PATH" admission release "$_lft_admission" --confirmed >/dev/null || return 1
     fi
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.torn-down hydra local '{}' >/dev/null || return 1
+    lifecycle_summarise_sessions "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID"
     run_hook post-teardown "" "$_lft_repo" "$_lft_session" "$_lft_branch"
 }

@@ -201,6 +201,15 @@ _cmd_adapter_activity() {
     else
         echo "Recorded activity for $_caa_branch instance $_caa_instance ($_caa_state, inferred from tmux)"
     fi
+    _cmd_adapter_maintain_sessions
+}
+
+# The observer's recorder is the cheap moment to bound activity logs and to
+# summarise sessions that ended while it watched: at most once per interval.
+_cmd_adapter_maintain_sessions() {
+    _cams_project="$(hydra_get_project_id 2>/dev/null)" || return 0
+    _load_lib workflow_sessions
+    session_maintain_due "$_cams_project" >/dev/null 2>&1 || true
 }
 
 # An observer says it is watching this project's interactive heads now.
@@ -219,6 +228,7 @@ _cmd_adapter_watch() {
         return 1
     }
     echo "Observer coverage recorded for $_caw_project"
+    _cmd_adapter_maintain_sessions
 }
 
 _cmd_resume_abort() {
@@ -341,6 +351,7 @@ _cmd_resume_instance() {
             return 1
         }
         lifecycle_commit_new_instance || echo "Warning: could not remove resume rollback metadata" >&2
+        lifecycle_summarise_sessions "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID"
         echo "Resumed $_cr_branch headlessly (instance $LIFECYCLE_INSTANCE_ID)"
         return 0
     fi
@@ -368,5 +379,6 @@ _cmd_resume_instance() {
         return 1
     }
     lifecycle_commit_new_instance || echo "Warning: could not remove resume rollback metadata" >&2
+    lifecycle_summarise_sessions "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID"
     echo "Resumed $_cr_branch in $_cr_session (instance $LIFECYCLE_INSTANCE_ID)"
 }
