@@ -273,7 +273,7 @@ $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/
 test-tui-actions: $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-actions
 
-$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h src/tui/plan_draft.c src/tui/plan_draft.h src/tui/setup_json.c src/tui/setup_json.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
 
 $(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(KETTLE_OBJECTS)

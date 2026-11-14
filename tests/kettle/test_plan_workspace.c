@@ -47,8 +47,13 @@ int main(void) {
     U("Policy JSON path", 3);
     kt_send(&s, policy);
     kt_send(&s, "\r");
-    /* The import opens the Plan page with focus, so V applies at once. */
+    /* The import opens the Plan page with focus, so V applies at once. A
+     * draft not validated yet reads as a plan: what each step does, not the
+     * JSON it was published as. */
     U(STATE("DRAFT", 1), 3);
+    U("runs sh compose.sh in plan-smoke", 3);
+    CHECK(kt_contains(&s, "starts a head on branch plan-smoke") && kt_contains(&s, "at most 3") &&
+          !kt_contains(&s, "schema_version"), "a draft reads as its steps, not its JSON");
     kt_send(&s, "V");
     U(STATE("READY", 1) " \xc2\xb7 awaiting you", 30);
     zoom_and_pages(&s);

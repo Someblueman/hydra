@@ -5,6 +5,7 @@
 #include "internal.h"
 #include "attention.h"
 #include "inbox.h"
+#include "plan_draft.h"
 #include "plan_summary.h"
 /* The side pane's pages: Details (always), Plan (a head with a plan) and Run
  * (a run, or a head a run created). Details and Plan are text that scrolls;
@@ -307,7 +308,11 @@ static void plan_actions(struct app *app, const struct native_plan *p) {
     paragraph(app, text, KT_STRONG);
 }
 
-static void plan_loaded(struct app *app, const struct native_plan *p) {
+static bool plan_draft_account(struct app *app, const struct native_plan *p);
+
+/* The plan's state, objective, scope and steps; true when a draft was told
+ * in words, so the document under it is not needed. */
+static bool plan_loaded(struct app *app, const struct native_plan *p) {
     char text[TEXT + 64];
     plan_state_text(app, p, text, sizeof(text));
     paragraph(app, text, p->state == PLAN_INVALID ? KT_WARNING : KT_STRONG);
@@ -315,19 +320,50 @@ static void plan_loaded(struct app *app, const struct native_plan *p) {
     if (p->notice[0]) paragraph(app, p->notice, KT_WARNING);
     if (p->objective[0]) { section(app, "Objective"); paragraph(app, p->objective, KT_BASE); }
     linef(app, "");
+    if (p->state == PLAN_DRAFT && plan_draft_account(app, p)) { plan_actions(app, p); return true; }
     plan_scope(app, p);
     plan_steps(app, p);
     plan_actions(app, p);
+    return false;
 }
 
-/* The plan document itself, below the summary: the draft as published or
- * the compiled preview. */
+/* A draft not validated yet, in words: its limits and what each step does,
+ * read from the JSON the agent published. False when it cannot be read,
+ * and the page shows the draft as published instead. */
+static bool plan_draft_account(struct app *app, const struct native_plan *p) {
+    struct plan_draft *d = p->source_bytes ? malloc(sizeof(*d)) : NULL;
+    char text[1200];
+    size_t i;
+    if (!d || !plan_draft_parse(p->source_bytes, p->source_length, d)) { free(d); return false; }
+    snprintf(text, sizeof(text), "%zu step%s%s%u head%s", d->steps_total, d->steps_total == 1 ? "" : "s", dot(app), d->heads,
+             d->heads == 1 ? "" : "s");
+    if (d->minutes) text_append(text, sizeof(text), "%sat most %u min", dot(app), d->minutes);
+    labelled_at(app, 8, "Scope", text, KT_BASE);
+    labelled_at(app, 8, "Writes", d->writes[0] ? d->writes : "inside the heads it spawns only", KT_BASE);
+    if (d->tools[0]) labelled_at(app, 8, "Tools", d->tools, KT_BASE);
+    section(app, "Steps");
+    for (i = 0; i < d->step_count; i++) {
+        const struct plan_draft_step *step = &d->steps[i];
+        snprintf(text, sizeof(text), "%zu %-12.12s %s%s%s", i + 1, step->id, step->kind, step->role[0] ? dot(app) : "", step->role);
+        linef(app, "%s", text);
+        if (step->what[0]) labelled_at(app, 2, "", step->what, KT_MUTED);
+    }
+    if (d->steps_total > d->step_count) linef(app, "%zu more steps", d->steps_total - d->step_count);
+    linef(app, "");
+    paragraph(app, "Hydra has not checked this draft yet. Approving it (E) validates exactly this revision first; "
+              "nothing runs if validation finds a problem, and the problems show here.", KT_MUTED);
+    free(d);
+    return true;
+}
+
+/* The plan document itself, below the summary: the compiled preview, or a
+ * draft as published when it cannot be read as a plan. */
 static void plan_document(struct app *app, const struct native_plan *p) {
     const char *text = p->state == PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;
     size_t length = p->state == PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
     size_t offset = 0;
     if (!text || !length) return;
-    section(app, p->state == PLAN_DRAFT ? "Draft" : "Technical (compiled preview)");
+    section(app, p->state == PLAN_DRAFT ? "Draft as published" : "Technical (compiled preview)");
     while (offset < length) {
         const char *end = memchr(text + offset, '\n', length - offset);
         size_t line = end ? (size_t)(end - text - offset) : length - offset;
@@ -365,15 +401,15 @@ static void plan_launched_runs(struct app *app, const struct head *h) {
 static void plan_draw(struct app *app) {
     const struct head *h = selected_head(app);
     const struct native_plan *p = app->plan;
-    bool mine = p && h && (!p->proposal_head[0] || !strcmp(p->proposal_head, h->branch));
+    bool mine = p && h && (!p->proposal_head[0] || !strcmp(p->proposal_head, h->branch)), told = false;
     /* A plan imported from files, with no head selected. */
-    if (!h && p && !p->proposal_head[0]) { plan_loaded(app, p); plan_document(app, p); return; }
+    if (!h && p && !p->proposal_head[0]) { if (!plan_loaded(app, p)) plan_document(app, p); return; }
     if (!h) return;
-    if (mine) plan_loaded(app, p);
+    if (mine) told = plan_loaded(app, p);
     else if (work_head_plan_ready(app, h)) plan_published(app, h);
     if (!mine && !work_head_plan_ready(app, h)) { paragraph(app, "No plan on screen for this head.", KT_MUTED); plan_actions(app, NULL); }
     plan_launched_runs(app, h);
-    if (mine) plan_document(app, p);
+    if (mine && !told) plan_document(app, p);
 }
 
 static void plan_page(struct app *app, struct kt_rect r) {
