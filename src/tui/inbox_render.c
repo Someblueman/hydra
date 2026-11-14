@@ -278,6 +278,8 @@ static int list_notes(struct app *app, const struct pane *p, int y) {
         snprintf(text, sizeof(text), "%s Reading what needs you%s", glyph(app, "\xe2\x97\x8c", "."), glyph(app, "\xe2\x80\xa6", "..."));
         kt_text(&app->frame, (struct kt_rect){p->x, y++, p->width, 1}, text, INFO);
     }
+    /* A good list can still carry a problem of its own: the seen store. */
+    if (a && a->have_good && !a->stale && a->error[0]) y = note(app, p, y, a->error, KT_WARNING);
     if (a && a->truncated) y = note(app, p, y, "Only part of the list could be read (a size limit was reached); some items may be missing.", KT_WARNING);
     else if (a && a->partial) y = note(app, p, y, "Some records could not be read completely; they are listed as Needs inspection.", KT_WARNING);
     return y;

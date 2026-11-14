@@ -96,10 +96,16 @@ case "${1:-}:${2:-}" in
         [ -n "${HYDRA_TEST_SEEN_FILE:-}" ] || exit 1
         # Clients mark and list concurrently: serialize like the real store
         # and never share a temporary file between processes.
+        # A client that quits stops its read, which may hold the lock: the
+        # lock goes with the holder, and one held for seconds is abandoned
+        # (every real holder finishes in milliseconds).
         seen_lock="$HYDRA_TEST_SEEN_FILE.lock"; seen_wait=0
         until mkdir "$seen_lock" 2>/dev/null; do
-            seen_wait=$((seen_wait + 1)); [ "$seen_wait" -lt 200 ] || exit 1; sleep 0.05
+            seen_wait=$((seen_wait + 1)); [ "$seen_wait" -lt 200 ] || exit 1
+            [ "$seen_wait" -ne 60 ] || rmdir "$seen_lock" 2>/dev/null
+            sleep 0.05
         done
+        trap 'rmdir "$seen_lock" 2>/dev/null; exit 143' TERM INT HUP
         touch "$HYDRA_TEST_SEEN_FILE"; seen_tmp="$HYDRA_TEST_SEEN_FILE.tmp.$$"
         case "${3:-}" in
             mark) { grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE"; printf '%s\t%s\n' "$4" "$5"; } > "$seen_tmp" && mv "$seen_tmp" "$HYDRA_TEST_SEEN_FILE" ;;

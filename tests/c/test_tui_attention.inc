@@ -127,8 +127,10 @@ static void attention_seen_group(struct session *left, struct session *right, co
 static void attention_restart(const char *tui, const char *hydra, const char *fake_bin) {
     struct session third;
     if (!result(open_session(&third, tui, hydra, fake_bin, 100, 30) == 0, "open attention client after restart")) return;
-    (void)wait_for_raw(&third); write_input(third.master, "I", 1U);
-    result(wait_for_markers(&third, "Seen 1", "Decisions 3", 3000), "seen markers survive a TUI restart");
+    (void)wait_for_raw(&third); (void)wait_for_model(&third); write_input(third.master, "I", 1U);
+    /* The seen store is read asynchronously, and the clients that just quit
+     * may still hold its lock: refresh within one bounded deadline. */
+    result(refresh_until(&third, "Seen 1", "Decisions 3", 8000), "seen markers survive a TUI restart");
     write_input(third.master, "q", 1U); result(wait_for_exit(&third) == 0 && terminal_restored(&third), "restarted attention client restores terminal"); close_session(&third);
 }
 static void test_attention_clients(const char *tui, const char *hydra, const char *fake_bin) {
