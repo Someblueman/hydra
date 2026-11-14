@@ -28,7 +28,7 @@ static void simple_lowering_cases(void) {
     /* plan_lowered passes schema 1 through unchanged. */
     lowered = plan_lowered(expected, policy, errors);
     assert(lowered == expected); json_object_put(lowered);
-    json_object_put(errors); json_object_put(expected);
+    json_object_put(errors); json_object_put(expected); json_object_put(draft);
 
     draft = simple_draft(); json_object_object_add(draft, "envelope", json_object_new_object()); expect_simple(draft, policy, "invalid_plan");
     draft = simple_draft(); json_object_object_del(draft, "done_when"); expect_simple(draft, policy, "invalid_collection");
