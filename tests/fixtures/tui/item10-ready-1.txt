@@ -1,40 +1,40 @@
- HYDRA / WORK                                             Local / 1 heads / 1 running / 0 need attention / 0 to repair  
- [Work]  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace                                       
-+- Heads in this project ---------------------------------------------------------------------------------------------+ 
-|    HEAD                                                                 STATUS         AGENT           REPORTED     | 
-| >  i10-h00                                                              running        item10-worker   -            | 
-| 1 heads  |  Row 1 of 1                                                                                              | 
-|                                                                                                                     | 
-|+- i10-h00 ---------------------------------------------------------------------------------------------------------+| 
-|| item10-worker / running / 0 changed files / 0 of 0 approvals                                                      || 
-|| Enter details / a talk to the agent / x remove / : more actions                                                   || 
-||                                                                                                                   || 
-|+-------------------------------------------------------------------------------------------------------------------+| 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-+---------------------------------------------------------------------------------------------------------------------+ 
- Current snapshot / age 0s                                                                                              
- j/k select  Enter details  a agent  n new task  x remove  / search  : more  ? help  q quit                             
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                    this machine / 1 head / 1 running  
+                                                                                                                       
+ Heads ----------------------- 1  i10-h00 ----- latest output / enter to talk  Details ------------------------------  
+ >* i10-h00            item10-wor * running / item10-worker                    Agent       item10-worker               
+                                                                               Session     running (the live           
+                                  No terminal output yet.                                  terminal)                   
+                                                                               Reported    nothing yet; declared when  
+                                                                                           done: done or blocked       
+                                                                               Where       this machine                
+                                                                                                                       
+                                                                               CHANGES                                 
+                                                                               Changed     0 files in the worktree,    
+                                                                                           not yet committed           
+                                                                               Full diff   : diff (everything since    
+                                                                                           the branch base)            
+                                                                                                                       
+                                                                               CHECKS                                  
+                                                                               Approvals   none                        
+                                                                               Messages    0 exchanged with other      
+                                                                                           heads                       
+                                                                               Coordinate  0 claims / 0 scopes / 0     
+                                                                                           queued / 0 resources        
+                                                                               Claims are files a head means to        
+                                                                               change and scopes the areas it stays    
+                                                                               within; Hydra flags overlap between     
+                                                                               heads before they conflict.             
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+                                                                                                                       
+  1 head                                                                                                               
+  * live   i10-h00 / running                                                                                           
+ ^/v select | enter/a talk | x remove | n new task | / filter | L location | tab/shift+tab pane | ? help | q quit      

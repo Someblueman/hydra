@@ -1,40 +1,40 @@
- HYDRA / WORK                                           Local / 50 heads / 50 running / 0 need attention / 0 to repair  
- [Work]  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace                                       
-+- Heads in this project ---------------------------------------------------------------------------------------------+ 
-|    HEAD                                                                 STATUS         AGENT           REPORTED     | 
-| >  i10-h29                                                              running        item10-worker   -            | 
-|    i10-h09                                                              running        item10-worker   -            | 
-|    i10-h12                                                              running        item10-worker   -            | 
-|    i10-h05                                                              running        item10-worker   -            | 
-|    i10-h20                                                              running        item10-worker   -            | 
-|    i10-h34                                                              running        item10-worker   -            | 
-|    i10-h19                                                              running        item10-worker   -            | 
-|    i10-h45                                                              running        item10-worker   -            | 
-|    i10-h18                                                              running        item10-worker   -            | 
-|    i10-h24                                                              running        item10-worker   -            | 
-|    i10-h48                                                              running        item10-worker   -            | 
-|    i10-h03                                                              running        item10-worker   -            | 
-|    i10-h35                                                              running        item10-worker   -            | 
-| 50 heads  |  Row 1 of 50                                                                                            | 
-|                                                                                                                     | 
-|+- i10-h29 ---------------------------------------------------------------------------------------------------------+| 
-|| item10-worker / running / 0 changed files / 0 of 0 approvals                                                      || 
-|| Enter details / a talk to the agent / x remove / : more actions                                                   || 
-||                                                                                                                   || 
-|+-------------------------------------------------------------------------------------------------------------------+| 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-|                                                                                                                     | 
-+---------------------------------------------------------------------------------------------------------------------+ 
- Current snapshot / age 0s                                                                                              
- j/k select  Enter details  a agent  n new task  x remove  / search  : more  ? help  q quit                             
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                 this machine / 50 heads / 50 running  
+                                                                                                                       
+ Heads ---------------------- 50  i10-h49 ----- latest output / enter to talk  Details ------------------------------  
+  * i10-h17            item10-wor * running / item10-worker                    Agent       item10-worker               
+  * i10-h18            item10-wor                                              Session     running (the live           
+  * i10-h19            item10-wor No terminal output yet.                                  terminal)                   
+  * i10-h20            item10-wor                                              Reported    nothing yet; declared when  
+  * i10-h21            item10-wor                                                          done: done or blocked       
+  * i10-h22            item10-wor                                              Where       this machine                
+  * i10-h23            item10-wor                                                                                      
+  * i10-h24            item10-wor                                              CHANGES                                 
+  * i10-h25            item10-wor                                              Changed     0 files in the worktree,    
+  * i10-h26            item10-wor                                                          not yet committed           
+  * i10-h27            item10-wor                                              Full diff   : diff (everything since    
+  * i10-h28            item10-wor                                                          the branch base)            
+  * i10-h29            item10-wor                                                                                      
+  * i10-h30            item10-wor                                              CHECKS                                  
+  * i10-h31            item10-wor                                              Approvals   none                        
+  * i10-h32            item10-wor                                              Messages    0 exchanged with other      
+  * i10-h33            item10-wor                                                          heads                       
+  * i10-h34            item10-wor                                              Coordinate  0 claims / 0 scopes / 0     
+  * i10-h35            item10-wor                                                          queued / 0 resources        
+  * i10-h36            item10-wor                                              Claims are files a head means to        
+  * i10-h37            item10-wor                                              change and scopes the areas it stays    
+  * i10-h38            item10-wor                                              within; Hydra flags overlap between     
+  * i10-h39            item10-wor                                              heads before they conflict.             
+  * i10-h40            item10-wor                                                                                      
+  * i10-h41            item10-wor                                                                                      
+  * i10-h42            item10-wor                                                                                      
+  * i10-h43            item10-wor                                                                                      
+  * i10-h44            item10-wor                                                                                      
+  * i10-h45            item10-wor                                                                                      
+  * i10-h46            item10-wor                                                                                      
+  * i10-h47            item10-wor                                                                                      
+  * i10-h48            item10-wor                                                                                      
+ >* i10-h49            item10-wor                                                                                      
+                                                                                                                       
+  50 heads                                                                                                             
+  * live   i10-h49 / running                                                                                           
+ ^/v select | enter/a talk | x remove | n new task | / filter | L location | tab/shift+tab pane | ? help | q quit      

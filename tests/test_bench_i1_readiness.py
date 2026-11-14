@@ -21,22 +21,25 @@ def retained_screen_controls(root: Path, output: Path) -> None:
         screen = (root / f"tests/fixtures/tui/item10-ready-{count}.txt").read_text()
         branches = {f"i10-h{index:02d}" for index in range(count)}
         assert owned_heads_visible(screen, True, branches), count
-        # The 3.0 Work list adds a WHERE (location) column; readiness must not depend on it.
-        located = re.sub(r"(\|\s+HEAD\s+STATUS\s+AGENT)", r"\1  WHERE", screen, count=1)
+        # With remote hosts the Work list gains a WHERE column after the agent;
+        # readiness must not depend on it.
+        located = re.sub(r"(i10-h\d\d +)item10-wor", r"\1item10  here", screen)
         assert located != screen and owned_heads_visible(located, True, branches), count
         screens[count] = screen
     screen = screens[50]
     branches = {f"i10-h{index:02d}" for index in range(50)}
-    assert "i10-h00" not in screen
+    # The newest head is selected; the list scrolled it into view, so the
+    # first worker is off screen.
+    assert "i10-h00" not in screen and " 50  i10-h49 " in screen
     negatives = {
-        "wrong-view": screen.replace("[Work]", "[Details]", 1),
-        "wrong-count": screen.replace("| 50 heads", "| 49 heads", 1),
-        "unknown-row": screen.replace("i10-h09", "not-owned", 1),
-        "duplicate-row": screen.replace("i10-h09", "i10-h29", 1),
-        "selected-unknown": "not-owned".join(screen.rsplit("i10-h29", 1)),
+        "wrong-view": screen.replace(" Heads -", " Needs you -", 1),
+        "wrong-count": screen.replace("  50 heads", "  49 heads", 1),
+        "unknown-row": screen.replace("i10-h30", "not-owned", 1),
+        "duplicate-row": screen.replace("i10-h30", "i10-h31", 1),
+        "selected-unknown": screen.replace(" 50  i10-h49 ", " 50  not-owned ", 1),
     }
     for name, changed in negatives.items():
-        assert not owned_heads_visible(changed, True, branches), name
+        assert changed != screen and not owned_heads_visible(changed, True, branches), name
     assert not owned_heads_visible(screen, False, branches)
     (output / "owned-head-predicate.json").write_text(
         json.dumps(

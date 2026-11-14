@@ -9,6 +9,14 @@ from typing import Any
 
 from bench_i1_pty import Observer
 
+# The control centre's top bar ("# hydra" in ASCII; the benchmark runs in the
+# C locale) and the screens' texts at fixed cells, (column, row, length, text).
+IDENTITY = (1, 0, len("# hydra"), "# hydra")
+INBOX = (1, 2, len("Needs you"), "Needs you")
+# The Work conversation's rule note once no terminal client is attached, at
+# 120 columns (the note is right-aligned in the conversation pane).
+WORK_PREVIEW = (48, 2, len("latest output / enter to talk"), "latest output / enter to talk")
+
 
 def wait_until(target_ns: int) -> None:
     while (remaining := target_ns - time.monotonic_ns()) > 0:
@@ -29,12 +37,8 @@ def late_dispatch_control(client: Observer) -> dict[str, Any]:
     scheduled = time.monotonic_ns()
     deadline = scheduled + 4_000_000_000
     wait_until(deadline + 100_000_000)
-    client.expect(
-        "late-dispatch",
-        (1, 0, len("HYDRA /"), "HYDRA /"),
-        (7, 1, 9, "[Details]"),
-    )
-    client.input("late-dispatch", b"\n")
+    client.expect("late-dispatch", IDENTITY, INBOX)
+    client.input("late-dispatch", b"2")
     observed = client.wait("observed", "late-dispatch")
     status = scheduled_status(deadline, [observed])
     if status != "scheduled-deadline-miss":
@@ -52,25 +56,30 @@ def late_dispatch_control(client: Observer) -> dict[str, Any]:
 def view_actions(
     client: Observer, start_ns: int, output: Path, from_attachment: bool = False
 ) -> list[dict[str, Any]]:
-    """Start in the 120x40 heads view; deadlines remain four seconds per input."""
-    identity = (1, 0, len("HYDRA /"), "HYDRA /")
+    """Start on Work at 120x40; deadlines remain four seconds per input.
+
+    navigation: Inbox (2), or from an attached agent: close its client and
+    leave (the conversation shows the latest output again); search: back to
+    Work (1) and filter the list, echoed in the status line; resize to 100x32
+    moves that status line up; cancel: Esc clears the filter and the live
+    status chip returns."""
+    identity = IDENTITY
     tag = "I10SEARCH104729"
     plan = (
         (
             0,
             "navigation",
-            b"\x1cx\x1b" if from_attachment else b"\n",
-            (1, 1, 6, "[Work]") if from_attachment else (7, 1, 9, "[Details]"),
+            b"\x1cx\x1b" if from_attachment else b"2",
+            WORK_PREVIEW if from_attachment else INBOX,
         ),
         (
             4,
             "search",
-            f"/{tag}\n".encode(),
-            (1, 38, len(f"Search: {tag}"), f"Search: {tag}"),
+            f"1/{tag}\n".encode(),
+            (1, 38, len(f"Filter: {tag}"), f"Filter: {tag}"),
         ),
-        (8, "resize", b"", (98, 2, 1, "+")),
-        # The status line reads "Live" for current data (it said "Current snapshot" before 2.9).
-        (12, "cancel", b"\x1b", (1, 30, len("Live"), "Live")),
+        (8, "resize", b"", (1, 30, len(f"Filter: {tag}"), f"Filter: {tag}")),
+        (12, "cancel", b"\x1b", (2, 30, len("* live"), "* live")),
     )
     actions: list[dict[str, Any]] = []
     for offset, identifier, keys, response in plan:
