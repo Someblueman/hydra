@@ -357,6 +357,14 @@ void pair(struct app *app, const char *left_label, const char *left, struct kt_s
           const char *right_label, const char *right, struct kt_style right_tone);
 
 void render_head_detail(struct app *app);
+/* Details facts from what the control centre holds (detail_links.c): the
+ * objective a head was started with ("" when none was recorded); the run
+ * step that targets a head and the unfinished steps it waits on; and the
+ * status the agent exited with, once Hydra's launcher said in the head's
+ * terminal that it left (-1 while nothing says so). */
+const char *head_objective(struct app *app, const struct head *head);
+bool head_step_link(const struct app *app, const struct head *head, char *out, size_t size);
+int head_agent_exit(struct app *app, const struct head *head);
 /* Internal views borrow app; destroy functions release their owned view state. */
 bool native_terminal_focused(struct app *app);
 /* The agent-pane layer (terminal_input.c): whether a key or mouse event is

@@ -37,17 +37,39 @@ static void detail_reported(struct app *app, const struct head *head, const char
     else labelled_pair(app, "Reported", reported, tone, "Group", group, KT_BASE);
 }
 
+/* The terminal's state: running, unless Hydra's launcher said in it that
+ * the agent left, which turns the pane into a plain shell. */
+static void detail_session(struct app *app, const struct head *head, const char *agent) {
+    char session[96];
+    int exited = !strcmp(status_label(head), "running") ? head_agent_exit(app, head) : -1;
+    if (exited >= 0) {
+        snprintf(session, sizeof(session), "agent exited (status %d); the terminal is a shell", exited);
+        labelled_pair(app, "Agent", agent, KT_BASE, "Session", session, KT_WARNING);
+        return;
+    }
+    snprintf(session, sizeof(session), "%s%s", status_label(head), !strcmp(status_label(head), "running") ? " (the live terminal)" : "");
+    labelled_pair(app, "Agent", agent, KT_BASE, "Session", session, status_tone(head));
+}
+
+/* A run that works on this head without having created it: its step here
+ * and the unfinished steps that step waits for (the workflow link that
+ * coordination showed), high on the page so a short screen keeps it. */
+static void detail_workflow(struct app *app, const struct head *head) {
+    char link[1024];
+    if (head_step_link(app, head, link, sizeof(link)))
+        labelled(app, "Workflow", link, strstr(link, "; waits for ") ? KT_WARNING : KT_BASE);
+}
+
 static void detail_identity(struct app *app, const struct head *head) {
     char agent[TEXT + 96], group[TEXT + 64];
+    const char *objective = head_objective(app, head);
     size_t record, owner = head_owner_run(app, head, &record);
     head_agent_text(app, head, agent, sizeof(agent));
     if (head_headless(head)) labelled_pair(app, "Agent", agent, KT_BASE, "Terminal", "headless (no terminal)", KT_MUTED);
-    else {
-        char session[96];
-        snprintf(session, sizeof(session), "%s%s", status_label(head), !strcmp(status_label(head), "running") ? " (the live terminal)" : "");
-        labelled_pair(app, "Agent", agent, KT_BASE, "Session", session, status_tone(head));
-    }
+    else detail_session(app, head, agent);
+    if (objective[0]) labelled(app, "Objective", objective, KT_BASE);
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
+    else detail_workflow(app, head);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
 }

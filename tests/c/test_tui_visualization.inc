@@ -64,6 +64,31 @@ static void test_visualization_short(const char *tui, const char *hydra, const c
     close_session(&session);
 }
 
+/* When the agent leaves its terminal, Hydra's launcher says so in it and
+ * the pane becomes a shell; the head's Details then report that, not a
+ * running agent in "the live terminal". */
+static void test_details_agent_exited(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char capture[] = "/tmp/hydra-exited-capture.XXXXXX";
+    int fd = mkstemp(capture);
+    result(fd >= 0, "create the pane text of an agent that exited");
+    if (fd < 0) return;
+    close(fd); unlink(capture);
+    result(write_marker_file(capture, "Not logged in. Run: codex login\n"
+                             "Hydra: codex exited with status 1; this pane is now a shell for head feature-live.\n$ \n"),
+           "write the pane text of an agent that exited");
+    setenv("FAKE_TMUX_CAPTURE", capture, 1);
+    result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open the exited-agent terminal");
+    unsetenv("FAKE_TMUX_CAPTURE");
+    (void)wait_for_model(&session);
+    result(wait_for_marker(&session, "agent exited (status 1);", 6000) && !session_visible(&session, "(the live terminal)"),
+           "Details say the agent exited and the terminal is a shell, not that it is running");
+    write_input(session.master, "q", 1);
+    result(wait_for_exit(&session) == 0, "the exited-agent terminal exits normally");
+    close_session(&session);
+    unlink(capture);
+}
+
 static void test_visualization_refresh(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     char marker[] = "/tmp/hydra-viz-refresh.XXXXXX";

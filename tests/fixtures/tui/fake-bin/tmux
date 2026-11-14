@@ -38,6 +38,8 @@ case "${1:-}" in
         printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | grep -Fqx "$wanted"
         ;;
     capture-pane)
+        # FAKE_TMUX_CAPTURE names a file whose text is every pane's.
+        if [ -f "${FAKE_TMUX_CAPTURE:-}" ]; then cat "$FAKE_TMUX_CAPTURE"; exit 0; fi
         printf 'pane text q :kill \033[2J remains display-only\n'
         ;;
     *) exit 1 ;;

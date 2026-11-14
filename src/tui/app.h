@@ -156,6 +156,9 @@ struct app {
     size_t preview_back;
     /* The head whose output preview_text holds, or is being read for. */
     char preview_head[TEXT];
+    /* The objective the head named by objective_head was started with,
+     * read once from its task file for Details (detail_links.c). */
+    char objective_head[TEXT], objective[1024];
     /* Whether the last poll wanted the preview: the conversation going back
      * to the latest output (a view closed, Work shown again) reads it now. */
     bool preview_wanted;

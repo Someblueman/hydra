@@ -237,6 +237,18 @@ done
 "$tui" --headless-fixture "$fixture" --size 80x24 --view heads --keys '?' > "$test_root/help-narrow.out"
 contains 'your own.' "$test_root/help-narrow.out" "the help dialog's keys-file sentence is whole at 80 columns"
 
+# Details name the objective a head was started with (its task file beside
+# its record) and a run whose step works on the head without having
+# created it, with the unfinished step that step waits for.
+mkdir -p "$test_root/head-live"
+printf 'Task: live\nBranch: feature-live\nObjective: Add a greeting to the project\n\nWork on it.\n' > "$test_root/head-live/task"
+awk -v dir="$test_root/head-live" 'BEGIN {FS = OFS = "\t"} $1 == "H" && $2 == "feature-live" {$24 = dir} {print}' "$fixture" > "$test_root/objective.tsv"
+"$tui" --headless-fixture "$test_root/objective.tsv" --workflow-fixture "$repo_root/tests/fixtures/tui/workflow-handoff.tsv" \
+    --size 80x24 --view detail > "$test_root/objective.out"
+contains 'Objective   Add a greeting to the project' "$test_root/objective.out" "Details show the objective the head was started with"
+contains 'Workflow    step handoff of run handoff, queued;' "$test_root/objective.out" "Details name the run step that works on the head"
+contains 'waits for approval (waiting-approval on' "$test_root/objective.out" "Details name the step it waits for and where that runs"
+
 # Column separators and panel edges must be invariant across varying values.
 awk 'BEGIN {FS = OFS = "\t"}
 $1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}
