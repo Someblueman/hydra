@@ -8,6 +8,7 @@ void new_task_attach(struct app *app) {
     for (size_t i = 0; i < app->model.head_count; i++) {
         if (strcmp(app->model.heads[i].branch, app->pending_task)) continue;
         app->selected = i;
+        app->run_row = app->task_row = false;
         app->search[0] = '\0';
         app->pending_task[0] = '\0';
         enter_view(app, 7);
@@ -62,12 +63,16 @@ static bool task_name_valid(void *context, const char *text, char *error, size_t
     return true;
 }
 
-/* One form: the task, its agent and its objective. */
-static bool task_form(struct app *app, char name[TEXT], char profile[TEXT], char *objective, size_t objective_size) {
+/* How the agent starts: with a plan agreed first, or on the objective. */
+static const char *const task_starts[] = {"Plan first", "Just do it"};
+
+/* One form: the task, its agent, its objective and how the agent starts
+ * (*direct: "Just do it"). */
+static bool task_form(struct app *app, char name[TEXT], char profile[TEXT], char *objective, size_t objective_size, bool *direct) {
     struct task_agents agents;
     struct task_name_check check = {"Becomes the branch and worktree name"};
     struct kt_textinput name_input, objective_input;
-    struct kt_field fields[3];
+    struct kt_field fields[4];
     if (!task_agents(app, &agents)) return false;
     memset(fields, 0, sizeof(fields));
     kt_textinput_init(&name_input, name, TEXT);
@@ -78,8 +83,11 @@ static bool task_form(struct app *app, char name[TEXT], char profile[TEXT], char
     fields[1].kind = KT_FIELD_CHOICE; fields[1].label = "Agent"; fields[1].options = agents.options;
     fields[1].option_count = agents.count;
     fields[2].kind = KT_FIELD_TEXT; fields[2].label = "Objective"; fields[2].input = &objective_input;
+    fields[3].kind = KT_FIELD_CHOICE; fields[3].label = "Start"; fields[3].options = task_starts; fields[3].option_count = 2;
+    fields[3].hint = "Plan first: nothing is implemented until you approve a plan. Just do it: the agent starts on the objective.";
     if (dialog_form_body(app, "New task", "Hydra creates the branch, its worktree and a terminal, and starts the agent there.",
-                         fields, 3) != 0) return false;
+                         fields, 4) != 0) return false;
+    *direct = fields[3].choice == 1;
     profile[0] = '\0';
     if (fields[1].choice > 0 && fields[1].choice < agents.count) copy_text(profile, TEXT, agents.names[fields[1].choice]);
     return true;
@@ -122,6 +130,28 @@ static bool planning_prompt(const char *name, const char *branch, const char *pr
     return n > 0 && (size_t)n < size;
 }
 
+/* "Just do it": the objective as the agent's first instruction, kept to its
+ * own worktree and branch. */
+static bool work_prompt(const char *name, const char *branch, const char *objective, char *out, size_t size) {
+    char source[4096];
+    int n;
+    if (!getcwd(source, sizeof(source))) copy_text(source, sizeof(source), "the checkout where Hydra runs");
+    n = snprintf(out, size,
+        "Task: %s\nBranch: %s\nObjective: %s\n\n"
+        "Work on this in this worktree and commit on branch %s when it is done. "
+        "Never change the user's checkout at %s or any other branch.",
+        name, branch, objective, branch, source);
+    return n > 0 && (size_t)n < size;
+}
+
+/* The agent's first instruction: the planning handoff, or (Just do it) the
+ * objective; none when there is nothing to say. */
+static bool first_prompt(const char *name, const char *branch, const char *profile, const char *objective, bool direct,
+                         char *out, size_t size) {
+    if (direct) return objective[0] && work_prompt(name, branch, objective, out, size);
+    return (objective[0] || strcmp(profile, "none")) && planning_prompt(name, branch, profile, objective, out, size);
+}
+
 static void task_started(struct app *app, const char *name, const char *branch) {
     int n = -1;
     if (strcmp(name, branch))
@@ -138,7 +168,8 @@ void new_task_action(struct app *app) {
     char *init[] = {(char *)app->hydra, "init", NULL, NULL, NULL};
     char *argv[10];
     size_t count = 0;
-    if (!task_form(app, name, profile, objective, sizeof(objective)) || !name[0]) return;
+    bool direct = false;
+    if (!task_form(app, name, profile, objective, sizeof(objective), &direct) || !name[0]) return;
     if (!task_branch_name(name, branch, sizeof(branch))) {
         copy_text(app->notice, sizeof(app->notice), "Task name needs a letter or digit to name its branch; nothing started");
         return;
@@ -153,7 +184,7 @@ void new_task_action(struct app *app) {
     argv[count++] = "spawn";
     argv[count++] = branch;
     if (profile[0]) { argv[count++] = "--profile"; argv[count++] = profile; }
-    if ((objective[0] || strcmp(profile, "none")) && planning_prompt(name, branch, profile, objective, planning, sizeof(planning))) {
+    if (first_prompt(name, branch, profile, objective, direct, planning, sizeof(planning))) {
         argv[count++] = "--prompt"; argv[count++] = planning;
     }
     argv[count] = NULL;

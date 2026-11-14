@@ -755,6 +755,27 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(strstr(spawned, "hydra plan schema") != NULL && strstr(spawned, "hydra plan propose <plan.json>") != NULL &&
            strstr(spawned, "never approve or run a plan yourself") != NULL && strstr(spawned, "--asset") == NULL,
            "planning handoff teaches the short plan form, not the expert schema");
+    /* "Just do it" (the last field, one option right) gives the agent the
+     * objective itself instead of the planning handoff. */
+    write_input(session.master, ":", 1U);
+    (void)wait_for_marker(&session, "Commands", 1000);
+    write_input(session.master, "spawn\n", 6U);
+    (void)wait_for_marker(&session, "New task", 1000);
+    write_input(session.master, "Direct Task\t\tfix the totals\t\033[C", 31U);
+    result(wait_for_marker(&session, "Just do it", 1000), "the new task form offers Plan first or Just do it");
+    write_input(session.master, "\n", 1U);
+    (void)wait_for_marker(&session, "started on branch direct-task", 2000);
+    spawned[0] = '\0';
+    spawn_file = fopen(spawn_path, "r");
+    if (spawn_file != NULL) {
+        size_t length = fread(spawned, 1U, sizeof(spawned) - 1U, spawn_file);
+        spawned[length] = '\0';
+        fclose(spawn_file);
+    }
+    (void)unlink(spawn_path);
+    result(strstr(spawned, "--prompt\nTask: Direct Task\nBranch: direct-task\nObjective: fix the totals\n") != NULL &&
+           strstr(spawned, "planning handoff") == NULL && strstr(spawned, "Never change the user's checkout") != NULL,
+           "Just do it hands the agent the objective, kept to its worktree");
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);
