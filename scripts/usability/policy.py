@@ -129,8 +129,11 @@ def cell_affordances(line: str, row: int, source: str) -> list[Affordance]:
             pending = []
     if key_led >= 2 or source == "footer" or listed:
         return found
-    # One pair: accept only "x  label" (two spaces after the key).
-    return [a for a in found if re.search(rf"(^|\s){re.escape(a.keys[-1])}\s{{2,}}", text)]
+    # One pair: accept only "x  label" (two spaces after the key, or after
+    # a token naming two keys such as "[/]").
+    lead = re.match(r"(\S+)\s{2,}", text)
+    return [a for a in found if re.search(rf"(^|\s){re.escape(a.keys[-1])}\s{{2,}}", text)
+            or (lead and key_group(lead.group(1)) == a.keys)]
 
 
 PRESS = re.compile(r"[Pp]ress (\S+)(?: or (\S+))? (?:to|for) ([^.;:]+)")
@@ -197,7 +200,7 @@ class Reading:
     dialog: list[str] = field(default_factory=list)
 
 
-DIALOG_TOP = re.compile(r"^(\s*)[+\u256d][-\u2500] (.+?) [-\u2500]+[+\u256e]")
+DIALOG_TOP = re.compile(r"[+\u256d][-\u2500] (.+?) [-\u2500]+[+\u256e]")
 DIALOG_BOTTOM = re.compile(r"[+\u2570][-\u2500]+ (.+?) [-\u2500][+\u256f]")
 
 
@@ -205,16 +208,16 @@ def dialog(rows: list[str]) -> tuple[str, list[str], str] | None:
     """The open dialog: its title, its inside rows and the key hints in its
     bottom edge."""
     for top, line in enumerate(rows):
-        match = DIALOG_TOP.match(line)
+        match = DIALOG_TOP.search(line)  # the screen behind may show left of it
         if not match:
             continue
-        left = len(match.group(1))
+        left = match.start()
         right = match.end() - 1  # the top right corner; the screen may go on beyond the dialog
         for bottom in range(top + 1, len(rows)):
             hints = DIALOG_BOTTOM.search(rows[bottom][left:right + 1])
             if hints:
                 inside = [r[left + 1:right].strip() for r in rows[top + 1:bottom]]
-                return match.group(2), inside, hints.group(1)
+                return match.group(1), inside, hints.group(1)
     return None
 
 

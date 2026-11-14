@@ -16,7 +16,7 @@ from typing import Callable
 
 from usability.journey import LEFT_INPUT, TOP_BAR, TYPING, Journey, prose, sessions_of
 from usability.journeys_plan import finished_run, planning_converse, planning_prepare, runs
-from usability.policy import Reading, form_fields, key_bytes, learned_tab_method, page_strips, rank, read_screen
+from usability.policy import Reading, dialog, form_fields, key_bytes, learned_tab_method, page_strips, rank, read_screen
 
 Predicate = Callable[[str], bool]
 
@@ -303,7 +303,8 @@ def remove_verify(j: Journey) -> None:
 
 
 def removal_consequences(j: Journey, screen: str) -> None:
-    text = prose(screen)
+    found = dialog(screen.splitlines())
+    text = " ".join(" ".join(found[1]).split()) if found else ""
     if "Remove sample?" in text and not getattr(j, "_removal_seen", False):
         j._removal_seen = True  # type: ignore[attr-defined]
         for phrase in ("Closes its terminal", "deletes its worktree", "The branch sample is kept"):

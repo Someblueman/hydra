@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from usability.journey import TYPING, Journey, page, prose
+from usability.journey import TYPING, Journey, column_prose, page, prose
 
 JARGON = ("sha256", "json", "schema", "envelope", "dag", "argv", "stdin", "instance_", "head_", "project_", "fifo")
 COMMAND = re.compile(r"\bhydra ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?")
@@ -27,6 +27,9 @@ class Concept:
     leave: Callable[[Journey], None] = lambda j: None
     plain: bool = True
     notes: list[str] = field(default_factory=list)
+    # A label on the pane's left edge: its text is read from that column
+    # rightwards, without the panes beside it.
+    column: str = ""
 
 
 def help_index(j: Journey) -> dict[str, str]:
@@ -71,7 +74,7 @@ def settled(j: Journey, screen: str) -> str:
 def evaluate(j: Journey, concept: Concept, index: dict[str, str]) -> dict:
     screen = settled(j, concept.reach(j))
     j.proof.append({"comprehension": concept.name, "entry": concept.entry, "at_ns": time.monotonic_ns()})
-    text = prose(screen)
+    text = column_prose(screen, concept.column) if concept.column else prose(screen)
     lower = text.lower()
     result = {"concept": concept.name, "entry": concept.entry, "facets": {}, "columns": j.columns}
     for facet, phrases in concept.facets.items():
@@ -208,12 +211,12 @@ CONCEPTS = [
         "purpose": ["Claims are files a head means to change"],
         "when it helps": ["Hydra flags overlap"],
         "example": ["0 claims"],
-    }, "head", back),
+    }, "head", back, column="Agent"),
     Concept("live session vs. completed work", "Details of a running head", reach_details, {
         "purpose": ["(the live terminal)"],
         "when it helps": ["declared when done"],
         "example": ["done or blocked"],
-    }, "head", back, plain=False),
+    }, "head", back, plain=False, column="Agent"),
     Concept("interruption", "attached agent input", reach_attached, {
         "purpose": ["keys go to the agent"],
         "consequences before acting": ["keeps it running"],
