@@ -206,6 +206,24 @@ static bool keys_over_overlays(void) {
     return ok;
 }
 
+/* q closes the output viewer as Esc does and never quits Hydra from inside
+ * it; the viewer's footer does not offer quitting. */
+static bool q_closes_output(void) {
+    struct fixture f;
+    bool ok = fixture_open(&f);
+    if (!ok) { fixture_close(&f); return false; }
+    one_head(f.app);
+    show_result(f.app, "REMOVAL OUTPUT", "untracked files\n");
+    /* An arrow scrolls nothing here; it only draws the viewer. */
+    type(&f, "\033[A");
+    ok = f.app->result_open && kt_test_contains(f.test, "REMOVAL OUTPUT") && !kt_test_contains(f.test, "q quit");
+    type(&f, "q");
+    kt_test_advance(f.test, 1);
+    ok = ok && !f.app->result_open && kt_test_running(f.test) && f.app->view == 7;
+    fixture_close(&f);
+    return ok;
+}
+
 /* A prompt waits inside the key handler while the loop runs: what follows in
  * the input is its text, a paste is text and cannot submit (its line break
  * is a blank), Enter submits. With nothing left to read it gives up rather
@@ -269,6 +287,7 @@ int main(void) {
         {stalled_sequence, "a stalled escape sequence is neither Escape nor the keys of its tail"},
         {escape_then_key, "Escape acts after 20 ms; Escape then a key handles both"},
         {keys_over_overlays, "arrow and page keys scroll the result overlay and the help, which Esc closes"},
+        {q_closes_output, "q closes the output viewer and does not quit"},
         {prompt_takes_input, "a prompt reads its text through the loop; paste cannot submit"},
         {dialogs_default_to_cancel, "a question defaults to Cancel and Esc closes a form without submitting"},
         {frames_are_few, "a burst of keys is one frame; a resize erases nothing"}

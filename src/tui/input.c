@@ -207,10 +207,9 @@ static void interactive_prompt(struct app *app, char prefix) {
 }
 
 static void result_key(struct app *app, char key) {
-    if (key == '\r' || key == '\n' || key == ' ' || key == 27) { app->result_open = false; app->notice[0] = '\0'; }
+    if (key == '\r' || key == '\n' || key == ' ' || key == 27 || key == 'q') { app->result_open = false; app->notice[0] = '\0'; }
     else if (key == 'j') app->result_scroll++;
     else if (key == 'k' && app->result_scroll) app->result_scroll--;
-    else if (key == 'q') app->running = false;
 }
 
 /* j / k scroll help; any other key closes it, and acts unless it was the

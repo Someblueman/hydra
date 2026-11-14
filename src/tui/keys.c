@@ -52,7 +52,9 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_RESULT_PAGE_UP, KEY_SCOPE_RESULT, "output.page-up", "page", "Output", 3),
     ROW(KEY_RESULT_PAGE_DOWN, KEY_SCOPE_RESULT, "output.page-down", "page", "Output", 3),
     ROW(KEY_RESULT_CLOSE, KEY_SCOPE_RESULT, "output.close", "close", "Output", 9),
-    ROW(KEY_RESULT_QUIT, KEY_SCOPE_RESULT, "output.quit", "quit", "Output", 8),
+    /* q closes the viewer like Esc; Hydra never quits from inside it. The
+     * name stays so keys files of earlier versions still load. */
+    ROW(KEY_RESULT_QUIT, KEY_SCOPE_RESULT, "output.quit", "close", "Output", 8),
     ROW(KEY_HELP_UP, KEY_SCOPE_HELP, "help.up", "scroll", "Help", 5),
     ROW(KEY_HELP_DOWN, KEY_SCOPE_HELP, "help.down", "scroll", "Help", 5),
     ROW(KEY_HELP_PAGE_UP, KEY_SCOPE_HELP, "help.page-up", "page", "Help", 3),

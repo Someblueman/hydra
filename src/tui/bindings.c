@@ -133,7 +133,7 @@ bool key_applies(const struct app *app, enum key_action action) {
 static uint32_t action_key(enum key_action action) {
     static const uint32_t keys[KEY_ACTIONS] = {
         [KEY_RESULT_UP] = 'k', [KEY_RESULT_DOWN] = 'j', [KEY_RESULT_PAGE_UP] = KT_KEY_PAGE_UP,
-        [KEY_RESULT_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_RESULT_CLOSE] = 27, [KEY_RESULT_QUIT] = 'q',
+        [KEY_RESULT_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_RESULT_CLOSE] = 27, [KEY_RESULT_QUIT] = 27,
         [KEY_HELP_UP] = 'k', [KEY_HELP_DOWN] = 'j', [KEY_HELP_PAGE_UP] = KT_KEY_PAGE_UP,
         [KEY_HELP_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_HELP_CLOSE] = 27,
         [KEY_TASK_NEW] = 'n', [KEY_HEAD_REMOVE] = 'x', [KEY_HEAD_MARK] = ' ', [KEY_HEAD_MARK_ALL] = 'A',
