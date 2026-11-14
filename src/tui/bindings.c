@@ -27,8 +27,8 @@ const uint32_t key_chains[KEY_CHAINS] = {
     [KEY_CHAIN_HOSTS_SETUP] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_HOSTS_SETUP | KEY_SCOPE_HOSTS_PANES,
     /* Stats: Tab moves between its panes and w is its workflow filter. */
     [KEY_CHAIN_STATISTICS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEW_ARROWS | KEY_SCOPE_STATISTICS,
-    [KEY_CHAIN_INBOX] = CHAIN_BASE | KEY_SCOPE_INBOX | KEY_SCOPE_INBOX_PAGES,
-    [KEY_CHAIN_REVIEW] = CHAIN_BASE | KEY_SCOPE_REVIEW | KEY_SCOPE_INBOX_PAGES,
+    [KEY_CHAIN_INBOX] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_INBOX | KEY_SCOPE_INBOX_PAGES,
+    [KEY_CHAIN_REVIEW] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_REVIEW | KEY_SCOPE_INBOX_PAGES,
     [KEY_CHAIN_HELP] = KEY_SCOPE_TERMINAL | KEY_SCOPE_HELP,
     [KEY_CHAIN_RESULT] = KEY_SCOPE_TERMINAL | KEY_SCOPE_RESULT,
     [KEY_CHAIN_STATS_FILTER] = KEY_SCOPE_TERMINAL | KEY_SCOPE_STATS_FILTER,
@@ -133,8 +133,7 @@ static uint32_t action_key(enum key_action action) {
         [KEY_VIEWS_LEFT] = KT_KEY_LEFT, [KEY_VIEWS_RIGHT] = KT_KEY_RIGHT,
         [KEY_VIEW_1] = '1', [KEY_VIEW_2] = '2', [KEY_VIEW_3] = '3', [KEY_VIEW_4] = '4', [KEY_VIEW_5] = '5',
         [KEY_VIEW_6] = '6', [KEY_VIEW_7] = '7', [KEY_VIEW_8] = '8', [KEY_VIEW_9] = '9',
-        [KEY_VIEW_CYCLE] = 'v', [KEY_VIEW_WORKSPACE] = 'W', [KEY_VIEW_OVERVIEW] = 'o', [KEY_VIEW_WORKFLOWS] = 'w',
-        [KEY_VIEW_HOSTS] = 'H', [KEY_VIEW_ATTENTION] = 'I', [KEY_VIEW_STATS] = 'D', [KEY_THEME] = 't',
+        [KEY_THEME] = 't',
         [KEY_PALETTE] = ':', [KEY_BACK] = 27, [KEY_HELP] = '?', [KEY_QUIT] = 'q'};
     return action < KEY_ACTIONS ? keys[action] : 0;
 }
@@ -155,6 +154,7 @@ void key_perform(struct app *app, enum key_action action) {
     if (action == KEY_REFRESH) { refresh_all(app); return; }
     if (action == KEY_PALETTE) { palette_open(app); return; }
     if (action >= KEY_VIEW_1 && action <= KEY_VIEW_4) { enter_screen(app, (int)(action - KEY_VIEW_1)); return; }
+    if (screen_alias(app, action)) return;
     if (work_perform(app, action)) return;
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) { statistics_perform(app, action); return; }
     if (inbox_perform(app, action)) return;

@@ -122,7 +122,7 @@ static bool review_start(struct session *session, const char *tui, const char *h
     if (!result(open_session(session, tui, hydra, fixture->directory, width, height) == 0, "open review PTY")) return false;
     result(wait_for_raw(session), "review terminal enters raw mode");
     (void)wait_for_model(session);
-    write_input(session->master, "I", 1U);
+    write_input(session->master, "2", 1U);
     /* The status line counts the items once the attention read answered;
      * the section headings are on the first rows at every size. */
     if (!result(wait_for_markers(session, "Decisions 2", "items need you", 5000), "review candidates load")) return false;

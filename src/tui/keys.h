@@ -16,8 +16,9 @@ struct kt_event;
  * TERMINAL: Hydra's own commands while an agent pane may hold input.
  * VIEWS: Tab changing screens (retired: Tab moves between panes);
  * VIEW_ARROWS: the arrows change screens (Stats).
- * JUMPS: the letters that open a screen, which Inbox and its review leave to
- * their own keys. STATS_FILTER: the keys while a Stats filter is typed.
+ * JUMPS: the letters of earlier releases that open a screen (kept for one
+ * release, help only) and t for the theme. STATS_FILTER: the keys while a
+ * Stats filter is typed.
  * INBOX: the Inbox list; INBOX_PAGES: its detail pages, there and on the
  * review pages (REVIEW). WORK: every pane of Work; WORK_LIST its list,
  * WORK_CONVERSATION the conversation, WORK_VIEWPORT a pane that scrolls

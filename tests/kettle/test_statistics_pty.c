@@ -77,14 +77,14 @@ static void runs_filter_evidence(struct kt_session *p) {
     CHECK(!PHAS("Run evidence"), "the second Esc closes the evidence");
 }
 
-/* D leaves and comes back with Work as it was (the selection and the
- * focused pane); g opens the run's Run page in Work and Esc comes back; a
+/* D (the old Stats toggle) leaves for Work as it was (the selection and the
+ * focused pane) and 4 comes back; g opens the run's Run page in Work and Esc comes back; a
  * click selects a row. */
 static void runs_jumps(struct kt_session *p) {
     PS("D");
     PU("Heads \xe2\x94\x80");
     CHECK(PHAS("feature-stale \xe2\x94\x80") && PHAS("esc back"), "Work keeps its selection and focus");
-    PS("D");
+    PS("4");
     PU("Workflow runs");
     PS("0/visualization\r");
     PU("1 of 1" DOT "newest first");
@@ -144,7 +144,7 @@ static void local_statistics(void) {
     S("j\033[Zjj");
     kt_pump(&s, .2);
     CHECK(HAS("feature-stale \xe2\x94\x80") && HAS("esc back"), "Work selection and focus setup");
-    S("D");
+    S("4");
     runs_overview(&s);
     runs_filter_evidence(&s);
     runs_jumps(&s);
@@ -224,7 +224,7 @@ static void metric_pages(void) {
     U("failed / 2");
     S("D");
     U("Heads \xe2\x94\x80");
-    S("D");
+    S("4");
     U("Owner recoveries");
     U("known 2/2");
     kt_close(&s, "q", 0, 0);
@@ -234,7 +234,7 @@ static void metric_pages(void) {
 /* Hosts says the same of each host: the failed one has unknown heads (--),
  * the empty one that responded has 0. */
 static void hosts_heads(struct kt_session *p) {
-    PS("H");
+    PS("3");
     PU("Observed 3");
     PU("List response: responded");
     CHECK(row_has(p, "offline", "disconnected") && row_has(p, "offline", "-- heads"), "a failed host has unknown heads");
@@ -365,7 +365,7 @@ static void session_statistics(void) {
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-sessions.tsv", 1), "session fixture environment");
     kt_open_terminal(&s, argv, 140, 40, NULL);
     U("Heads \xe2\x94\x80");
-    S("D");
+    S("4");
     session_overview(&s);
     session_filters(&s);
     session_evidence(&s);

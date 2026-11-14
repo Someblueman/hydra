@@ -75,7 +75,7 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     result(wait_for_screen_text(&session, "builder/feature-", 80, 24, 3000), "the unified list fits 80x24");
     write_input(session.master, "t", 1U);
     if (!result(wait_for_screen_text(&session, "q quit", 80, 24, 3000), "hints stay visible at 80x24")) remote_dump(&session);
-    write_input(session.master, "I", 1U);
+    write_input(session.master, "2", 1U);
     result(wait_for_markers(&session, "Needs you", "Approve S-1: T-1", 6000), "Inbox reads the one local-and-remote stream");
     write_input(session.master, "\033", 1U);
     write_input(session.master, "q", 1U);
@@ -248,7 +248,7 @@ static void test_inbox_remote_decision(const char *tui, const char *hydra, const
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
     result(wait_for_marker(&session, "task_build", 6000), "the remote observation arrives before deciding");
-    write_input(session.master, "I", 1U);
+    write_input(session.master, "2", 1U);
     result(wait_for_markers(&session, "Approve implement: build-plan", "on builder", 4000), "a remote approval is a decision naming its host");
     /* The selected item's Summary sits beside the list and names its host. */
     result(wait_for_marker(&session, "Host        builder", 2000), "the first remote approval is selected");

@@ -95,9 +95,9 @@ static void launch(struct kt_session *s, int cols, int rows) {
     capture(s, "01-entry");
 }
 
-/* The ordinary control centre: H opens Hosts, A adds a host. */
+/* The ordinary control centre: 3 opens Hosts, A adds a host. */
 static void add_host(struct kt_session *s) {
-    kt_send(s, "H");
+    kt_send(s, "3");
     kt_until(s, "+ Add a host", 4);
     capture(s, "02-hosts");
     kt_send(s, "A");
@@ -269,7 +269,7 @@ static void changed_key(int cols, int rows) {
  * as an absolute path. */
 static void add_host_tilde(struct kt_session *s) {
     char config[4096];
-    kt_send(s, "H");
+    kt_send(s, "3");
     kt_until(s, "+ Add a host", 4);
     kt_send(s, "A");
     kt_until(s, "Hydra connects with your own SSH", 4);
@@ -325,7 +325,7 @@ static void edit_setup(int cols, int rows) {
     char expected[4096];
     reset(flags);
     launch(&s, cols, rows);
-    kt_send(&s, "H");
+    kt_send(&s, "3");
     kt_until(&s, "Check requirements: blocked", 6);
     kt_send(&s, "j");
     kt_until(&s, "e edit", 3);
@@ -357,7 +357,7 @@ static void remove_setup(int cols, int rows) {
     const char *flags[] = {"early", NULL};
     reset(flags);
     launch(&s, cols, rows);
-    kt_send(&s, "H");
+    kt_send(&s, "3");
     kt_until(&s, "Check requirements: blocked", 6);
     kt_send(&s, "jx");
     kt_until(&s, "Remove the setup record of ovh?", 6);
@@ -384,7 +384,7 @@ static void duplicate_name(int cols, int rows) {
     const char *flags[] = {"early", NULL};
     reset(flags);
     launch(&s, cols, rows);
-    kt_send(&s, "H");
+    kt_send(&s, "3");
     kt_until(&s, "Check requirements: blocked", 6);
     kt_send(&s, "A");
     kt_until(&s, "Hydra connects with your own SSH", 4);

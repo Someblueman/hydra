@@ -83,7 +83,7 @@ void select_tab(struct app *app, int direction) {
 }
 
 /* Esc after a screen's own steps: back to the screen a jump came from (o
- * from Inbox, g from Stats, the letters I, H and W), or nothing. */
+ * from Inbox, g from Stats, the old letters W, I, H and D), or nothing. */
 static void jump_return(struct app *app) {
     int back = app->jump_back - 1;
     if (app->view == 7 && app->inbox && app->inbox->jumped) { app->inbox->jumped = false; enter_view(app, 9); return; }
@@ -205,15 +205,6 @@ static void interactive_prompt(struct app *app, char prefix) {
     work_selection_changed(app);
 }
 
-static bool select_view(struct app *app, char key) {
-    switch (key) {
-        case 'I': screen_jump(app, 9); return true;
-        case 'W': screen_jump(app, 7); return true;
-        case 'H': screen_jump(app, 6); return true;
-        default: return false;
-    }
-}
-
 static void result_key(struct app *app, char key) {
     if (key == '\r' || key == '\n' || key == ' ' || key == 27) { app->result_open = false; app->notice[0] = '\0'; }
     else if (key == 'j') app->result_scroll++;
@@ -234,9 +225,22 @@ static bool overlay_key(struct app *app, char key) {
     return app->help && help_key(app, key);
 }
 
-static bool view_key(struct app *app, char key) {
-    if (key == 'D') { statistics_toggle(app); return true; }
-    return select_view(app, key);
+bool screen_alias(struct app *app, enum key_action action) {
+    static const struct { enum key_action old; int view; enum key_action now; const char *name; } aliases[] = {
+        {KEY_VIEW_WORKSPACE, 7, KEY_VIEW_1, "Work"}, {KEY_VIEW_ATTENTION, 9, KEY_VIEW_2, "Inbox"},
+        {KEY_VIEW_HOSTS, 6, KEY_VIEW_3, "Hosts"}, {KEY_VIEW_STATS, 8, KEY_VIEW_4, "Stats"}};
+    char old[32], now[32], text[128];
+    size_t i;
+    for (i = 0; i < sizeof(aliases) / sizeof(aliases[0]) && aliases[i].old != action; i++) {}
+    if (i == sizeof(aliases) / sizeof(aliases[0])) return false;
+    /* D was a toggle: on Stats it still goes back where it came from. */
+    if (action == KEY_VIEW_STATS && app->view == 8) { app->jump_back = 0; statistics_toggle(app); return true; }
+    screen_jump(app, aliases[i].view);
+    (void)key_text(app, action, old, sizeof(old));
+    if (!key_text(app, aliases[i].now, now, sizeof(now))) copy_text(now, sizeof(now), "its tab");
+    snprintf(text, sizeof(text), "%s is %s now; %s is its old key", aliases[i].name, now, old);
+    toast(app, KT_TOAST_INFO, text);
+    return true;
 }
 
 /* x: a local head is removed; a remote head's agent is interrupted on its host. */
@@ -297,7 +301,6 @@ static void head_key(struct app *app, char key) {
 void input_character(struct app *app, char key) {
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
-    if (view_key(app, key)) return;
     head_key(app, key);
 }
 

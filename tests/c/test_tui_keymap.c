@@ -241,6 +241,28 @@ static bool released_stats_names_load(void) {
     return ok;
 }
 
+/* The screen letters of earlier releases (W, I, H, D) stay for one release:
+ * live on every screen, never in a footer, listed in help as old keys. */
+static bool old_screen_keys(void) {
+    static const enum key_action old[] = {KEY_VIEW_WORKSPACE, KEY_VIEW_ATTENTION, KEY_VIEW_HOSTS, KEY_VIEW_STATS};
+    static const enum key_chain_id screens[] = {KEY_CHAIN_WORK_LIST, KEY_CHAIN_INBOX, KEY_CHAIN_HOSTS, KEY_CHAIN_STATISTICS};
+    struct app *app = app_new(false);
+    const struct native_keys *k = native_keys(app);
+    char text[1024];
+    size_t i, c;
+    bool ok = true;
+    for (i = 0; i < sizeof(old) / sizeof(old[0]); i++) {
+        const struct kt_binding *b = &k->bindings[old[i]];
+        ok = ok && b->priority < 0 && strstr(b->label, "(old key)") != NULL;
+        for (c = 0; c < sizeof(screens) / sizeof(screens[0]); c++) ok = ok && (b->scope & key_chains[screens[c]]);
+    }
+    set_chain(app, 7, false, false);
+    ok = ok && footer_text(app, 140, text, sizeof(text)) && !strstr(text, "old key");
+    if (!ok) fprintf(stderr, "old screen keys: %s\n", text);
+    free(app);
+    return ok;
+}
+
 int main(void) {
     result(chains_unique(false), "no key has two meanings within a scope chain (local)");
     result(chains_unique(true), "no key has two meanings within a scope chain (fleet)");
@@ -252,6 +274,7 @@ int main(void) {
     result(old_keys_file_loads(), "a keys file with the first version's names still loads");
     result(released_stats_names_load(), "a 3.0 keys file with the retired Statistics names still loads");
     result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics; retired rows are live nowhere");
-    printf("Passed: %d checks, Failed: %d\n", 10 - failures, failures);
+    result(old_screen_keys(), "the old screen letters work on every screen, stay out of the footer and are help's old keys");
+    printf("Passed: %d checks, Failed: %d\n", 11 - failures, failures);
     return failures ? 1 : 0;
 }

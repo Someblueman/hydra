@@ -143,7 +143,7 @@ int main(void) {
     deadline = kt_now() + 8;
     while (kt_now() < deadline && !kt_contains(&s, "stale") && !kt_contains(&s, "STALE"))
         kt_pump(&s, .25);
-    kt_send(&s, "H");
+    kt_send(&s, "3");
     kt_pump(&s, .4);
     CHECK(kt_contains(&s, "stale") || kt_contains(&s, "STALE"), "lost transport visible stale");
     CHECK(!kill(owner, SIGSTOP), "stop recorded owner");

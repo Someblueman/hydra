@@ -284,7 +284,7 @@ static bool measure_i1_start(struct i1_measurement *measurement, const char *tui
         close_session(&measurement->session);
         return false;
     }
-    write_input(measurement->session.master, "W", 1U);
+    /* Work, with its conversation pane, is the screen Hydra opens on. */
     measurement->workspace_ready = wait_for_marker_capture(&measurement->session, "Heads \xe2\x94\x80", 3000,
                                                             measurement->transcript, &measurement->transcript_used);
     if (!measurement->workspace_ready) return true;

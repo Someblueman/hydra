@@ -141,7 +141,7 @@ static void statistics(void) {
     int started, most;
     open_view(&s, "heads");
     U("feature-live", 5);
-    S("D");
+    S("4");
     U("Loading statistics...", PROMPT);
     keys_answered(&s, "Statistics");
     U("Latest attempts average", 6);

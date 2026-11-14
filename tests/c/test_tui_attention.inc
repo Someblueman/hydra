@@ -7,9 +7,9 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     if (!result(open_session(&session, tui, hydra, fake_bin, 100, 30) == 0, "open attention terminal")) return;
     result(wait_for_raw(&session), "attention terminal enters raw mode");
     (void)wait_for_model(&session);
-    write_input(session.master, "I", 1U);
+    write_input(session.master, "2", 1U);
     result(wait_for_markers(&session, "Decisions 3", "Ready for review 1", 3000),
-           "I opens Inbox, which lists the approval with the gates and the result to review");
+           "2 opens Inbox, which lists the approval with the gates and the result to review");
     result(wait_for_marker(&session, "Approve S-1: T-1", 1000), "Inbox rows read as sentences");
     result(wait_for_marker(&session, "attempt 1   new", 1000), "a new item says so");
     result(wait_for_markers(&session, "Agents 2", "Repairs 4", 1000), "stopped terminals and repairs are listed after decisions");
@@ -127,7 +127,7 @@ static void attention_seen_group(struct session *left, struct session *right, co
 static void attention_restart(const char *tui, const char *hydra, const char *fake_bin) {
     struct session third;
     if (!result(open_session(&third, tui, hydra, fake_bin, 100, 30) == 0, "open attention client after restart")) return;
-    (void)wait_for_raw(&third); (void)wait_for_model(&third); write_input(third.master, "I", 1U);
+    (void)wait_for_raw(&third); (void)wait_for_model(&third); write_input(third.master, "2", 1U);
     /* The seen store is read asynchronously, and the clients that just quit
      * may still hold its lock: refresh within one bounded deadline. */
     result(refresh_until(&third, "Seen 1", "Decisions 3", 8000), "seen markers survive a TUI restart");
@@ -150,7 +150,7 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     (void)setenv("HYDRA_TEST_ATTENTION_FAIL_FILE", fail, 1);
     if (!result(open_session(&left, tui, hydra, fake_bin, 100, 30) == 0, "open first attention client")) goto cleanup;
     if (!result(open_session(&right, tui, hydra, fake_bin, 100, 30) == 0, "open second attention client")) { close_session(&left); goto cleanup; }
-    result(wait_for_raw(&left) && wait_for_raw(&right), "both attention clients enter raw mode"); write_input(left.master, "I", 1U); write_input(right.master, "I", 1U);
+    result(wait_for_raw(&left) && wait_for_raw(&right), "both attention clients enter raw mode"); write_input(left.master, "2", 1U); write_input(right.master, "2", 1U);
     result(wait_for_markers(&left, "Decisions 3", "Ready for review 1", 3000) && wait_for_markers(&right, "Decisions 3", "Ready for review 1", 3000), "both clients list the approval and the result");
     write_input(left.master, "s", 1U); result(wait_for_markers(&left, "Seen, but still needs your decision", "Decisions 3", 1500), "a seen approval stays listed until decided"); result(wait_for_marker(&right, "step S-1   attempt 1   new", 1500), "second client is unchanged until it refreshes");
     drain_output(&left); unlink(done); write_reordered_fixture(path, reordered); attention_refresh(&left); result(wait_for_attention_order(&left), "pure reorder applies with unchanged sections"); write_input(left.master, "[", 1U); result(wait_for_marker(&left, "Task        T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "]", 1U);
@@ -189,7 +189,7 @@ static void test_attention_failure(const char *tui, const char *hydra, const cha
     setenv("HYDRA_ATTENTION_FIXTURE", path, 1);
     if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open failure attention terminal")) goto cleanup;
     result(wait_for_raw(&session), "failure attention terminal enters raw mode");
-    write_input(session.master, "I", 1U);
+    write_input(session.master, "2", 1U);
     result(wait_for_markers(&session, "Failed 1", "Check failed: plan-x", 3000), "a failed check is listed under Failed, named by its plan");
     result(wait_for_markers(&session, "step repo-check", "req-a, req-b", 1000), "the failure names its step and the requirements it decides");
     result(screen_row_order(&session, "Failed 1", "Ready for review 1"), "failures are listed before results to review");

@@ -415,6 +415,10 @@ void select_tab(struct app *app, int direction);
 void screen_jump(struct app *app, int view);
 /* Opens screen index (0 Work, 1 Inbox, 2 Hosts, 3 Stats). */
 void enter_screen(struct app *app, int index);
+/* The letters of earlier releases that opened a screen (W, I, H, D): a jump
+ * to the screen that took over, with a toast naming its key now. False for
+ * any other action. */
+bool screen_alias(struct app *app, enum key_action action);
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms);
 void action_capture_reap(struct app *app);
 void remove_heads_action(struct app *app);

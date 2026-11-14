@@ -829,6 +829,22 @@ contains 'builder --------' "$test_root/hosts-back.txt" 'Esc in Work returns to 
 contains 'Observed 3' "$test_root/hosts-back.txt" 'Esc returns to the Hosts list'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view hosts --keys "j$(printf '\r\033')1" > "$test_root/hosts-back-work.txt"
 if grep -Fq 'host builder' "$test_root/hosts-back-work.txt"; then assert_success 1 'returning to Hosts restores the location filter Work had'; else assert_success 0 'returning to Hosts restores the location filter Work had'; fi
+# The screen letters of earlier releases still open their screens for one
+# release, as a jump (Esc comes back), with a notice naming the key now.
+for alias_case in "I:2:Inbox:Needs you" "H:3:Hosts:Observed 3" "D:4:Stats:Sessions  Runs ---" "W:1:Work:Heads"; do
+    alias_key="${alias_case%%:*}"; alias_rest="${alias_case#*:}"; alias_now="${alias_rest%%:*}"; alias_rest="${alias_rest#*:}"
+    alias_name="${alias_rest%%:*}"; alias_marker="${alias_rest#*:}"
+    alias_from=inbox
+    [ "$alias_key" = W ] || alias_from=work
+    "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" \
+        --ascii --size 140x40 --view "$alias_from" --keys "$alias_key" > "$test_root/alias.txt"
+    contains "$alias_name is $alias_now now; $alias_key is its old key" "$test_root/alias.txt" "the old key $alias_key names $alias_now, the key of $alias_name now"
+    contains "$alias_marker" "$test_root/alias.txt" "the old key $alias_key opens $alias_name"
+done
+"$tui" --headless-fixture "$fixture" --ascii --size 140x40 --view work --keys "I$(printf '\033')" > "$test_root/alias-back.txt"
+contains 'Heads ---' "$test_root/alias-back.txt" 'Esc after an old screen key returns to the screen it left'
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v6.tsv" --ascii --size 140x40 --view work --keys DD > "$test_root/alias-toggle.txt"
+contains 'Heads ---' "$test_root/alias-toggle.txt" 'D on Stats still goes back, as the toggle it was'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
 contains '3 local / 3 remote' "$test_root/unified-overview.txt" 'the top bar counts remote work apart'
 contains '1 of 3 hosts disconnected' "$test_root/unified-overview.txt" 'the top bar names disconnected hosts'
