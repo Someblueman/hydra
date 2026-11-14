@@ -190,7 +190,13 @@ def recovery(j: Journey) -> None:
     # Review the failure the Inbox offers for this run; the result is the run's.
     select(j, "ux-greeting")
     j.keys(b"r")
-    screen = j.see("RESULT  ux-greeting")
+    screen = j.see_any("RESULT  ux-greeting", "r loads exact review")
+    if "r loads exact review" in screen:
+        # The item changed under the review while the run's records landed;
+        # the review says to load it again, and r does.
+        j.proof.append({"note": "the review asked to be loaded again", "at_ns": time.monotonic_ns()})
+        j.keys(b"r")
+        screen = j.see("RESULT  ux-greeting")
     j.expect("verdict FAILED" in screen, "The review states the run's verdict as failed")
     screen = review_section(j, "WHAT WAS CHECKED")
     rows = [line for line in screen.splitlines() if "greeting-committed" in line]

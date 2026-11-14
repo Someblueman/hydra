@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -84,11 +85,21 @@ def planning_converse(j: Journey, task: str, agent: str = "journey-provider",
     plan_page(j, "Plan ready")
 
 
+def plan_state(j: Journey, revision: int) -> str:
+    """Wait for the Plan page's state line to show the revision (not the
+    agent's "revision 2" in the conversation beside it)."""
+    assert j.observer
+    state = re.compile(rf"revision {revision}\W+(not validated yet|awaiting you)")
+    screen, _ = j.observer._visible(lambda screen, record: record["parser_complete"] and state.search(screen) is not None,
+                                    time.monotonic_ns() + int(15e9), f"the Plan page at revision {revision}")
+    return screen
+
+
 def approval(j: Journey, revision: int) -> str:
     """E on the Plan page: one dialog naming the exact revision it runs. A
     later revision is approved once the page shows it."""
     if revision > 1:
-        j.see(f"revision {revision}")
+        plan_state(j, revision)
     j.keys(b"E")
     return j.see_prose(f"revision {revision}?")
 

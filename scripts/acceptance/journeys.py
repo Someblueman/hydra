@@ -20,6 +20,7 @@ from usability.journeys_plan import (
     independent_digest,
     launched_digests,
     plan_page,
+    plan_state,
     provider_fixture,
     runs,
     talk,
@@ -76,7 +77,8 @@ def plan_from_conversation(j: Case) -> None:
              closed and not runs(j) and not launched_digests(j))
     # Revise the plan through the same conversation.
     talk(j, "revise", "PROPOSAL REVISION READY")
-    screen = plan_page(j, "revision 2")
+    plan_page(j)
+    screen = plan_state(j, 2)
     j.record("U17.b", "the revised proposal is a new revision shown as DRAFT / not validated yet",
              "DRAFT" in screen and "revision 2" in screen and "not validated yet" in screen)
     second = approval(j, 2)
