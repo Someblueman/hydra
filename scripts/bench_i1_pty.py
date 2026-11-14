@@ -16,54 +16,66 @@ from typing import Any
 from bench_i1_process import ProcessCounters
 
 
+# The Work screen's list: its titled rule ("Heads ---- 50  <selected head>
+# ----- latest output ..."), one row per head (the selected one barred with
+# ">" in ASCII or the block bar in UTF-8), then its footer ("50 heads").
+LIST_RULE = re.compile(r" Heads [-─]+ (\d+)  (\S+) [-─]")
+LIST_ROW = re.compile(r" ([> ▌])\S (\S+)(?: +\S+)* *")
+# A run row ("> * run NAME  1/4", collapsed or expanded) is not a head.
+LIST_RUN = re.compile(r" [> \u258c][>v\u25b8\u25be] \S run .*")
+LIST_FOOTER = re.compile(r"  (\d+) heads?(?: (?:/|·) .*)? *")
+
+
+def owned_name(shown: str, owned_branches: set[str]) -> str:
+    """The branch a list row names: a name cut with an ellipsis stands for
+    the one owned branch it begins; otherwise the name as shown."""
+    for ellipsis in ("...", "\u2026"):
+        if shown.endswith(ellipsis):
+            matches = [b for b in owned_branches if b.startswith(shown[: -len(ellipsis)])]
+            return matches[0] if len(matches) == 1 else shown
+    return shown
+
+
 def owned_heads_visible(
     screen: str, parser_complete: bool, owned_branches: set[str]
 ) -> bool:
     """Match an exact model total and owned viewport rows without assuming order."""
-    if not parser_complete or not owned_branches or "[Work]" not in screen:
+    if not parser_complete or not owned_branches:
         return False
     lines = screen.splitlines()
-    tables = [
-        (index, match)
-        for index, line in enumerate(lines)
-        # 3.0 adds a WHERE (location) column to the one local/remote Work list.
-        if (match := re.fullmatch(r"\|\s+(HEAD)\s+(STATUS)\s+AGENT\s+(?:WHERE\s+)?REPORTED\s+\|\s*", line))
-    ]
-    summaries = [
-        (index, match)
-        for index, line in enumerate(lines)
-        if (match := re.fullmatch(r"\|\s*(\d+) heads\s*\|\s*Row (\d+) of (\d+)\s*\|\s*", line))
-    ]
-    details = [
-        (index, match.group(1))
-        for index, line in enumerate(lines)
-        if (match := re.fullmatch(r"\|\+- (\S+) -+\+\|\s*", line))
-    ]
-    if len(tables) != 1 or len(summaries) != 1 or len(details) != 1:
+    rules = [(index, match) for index, line in enumerate(lines) if (match := LIST_RULE.match(line))]
+    if len(rules) != 1:
         return False
-    table_index, header = tables[0]
-    summary_index, summary = summaries[0]
-    count, position, total = map(int, summary.groups())
-    if not (
-        count == total == len(owned_branches)
-        and 1 <= position <= count
-        and table_index < summary_index < details[0][0] < len(lines) - 1
-    ):
+    rule_index, rule = rules[0]
+    width = rule.end(1) + 1
+    footers = [
+        (index, match)
+        for index, line in enumerate(lines[rule_index + 1 :], rule_index + 1)
+        if (match := LIST_FOOTER.fullmatch(line[:width]))
+    ]
+    if len(footers) != 1 or not (int(rule.group(1)) == int(footers[0][1].group(1)) == len(owned_branches)):
         return False
-    rows, selected = [], []
-    for line in lines[table_index + 1 : summary_index]:
-        if not re.fullmatch(r"\| [ >]  .*\|\s*", line):
+    rows, selected, ended = [], [], False
+    for line in lines[rule_index + 1 : footers[0][0]]:
+        part = line[:width]
+        if not part.strip():
+            ended = True
+            continue
+        if not ended and LIST_RUN.fullmatch(part):
+            continue
+        match = LIST_ROW.fullmatch(part)
+        if ended or not match:
             return False
-        branch = line[header.start(1) : header.start(2)].strip()
-        if line[2] == ">":
-            selected.append(branch)
-        rows.append(branch)
+        name = owned_name(match.group(2), owned_branches)
+        if match.group(1) != " ":
+            selected.append(name)
+        rows.append(name)
     return (
         bool(rows)
         and len(rows) == len(set(rows))
         and set(rows) <= owned_branches
         and len(selected) == 1
-        and details[0][1] == selected[0]
+        and rule.group(2) == selected[0]
     )
 
 
@@ -332,7 +344,7 @@ class Observer:
         self.closed = True
         try:
             if self.process.poll() is None:
-                self.send("Q cleanup " + (b"\x02q" if attached else b"\x1b\x1bq").hex())
+                self.send("Q cleanup " + (b"\x1cq" if attached else b"\x1b\x1bq").hex())
             self.process.wait(timeout=5)
         except (BrokenPipeError, RuntimeError, subprocess.TimeoutExpired):
             if not any(

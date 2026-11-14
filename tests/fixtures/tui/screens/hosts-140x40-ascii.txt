@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work   2 Inbox 11   3 Hosts   4 Stats                                                      this machine / 3 heads / 1 running  
+                                                                                                                                           
+ Hosts  Onboarding  -------------------- 1 --   This machine ----------------------------------------------------------------------------- 
+ >* This machine                      3 heads   Heads       3 heads / 1 running / 1 terminal gone                                          
+  + Add a host      set up a machine over SSH   tmux        . reading...                                                                   
+                                                Hydra       . reading...                                                                   
+                                                                                                                                           
+                                                Agents                                                                                     
+                                                            . reading...                                                                   
+                                                                                                                                           
+                                                Hydra can run agents on other machines over SSH, for example a build box with more cores   
+                                                or a machine that already has the right toolchain, when a task needs more than this        
+                                                machine offers. Adding a host checks its SSH host key and requirements, installs a         
+                                                matching Hydra there and helps you install and sign in to agents. Nothing changes on the   
+                                                remote until you approve it.                                                               
+                                                                                                                                           
+                                                Press Enter or A to add a host. Its work then appears in Work beside local heads; L        
+                                                filters by location.                                                                       
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live                                                                                                                                   
+ ^/v select | enter open | A add host | O onboarding | / filter | [/] page | : commands | esc back | ? help | q quit                       

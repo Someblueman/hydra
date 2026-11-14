@@ -293,6 +293,12 @@ state_v2_verify() {
                ! event_verify_file "$_sv2v_head/events/events.jsonl"; then
                 _sv2v_errors=1
             fi
+            for _sv2v_activity in "$_sv2v_head"/instances/instance_*/activity.jsonl; do
+                [ -f "$_sv2v_activity" ] || continue
+                if command -v event_verify_file >/dev/null 2>&1 && ! event_verify_file "$_sv2v_activity"; then
+                    _sv2v_errors=1
+                fi
+            done
             _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
             for _sv2v_other in "$_sv2v_project"/heads/head_*; do
                 [ -d "$_sv2v_other" ] || continue

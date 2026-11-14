@@ -8,7 +8,7 @@
 /* Onboarding controller: which child runs, what its envelope leads to, and
  * the keys of each screen. Every record shown comes from a CLI envelope or
  * from an export the CLI wrote; the only mutation is `fleet enroll apply`,
- * run with the exact intent and the digest the operator typed. */
+ * run with the exact intent and digest the operator confirmed. */
 #define ONB_READ_BUDGET_MS (5L * 60L * 1000L)
 #define ONB_APPLY_BUDGET_MS (60L * 60L * 1000L)
 
@@ -21,7 +21,6 @@ struct native_onboarding *native_onboarding_state(struct app *app) {
     if (!s->model) { free(s); return NULL; }
     s->job.fd = -1;
     s->filter.typed = -1;
-    tv_input_init(&s->input);
     app->onboarding = s;
     return s;
 }
@@ -149,7 +148,7 @@ static void review_result(struct native_onboarding *s, const char *intent_path) 
     copy_text(m->intent.path, sizeof(m->intent.path), intent_path);
     copy_text(s->intent_path, sizeof(s->intent_path), intent_path);
     s->screen = ONB_SCREEN_INTENT; s->scroll = 0;
-    notice(s, "Reviewed: nothing has been applied. Check every binding; a applies after you type the digest");
+    notice(s, "Reviewed: nothing has been applied. Check every binding; a applies after you confirm the digest");
 }
 
 static void status_result(struct native_onboarding *s) {
@@ -237,7 +236,6 @@ void native_onboarding_open(struct app *app) {
     struct native_onboarding *s = native_onboarding_state(app);
     if (!s) { copy_text(app->notice, sizeof(app->notice), "Onboarding is unavailable: out of memory"); return; }
     s->open = true; s->notice[0] = '\0';
-    tv_input_init(&s->input);
     if (s->job.active) { s->screen = ONB_SCREEN_RUNNING; return; }
     s->screen = ONB_SCREEN_LIST;
     if (!s->directory_known) home_start(app, s);
@@ -345,19 +343,21 @@ static void submit_review(struct app *app, struct native_onboarding *s) {
     (void)job_start(app, s, ONB_JOB_REVIEW);
 }
 
-/* a on the intent: the typed confirmation names the digest shown; the
- * command then runs exactly as displayed, or not at all. */
+/* a on the intent: the confirmation names the intent, its full digest and
+ * the exact command, and defaults to Cancel; the command then runs exactly
+ * as displayed, or not at all. */
 static void apply_confirm(struct app *app, struct native_onboarding *s) {
     const struct onb_intent *in = &s->model->intent;
-    char prompt[320], typed[80], digest[72], path[ONB_PATH];
+    char body[ONB_PATH + 512], digest[72], path[ONB_PATH];
     size_t i, open = 0;
     if (!in->loaded || !onb_hex_digest(in->digest)) { notice(s, "No reviewed intent is loaded"); return; }
     for (i = 0; i < in->host_count; i++) if (strcmp(in->hosts[i].status, "enrolled") && strcmp(in->hosts[i].status, "revoked")) open++;
     if (!open) { notice(s, "Every reviewed host is enrolled or revoked; there is nothing to apply"); return; }
     copy_text(digest, sizeof(digest), in->digest); copy_text(path, sizeof(path), in->path);
-    snprintf(prompt, sizeof(prompt), "Type at least the first 12 characters of the intent digest %.16s... to run hydra fleet enroll apply --confirm (Esc cancels): ", digest);
-    if (prompt_text(app, prompt, typed, sizeof(typed))) { notice(s, "Not applied: nothing was run"); return; }
-    if (!onb_digest_confirms(typed, digest)) { notice(s, "The typed text does not match the shown digest; nothing was run"); return; }
+    snprintf(body, sizeof(body), "Enroll the %zu host%s this intent reviewed?\n\nIntent digest %s\n\nRuns: hydra fleet enroll apply "
+             "--input %s --confirm %s\n\nIf the intent changes before you confirm, nothing runs.",
+             open, open == 1 ? "" : "s", digest, path, digest);
+    if (!dialog_confirm(app, "Apply reviewed intent", body, "Apply", true)) { notice(s, "Not applied: nothing was run"); return; }
     if (!s->model->intent.loaded || strcmp(s->model->intent.digest, digest) || strcmp(s->model->intent.path, path) ||
         !onb_apply_argv(&s->argv, path, digest) || !onb_apply_argv_valid(&s->argv, path, digest)) {
         notice(s, "The intent changed during confirmation; nothing was run"); return;
@@ -387,21 +387,28 @@ static void clear_filters(struct native_onboarding *s) {
     notice(s, "Filters cleared");
 }
 
-static void list_key(struct app *app, struct native_onboarding *s, uint32_t key) {
-    if (key == 'f') open_form(s, ONB_SCREEN_SELECT);
-    else if (key == 'Q') qualify_start(app, s);
-    else if (key == 'r') review_open(s);
-    else if (key == 'i') { if (s->model->intent.loaded) { s->screen = ONB_SCREEN_INTENT; s->scroll = 0; s->notice[0] = '\0'; } else notice(s, "No reviewed intent: r reviews a qualified candidate"); }
-    else if (key == 'c') { s->screen = ONB_SCREEN_CHANGES; s->scroll = 0; s->notice[0] = '\0'; }
-    else if (key == 's') { s->filter.typed = (s->filter.typed + 2) % (ONB_TYPED_COUNT + 1) - 1; s->selected = 0; s->scroll = 0; }
-    else if (key == 'S') { onb_next_source(s->model, s->filter.source, sizeof(s->filter.source)); s->selected = 0; s->scroll = 0; }
-    else if (key == 'P') { onb_next_platform(s->model, s->filter.platform, sizeof(s->filter.platform)); s->selected = 0; s->scroll = 0; }
-    else if (key == 'l') filter_prompt(app, s, s->filter.label, sizeof(s->filter.label), "Show candidates with a label containing: ");
-    else if (key == '/') filter_prompt(app, s, s->filter.search, sizeof(s->filter.search), "Search candidates (name, target, ID): ");
-    else if (key == 'x') clear_filters(s);
-    else if (key == 'o') open_export(app, s);
-    else if (key == 'R') { if (s->directory_known) { load_records(app, s); notice(s, "Reloaded the recorded export and enrollment status"); } }
-    else if (key == 'q') app->running = false;
+static void show_intent(struct native_onboarding *s) {
+    if (!s->model->intent.loaded) { notice(s, "No reviewed intent: r reviews a qualified candidate"); return; }
+    s->screen = ONB_SCREEN_INTENT; s->scroll = 0; s->notice[0] = '\0';
+}
+
+static void reload(struct app *app, struct native_onboarding *s) {
+    if (!s->directory_known) return;
+    load_records(app, s);
+    notice(s, "Reloaded the recorded export and enrollment status");
+}
+
+/* The filters cycle or are typed; each starts the list from its first row. */
+static void filter_action(struct app *app, struct native_onboarding *s, enum key_action action) {
+    switch (action) {
+    case KEY_ONB_STATE: s->filter.typed = (s->filter.typed + 2) % (ONB_TYPED_COUNT + 1) - 1; break;
+    case KEY_ONB_SOURCE: onb_next_source(s->model, s->filter.source, sizeof(s->filter.source)); break;
+    case KEY_ONB_PLATFORM: onb_next_platform(s->model, s->filter.platform, sizeof(s->filter.platform)); break;
+    case KEY_ONB_LABEL: filter_prompt(app, s, s->filter.label, sizeof(s->filter.label), "Show candidates with a label containing: "); break;
+    case KEY_ONB_SEARCH: filter_prompt(app, s, s->filter.search, sizeof(s->filter.search), "Search candidates (name, target, ID): "); break;
+    default: clear_filters(s); return;
+    }
+    s->selected = 0; s->scroll = 0;
 }
 
 static void enter(struct app *app, struct native_onboarding *s) {
@@ -431,69 +438,131 @@ static void back(struct app *app, struct native_onboarding *s) {
     }
 }
 
+void native_onboarding_back(struct app *app) {
+    if (native_onboarding_active(app)) back(app, app->onboarding);
+}
+
+/* Steps a position by direction, page rows at a time (one when page is 0),
+ * within 0..limit. */
+static size_t step_within(size_t at, size_t limit, int direction, int page) {
+    int steps = page > 0 ? page : 1;
+    while (steps-- > 0) {
+        if (direction < 0 && at) at--;
+        else if (direction > 0 && at < limit) at++;
+    }
+    return at;
+}
+
+/* The list's selection, a form's focused field, or a page's scroll. */
 static void move(struct native_onboarding *s, int direction, int page) {
+    struct onb_row rows[ONB_CANDIDATES + ONB_RECORDS];
+    size_t count;
     if (s->screen == ONB_SCREEN_SELECT || s->screen == ONB_SCREEN_REVIEW) {
         s->focus = (s->focus + ONB_FORM_FIELDS + direction) % ONB_FORM_FIELDS; return;
     }
-    if (s->screen == ONB_SCREEN_LIST) {
-        struct onb_row rows[ONB_CANDIDATES + ONB_RECORDS];
-        size_t count = rows_of(s, rows);
-        int steps = page > 0 ? page : 1;
-        while (steps-- > 0) {
-            if (direction < 0 && s->selected) s->selected--;
-            else if (direction > 0 && s->selected + 1 < count) s->selected++;
-        }
-        return;
-    }
-    {
-        int steps = page > 0 ? page : 1;
-        while (steps-- > 0) {
-            if (direction < 0 && s->scroll) s->scroll--;
-            else if (direction > 0 && s->more) s->scroll++;
-        }
-    }
+    if (s->screen != ONB_SCREEN_LIST) { s->scroll = step_within(s->scroll, s->scroll_limit, direction, page); return; }
+    count = rows_of(s, rows);
+    s->selected = step_within(s->selected, count ? count - 1 : 0, direction, page);
 }
 
 static bool text_screen(const struct native_onboarding *s) { return s->screen == ONB_SCREEN_SELECT || s->screen == ONB_SCREEN_REVIEW; }
 
-static void screen_key(struct app *app, struct native_onboarding *s, const struct tv_event *e) {
-    uint32_t key = e->key;
-    int page = app->rows > 12 ? app->rows / 2 : 6;
-    if (key == TV_KEY_SEQUENCE && !strcmp(e->bytes, "\033[Z")) move(s, -1, 0);
-    else if (key == '\t' || key == TV_KEY_DOWN) move(s, 1, 0);
-    else if (key == TV_KEY_UP) move(s, -1, 0);
-    else if (key == TV_KEY_PAGE_UP) move(s, -1, page);
-    else if (key == TV_KEY_PAGE_DOWN) move(s, 1, page);
-    else if (key == '\r' || key == '\n') enter(app, s);
-    else if (key == 27) back(app, s);
-    else if (text_screen(s) || key >= 128) return;
-    else if (key == 'j') move(s, 1, 0);
-    else if (key == 'k') move(s, -1, 0);
-    else if (s->screen == ONB_SCREEN_LIST) list_key(app, s, key);
-    else if (s->screen == ONB_SCREEN_INTENT && key == 'a') apply_confirm(app, s);
-    else if (s->screen == ONB_SCREEN_INTENT && key == 's') status_start(app, s);
-    else if (s->screen == ONB_SCREEN_RUNNING && key == 'c') back(app, s);
-    else if (s->screen == ONB_SCREEN_RUNNING && key == 'b' && !s->job.cancelled) close_view(app, s);
-    else if (key == 'q' && !s->job.active) app->running = false;
+/* ---- Keys (the binding table: keys.c) ---- */
+
+enum key_chain_id native_onboarding_chain(const struct app *app) {
+    switch (app->onboarding->screen) {
+    case ONB_SCREEN_LIST: return KEY_CHAIN_ONBOARDING;
+    case ONB_SCREEN_INTENT: return KEY_CHAIN_ONBOARDING_INTENT;
+    case ONB_SCREEN_RUNNING: return KEY_CHAIN_ONBOARDING_RUNNING;
+    case ONB_SCREEN_SELECT: case ONB_SCREEN_REVIEW: return KEY_CHAIN_ONBOARDING_FORM;
+    default: return KEY_CHAIN_ONBOARDING_PAGE;
+    }
 }
 
-static void onboarding_event(struct app *app, struct native_onboarding *s, const struct tv_event *e) {
-    if (e->type == TV_MOUSE || e->type == TV_PASTE_BEGIN || e->type == TV_PASTE_END) return;
-    if (e->type == TV_PASTE) { if (text_screen(s)) onb_form_insert(s, e); return; }
-    if (text_screen(s) && e->key != 27 && onb_form_key(s, e)) return;
-    screen_key(app, s, e);
+/* Reviewed hosts that are neither enrolled nor revoked: what a apply runs on. */
+static size_t open_hosts(const struct onb_intent *in) {
+    size_t i, open = 0;
+    for (i = 0; i < in->host_count; i++) if (strcmp(in->hosts[i].status, "enrolled") && strcmp(in->hosts[i].status, "revoked")) open++;
+    return open;
 }
 
-bool native_onboarding_byte(struct app *app, unsigned char byte) {
-    struct tv_event e;
-    struct native_onboarding *s = app->onboarding;
-    if (!s || !s->open || app->view != 6) return false;
-    if (tv_input_feed(&s->input, byte, &e)) onboarding_event(app, s, &e);
+/* Quitting waits for a command that runs on its own screen to finish or be
+ * cancelled; elsewhere it keeps running and records its own rows. */
+bool native_onboarding_applies(const struct app *app, enum key_action action, bool *applies) {
+    const struct native_onboarding *s = app->onboarding;
+    bool open = native_onboarding_active(app) && app->view == 6;
+    if (action == KEY_QUIT && open && s->screen == ONB_SCREEN_RUNNING) { *applies = !s->job.active; return true; }
+    if (action < KEY_ONB_FIRST || action > KEY_ONB_LAST) return false;
+    switch (action) {
+    case KEY_ONB_CONTINUE: *applies = open && s->screen == ONB_SCREEN_ERROR; break;
+    case KEY_ONB_APPLY: *applies = open && s->model->intent.loaded && open_hosts(&s->model->intent) > 0; break;
+    case KEY_ONB_CANCEL: *applies = open && s->job.active && !s->job.cancelled; break;
+    case KEY_ONB_BACKGROUND: *applies = open && !s->job.cancelled; break;
+    default: *applies = open; break;
+    }
     return true;
 }
 
-void native_onboarding_flush_input(struct app *app) {
-    struct tv_event e;
+/* Labels that follow the screen: Enter on a form's last field submits it,
+ * Enter on an error reads the recorded status where a result is missing, and
+ * Esc cancels a command that runs. */
+void native_onboarding_labels(const struct app *app, struct kt_binding *rows) {
+    const struct native_onboarding *s = app->onboarding;
+    if (!native_onboarding_active(app) || app->view != 6) return;
+    if (text_screen(s) && s->focus + 1 >= ONB_FORM_FIELDS) rows[KEY_ONB_SUBMIT].label = "run";
+    if (!strcmp(s->model->last.code, "no_result") || !strcmp(s->model->last.code, "apply_in_progress"))
+        rows[KEY_ONB_CONTINUE].label = "read the recorded status";
+    if (s->screen == ONB_SCREEN_RUNNING) rows[KEY_BACK].label = "cancel";
+}
+
+static void list_action(struct app *app, struct native_onboarding *s, enum key_action action) {
+    switch (action) {
+    case KEY_ONB_OPEN: onb_open_detail(s); break;
+    case KEY_ONB_FIND: open_form(s, ONB_SCREEN_SELECT); break;
+    case KEY_ONB_QUALIFY: qualify_start(app, s); break;
+    case KEY_ONB_REVIEW: review_open(s); break;
+    case KEY_ONB_INTENT: show_intent(s); break;
+    case KEY_ONB_CHANGES: s->screen = ONB_SCREEN_CHANGES; s->scroll = 0; s->notice[0] = '\0'; break;
+    case KEY_ONB_EXPORT: open_export(app, s); break;
+    case KEY_ONB_RELOAD: reload(app, s); break;
+    case KEY_ONB_PAGE_PREVIOUS: case KEY_ONB_PAGE_NEXT: close_view(app, s); break;
+    default: filter_action(app, s, action); break;
+    }
+}
+
+/* Moves: the list's selection, a page's scroll or a form's field. */
+static bool move_action(struct app *app, struct native_onboarding *s, enum key_action action) {
+    int page = app->rows > 12 ? app->rows / 2 : 6;
+    switch (action) {
+    case KEY_ONB_UP: case KEY_ONB_SCROLL_UP: case KEY_ONB_FIELD_PREVIOUS: move(s, -1, 0); return true;
+    case KEY_ONB_DOWN: case KEY_ONB_SCROLL_DOWN: case KEY_ONB_FIELD_NEXT: move(s, 1, 0); return true;
+    case KEY_ONB_PAGE_UP: case KEY_ONB_SCROLL_PAGE_UP: move(s, -1, page); return true;
+    case KEY_ONB_PAGE_DOWN: case KEY_ONB_SCROLL_PAGE_DOWN: move(s, 1, page); return true;
+    default: return false;
+    }
+}
+
+bool native_onboarding_perform(struct app *app, enum key_action action) {
     struct native_onboarding *s = app->onboarding;
-    if (s && s->open && tv_input_flush(&s->input, &e)) onboarding_event(app, s, &e);
+    if (action < KEY_ONB_FIRST || action > KEY_ONB_LAST) return false;
+    if (!native_onboarding_active(app) || move_action(app, s, action)) return true;
+    switch (action) {
+    case KEY_ONB_CONTINUE: case KEY_ONB_SUBMIT: enter(app, s); break;
+    case KEY_ONB_APPLY: apply_confirm(app, s); break;
+    case KEY_ONB_STATUS: status_start(app, s); break;
+    case KEY_ONB_CANCEL: case KEY_ONB_FORM_BACK: back(app, s); break;
+    case KEY_ONB_BACKGROUND: close_view(app, s); break;
+    default: list_action(app, s, action); break;
+    }
+    return true;
+}
+
+/* While a form is shown its focused field takes text, pastes included;
+ * Escape and the keys that are not text go to the binding table. */
+bool native_onboarding_text(struct app *app, const struct kt_event *e) {
+    struct native_onboarding *s = app->onboarding;
+    if (!s || !s->open || app->view != 6) return false;
+    if (e->type == KT_MOUSE || e->type == KT_PASTE_BEGIN || e->type == KT_PASTE_END) return true;
+    if (e->type == KT_PASTE) { if (text_screen(s)) onb_form_insert(s, e); return true; }
+    return text_screen(s) && e->key != KT_KEY_ESCAPE && onb_form_key(s, e);
 }

@@ -73,6 +73,8 @@ Commands:
                     Revocation: revoke candidate|source|transport|package|project ID --reason TEXT
                                 revoke list [--scope SCOPE]; final, local, never edits known_hosts
   capabilities      Print machine-readable Hydra and agent capabilities
+  plan              Review, approve and follow a plan an agent proposed
+                    Usage: hydra plan --help (the short plan format: hydra plan schema)
   workflow          Run or inspect finite, recoverable workflow definitions
                     Usage: hydra workflow list
                            hydra workflow <show|validate|dry-run|run> <id|path>
@@ -83,6 +85,8 @@ Commands:
   outcome <head>    Declare an instance-scoped outcome
   wait <head>       Wait for durable lifecycle evidence
   adapter ingest    Ingest a canonical provider-neutral adapter event
+  adapter activity  Record an observer's inferred activity change (JSON on stdin)
+  adapter watch     Record that an observer is watching this project's heads
   resume <head>     Create a new instance using durable resume metadata
                     --terminal: restart only a stopped interactive terminal;
                     requires the existing worktree and never recreates it
@@ -114,7 +118,7 @@ Commands:
   gate              Run verification gates and record explicit approvals
   context           Create typed, explicit context packs without implicit files
   sync <head>       Safely merge a named ref into a clean, approved head
-  land <head>       Safely merge an approved head into the current target branch
+  land <worker>     Merge a plan's verified result (or a gated head) into your current branch
   integrate         Assemble, verify, approve, and promote completed heads
                     Use "integrate train" for per-candidate guarded gates
   du                Report per-head worktree and durable-state disk usage
@@ -188,9 +192,8 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
-  tui               Native mission control with visible basic fallback
+  tui               Native mission control (needs the hydra-tui helper)
                     Options:
-                      --basic                  Use the maintained shell TUI explicitly
                       --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
   queue             View and manage pending spawn queue
@@ -237,7 +240,8 @@ Environment:
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
                       When limit is reached, spawns are queued for later
-  HYDRA_ADMISSION_QUEUE_SECONDS  Admission wait deadline (default: 60)
+  HYDRA_ADMISSION_QUEUE_SECONDS  Admission wait deadline (default: 60); also
+                      bounds an execution's wait for the busy admission lock
   HYDRA_ADMISSION_LABELS  Comma-separated required host labels
   HYDRA_SKIP_SETUP  Set to 1 to skip environment setup commands
   HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
@@ -368,6 +372,10 @@ main() {
         workflow)
             shift
             cmd_workflow "$@"
+            ;;
+        plan)
+            shift
+            cmd_plan "$@"
             ;;
         lifecycle)
             shift

@@ -70,9 +70,15 @@ cmd_sync() {
 }
 
 cmd_land() {
-    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra land <head> --into <branch> --gate <name> [--dry-run] [--keep-head]'; return 0 ;; esac
+    case "${1:-}" in -h|--help)
+        printf '%s\n' 'Usage: hydra land <worker> [--into <branch>] [--dry-run] [--keep-head]' \
+            '       hydra land <head> --gate <name> [--into <branch>] [--dry-run] [--keep-head]' \
+            'Without --gate, lands the commit a plan run verified on its worker branch.' \
+            '--into defaults to the current branch of your checkout. Nothing is pushed.'
+        return 0 ;;
+    esac
     _cl_branch="${1:-}"
-    [ -n "$_cl_branch" ] || { cli_error land invalid_input "head is required" "run hydra land <head> --into <branch> --gate <name> [--dry-run] [--keep-head]"; return 1; }
+    [ -n "$_cl_branch" ] || { cli_error land invalid_input "head is required" "run hydra land <worker> [--into <branch>] [--dry-run] [--keep-head]"; return 1; }
     shift
     _cl_into="" _cl_gate="" _cl_dry=0 _cl_keep=0
     while [ $# -gt 0 ]; do
@@ -84,9 +90,14 @@ cmd_land() {
             *) cli_error land invalid_input "unknown option '$1'" "use --into, --gate, --dry-run, or --keep-head"; return 1 ;;
         esac
     done
-    if [ -z "$_cl_into" ] || [ -z "$_cl_gate" ]; then
-        cli_error land invalid_input "--into and --gate are required" "name the current target branch and an approved gate"
-        return 1
+    # Without a head gate, the gate is the plan run's verified commit.
+    if [ -z "$_cl_gate" ]; then
+        integration_land_verified "$_cl_branch" "$_cl_into" "$_cl_dry" "$_cl_keep"
+        return
+    fi
+    if [ -z "$_cl_into" ]; then
+        _cl_into="$(git -C "$(get_repo_root)" branch --show-current 2>/dev/null || true)"
+        [ -n "$_cl_into" ] || { cli_error land invalid_input "your checkout is not on a branch" "name the target branch with --into"; return 1; }
     fi
     if _cl_run="$(integration_land "$_cl_branch" "$_cl_into" "$_cl_gate" "$_cl_dry" "$_cl_keep")"; then
         if [ "$_cl_dry" -eq 1 ]; then printf '%s\n' "$_cl_run"; else echo "Land completed: $_cl_run"; fi

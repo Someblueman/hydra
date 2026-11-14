@@ -14,6 +14,8 @@
 #define PLAN_ASSET_LIMIT (64U * 1024U)
 #define PLAN_ASSETS 16U
 #define PLAN_INPUT_PREFIX "@input/"
+/* The short plan form an agent writes; lowered to schema 1 before validation. */
+#define PLAN_SIMPLE_FORM "simple-1"
 /* All returned JSON objects are owned by the caller. Diagnostics accumulate in
  * a caller-owned array; no validation function executes proposed operations. */
 json_object *plan_cli(int argc, char **argv);
@@ -40,6 +42,8 @@ json_object *plan_bundle_assets(json_object *files);
 bool plan_json_unique(const char *text);
 json_object *plan_canonical(json_object *value);
 void plan_error(json_object *errors, const char *path, const char *code, const char *message);
+/* A failed planning command envelope whose recovery is the next step for that command. */
+json_object *plan_failure(const char *command, const char *code, const char *message, const char *recovery);
 void plan_obligation_error(json_object *errors, const char *path, const char *code,
                            const char *message, const char *obligation,
                            const char *counterexample);
@@ -91,12 +95,57 @@ int plan_recipe_digest(json_object *compiled, const char *check, char digest[65]
 enum plan_verdict plan_report(json_object *compiled, json_object *check,
                               json_object *report, const char *subject);
 int plan_materialize(json_object *compiled, const char *directory);
+/* Why an accepted artifact may not run. STALE fills errors with the diagnostics
+ * of recompiling it against source; CHANGED recompiled to another digest. When
+ * fresh is not NULL it receives the caller-owned recompiled artifact, if any. */
+enum plan_admission { PLAN_ADMITTED, PLAN_DIGEST_FORMAT, PLAN_UNDIGESTIBLE, PLAN_DIGEST_MISMATCH, PLAN_STALE, PLAN_CHANGED };
+enum plan_admission plan_admission(json_object *compiled, const char *source, const char *accepted, json_object *errors, json_object **fresh);
 int plan_admit(json_object *compiled, const char *source, const char *accepted);
-int plan_heads_available(json_object *compiled, const char *source);
+#define PLAN_REF 128
+/* 0 when no spawn branch exists in source, locally or as origin's; 1 when one
+ * does and -1 when one cannot be checked, with conflict naming that ref. */
+int plan_heads_available(json_object *compiled, const char *source, char conflict[PLAN_REF]);
 int plan_finish(const char *run);
 json_object *plan_delivery(const char *run);
 /* Borrows a successful plan_delivery result; prints its verification evidence. */
 void plan_delivery_view(json_object *delivery);
 int plan_preview(json_object *compiled, FILE *out);
+/* Whether a spawn step among steps creates head. */
+bool plan_spawns(json_object *steps, const char *head);
+/* The ID of the check with method command that step reports, or NULL. */
+const char *plan_command_check(json_object *plan, const char *step);
+/* Whether draft uses the short form ("plan": "simple-1"). */
+bool plan_simple(json_object *draft);
+/* Returns the caller-owned schema 1 plan a simple-1 draft stands for, or NULL
+ * with diagnostics. policy may be NULL to check the draft's shape only. */
+json_object *plan_simple_lower(json_object *draft, json_object *policy, json_object *errors);
+/* A caller-owned schema 1 plan for draft: lowered when it is simple-1, else a
+ * new reference to draft itself. NULL with diagnostics on error. */
+json_object *plan_lowered(json_object *draft, json_object *policy, json_object *errors);
+/* Writes the report of the command check a step owns into attempt/outputs,
+ * from the commit the step ran on; refuses when it did not run on its subject. */
+int plan_command_report(const char *run, const char *step, const char *attempt);
+/* The short flow's commands (plan_flow.c); each borrows argv. */
+json_object *plan_check_cli(int argc, char **argv);
+json_object *plan_policy_for_cli(int argc, char **argv);
+json_object *plan_policy_tool_cli(int argc, char **argv);
+json_object *plan_policy_text_cli(int argc, char **argv);
+json_object *plan_review_text_cli(int argc, char **argv);
+json_object *plan_detach_cli(int argc, char **argv);
+json_object *plan_verified_commit_cli(int argc, char **argv);
+/* The readable plan (plan_summary.c): a caller-owned schema 1 projection of a
+ * valid compiled artifact, or NULL; its text; and the summary command. */
+json_object *plan_summary(json_object *compiled);
+void plan_summary_text(json_object *summary);
+json_object *plan_summary_cli(int argc, char **argv);
+/* Prints the run driver's per-step hooks for exec steps on spawned heads. */
+int plan_hooks(json_object *compiled, FILE *out);
+/* The run guard: 0 when run's compiled artifact still has the accepted digest
+ * and its data, definition, graph and copied inputs are those admitted. With
+ * record, writes the digests it compares against later instead. */
+int plan_run_guard(const char *run, bool record);
+/* The commit the last succeeded agent step on branch recorded: 0 when every
+ * later command on that head ran on it, -2 when one did not, -1 when none. */
+int plan_head_commit(const char *run, json_object *plan, const char *branch, char commit[65]);
 int plan_tui(json_object *compiled);
 #endif

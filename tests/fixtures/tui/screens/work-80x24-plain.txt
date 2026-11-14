@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work  2 Inbox 11  3 Hosts  4 Stats            3 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details ─────────────────────────────  
+ ▌◐ feature-live          ◐ needs you · codex · 1 of 2 approvals · 4 files c…  
+  ▲ feature-stale                                                              
+  ? feature-unavailable   No terminal output yet.                              
+  ▸ ● run visualization…                                                       
+  ▸ ✓ run second-run                                                           
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  3 heads · 3 need you                                                         
+  ● live   feature-live · running                                              
+ ↑/↓ select • enter/a talk • x remove • n new task • ? help • q quit           

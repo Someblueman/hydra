@@ -1,7 +1,7 @@
 #ifndef HYDRA_TUI_ONBOARDING_H
 #define HYDRA_TUI_ONBOARDING_H
 #include "setup_flow.h"
-#include "../termviz/input.h"
+#include "../kettle/input.h"
 #include <stdbool.h>
 #include <stddef.h>
 /* Onboarding operator view (H5): the H1-H3 records (candidates and their
@@ -78,7 +78,6 @@ struct onb_model {
  * m->last always reports the envelope header. */
 int onb_parse(struct onb_model *m, const char *text, size_t length, int exit_status);
 int onb_parse_file(struct onb_model *m, const char *path);
-void onb_envelope_only(struct onb_envelope *e, const char *text, size_t length, int exit_status);
 
 /* ---- Typed state, rows and filters ---- */
 enum onb_typed { ONB_NEW, ONB_QUALIFIED, ONB_FAILED, ONB_CONFLICTING, ONB_REVOKED, ONB_REVIEWED, ONB_UNKNOWN, ONB_ENROLLED, ONB_TYPED_COUNT };

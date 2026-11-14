@@ -4,7 +4,7 @@ It applies the escape sequences Hydra's presenter and tmux emit, keeps text
 attributes so snapshots retain colour, and counts the events the flicker
 check needs: full-screen clears, cells rewritten with an identical glyph and
 attributes, cursor placements that paint nothing, and glyphs that disappear
-and reappear within a few frames. The native termviz terminal remains the
+and reappear within a few frames. The native kettle terminal remains the
 oracle for ASCII snapshots; `text()` is compared against it in the harness.
 """
 

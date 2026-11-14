@@ -333,12 +333,13 @@ void setup_running_label(const char *id, char *out, size_t size) {
     else setup_step_label(id, out, size);
 }
 
-static const char *const statuses[][3] = {
-    /* status, label, mark (unicode) */
-    {"done", "done", "\xe2\x9c\x93"}, {"skipped", "skipped", "-"}, {"failed", "failed", "\xe2\x9c\x97"},
-    {"outcome_unknown", "outcome unknown", "?"}, {"approval_required", "needs your approval", "!"},
-    {"blocked", "blocked", "!"}, {"in_progress", "in progress", "~"}, {"running", "running", ">"},
-    {"pending", "not started", " "}, {"upgrade_available", "upgrade available", "^"},
+static const char *const statuses[][4] = {
+    /* status, label, mark, its ASCII form */
+    {"done", "done", "\xe2\x9c\x93", "+"}, {"skipped", "skipped", "-", "-"}, {"failed", "failed", "\xe2\x9c\x97", "x"},
+    {"outcome_unknown", "outcome unknown", "?", "?"}, {"approval_required", "needs your approval", "\xe2\x97\x90", "~"},
+    {"blocked", "blocked", "\xe2\x96\xb2", "!"}, {"in_progress", "in progress", "\xe2\x97\x90", "~"},
+    {"running", "running", "\xe2\x97\x8f", "*"}, {"pending", "not started", "\xe2\x97\x8b", "-"},
+    {"upgrade_available", "upgrade available", "^", "^"},
 };
 
 static int status_index(const char *status) {
@@ -355,13 +356,18 @@ const char *setup_status_label(const char *status) {
 const char *setup_status_mark(const char *status, bool ascii) {
     int i = status_index(status);
     if (i < 0) return " ";
-    if (ascii && !strcmp(status, "done")) return "+";
-    if (ascii && !strcmp(status, "failed")) return "x";
-    return statuses[i][2];
+    return statuses[i][ascii ? 3 : 2];
 }
 
 bool setup_status_finished(const char *status) {
     return !strcmp(status, "done") || !strcmp(status, "skipped");
+}
+
+bool setup_preflight_blocked(const struct setup_envelope *e) {
+    size_t i;
+    if (!strcmp(e->code, "prerequisite_missing")) return true;
+    for (i = 0; i < e->requirement_count; i++) if (e->requirements[i].blocking && strcmp(e->requirements[i].status, "ok")) return true;
+    return false;
 }
 
 const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e) {

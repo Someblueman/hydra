@@ -277,6 +277,21 @@ sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s/retry-count/class-count/' 
 assert_failure $? "failure outside selected retry classes fails the run"
 assert_equal 1 "$(cat "$test_root/class-count")" "excluded failure class is never retried"
 
+# Deciding the final state of a failed run with many steps writes nothing to
+# stderr: no reader of the step states is cut off by an early match.
+{
+    printf 'version: 1\nid: many-failed\nparallelism: 1\nresources:\n  disk_mb: 1\n  max_heads: 1\nsteps:\n'
+    printf '  - id: fail\n    kind: exec\n    needs: []\n    retry: 0\n    idempotent: true\n    args:\n      head: workflow-a\n      argv: [sh, -c, "exit 1"]\n'
+    for _twr_step in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        printf '  - id: after-%s\n    kind: exec\n    needs: [fail]\n    retry: 0\n    idempotent: true\n    args:\n      head: workflow-a\n      argv: [true]\n' "$_twr_step"
+    done
+} > "$test_root/many-failed.yml"
+"$HYDRA_BIN" workflow run "$test_root/many-failed.yml" > "$test_root/many-failed.out" 2> "$test_root/many-failed.err"
+assert_failure $? "a failed step fails a run with many steps"
+assert_equal failed "$(cat "$(run_dir_for "$(sed -n '1p' "$test_root/many-failed.out")")/state")" "the run with many steps records failed"
+if grep -q 'terminated by signal' "$test_root/many-failed.err"; then signal_status=1; else signal_status=0; fi
+assert_success "$signal_status" "deciding the final state prints no reader termination"
+
 sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s@argv: .*@argv: [sleep, 3]\n      timeout: 1@' "$test_root/retry.yml" > "$test_root/timeout.yml"
 "$HYDRA_BIN" workflow run "$test_root/timeout.yml" > "$test_root/timeout.out" 2>&1
 assert_failure $? "timeout retry budget eventually exhausts"
@@ -315,20 +330,22 @@ steps:
 EOF
 # Delay the scheduler's next state scan until the cancelled step publishes its
 # terminal state, reproducing the ordering that intermittently failed in CI.
+# The scheduler's step-state scans are awk passes that receive the run
+# directory as WORKFLOW_RUN_DIR.
 mkdir "$test_root/race-bin"
-cat > "$test_root/race-bin/find" <<EOF
+cat > "$test_root/race-bin/awk" <<EOF
 #!/bin/sh
 run_dir=\$(cat "$test_root/cancel-race-dir" 2>/dev/null || true)
-if [ "\$#" -ge 3 ] && [ "\$1" = "\$run_dir/steps" ] && [ "\$2" = -name ] && [ -s "\$run_dir/residual-children.tsv" ]; then
+if [ -n "\$run_dir" ] && [ "\${WORKFLOW_RUN_DIR:-}" = "\$run_dir" ] && [ -s "\$run_dir/residual-children.tsv" ]; then
     count=0
     while [ "\$(cat "\$run_dir/steps/long/state")" = running ] && [ "\$count" -lt 100 ]; do
         sleep 0.05; count=\$((count + 1))
     done
     : > "$test_root/cancel-race-observed"
 fi
-exec "$(command -v find)" "\$@"
+exec "$(command -v awk)" "\$@"
 EOF
-chmod +x "$test_root/race-bin/find"
+chmod +x "$test_root/race-bin/awk"
 PATH="$test_root/race-bin:$PATH" "$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
 cancel_runner=$!
 wait_for_file "$test_root/cancel-started" || exit 1

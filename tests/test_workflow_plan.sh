@@ -171,11 +171,28 @@ printf '{"schema_version":1,"schema_version":1}\n' > "$ROOT/bad.json"
 "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json"
 assert_failure $? 'duplicate JSON members rejected'
 digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$ROOT/compile.json")"
-"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept 0000000000000000000000000000000000000000000000000000000000000000 >/dev/null 2>&1
+"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept 0000000000000000000000000000000000000000000000000000000000000000 > /dev/null 2> "$ROOT/admit.err"
 assert_failure $? 'execution rejects a different accepted digest'
+if grep -q '"code":"digest_mismatch","message":"the accepted digest is not this artifact' "$ROOT/admit.err" && ! grep -q "$digest" "$ROOT/admit.err"; then check=0; else check=1; fi
+assert_success "$check" 'a different digest is reported as a mismatch without revealing the expected one'
+"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$(printf '%.12s' "$digest")" > /dev/null 2> "$ROOT/admit.err"
+assert_failure $? 'execution rejects a shortened digest'
+grep -q '"code":"digest_mismatch","message":"--accept takes the full 64-character lowercase hex digest; the 12-character value' "$ROOT/admit.err"
+assert_success $? 'a shortened digest is reported as such'
+compiled_commit="$(git rev-parse HEAD | cut -c1-12)"
+git -c commit.gpgSign=false commit -q --allow-empty -m 'moved source'
+"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > /dev/null 2> "$ROOT/admit.err"
+assert_failure $? 'a moved source commit is rejected before execution'
+grep -q "\"code\":\"source_changed\",\"message\":\"the source checkout moved from commit $compiled_commit to $(git rev-parse HEAD | cut -c1-12)" "$ROOT/admit.err" &&
+    grep -q '"recovery":"compile the plan again from this checkout' "$ROOT/admit.err"
+assert_success $? 'admission names the moved source commit and how to recover'
+git reset -q --hard HEAD~1
 printf 'changed\n' >> expected.txt
-"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" >/dev/null 2>&1
+"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > /dev/null 2> "$ROOT/admit.err"
 assert_failure $? 'stale source and inputs rejected before execution'
+grep -q '"code":"source_changed"' "$ROOT/admit.err" && grep -q '"condition":"tracked_changes"' "$ROOT/admit.err" &&
+    grep -q '"recovery":"commit or stash these changes in ' "$ROOT/admit.err"
+assert_success $? 'admission of a changed checkout carries the compile diagnostics and their recovery'
 "$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" > "$ROOT/dirty-source.json"
 assert_failure $? 'tracked source changes block validation'
 grep -q '"condition":"tracked_changes"' "$ROOT/dirty-source.json" &&
@@ -204,8 +221,11 @@ printf 'tampered\n' > "$run_dir/steps/compose/attempt-1/artifacts/report"
 "$HYDRA_BIN" workflow plan result "$run" >/dev/null 2>&1
 assert_failure $? 'result retrieval refuses corrupted sealed bytes despite recorded success'
 cp expected.txt "$run_dir/steps/compose/attempt-1/artifacts/report"
-"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" >/dev/null 2>&1
+"$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > /dev/null 2> "$ROOT/admit.err"
 assert_failure $? 'new execution cannot reuse existing heads'
+grep -q '"code":"branch_exists","message":"the spawn branch plan-smoke already exists in ' "$ROOT/admit.err" &&
+    grep -q '"recovery":"give the spawn step an unused branch name' "$ROOT/admit.err"
+assert_success $? 'admission names the spawn branch that already exists'
 "$HYDRA_BIN" kill plan-smoke --force >/dev/null 2>&1
 git branch -D plan-smoke >/dev/null 2>&1 || true
 "$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > "$ROOT/durable.out" 2>/dev/null

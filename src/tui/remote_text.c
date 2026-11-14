@@ -32,10 +32,10 @@ const char *remote_head_status(const struct app *app, const struct head *h) {
     return h->desired[0] ? h->desired : "unknown";
 }
 
-enum tv_style remote_head_tone(const struct app *app, const struct head *h) {
+struct kt_style remote_head_tone(const struct app *app, const struct head *h) {
     const char *status = remote_head_status(app, h);
-    if (!strcmp(status, "stale") || !strcmp(status, "disconnected") || !strcmp(status, "unknown")) return TV_WARNING;
-    return TV_BASE;
+    if (!strcmp(status, "stale") || !strcmp(status, "disconnected") || !strcmp(status, "unknown")) return KT_WARNING;
+    return KT_BASE;
 }
 
 /* "fresh, 3s old" / "stale, 120s old (host disconnected)" / "unknown". */
@@ -86,28 +86,28 @@ const char *task_status(const struct app *app, const struct task_observation *t)
     return t->state;
 }
 
-enum tv_style task_tone(const struct app *app, const struct task_observation *t) {
+struct kt_style task_tone(const struct app *app, const struct task_observation *t) {
     const char *status = task_status(app, t);
     if (!strcmp(status, "stale") || !strcmp(status, "unknown") || !strcmp(t->state, "failed") ||
-        !strcmp(t->state, "waiting_approval") || !strcmp(t->state, "outcome_unknown")) return TV_WARNING;
-    if (!strcmp(t->state, "running")) return TV_SUCCESS;
-    return TV_BASE;
+        !strcmp(t->state, "waiting_approval") || !strcmp(t->state, "outcome_unknown")) return KT_WARNING;
+    if (!strcmp(t->state, "running")) return KT_SUCCESS;
+    return KT_BASE;
 }
 
 /* The remote source's freshness for the footer; false when nothing remote
  * is known and nothing failed. */
-bool remote_footer_text(const struct app *app, char *out, size_t size, enum tv_style *tone) {
+bool remote_footer_text(const struct app *app, char *out, size_t size, struct kt_style *tone) {
     long limit = 2L * HYDRA_TUI_REFRESH_SECONDS + HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS / 1000L;
     if (app->remote_stale) {
         snprintf(out, size, "Remote: STALE, last good observation %lds ago%s%s", remote_age(app),
                  app->remote_error[0] ? "; " : "", app->remote_error);
-        *tone = TV_WARNING;
+        *tone = KT_WARNING;
         return true;
     }
     if (!app->remote_known || !app->model.host_count) return false;
-    if (remote_age(app) > limit) { snprintf(out, size, "Remote updated %lds ago", remote_age(app)); *tone = TV_BASE; return true; }
+    if (remote_age(app) > limit) { snprintf(out, size, "Remote updated %lds ago", remote_age(app)); *tone = KT_BASE; return true; }
     snprintf(out, size, "Remote live");
-    *tone = TV_MUTED;
+    *tone = KT_MUTED;
     return true;
 }
 

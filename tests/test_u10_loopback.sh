@@ -18,7 +18,7 @@ root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-u10-loopback}"
 tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-u10-loopback}"
 build="${BUILD_DIR:?BUILD_DIR is required: run via make test-u10-loopback}"
-cells="$build/termviz-cells"
+cells="$build/kettle-cells"
 
 skip() { printf 'SKIP U10 loopback: %s\n' "$1"; exit 0; }
 if [ "$(id -u)" -ne 0 ]; then

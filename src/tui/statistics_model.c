@@ -2,9 +2,11 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "statistics_cohorts.h"
+#include "statistics.h"
 /* View state is caller-owned and independent of head/graph selection. */
 
+
+static void statistics_runs_move(struct app *app, int direction);
 
 bool statistics_init(struct app *app) {
     if (!app->statistics) {
@@ -20,7 +22,7 @@ void statistics_destroy(struct app *app) {
     free(app->statistics->model); free(app->statistics); app->statistics = NULL;
 }
 
-void statistics_visible(struct app *app) {
+static void statistics_runs_visible(struct app *app) {
     struct statistics_view *v = app->statistics;
     size_t i, j;
     v->count = 0;
@@ -45,9 +47,16 @@ void statistics_visible(struct app *app) {
         if (!strcmp(identity, v->selected_id)) { v->selected = i; break; }
     }
     if (v->selected >= v->count) v->selected = v->count ? v->count - 1 : 0;
+    /* A filter that hides every row keeps the selection for when it shows
+     * again. */
     if (v->count) copy_text(v->selected_id, sizeof(v->selected_id), app->fleet ?
         app->model.hosts[v->visible[v->selected]].name : v->model->runs[v->visible[v->selected]].id);
-    else v->selected_id[0] = '\0';
+}
+
+/* The rows of both pages after a new sample or a changed filter. */
+void statistics_visible(struct app *app) {
+    statistics_runs_visible(app);
+    statistics_sessions_visible(app);
 }
 
 /* Consumes the completed observation stream. */
@@ -62,32 +71,52 @@ int accept_statistics(struct app *app, FILE *input) {
         return -1;
     }
     fclose(input); free(app->statistics->model); app->statistics->model = next;
+    statistics_sessions_default(app->statistics);
+    /* A sample without remote steps has no cohorts page to stay on. */
+    if (app->statistics->metric_page > HS_METRICS && !statistics_cohorts_recorded(next)) app->statistics->metric_page = 0;
     app->statistics->stale = false; app->statistics->error[0] = '\0';
+    app->statistics->received = time(NULL);
     statistics_visible(app);
     return 0;
 }
 
-int refresh_statistics(struct app *app, const char *fixture) {
-    char notice[TEXT];
-    FILE *input;
+/* Deterministic rendering reads a recorded stream in place of the adapter. */
+int load_statistics_fixture(struct app *app, const char *fixture) {
     if (app->fleet) { if (!statistics_init(app)) return -1; statistics_visible(app); return 0; }
-    copy_text(notice,sizeof(notice),app->notice);
-    if (!fixture) native_observations_cancel(app,2);
-    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","statistics-data",2000);
-    copy_text(app->notice,sizeof(app->notice),notice);
-    return accept_statistics(app,input);
+    return accept_statistics(app, fopen(fixture, "r"));
+}
+
+/* Asks for a fresh sample without waiting for it: the view keeps the sample
+ * it has until the new one arrives. */
+void statistics_request(struct app *app) {
+    if (!statistics_init(app)) return;
+    if (app->fleet) { statistics_visible(app); return; }
+    native_observations_request(app, OBSERVE_STATISTICS);
 }
 
 void statistics_move(struct app *app, int direction) {
+    if (!app->statistics) return;
+    if (statistics_sessions_shown(app)) statistics_sessions_move(app, direction);
+    else statistics_runs_move(app, direction);
+}
+
+/* Moves an offset by one within [0, count). */
+static void step(size_t *offset, size_t count, int direction) {
+    if (direction > 0 && *offset + 1 < count) (*offset)++;
+    if (direction < 0 && *offset) (*offset)--;
+}
+
+/* On the cohorts page the arrows move through the cohorts (step_scroll is
+ * its selection). With the evidence focused they scroll its steps;
+ * otherwise they move the selection, which the evidence beside the list
+ * follows. */
+static void statistics_runs_move(struct app *app, int direction) {
     struct statistics_view *v = app->statistics;
-    if (!v) return;
-    if (v->detail || (!app->fleet && v->metric_page == STATISTICS_COHORT_PAGE)) {
-        if (direction > 0 && v->step_scroll < HS_STEPS - 1) v->step_scroll++;
-        if (direction < 0 && v->step_scroll) v->step_scroll--;
-    } else {
-        if (direction > 0 && v->selected + 1 < v->count) v->selected++;
-        if (direction < 0 && v->selected) v->selected--;
-        if (v->count) copy_text(v->selected_id, sizeof(v->selected_id), app->fleet ?
-            app->model.hosts[v->visible[v->selected]].name : v->model->runs[v->visible[v->selected]].id);
-    }
+    if (statistics_cohorts_shown(app)) { step(&v->step_scroll, statistics_cohort_count(v), direction); return; }
+    if (stats_evidence_focused(app)) { step(&v->step_scroll, HS_STEPS, direction); return; }
+    step(&v->selected, v->count, direction);
+    v->step_scroll = 0;
+    if (!v->count) return;
+    copy_text(v->selected_id, sizeof(v->selected_id), app->fleet ?
+        app->model.hosts[v->visible[v->selected]].name : v->model->runs[v->visible[v->selected]].id);
 }

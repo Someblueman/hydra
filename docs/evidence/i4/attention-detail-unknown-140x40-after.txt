@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ATTENTION DETAIL                                                                                                                        │
-│ Needs inspection · index-rebuild · on archive                                                                                           │
-│ Status      New: not marked seen yet.                                                                                                   │
-│ Why         This item could not be classified by Hydra (provider_question). Inspect its records before acting.                          │
-│ Next        r shows the records Hydra could read; inspect them before acting.                                                           │
-│                                                                                                                                         │
-│ IDENTITY                                                                                                                                │
-│ Kind        question · provider_question                           Source      fleet overview                                           │
-│ Project     project_7f3a                                           Host        archive                                                  │
-│ Task        task_9e8d7c6b                                          Run         run_aa11bb22cc33                                         │
-│ Step        -                                                      Attempt     -                                                        │
-│ Head        head_a7b9c1d3                                          Instance    instance_a7b9c1d3                                        │
-│ Request     -                                                      Binding     -                                                        │
-│ Freshness   unknown                                                                                                                     │
-│ Route       unavailable · not navigable                                                                                                 │
-│ Revision   1111111111111111111111111111111111111111111111111111111111111111                                                             │
-│ Identity   2222222222222222222222222222222222222222222222222222222222222222                                                             │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- r review  s mark seen / new again  Space/b scroll  Esc back to the list  ? help  q quit                                                   
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     ▲ Needs inspection: index-rebuild                                         
+  ◐ Approve merge-gate: notes-cleanup                            run run_aa11bb22cc33 · on archive                                         
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new                                                                               
+ Failed 1                                                        What is waiting                                                           
+  ✗ Check failed: kill-dry-run                                   This item could not be classified by Hydra (provider_question). Inspect   
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    its records before acting.                                                
+ Ready for review 3                                                                                                                        
+  ✓ Result ready: kill-dry-run                                   Run         run_aa11bb22cc33                                              
+    run run_2cdf8bbe1a4e · step implement · attempt 1 · new      Task        task_9e8d7c6b                                                 
+  ✓ Result ready: feature-build                                  Host        archive                                                       
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…    Status      New: not marked seen yet.                                     
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…    Next        r shows the records Hydra could read; inspect them before     
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new                  acting.                                                       
+ Agents 1                                                                                                                                  
+  ▲ Terminal stopped: notes-cleanup                              r Review    s Seen                                                        
+    worktree and files kept · R restarts it                                                                                                
+ Repairs 2                                                                                                                                 
+  ▲ (stale) Approval expired: docs-refresh                                                                                                 
+    run run_55aa66bb77cc · step release-gate · attempt 1                                                                                   
+ ▌▲ Needs inspection: index-rebuild                                                                                                        
+ ▌  run run_aa11bb22cc33 · on archive                                                                                                      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ select • enter open • r review • s seen • tab/shift+tab pane • [/] page • : commands • esc back • ? help • q quit                     

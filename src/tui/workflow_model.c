@@ -15,14 +15,14 @@ bool workflow_id(const char *s) {
 size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices) {
     size_t i, n = 0;
     for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run) {
-        if (n == TV_GRAPH_MAX_NODES) return n + 1;
+        if (n == KT_GRAPH_MAX_NODES) return n + 1;
         indices[n++] = i;
     }
     return n;
 }
 
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
-                            struct tv_edge *edges, size_t *count) {
+                            struct kt_edge *edges, size_t *count) {
     size_t i;
     *count = 0;
     for (i = 0; i < n; i++) {
@@ -34,13 +34,13 @@ bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_
         while (token) {
             size_t j;
             for (j = 0; j < n; j++) if (!strcmp(token, m->nodes[indices[j]].id)) break;
-            if (j == n || *count == TV_GRAPH_MAX_EDGES) return false;
+            if (j == n || *count == KT_GRAPH_MAX_EDGES) return false;
             {
                 size_t previous;
                 for (previous = 0; previous < *count; previous++)
                     if (edges[previous].from == j && edges[previous].to == i) return false;
             }
-            edges[(*count)++] = (struct tv_edge){j, i};
+            edges[(*count)++] = (struct kt_edge){j, i};
             token = strtok_r(NULL, ",", &save);
         }
     }
@@ -171,10 +171,10 @@ static int workflow_record(struct workflow_model *m, char **f, size_t count, boo
 static bool workflow_graphs_valid(const struct workflow_model *m) {
     size_t i;
     for (i = 0; i < m->run_count; i++) {
-        size_t indices[TV_GRAPH_MAX_NODES], count, n = workflow_nodes(m, i, indices);
-        struct tv_edge edges[TV_GRAPH_MAX_EDGES]; struct tv_graph_layout layout;
-        if (n > TV_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) ||
-            !tv_graph_layout(edges, count, n, &layout)) return false;
+        size_t indices[KT_GRAPH_MAX_NODES], count, n = workflow_nodes(m, i, indices);
+        struct kt_edge edges[KT_GRAPH_MAX_EDGES]; struct kt_graph_layout layout;
+        if (n > KT_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) ||
+            !kt_graph_layout(edges, count, n, &layout)) return false;
     }
     return true;
 }
@@ -213,7 +213,7 @@ int accept_workflows(struct app *app, FILE *input) {
     }
     fclose(input);
     if (app->workflows && app->workflow_run < app->workflows->run_count) {
-        size_t i, previous[TV_GRAPH_MAX_NODES], next_indices[TV_GRAPH_MAX_NODES];
+        size_t i, previous[KT_GRAPH_MAX_NODES], next_indices[KT_GRAPH_MAX_NODES];
         size_t old_count = workflow_nodes(app->workflows, app->workflow_run, previous);
         char selected_id[65] = "";
         if (app->workflow_node < old_count) copy_text(selected_id, sizeof(selected_id), app->workflows->nodes[previous[app->workflow_node]].id);
@@ -231,18 +231,13 @@ int accept_workflows(struct app *app, FILE *input) {
     return 0;
 }
 
-int refresh_workflows(struct app *app, const char *fixture) {
-    char notice[TEXT];
-    FILE *input;
-    copy_text(notice,sizeof(notice),app->notice);
-    if (!fixture) native_observations_cancel(app,1);
-    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","tui-data",2000);
-    copy_text(app->notice,sizeof(app->notice),notice);
-    return accept_workflows(app,input);
+/* Deterministic rendering reads a recorded stream in place of the adapter. */
+int load_workflow_fixture(struct app *app, const char *fixture) {
+    return accept_workflows(app, fopen(fixture, "r"));
 }
 
 void workflow_move(struct app *app, int direction) {
-    size_t indices[TV_GRAPH_MAX_NODES], n;
+    size_t indices[KT_GRAPH_MAX_NODES], n;
     if (!app->workflows) return;
     n = workflow_nodes(app->workflows, app->workflow_run, indices);
     if (direction > 0 && app->workflow_node + 1 < n) app->workflow_node++;
@@ -250,21 +245,23 @@ void workflow_move(struct app *app, int direction) {
     app->graph_follow = true;
 }
 
+/* Moves a pan offset by step within 0..limit. */
+static int pan(int at, int step, int limit) {
+    at += step;
+    if (at < 0) return 0;
+    return at > limit ? limit : at;
+}
+
+/* The Run page's graph keys: j/k select a step, h/l and J/K pan (the graph
+ * stops following the selection), Enter recentres on the selected step. */
 bool workflow_key(struct app *app, char key) {
-    if (key == 'j' || key == 'k') workflow_move(app, key == 'j' ? 1 : -1);
-    else if (key == '[' || key == ']') {
-        if (app->workflows && app->workflows->run_count) {
-            size_t n = app->workflows->run_count;
-            if (n > 1) app->notice[0] = '\0';
-            app->workflow_run = (app->workflow_run + (key == ']' ? 1 : n - 1)) % n;
-            app->workflow_node = 0; app->graph_x = 0; app->graph_y = 0; app->graph_follow = true;
-        }
-    } else if (key == 'h') { app->graph_x = app->graph_x > 8 ? app->graph_x - 8 : 0; app->graph_follow = false; }
-    else if (key == 'l') { if (app->graph_x < 3500) app->graph_x += 8; app->graph_follow = false; }
-    else if (key == 'J') { if (app->graph_y < 650) app->graph_y += 4; app->graph_follow = false; }
-    else if (key == 'K') { app->graph_y = app->graph_y > 4 ? app->graph_y - 4 : 0; app->graph_follow = false; }
-    else if (key == '\r' || key == '\n') app->graph_follow = true;
-    else if (strchr("/:pda cAxG", key)) copy_text(app->notice, sizeof(app->notice), "Workflow view is read-only; j/k nodes, [/] runs, h/l/J/K pan");
-    else return false;
+    switch (key) {
+    case 'j': case 'k': workflow_move(app, key == 'j' ? 1 : -1); return true;
+    case 'h': case 'l': app->graph_x = pan(app->graph_x, key == 'l' ? 8 : -8, 3500); break;
+    case 'J': case 'K': app->graph_y = pan(app->graph_y, key == 'J' ? 4 : -4, 650); break;
+    case '\r': case '\n': app->graph_follow = true; return true;
+    default: return false;
+    }
+    app->graph_follow = false;
     return true;
 }

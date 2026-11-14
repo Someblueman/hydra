@@ -3,9 +3,13 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "wake.h"
+#include <poll.h>
 
 /* Synchronous CLI actions have a private process group and bounded output.
- * Interrupted mutations remain unknown; this transport never retries them. */
+ * Interrupted mutations remain unknown; this transport never retries them.
+ * The caller waits for the result while the loop runs around it: agent panes
+ * keep updating and keys typed meanwhile are dropped. */
 static int action_spawn(char *const argv[], pid_t *pid, int *fd) {
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
@@ -133,8 +137,34 @@ static int action_result(struct action_capture *p) {
     return WIFEXITED(p->status) ? WEXITSTATUS(p->status) : 1;
 }
 
+struct action_wait { struct action_capture *capture; long budget_ms; bool done; };
+
+/* What would make stepping the action again worthwhile: more output, its
+ * deadline, or the stages of stopping it. Its exit arrives as a signal. */
+static void action_wake(const struct action_capture *p, long budget_ms) {
+    if (p->failure) { wake_after(20); return; }
+    if (!p->eof) wake_fd(p->fd, POLLIN);
+    wake_at(&p->started, budget_ms);
+}
+
+static void action_tick(struct app *app, void *context) {
+    struct action_wait *wait = context;
+    if (!wait->done) wait->done = action_step(app, wait->capture, wait->budget_ms);
+    if (!wait->done) action_wake(wait->capture, wait->budget_ms);
+}
+
+/* With no loop to wait in (it is ending, or absent): poll the pipe briefly. */
+static void action_pause(const struct action_capture *p) {
+    struct pollfd output = {0, POLLIN, 0};
+    output.fd = p->eof || p->failure ? -1 : p->fd;
+    (void)poll(&output, 1, 20);
+}
+
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms) {
     struct action_capture capture = {0};
+    struct action_wait wait = {&capture, budget_ms, false};
+    struct modal modal = {action_tick, NULL, &wait};
+    bool pushed;
     int error;
     if (!size) return 1;
     out[0] = '\0';
@@ -147,10 +177,15 @@ int run_captured(struct app *app, char *const argv[], char *out, size_t size, lo
     if (error) { snprintf(out, size, "Could not start %s: %s", argv[0], strerror(error)); return 1; }
     capture.out = out; capture.size = size;
     (void)clock_gettime(CLOCK_MONOTONIC, &capture.started);
-    while (!action_step(app, &capture, budget_ms)) {
-        char key;
-        update_size(app); render(app, 0U, false);
-        (void)read_key(40, &key);
+    pushed = modal_push(app, &modal);
+    app->action_depth++;
+    for (;;) {
+        struct kt_msg msg;
+        action_tick(app, &wait);
+        if (wait.done) break;
+        if (!pushed || modal_wait(app, &msg) == MODAL_STOPPED) action_pause(&capture);
     }
+    app->action_depth--;
+    if (pushed) modal_pop(app);
     return action_result(&capture);
 }

@@ -16,6 +16,14 @@ static size_t plan_spawns(const struct native_plan *p) {
 
 /* Shows the short digest, policy and consequences, then passes the full digest
  * of this displayed revision. Launch still refuses a changed draft or policy. */
+/* The execution approval: one question, its policy and consequences. */
+static bool plan_execute_confirmed(struct app *app, const char *const lines[], size_t count) {
+    char body[2048]="";
+    size_t i;
+    for (i=0;i<count;i++) text_append(body,sizeof(body),"%s%s",i ? "\n\n" : "",lines[i]);
+    return dialog_confirm(app,"Execute plan",body,"Execute",false);
+}
+
 static void plan_confirm_execution(struct app *app) {
     struct native_plan *p=app->plan;
     struct plan_summary summary;
@@ -33,7 +41,7 @@ static void plan_confirm_execution(struct app *app) {
     plan_summary_consequences(&summary,p->graph.node_count,plan_spawns(p),consequences,sizeof(consequences));
     lines[0]=first; lines[1]=policy; lines[2]=consequences;
     lines[3]="y executes exactly this validated revision. A changed draft or policy must be validated again.";
-    if (!confirm_choice(app,"INPUT TO HYDRA / execution approval",lines,4,"y")) {
+    if (!plan_execute_confirmed(app,lines,4)) {
         copy_text(app->notice,sizeof(app->notice),"Execution not approved; nothing was submitted.");
         return;
     }
@@ -43,8 +51,9 @@ static void plan_confirm_execution(struct app *app) {
 
 void native_plan_execute(struct app *app) {
     struct native_plan *p=app->plan;
-    if (p && p->digest[0] && !strcmp(p->digest,p->launched_digest))
-        copy_text(app->notice,sizeof(app->notice),"This revision was already submitted. Open C to inspect its recorded run.");
+    if (p && p->digest[0] && !strcmp(p->digest,p->launched_digest) && !native_plan_launch_failed(p))
+        copy_text(app->notice,sizeof(app->notice),p->launched_run[0] ? "This revision was already submitted. Open C to inspect its recorded run." :
+            "This revision was already submitted; its launch has not recorded a run yet. No automatic retry.");
     else if (p && p->state==PLAN_RETURNED)
         copy_text(app->notice,sizeof(app->notice),"This revision was returned for changes; nothing runs until the agent publishes a revision.");
     else if (p && p->state==PLAN_READY) plan_confirm_execution(app);
@@ -68,8 +77,8 @@ static void plan_feedback_text(const struct native_plan *p, const char *feedback
 static bool plan_can_return(struct app *app) {
     struct native_plan *p=app->plan;
     const char *refusal=NULL;
-    if (!p || !p->proposal_head[0]) refusal="F returns an agent proposal; review one with P first (I imports files without an agent).";
-    else if (p->digest[0] && !strcmp(p->digest,p->launched_digest)) refusal="This revision was already submitted; request changes in the agent's conversation.";
+    if (!p || !p->proposal_head[0]) refusal="F returns an agent proposal; review one with P first (: imports files without an agent).";
+    else if (p->digest[0] && !strcmp(p->digest,p->launched_digest) && !native_plan_launch_failed(p)) refusal="This revision was already submitted; request changes in the agent's conversation.";
     else if (p->state==PLAN_RETURNED) refusal="Already returned for changes; waiting for the agent's revision.";
     else if (p->job.pid) refusal="Validation is running; request changes when it finishes.";
     if (refusal) copy_text(app->notice,sizeof(app->notice),refusal);
@@ -79,6 +88,15 @@ static bool plan_can_return(struct app *app) {
 /* Records the return through the CLI, clears this revision's validation and
  * types the feedback into the agent's conversation. The user presses Enter
  * there: the text is theirs to review before the agent acts on it. */
+static bool plan_feedback_form(struct app *app, const char *body, char *feedback, size_t size) {
+    struct kt_textinput input;
+    struct kt_field field;
+    kt_textinput_init(&input,feedback,size);
+    memset(&field,0,sizeof(field));
+    field.kind=KT_FIELD_TEXT; field.label="What should change"; field.input=&input;
+    return dialog_form_body(app,"Request changes",body,&field,1)==0 && feedback[0];
+}
+
 void native_plan_request_changes(struct app *app) {
     char feedback[2048]="", output[4096], branch[TEXT], prompt[TEXT+96], text[4096];
     unsigned revision;
@@ -86,8 +104,9 @@ void native_plan_request_changes(struct app *app) {
     if (!plan_can_return(app)) return;
     copy_text(branch,sizeof(branch),app->plan->proposal_head);
     revision=app->plan->revision;
-    snprintf(prompt,sizeof(prompt),"Changes to request from %s (typed into its conversation): ",branch);
-    if (prompt_text(app,prompt,feedback,sizeof(feedback)) || !feedback[0]) return;
+    snprintf(prompt,sizeof(prompt),"Changes to request from %s. Your feedback is typed into its conversation; "
+             "you press Enter there.",branch);
+    if (!plan_feedback_form(app,prompt,feedback,sizeof(feedback))) return;
     if (!app->plan || app->plan->revision!=revision || app->plan->job.pid) {
         copy_text(app->notice,sizeof(app->notice),"The proposal changed while you typed; nothing was returned. Review the new revision.");
         return;

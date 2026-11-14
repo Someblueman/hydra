@@ -1,6 +1,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
+#include "fleet/support/sha256.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -327,12 +328,59 @@ static void obligation_cases(void) {
     obligations = plan_obligations_reviews(plan); assert(json_object_array_length(obligations) == 2); json_object_put(obligations); json_object_put(plan); json_object_put(policy);
 }
 #include "test_plan_bundle.inc"
+#include "test_plan_simple.inc"
+/* validate reports diagnostics, and projects coverage and obligations, for a
+ * draft that fails validation; a missing or mistyped member must not abort. */
+static void expect_cli(const char *root, json_object *plan, json_object *policy, const char *assets, const char *code) {
+    char plan_path[F_PATH], policy_path[F_PATH];
+    char *argv[] = {"validate", plan_path, policy_path, (char *)root, "--assets-dir", (char *)assets, NULL};
+    json_object *result, *diagnostics; size_t i; bool found = false;
+    assert(!f_path(plan_path, sizeof(plan_path), root, "missing-plan.json") && !f_path(policy_path, sizeof(policy_path), root, "missing-policy.json"));
+    assert(!json_object_to_file(plan_path, plan) && !json_object_to_file(policy_path, policy));
+    result = plan_cli(assets ? 6 : 4, argv);
+    assert(result && !json_object_get_boolean(f_field(result, "ok")));
+    diagnostics = f_field(f_field(result, "data"), "diagnostics");
+    for (i = 0; i < json_object_array_length(diagnostics); i++)
+        if (!strcmp(f_string(json_object_array_get_idx(diagnostics, i), "code"), code)) found = true;
+    if (!found) fprintf(stderr, "%s\n", json_object_to_json_string(result));
+    assert(found && json_object_is_type(f_field(f_field(result, "data"), "obligations"), json_type_array));
+    json_object_put(result); unlink(plan_path); unlink(policy_path);
+}
+static void missing_member_cases(const char *root) {
+    const char *const wrong[] = {NULL, "\"x\"", "7", "{}"};
+    json_object *plan, *policy = plan_read("tests/fixtures/plan/policy.json"), *verifier;
+    size_t i;
+    for (i = 0; i < sizeof(wrong) / sizeof(wrong[0]); i++) {
+        plan = fixture();
+        if (wrong[i]) json_object_object_add(plan, "requirements", f_parse_value(wrong[i]));
+        else json_object_object_del(plan, "requirements");
+        expect_cli(root, plan, policy, NULL, "invalid_collection"); json_object_put(plan);
+        plan = fixture();
+        json_object_object_add(plan, "obligations", f_parse_value(wrong[i] ? wrong[i] : "[\"x\"]"));
+        expect_cli(root, plan, policy, NULL, wrong[i] ? "invalid_collection" : "invalid_obligation"); json_object_put(plan);
+    }
+    plan = fixture(); json_object_object_add(plan, "obligations", obligation_set());
+    json_object_object_del(json_object_array_get_idx(f_field(plan, "deliverables"), 0), "step");
+    expect_cli(root, plan, policy, NULL, "impossible_evaluation"); json_object_put(plan);
+    plan = fixture(); json_object_object_add(plan, "obligations", obligation_set());
+    json_object_object_del(json_object_array_get_idx(f_field(plan, "deliverables"), 0), "output");
+    expect_cli(root, plan, policy, NULL, "impossible_evaluation"); json_object_put(plan);
+    plan = fixture(); add_verifier(plan, "@input/verifier");
+    verifier = f_field(f_field(f_field(plan, "data"), "inputs"), "verifier");
+    json_object_object_add(verifier, "asset", json_object_new_int(7));
+    expect_cli(root, plan, policy, root, "invalid_asset"); json_object_put(plan); json_object_put(policy);
+    plan = plan_read("tests/fixtures/plan-task/plan.json"); policy = plan_read("tests/fixtures/plan-task/policy.json");
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1));
+    json_object_object_add(f_field(policy, "envelope"), "repair_budget", json_object_new_int(1));
+    json_object_object_del(f_field(f_field(f_field(plan, "data"), "steps"), "compose"), "inputs");
+    expect_cli(root, plan, policy, NULL, "missing_repair_context"); json_object_put(plan); json_object_put(policy);
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
-    bundle_cases(root);
+    bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases(); sha256_cases();
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));

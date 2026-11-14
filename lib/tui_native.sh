@@ -62,17 +62,17 @@ tui_native_capabilities() {
     fi
     if [ "$_tnc_json" -eq 1 ]; then
         printf '{"schema_version":1,"ok":true,"command":"tui capabilities","data":{'
-        printf '"default_mode":"native","fallback_mode":"basic","basic":true,"native":%s,' "$_tnc_native"
+        printf '"default_mode":"native","fallback_mode":"none","basic":false,"native":%s,' "$_tnc_native"
         printf '"native_path":%s,' "$(json_string_or_null "$_tnc_path")"
         printf '"observation":"bounded-polling","tmux_control_mode":false,'
         printf '"headless_fixture":true,"mutation_authority":"shell-cli"}}\n'
     else
-        printf 'default mode: native (visible basic fallback)\n'
-        printf 'basic TUI: available\n'
+        printf 'default mode: native (no fallback)\n'
         if [ "$_tnc_native" = true ]; then
             printf 'native TUI: available at %s\n' "$_tnc_path"
         else
             printf 'native TUI: unavailable (run make build-tui or install a native artifact)\n'
+            printf 'without it: hydra list and hydra switch still work\n'
         fi
         printf 'observation: measured bounded polling; tmux control mode not enabled\n'
         printf 'mutations: delegated to the shell CLI with argv execution\n'
@@ -334,9 +334,15 @@ EOF
             fi
         done
     fi
-    # Same authority as 'hydra gc --policy orphaned'; the label is
-    # "<branch> (<path>), <size>" with a cached, bounded size, and the source is
-    # the exact path an in-app removal passes to gc --path.
+    tui_native_emit_orphans
+}
+
+# R rows for leftover worktrees. Same authority as 'hydra gc --policy
+# orphaned'; the label is "<branch> (<path>), <size>" with a cached, bounded
+# size, and the source is the exact path an in-app removal passes to gc --path.
+# The native reader of the state store asks for these rows alone (--orphan-rows)
+# when a worktree directory without a head record exists.
+tui_native_emit_orphans() {
     list_orphan_worktree_rows cached | while IFS="$(printf '\t')" read -r _tned_state _tned_obranch _tned_okib _tned_opath; do
         [ -n "$_tned_opath" ] || continue
         _tned_okind=orphan-worktree
@@ -346,6 +352,14 @@ EOF
             "$(tui_native_safe_field "$_tned_obranch ($_tned_opath), $(worktree_format_kib "$_tned_okib")")" \
             "$(tui_native_safe_field "$_tned_opath")"
     done
+}
+
+# Say why the control centre cannot start, how to get the helper, and which
+# commands work without it.
+tui_native_report_unavailable() {
+    echo "Error: native TUI is unavailable: the control centre needs the hydra-tui helper built for Hydra $HYDRA_VERSION" >&2
+    echo "Next: run 'make build-tui' in a source checkout, or rerun install.sh with HYDRA_BUILD_TUI=1 or HYDRA_TUI_ARTIFACT=/path/to/hydra-tui" >&2
+    echo "Meanwhile: 'hydra list' and 'hydra switch' work without it" >&2
 }
 
 # Remote work beside local work (U11): the fleet helper's visual stream, or
@@ -429,13 +443,14 @@ tui_native_onboarding_home() {
 
 tui_native_exec() {
     _tne_binary="$(tui_native_find_binary)" || {
-        echo "Error: native TUI is unavailable" >&2
-        echo "Next: run make build-tui, install the native artifact, or use hydra tui --basic" >&2
+        tui_native_report_unavailable
         return 1
     }
     exec "$_tne_binary" --hydra "$HYDRA_BIN_CMD" "$@"
 }
 
+# Run the control centre in this terminal. An unexpected exit status leaves the
+# terminal as it was found and is reported and returned as is.
 tui_native_run() {
     _tnr_saved_stty=""
     if [ -t 0 ]; then
@@ -443,30 +458,35 @@ tui_native_run() {
     fi
     _tnr_binary="$(tui_native_find_binary 2>/dev/null || true)"
     if [ -z "$_tnr_binary" ]; then
-        if [ -n "$_tnr_saved_stty" ]; then
-            stty "$_tnr_saved_stty" 2>/dev/null || true
-        fi
-        echo "Warning: native TUI is unavailable; starting the basic TUI" >&2
-        cmd_tui --basic
-        return $?
+        tui_native_report_unavailable
+        return 1
     fi
-    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" "$@"; then
+    # --store: this CLI's state store is the helper's to read in-process; the
+    # helper then asks the CLI only for what the store cannot say.
+    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" --store "$@"; then
         _tnr_status=0
     else
         _tnr_status=$?
     fi
     if [ -t 1 ]; then
-        printf '\033[?1000l\033[?1006l\033[0m\033[?25h'
+        # The helper draws on the alternate screen and leaves it itself; one
+        # ended by a signal may not have. A helper that refused to start never
+        # took the screen, and leaving it again would move the cursor.
+        if [ "$_tnr_status" -gt 128 ]; then
+            printf '\033[?1049l'
+        fi
+        printf '\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h'
     fi
     case "$_tnr_status" in
-        0|2|129|130|131|133|137|143) return "$_tnr_status" ;;
+        # 3 is the helper refusing to start (no terminal, TERM=dumb, too small);
+        # it has already said why.
+        0|2|3|129|130|131|133|137|143) ;;
         *)
             if [ -n "$_tnr_saved_stty" ]; then
                 stty "$_tnr_saved_stty" 2>/dev/null || true
             fi
-            echo "Warning: native TUI exited with status $_tnr_status; starting the basic TUI" >&2
-            cmd_tui --basic
-            return $?
+            echo "Error: native TUI exited unexpectedly with status $_tnr_status" >&2
             ;;
     esac
+    return "$_tnr_status"
 }

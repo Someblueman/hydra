@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                               3 local / 3 remote / 1 of 3 hosts disconnected / 1 running  
+                                                                                                                                           
+ Hosts  Onboarding  -------------------- 4 --   This machine ----------------------------------------------------------------------------- 
+ >* This machine                      3 heads   Heads       3 heads / 1 running / 1 terminal gone                                          
+  Observed 3                                    tmux        . reading...                                                                   
+  * builder                    1 head / fresh   Hydra       . reading...                                                                   
+  ! archive               1 head / stale 300s                                                                                              
+  ! offline           disconnected /+- Add a host ---------------------------------------------------+                                     
+  + Add a host      set up a machine|                                                                |                                     
+                                    |  Hydra connects with your own SSH setup. It checks the         |                                     
+                                    |  machine and asks before every change; nothing changes on the  |xample a build box with more cores   
+                                    |  remote until you approve it. Next: Hydra reads the machine's  |n a task needs more than this        
+                                    |  SSH host key and shows it for you to confirm.                 |and requirements, installs a         
+                                    |                                                                | to agents. Nothing changes on the   
+                                    |  SSH destination                                               |                                     
+                                    |  |                                                             |                                     
+                                    |  user@host, or a Host from ~/.ssh/config                       |e edits and x removes an unfinished  
+                                    |                                                                | heads; L filters by location.       
+                                    |  Name in Hydra                                                 |                                     
+                                    |  |                                                             |                                     
+                                    |  empty: the host name is used                                  |                                     
+                                    |                                                                |                                     
+                                    |  SSH config file                                               |                                     
+                                    |  |                                                             |                                     
+                                    |  absolute path or ~/...; empty: your usual SSH config          |                                     
+                                    |                                                                |                                     
+                                    +-------------------------- tab next | enter check | esc cancel -+                                     
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live   Remote live / 3 remote hosts                                                                                                    
+ ^/v select | enter open | A add host | r observe again | O onboarding | / filter | [/] page | : commands | esc back | ? help | q quit     

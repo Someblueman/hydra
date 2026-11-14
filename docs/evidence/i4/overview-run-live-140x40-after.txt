@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / OVERVIEW                                                Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Work  Details  [Overview]  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Overview ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ╭─ RUNNING ────────────────────╮ ╭─ NEED ATTENTION ─────────────╮ ╭─ RUNS ACTIVE ────────────────╮ ╭─ CHANGED FILES ──────────────────╮ │
-│ │ 2                            │ │ 1                            │ │ 1                            │ │ 3                                │ │
-│ │                              │ │ failures, decisions, stopped │ │                              │ │                                  │ │
-│ │ heads and runs working now   │ │ see Recovery too             │ │ 1 recorded in this project   │ │ uncommitted, all heads           │ │
-│ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────────╯ │
-│                                                                                                                                         │
-│ ╭─ WORK / what you started, local and remote ──────────────────────────────────╮ ╭─ SELECTED / what it needs ─────────────────────────╮ │
-│ │                                                                              │ │                                                    │ │
-│ │ > add-kill                                                  running          │ │ add-kill                                           │ │
-│ │     ▸ plan run kill-dry-run                                 running          │ │                                                    │ │
-│ │   notes-cleanup                                             terminal gone    │ │ Agent: codex · local                               │ │
-│ │                                                                              │ │ Session: running                                   │ │
-│ │                                                                              │ │ Changed files 0   Reported: nothing yet            │ │
-│ │                                                                              │ │ No approval requests                               │ │
-│ │ 2 heads you started / Enter opens or expands                                 │ │                                                    │ │
-│ ╰──────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────────────╯ │
-│                                                                                                                                         │
-│ ╭─ RUN / plan run kill-dry-run · running · 2 heads · from add-kill ───────────────────────────────────────────────────────────────────╮ │
-│ │ STEP             KIND/ROLE      STATE             TRIES TIME          HEAD                                                          │ │
-│ │ spawn-worker     spawn/work     succeeded         1     5s            kill-dry-run-worker                                           │ │
-│ │ implement        exec/compose   running           1     511h28m       kill-dry-run-worker                                           │ │
-│ │   codex-cli 0.46.0 · gpt-6-sol (configured), effort xhigh (configured) · tokens in unknown, cached unknown, out unknown             │ │
-│ │ spawn-check      spawn/work     ready             0     -             kill-dry-run-check (pending)                                  │ │
-│ │ verify           exec/verify    queued            0     -             kill-dry-run-check (pending)                                  │ │
-│ │                                                                                                                                     │ │
-│ │ Next  Running step implement on kill-dry-run-worker (codex); p on that head shows its output                                        │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ │                                                                                                                                     │ │
-│ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit                                                              
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
+                                                                                                                                           
+ Heads ─────────────────────── 3  kill-dry-run-worker ───────────────── latest output · read-only  Details  Run ─────────────────────────  
+  ● add-kill           codex      ● worker · codex · step implement · running · headless, no ter…  ● running · step 2 of 4 · plan run kil  
+ ▌  ▸ ● plan run kill… 1/4                                                                                                                 
+  ▲ notes-cleanup      claude     Reading the step output...                                       ╭────────────────────╮     ╭─────────   
+                                                                                                   │ spawn-worker       │──┬─>│ implemen   
+                                                                                                   │ succeeded          │  │  │ running    
+                                                                                                   ╰────────────────────╯  │  ╰─────────   
+                                                                                                                           │               
+                                                                                                   ╭────────────────────╮  │               
+                                                                                                   │ spawn-check        │──┘               
+                                                                                                   │ ready              │                  
+                                                                                                   ╰────────────────────╯                  
+                                                                                                                                           
+                                                                                                    STEP          STATE         TIME       
+                                                                                                   ▌spawn-worker  ✓ succeeded   5s         
+                                                                                                    implement     ● running     1180h00m   
+                                                                                                    spawn-check   ○ ready       -          
+                                                                                                    verify        ○ queued      -          
+                                                                                                                                           
+                                                                                                   spawn-worker ─────────────── evidence   
+                                                                                                   Head    kill-dry-run-worker             
+                                                                                                   Kind    spawn/work, attempt 1           
+                                                                                                   Needs   -                               
+                                                                                                                                           
+                                                                                                   Next    Running step implement on       
+                                                                                                           kill-dry-run-worker (codex);    
+                                                                                                           its output is in the            
+                                                                                                           conversation                    
+                                                                                                   Heads   kill-dry-run-worker (worker)    
+                                                                                                           kill-dry-run-check (pending)    
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  2 heads · 1 needs you                                                                                                                    
+  ● live   plan run kill-dry-run · running · 2 heads                                                                                       
+ ↑/↓ select • enter expand • ←/→ collapse/expand • Y approve • N reject • R resume • X cancel • n new task • / filter • ? help • q quit    

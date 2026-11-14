@@ -88,19 +88,43 @@ jq -e '.data.result.changes as $c | $c.state == "observed" and $c.branch == "kil
     and ($c.commits | length) == 2 and ($c.commits | map(.subject) | index("feat(kill): add --dry-run preview")) != null
     and ($c.files | map(.path) | sort) == ["README.md","lib/kill_dry.sh"]
     and ($c.diff | contains("+hydra kill --dry-run previews the targets")) and $c.uncommitted_changes == false
-    and (.data.result.next.land | endswith("git merge --no-ff kill-dry-worker"))
-    and .data.result.next.cleanup == ["hydra kill kill-dry-worker","hydra kill kill-dry-verifier"]' "$fixture/review.json" >/dev/null
+    and .data.result.next.land == "hydra land kill-dry-worker" and .data.result.next.landable == true
+    and .data.result.next.keep == null
+    and .data.result.next.cleanup == ["hydra kill kill-dry-verifier --protect-untracked"]' "$fixture/review.json" >/dev/null
 review review-data "$verify_row" > "$fixture/review.tsv"
 for text in 'RESULT  kill-dry-run  -  verdict PASS (verified)  -  run succeeded' 'WHAT WAS PRODUCED' \
     '  PASS    preview-targets - Dry run lists targets (check: check)' "    Ran: sh @input/verify  (@input/NAME is the run's sealed copy of that input)" \
     '      Passed: 2  Failed: 0  Total: 2' '      tokens in 3.85M, cached 3.74M, out 23.0k; cost not reported' \
-    'CHANGES ON kill-dry-worker  (2 commits, 2 files, +4 -0; the branch as it is now)' 'DIFF  (complete)' \
-    '  Land the worker branch yourself; Hydra never merges for you:' 'TECHNICAL DETAILS  (exact identity and retained-contract checks)' \
+    'CHANGES ON kill-dry-worker  (2 commits, 2 files, +4 -0; the commit the checks ran on)' 'DIFF  (complete)' \
+    '  Land it into your current branch, a local merge of the verified commit after you confirm; nothing is pushed:' \
+    '    hydra land kill-dry-worker' 'TECHNICAL DETAILS  (exact identity and retained-contract checks)' \
     'readiness: ready'; do
     grep -Fqx "TEXT$tab$text" "$fixture/review.tsv" || { printf 'missing review line: %s\n' "$text" >&2; exit 1; }
 done
 [ "$(awk -F '\t' '$1=="REF" && $2=="log" && $3=="available" {n++} END {print n+0}' "$fixture/review.tsv")" -eq 1 ]
 if grep -q 'no recorded diff projection' "$fixture/review.tsv"; then exit 1; fi
+
+# Work the worker left uncommitted is not on its branch: the review says the
+# result is not landable as is and how to keep it, and the suggested cleanup
+# refuses rather than deleting it.
+worker_tree="$(hydra path kill-dry-worker)"
+printf 'verified but uncommitted\n' > "$worker_tree/pending.txt"
+review review "$verify_row" > "$fixture/pending.json"
+jq -e '.data.result.changes as $c | $c.uncommitted_changes == true and $c.uncommitted_count == 1
+    and $c.uncommitted_paths == ["?? pending.txt"] and .data.result.next.landable == false
+    and (.data.result.next.keep | endswith("&& git add -A && git commit -m '"'"'Result of plan kill-dry-run'"'"'"))
+    and .data.result.next.land == "hydra land kill-dry-worker"' "$fixture/pending.json" >/dev/null
+review review-data "$verify_row" > "$fixture/pending.tsv"
+for text in '  Not landable as is: the worker head has 1 uncommitted or untracked path that branch kill-dry-worker does not contain' \
+    '    ?? pending.txt' '  Not landable as is. To keep the worker'"'"'s uncommitted and untracked work, commit it on its branch' \
+    '  Then remove the plan'"'"'s other heads (each refuses while its worktree has uncommitted or untracked files):' \
+    '    hydra kill kill-dry-verifier --protect-untracked'; do
+    grep -Fqx "TEXT$tab$text" "$fixture/pending.tsv" || { printf 'missing review line: %s\n' "$text" >&2; exit 1; }
+done
+if hydra kill kill-dry-worker --protect-untracked > "$fixture/kill.out" 2>&1; then exit 1; fi
+grep -q 'untracked files' "$fixture/kill.out"
+[ "$(cat "$worker_tree/pending.txt")" = 'verified but uncommitted' ]
+rm "$worker_tree/pending.txt"
 
 # While the run is still active, a sealed result waits for the delivery gate:
 # checks are pending, never failed, and requirements are pending.
@@ -176,9 +200,9 @@ review review "$unknown_row" > "$fixture/unknown-review.json"
 jq -e '.ok and .data.inventory_state == "not_applicable" and .data.checks.state != "failed" and .data.identity.kind == "unknown"' "$fixture/unknown-review.json" >/dev/null
 printf '1\n' > "$run_dir/steps/spawn-worker/authoritative-attempt"
 
-# Statistics schema 4 carries the exec receipt evidence for the agent step.
+# The statistics feed carries the exec receipt evidence for the agent step (U rows).
 hydra workflow statistics-data > "$fixture/statistics.tsv"
-[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}5" ]
+[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}6" ]
 grep -Fqx "U${tab}$run${tab}implement${tab}fixture-codex${tab}codex-cli 0.99.0-fixture${tab}-${tab}-${tab}3850000${tab}3740000${tab}23000${tab}-" "$fixture/statistics.tsv"
 [ "$(grep -c "^U$tab" "$fixture/statistics.tsv")" -eq 1 ]
 

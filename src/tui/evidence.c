@@ -39,13 +39,13 @@ static bool native_evidence_accept(struct native_evidence *e, FILE *input) {
 void native_evidence_tick(struct app *app, bool watch) {
     struct native_evidence *e=app->evidence;
     struct workflow_model *m=app->workflows;
-    size_t indices[TV_GRAPH_MAX_NODES],count=0;
+    size_t indices[KT_GRAPH_MAX_NODES],count=0;
     const char *run="",*step="-";
-    bool visible=app->view==7 && native_workspace_monitoring(app);
+    bool visible=work_run_shown(app);
     if (visible && m && app->workflow_run<m->run_count) {
         run=m->runs[app->workflow_run].id;
         count=workflow_nodes(m,app->workflow_run,indices);
-        if (count<=TV_GRAPH_MAX_NODES && app->workflow_node<count) step=m->nodes[indices[app->workflow_node]].id;
+        if (count<=KT_GRAPH_MAX_NODES && app->workflow_node<count) step=m->nodes[indices[app->workflow_node]].id;
     }
     if (!e && !run[0]) return;
     if (!e) {

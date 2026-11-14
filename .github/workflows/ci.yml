@@ -173,7 +173,7 @@ jobs:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-workspace
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make test-visualization test-workspace-pty test-attached-pty test-plan-workspace test-statistics test-termviz-export
+        make test-visualization test-workspace-pty test-attached-pty test-plan-workspace test-statistics test-kettle-export
 
     - name: Package exact source commit
       run: |
@@ -316,7 +316,7 @@ jobs:
       run: |
         mkdir -p "$TMUX_TMPDIR"
         sudo ln -sf /bin/dash /bin/sh
-        make build-fleet build-tui build-core build/termviz-cells
+        make build-fleet build-tui build-core build/kettle-cells
         LANG=C.UTF-8 LC_ALL=C.UTF-8 make test-u10-loopback | tee "$RUNNER_TEMP/u10-loopback.out"
         grep -q '^U10 loopback acceptance passed' "$RUNNER_TEMP/u10-loopback.out"
 

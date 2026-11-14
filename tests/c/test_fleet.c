@@ -88,6 +88,15 @@ int main(void) {
     capture_streams();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
+    /* Multibyte UTF-8 parses on every json-c version; malformed UTF-8 never does. */
+    obj = f_parse("{\"a\":\"caf\xc3\xa9 \xe2\x9a\xa0 \xf0\x9f\x98\x80\"}");
+    assert(obj && !strcmp(f_string(obj, "a"), "caf\xc3\xa9 \xe2\x9a\xa0 \xf0\x9f\x98\x80")); json_object_put(obj);
+    assert(!f_parse("{\"a\":\"\xff\"}")); assert(!f_parse("{\"a\":\"\xe2\x9a\"}"));
+    assert(!f_parse("{\"a\":\"\x80\"}")); assert(!f_parse("{\"a\":\"x\xc3"));
+    assert(!f_parse("{\"a\":\"\xc0\x80\"}")); assert(!f_parse("{\"a\":\"\xed\xa0\x80\"}"));
+    assert(!f_parse("{\"a\":\"\xf4\x90\x80\x80\"}")); assert(!f_parse("{\"\xc3\xa9\":1,\xc3\xa9}"));
+    obj = f_parse("{\"\xc3\xa9\":\"q\\\"\xc3\xa9\\\\\xe2\x9a\xa0\"}");
+    assert(obj && !strcmp(f_string(obj, "\xc3\xa9"), "q\"\xc3\xa9\\\xe2\x9a\xa0")); json_object_put(obj);
     quoted = f_quote("a'b;$(touch nope)"); assert(quoted && !strcmp(quoted, "'a'\\''b;$(touch nope)'")); free(quoted);
     assert(!f_target("-oProxyCommand=evil") && !f_target("host;evil") && f_target("ubuntu@example.test"));
     assert(!f_run(echo, "literal input", 13, 2, &cap));

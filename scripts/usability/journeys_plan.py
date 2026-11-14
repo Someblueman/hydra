@@ -1,10 +1,12 @@
-"""Planning journeys: conversation to proposal, guided policy, validation,
-exact-digest approval and checked delivery through the provider fixture."""
+"""Planning journeys: conversation to a published proposal on the Plan page,
+one approval of the exact revision, and checked delivery through the
+provider fixture."""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -37,31 +39,69 @@ def planning_prepare(j: Journey) -> None:
     )
 
 
-def planning_converse(j: Journey, task: str) -> None:
-    """Open the control centre, converse to a proposal, review it with the
-    guided policy and validate it to "awaiting approval"; nothing executes."""
+def footer(screen: str) -> str:
+    rows = screen.rstrip("\n").splitlines()
+    return rows[-1] if rows else ""
+
+
+def plan_page(j: Journey, *texts: str) -> str:
+    """Show the selected head's Plan page with the keys on it: Ctrl-\\ B
+    selects the page; where it is the side pane beside the list, Shift-Tab
+    gives it the focus. Waits for every text."""
+    for _ in range(3):
+        j.keys(b"\x1cB")
+        time.sleep(0.6)
+        if "E approve" not in footer(j.screen()):
+            j.keys(b"\x1b[Z")
+            time.sleep(0.6)
+        try:
+            return j.see_all("E approve", *texts, timeout=4)
+        except TimeoutError:
+            continue
+    return j.see_all("E approve", *texts)
+
+
+def talk(j: Journey, request: str, reply: str) -> None:
+    """Type a request into the planning conversation and leave input once
+    the agent answered."""
+    j.attach_agent()
+    j.keys(request.encode() + b"\r")
+    j.see(reply)
+    j.leave_agent()
+
+
+def planning_converse(j: Journey, task: str, agent: str = "journey-provider",
+                      objective: str = "Deliver a checked report") -> None:
+    """Open the control centre, start a planning conversation from the
+    new-task form and converse to a published proposal, which the Plan page
+    shows as ready without any key; nothing executes."""
     j.open()
-    j.keys(b"n")
-    j.see("Task name:")
-    j.keys(task.encode() + b"\r")
-    j.see("Agent profile")
-    j.keys(b"journey-provider\r")
-    j.see("Objective")
-    j.keys(b"Deliver a checked report\r")
+    j.new_task(task, agent, objective)
     j.see("ready to discuss")
     j.attached = True
     j.keys(b"draft\r")
     j.see("PROPOSAL READY")
-    j.keys(b"\x02\t")
-    j.attached = False
-    j.keys(b"B")
-    j.see("PLAN OVERVIEW")
-    j.keys(b"P")
-    j.see_prose("No execution yet. y/N:")
-    j.keys(b"y\r")
-    assert "malformed" not in j.see("unvalidated")
-    j.keys(b"V")
-    j.see("awaiting approval")
+    j.leave_agent()
+    plan_page(j, "Plan ready")
+
+
+def plan_state(j: Journey, revision: int) -> str:
+    """Wait for the Plan page's state line to show the revision (not the
+    agent's "revision 2" in the conversation beside it)."""
+    assert j.observer
+    state = re.compile(rf"revision {revision}\W+(not validated yet|awaiting you)")
+    screen, _ = j.observer._visible(lambda screen, record: record["parser_complete"] and state.search(screen) is not None,
+                                    time.monotonic_ns() + int(15e9), f"the Plan page at revision {revision}")
+    return screen
+
+
+def approval(j: Journey, revision: int) -> str:
+    """E on the Plan page: one dialog naming the exact revision it runs. A
+    later revision is approved once the page shows it."""
+    if revision > 1:
+        plan_state(j, revision)
+    j.keys(b"E")
+    return j.see_prose(f"revision {revision}?")
 
 
 def planning(j: Journey) -> None:
@@ -69,8 +109,11 @@ def planning(j: Journey) -> None:
     planning_converse(j, "conversation")
     records = Path(j.env["HYDRA_HOME"]) / "state/v2/projects"
     assert not list(records.glob("*/workflows/runs/*/state")), (
-        "Validation executed the plan"
+        "Publishing a proposal executed the plan"
     )
+    # The approval dialog names revision 1 (E has read it under the guided
+    # policy, so it can be compiled independently); cancelling it runs nothing.
+    approval(j, 1)
     paths = (
         j.cli("workflow", "plan", "proposal", "conversation")
         .splitlines()[1]
@@ -80,32 +123,21 @@ def planning(j: Journey) -> None:
     original = json.loads(j.cli("workflow", "plan", "compile", *paths, str(compiled)))[
         "data"
     ]["sha256"]
-    # Change the actual draft through the same conversation; old approval must
-    # become unusable before any execution is permitted.
-    j.keys(b"a")
-    j.see("Typing goes to the agent")
-    j.attached = True
-    j.keys(b"revise\r")
-    j.see("PROPOSAL REVISION READY")
-    j.keys(b"\x02\t")
-    j.attached = False
-    j.keys(b"B")
-    j.see("unvalidated")
-    j.keys(b"E")
-    j.see("Validate a local plan")
+    j.escape()
+    j.see_all("DRAFT", "revision 1")
     assert not list(records.glob("*/workflows/runs/*/state")), (
-        "Changed draft reused old approval"
+        "A cancelled approval executed the plan"
     )
-    j.keys(b"V")
-    j.see("awaiting approval")
+    # Change the actual draft through the same conversation; the approval
+    # that follows names and runs the new revision only.
+    talk(j, "revise", "PROPOSAL REVISION READY")
+    plan_page(j)
+    approval(j, 2)
     compiled = j.output / "independent-revised.json"
     revised = json.loads(j.cli("workflow", "plan", "compile", *paths, str(compiled)))[
         "data"
     ]["sha256"]
     assert revised != original
-    j.keys(b"E")
-    j.see("INPUT TO HYDRA / execution approval")
-    j.see(f"digest {revised[:12]}?")
     j.keys(b"y")
     deadline = time.monotonic() + 60
     states = []
@@ -121,9 +153,11 @@ def planning(j: Journey) -> None:
     assert len(states) == 1 and states[0].read_text().strip() == "succeeded", (
         "Approved plan did not deliver"
     )
+    launched = {d.name for d in records.glob("*/workflows/launches/*") if d.is_dir()}
+    assert launched == {revised}, f"Approval ran {sorted(launched)}, not the revised digest {revised}"
     delivery = json.loads(j.cli("workflow", "plan", "result", states[0].parent.name))
     assert delivery["ok"], "Independent delivery verification failed"
-    j.see("HYDRA /")
+    j.see_all("RUN RECORDED", "succeeded")
 
 
 GREETING = "Hello from Hydra"
@@ -279,39 +313,36 @@ def independent_digest(j: Journey, head: str, name: str) -> str:
                             *extra))["data"]["sha256"]
 
 
-def converse_and_validate(j: Journey, task: str) -> None:
-    """Start a planning conversation in-app, publish, review with the guided
-    policy and validate: no JSON, file paths or CLI from the user."""
-    j.keys(b"n")
-    j.see("Task name:")
-    j.keys(task.encode() + b"\r")
-    j.see("Agent profile")
-    j.keys(b"codex\r")
-    j.see("Objective")
-    j.keys(b"Add a committed greeting and verify it\r")
+def converse_to_proposal(j: Journey, task: str) -> None:
+    """Start a planning conversation in-app and publish a proposal: no JSON,
+    file paths or CLI from the user."""
+    j.new_task(task, "codex", "Add a committed greeting and verify it")
     j.see("ready to discuss")
     j.attached = True
     j.keys(b"draft\r")
     j.see("PROPOSAL READY")
-    j.keys(b"\x02\t")
-    j.attached = False
-    j.keys(b"B")
-    j.see("PLAN OVERVIEW")
-    j.keys(b"P")
-    j.see("Review with local policy")
-    j.keys(b"y\r")
-    j.see("unvalidated")
-    j.keys(b"V")
-    j.see("awaiting approval")
+    j.leave_agent()
+    plan_page(j, "Plan ready")
 
 
-def execute(j: Journey, head: str, name: str) -> Path:
+def launched_digests(j: Journey) -> set[str]:
+    """Digests the approvals launched: one launch record per accepted digest."""
+    records = Path(j.env["HYDRA_HOME"]) / "state/v2/projects"
+    return {d.name for d in records.glob("*/workflows/launches/*") if d.is_dir()}
+
+
+def execute(j: Journey, head: str, name: str, revision: int) -> Path:
+    """Approve the Plan page's revision with E and y; the launch must be of
+    the digest an independent compile of that revision gives (compiled while
+    the dialog is open: E has read the revision under the guided policy)."""
+    before, launched = set(runs(j)), launched_digests(j)
+    approval(j, revision)
     digest = independent_digest(j, head, name)
-    before = set(runs(j))
-    j.keys(b"E")
-    j.see_all("INPUT TO HYDRA / execution approval", f"digest {digest[:12]}?")
     j.keys(b"y")
-    return finished_run(j, before)
+    run = finished_run(j, before)
+    j.check(launched_digests(j) - launched == {digest},
+            f"The approval launched exactly the revision's digest {digest[:12]}")
+    return run
 
 
 def worker_diff(j: Journey, branch: str) -> tuple[list[str], str]:

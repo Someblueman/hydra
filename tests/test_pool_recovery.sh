@@ -135,8 +135,8 @@ assert_equal none "$(json_field "$out" reason)" "nothing is handed out in place 
 assert_equal recovery-required "$(sed -n '1p' "$crash_dir/tasks/risky/state")" "a non-idempotent task with an unknown outcome becomes recovery-required"
 assert_equal 1 "$(sed -n '1p' "$crash_dir/tasks/risky/attempts")" "the uncertain attempt is not replayed"
 assert_equal unknown "$(sed -n '1p' "$crash_dir/tasks/risky/attempt-1/outcome")" "the attempt outcome is recorded as unknown"
-[ ! -d "$crash_dir/tasks/risky/attempt-2" ]
-assert_success $? "no second attempt is invented for the risky task"
+if [ ! -d "$crash_dir/tasks/risky/attempt-2" ]; then check=0; else check=1; fi
+assert_success "$check" "no second attempt is invented for the risky task"
 grep -q '"type":"task.stale_owner","detail":"outcome=unknown source=unknown"' "$crash_dir/events.jsonl"
 assert_success $? "the stale owner is recorded with an unknown outcome"
 "$HYDRA_BIN" pool create crash-safe >/dev/null

@@ -7,8 +7,9 @@
 static bool bound_spec(const char *digest) {
     return strlen(digest) == 64 && strspn(digest, "0123456789abcdef") == 64;
 }
-static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
-    if (app->view != 0 && app->view != 1 && app->view != 4) return "Select a remote task in Work or Overview before using task controls.";
+/* Why a decision or control on this remote task cannot be sent now, or NULL:
+ * only a fresh observation of a task in the matching state authorizes one. */
+const char *native_fleet_task_refusal(const struct app *app, const struct task_observation *task, char key) {
     if (app->remote_stale || task->retained || strcmp(task->freshness, "fresh") || !strcmp(task->state, "outcome_unknown"))
         return "Task evidence is stale or uncertain; inspect and reconcile before mutating.";
     if (key == 'X') {
@@ -23,7 +24,11 @@ static const char *disabled_reason(const struct app *app, const struct task_obse
         return "No current approval request is available; refresh receiver evidence.";
     return NULL;
 }
-static const struct task_observation *current_target(const struct app *app, const struct task_observation *target) {
+static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
+    if (app->view != 7) return "Select a remote task in Work before using task controls.";
+    return native_fleet_task_refusal(app, task, key);
+}
+const struct task_observation *native_fleet_task_current(const struct app *app, const struct task_observation *target) {
     for (size_t i = 0; i < app->model.task_count; i++) {
         const struct task_observation *current = &app->model.tasks[i];
         if (strcmp(current->host, target->host) || strcmp(current->task_id, target->task_id)) continue;
@@ -33,19 +38,30 @@ static const struct task_observation *current_target(const struct app *app, cons
     }
     return NULL;
 }
+/* The confirmation names the exact task and host; a reject or cancel is
+ * drawn as destructive. */
+static bool fleet_confirmed(struct app *app, char key, const char *action, const struct task_observation *target) {
+    char body[640], title[64];
+    static const char *const accept[] = {"Approve", "Reject", "Resume", "Cancel"};
+    size_t which = key == 'Y' ? 0 : key == 'N' ? 1 : key == 'R' ? 2 : 3;
+    snprintf(title, sizeof(title), "%c%s remote task", action[0] - 'a' + 'A', action + 1);
+    snprintf(body, sizeof(body), "%c%s task %.120s on %.80s?\n\nThe receiver acts on exactly this task, request and "
+             "specification; if any of them changes before you confirm, nothing is sent.",
+             action[0] - 'a' + 'A', action + 1, target->task_id, target->host);
+    return dialog_confirm(app, title, body, accept[which], which == 1 || which == 3);
+}
+
 bool native_fleet_control_key(struct app *app, char key, const char *action) {
-    char answer[64], prompt[192];
     if (!selected_task(app)) {
-        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; select its row in Work or Overview."); return true;
+        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; select its row in Work."); return true;
     }
     /* prompt_text refreshes the entire model. Keep no borrowed model pointers
      * across the modal; copy the exact receiver-owned binding first. */
     struct task_observation target = app->model.tasks[app->task_selected];
     const char *reason = disabled_reason(app, &target, key);
     if (reason) { copy_text(app->notice, sizeof(app->notice), reason); return true; }
-    snprintf(prompt, sizeof(prompt), "Type %s to dispatch for the selected task: ", action);
-    if (prompt_text(app, prompt, answer, sizeof(answer)) || strcmp(answer, action)) return true;
-    const struct task_observation *current = current_target(app, &target);
+    if (!fleet_confirmed(app, key, action, &target)) return true;
+    const struct task_observation *current = native_fleet_task_current(app, &target);
     if (!current || disabled_reason(app, current, key)) {
         copy_text(app->notice, sizeof(app->notice), "Task evidence changed during confirmation; no mutation dispatched."); return true;
     }

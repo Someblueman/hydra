@@ -43,12 +43,20 @@ admission_open() {
     [ "$(find "$_ad_root" -prune -user "$(id -u)" ! -perm -0020 ! -perm -0002 -exec printf yes \;)" = yes ] || return 1
     # This lock is deliberately not swept by generic stale-lock cleanup. A
     # crashed writer needs inspection; it must never permit concurrent writers.
+    # A caller waits about 2 s for a busy lock. An execution owner (see
+    # admission_binding) sets _ad_lock_seconds to its queue deadline and keeps
+    # waiting up to that long, so owners contending on one host, such as
+    # parallel workflow steps, take turns instead of failing.
     _ad_problem='the admission lock is held'
-    _ad_tries=0
+    _ad_tries=0 _ad_lock_until=''
     until mkdir "$_ad_root/lock" 2>/dev/null; do
         _ad_tries=$((_ad_tries + 1))
-        [ "$_ad_tries" -lt 40 ] || return 1
-        sleep 0.05
+        if [ "$_ad_tries" -lt 40 ]; then sleep 0.05; continue; fi
+        case "${_ad_lock_seconds:-}" in ''|*[!0-9]*) return 1 ;; esac
+        [ "${#_ad_lock_seconds}" -le 6 ] && [ "$_ad_lock_seconds" -gt 2 ] || return 1
+        [ -n "$_ad_lock_until" ] || _ad_lock_until=$(($(date +%s) + _ad_lock_seconds - 2))
+        [ "$(date +%s)" -lt "$_ad_lock_until" ] || return 1
+        sleep 0.2
     done
     trap 'rmdir "$_ad_root/lock" 2>/dev/null || true' 0
     trap 'exit 130' INT

@@ -258,7 +258,7 @@ static void screen_case(struct app *app, const char *label, enum onb_screen scre
     keep(label, cols, rows, frame);
     for (i = 0; i < count; i++) if (!strstr(all, must[i])) { ok = false; fprintf(stderr, "  missing: %s\n", must[i]); }
     snprintf(name, sizeof(name), "%s screen at %dx%d shows what it must and fits", label, cols, rows);
-    check(ok && fits(frame, cols) && strstr(frame, "[Hosts]"), name);
+    check(ok && fits(frame, cols) && strstr(frame, " 3 Hosts "), name);
 }
 
 static void screens_at(struct app *app, int cols, int rows) {
@@ -322,9 +322,15 @@ static void hundred_case(struct app *app, int cols, int rows) {
 
 /* ---- Keys (no child ever starts here) ---- */
 
+/* Keys arrive as the terminal's decoder delivers them, through the path
+ * every key takes (the page's fields, then the binding table); a lone
+ * Escape is reported once the input pauses, which the flush stands for. */
 static void press(struct app *app, const char *keys) {
-    for (; *keys; keys++) (void)native_onboarding_byte(app, (unsigned char)*keys);
-    native_onboarding_flush_input(app);
+    struct kt_input decoder;
+    struct kt_event e;
+    kt_input_init(&decoder);
+    for (; *keys; keys++) if (kt_input_feed(&decoder, (unsigned char)*keys, &e)) input_event(app, &e);
+    if (kt_input_flush(&decoder, &e)) input_event(app, &e);
 }
 
 static void key_cases(struct app *app) {
@@ -342,7 +348,7 @@ static void key_cases(struct app *app) {
     check(s->screen == ONB_SCREEN_LIST && !s->job.active && strstr(s->notice, "revoked") && strstr(s->notice, "inspected"), "r on a revoked identity offers inspection only");
     press(app, "\r");
     check(s->screen == ONB_SCREEN_DETAIL && s->detail_index == 5 && !s->detail_record, "Enter opens the revoked candidate's detail");
-    press(app, "\033"); native_onboarding_flush_input(app);
+    press(app, "\033");
     check(s->screen == ONB_SCREEN_LIST, "Esc returns to the list");
     press(app, "kk");
     press(app, "r");
@@ -352,10 +358,10 @@ static void key_cases(struct app *app) {
     check(s->screen == ONB_SCREEN_REVIEW && !s->job.active && !strcmp(s->candidate, "cand_6d697865643031"), "r on a qualified candidate opens the review form without running anything");
     press(app, "\r\r\r\r\r");
     check(s->screen == ONB_SCREEN_REVIEW && !s->job.active && strstr(s->problem, "required"), "an empty project is caught before anything runs");
-    press(app, "\033"); native_onboarding_flush_input(app);
+    press(app, "\033");
     press(app, "i");
     check(s->screen == ONB_SCREEN_INTENT && !s->job.active, "i shows the loaded intent");
-    press(app, "\033"); native_onboarding_flush_input(app);
+    press(app, "\033");
     s->directory_known = false;
     press(app, "Q");
     check(!s->job.active && strstr(s->notice, "directory"), "Q without the onboarding directory runs nothing");
@@ -363,13 +369,13 @@ static void key_cases(struct app *app) {
     s->model->candidate_count = 0; s->model->record_count = 0;
     press(app, "Q");
     check(s->screen == ONB_SCREEN_SELECT && s->form_qualify && !s->job.active, "Q with nothing listed opens the selection form in qualify mode");
-    press(app, "\033"); native_onboarding_flush_input(app);
+    press(app, "\033");
     press(app, "f");
     check(s->screen == ONB_SCREEN_SELECT && !s->form_qualify, "f opens the selection form for discovery");
     press(app, "\r\r\r\r\r");
     check(s->screen == ONB_SCREEN_SELECT && !s->job.active && s->problem[0], "an empty selection is caught before anything runs");
-    press(app, "\033"); native_onboarding_flush_input(app);
-    press(app, "\033"); native_onboarding_flush_input(app);
+    press(app, "\033");
+    press(app, "\033");
     check(!s->open, "Esc on the list closes the view");
 }
 

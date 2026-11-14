@@ -18,8 +18,10 @@
 #define HYDRA_TUI_REMOTE_IDLE_SECONDS 30L
 #define HYDRA_TUI_REMOTE_RETRY_SECONDS 5L
 
-/* Local state observation is a single shell transaction. Keep startup and
- * refresh bounded while allowing the measured ten-head snapshot to complete. */
+/* Local state observation is one transaction: the shell reader, or the read
+ * of the state store with the tmux and git commands it starts. Keep startup
+ * and refresh bounded while allowing the shell reader's measured ten-head
+ * snapshot to complete. */
 #define HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS 10000L
 
 #endif

@@ -190,6 +190,15 @@ static bool records(json_object *array, const char *path, const char *const keys
     }
     return true;
 }
+/* Names the value the policy lacks, and for a tool how the user can allow it. */
+static void policy_excess(json_object *errors, const char *set, const char *value) {
+    char message[512];
+    if (!strcmp(set, "tools"))
+        (void)snprintf(message, sizeof(message), "plan exceeds supplied policy: the tool %.64s is not allowed; use only allowed tools, "
+                       "or ask the user to allow it with hydra plan policy --allow-tool %.64s", value, value);
+    else (void)snprintf(message, sizeof(message), "plan exceeds supplied policy: %s %.200s is not allowed", set, value);
+    plan_error(errors, set, "unauthorized", message);
+}
 static void policy_bounds(json_object *env, json_object *allowed, json_object *steps, json_object *errors) {
     size_t i, j;
     const char *sets[] = {"hosts", "tools", "effects", "writes"};
@@ -199,7 +208,7 @@ static void policy_bounds(json_object *env, json_object *allowed, json_object *s
         for (j = 0; j < json_object_array_length(set); j++) {
             const char *s = f_text(json_object_array_get_idx(set, j));
             if (!(i == 3 ? policy_write(f_field(allowed, sets[i]), steps, s) : plan_has(f_field(allowed, sets[i]), s)))
-                plan_error(errors, sets[i], "unauthorized", "plan exceeds supplied policy");
+                policy_excess(errors, sets[i], s);
             if (i == 2 && strcmp(s, "worktree") && strcmp(s, "execute")) plan_error(errors, "effects", "unsupported_effect", "supported effects are worktree and execute");
         }
     }

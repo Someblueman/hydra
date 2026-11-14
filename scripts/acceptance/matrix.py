@@ -44,7 +44,7 @@ BULLETS = {
     "U7.d": "Destructive actions stay separate from restoring access to work.",
     "U8.a": "Tab/Shift-Tab, arrows, Enter and Esc behave as the displayed hints say in Work, Details, Overview, Coordination and dialogs.",
     "U8.b": "Inside the Workspace, Tab and Shift-Tab move pane focus as hinted and the focus is visible.",
-    "U8.c": "Tab and Esc reach an attached agent; the hinted Ctrl-B Tab leaves input and Tab brings focus back to the agent.",
+    "U8.c": "Tab and Esc reach an attached agent; the hinted Ctrl-] leaves input and Tab brings focus back to the agent.",
     "U9.a": "With no work, Overview and Coordination explain the state and offer a next action instead of an empty dashboard.",
     "U9.b": "With a single agent, Overview answers what is running, needs attention, changed and finished with routes; Coordination explains why there is nothing to coordinate.",
     "U9.c": "With multi-agent work and a blocked dependency, Overview shows the pending decision with a route and Coordination explains assignments, dependencies and blockers.",

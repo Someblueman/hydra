@@ -42,14 +42,13 @@ case "$HYDRA_TEST_DAG_FAULT" in
 esac
 if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ]; then
     HYDRA_TEST_DAG_RUN=$run_dir
-    HYDRA_TEST_DAG_REAL_FIND=$(command -v find)
+    HYDRA_TEST_DAG_REAL_AWK=$(command -v awk)
     HYDRA_TEST_DAG_REAL_MV=$(command -v mv)
-    export HYDRA_TEST_DAG_RUN HYDRA_TEST_DAG_REAL_FIND HYDRA_TEST_DAG_REAL_MV
+    export HYDRA_TEST_DAG_RUN HYDRA_TEST_DAG_REAL_AWK HYDRA_TEST_DAG_REAL_MV
     mkdir "$fixture/snapshot-tools"
-    for tool in find mv; do
+    for tool in awk mv; do
         ln -s "$root/tests/fixtures/workflow/cancel-snapshot.sh" "$fixture/snapshot-tools/$tool"
     done
-    printf '0\n' > "$fixture/cancel-snapshot-count"
     PATH="$fixture/snapshot-tools:$PATH"
     export PATH
 fi

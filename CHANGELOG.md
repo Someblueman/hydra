@@ -7,6 +7,365 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A shorter planning flow. An agent writes a one-screen plan (`hydra plan
+  schema` prints the short `simple-1` form: objective, worker instructions,
+  commands, what "done" means) and publishes it with `hydra plan propose`;
+  each publication is a numbered revision, checked at once against the
+  project's plan policy, with diagnostics the agent can act on. You then run
+  `hydra plan show` (a readable summary: the steps in words, the worker's full
+  instructions, the commands and the text of any script that will run, "changes
+  only branch X", the time limit in minutes, what done means, the policy),
+  `hydra plan approve` (compiles that revision afresh, shows it, asks once and
+  starts it; `--accept <digest>` remains for automation), `hydra plan status`
+  and `hydra plan review`. Nothing needs to be copied between commands. The
+  guided policy is the project's standing default (`hydra plan policy` shows
+  and edits it). The technical preview is behind `--technical`, and every
+  existing `hydra workflow plan ...` command still works; expert features
+  (obligations, relations, reuse, repair, staged and schema 2 plans) are
+  documented under "Advanced plans".
+- After each agent step on a worker head a plan created, Hydra commits what
+  the agent left there (without hooks or signing), so the checks, the review
+  and landing all refer to one commit. New files that look like secrets
+  (`.env` files, private keys, credentials) are left out and listed. A new
+  `command` check passes when its command exits 0 on that commit, and Hydra
+  writes the evidence itself ("make check exited 0 on commit ...").
+- `hydra land <worker>` lands a plan's verified commit: a local merge of
+  exactly the commit the checks ran on into the checkout's current branch (or
+  `--into`), never a push. It refuses a worker that moved since the checks or
+  a checkout with tracked changes, asks for confirmation on a terminal, records
+  the landing in the run, and retires the worker head (keeping its branch, and
+  keeping the head if it still has work not on the branch). The review's NEXT
+  section and the control centre now give this one command.
+- Approving, running or landing a plan, and editing the plan policy, are
+  refused from inside an agent's head (`HYDRA_HEAD_ID`/`HYDRA_INSTANCE_ID`
+  set) unless `HYDRA_PLAN_ALLOW_AGENT=1`. This guards against an agent
+  approving its own plan; it is not a security boundary.
+- `hydra-fleet workflow-plan summary [--json]`: the readable plan as text or
+  as a stable JSON projection for the control centre (`docs/CONTRACTS.md`).
+
+- kettle (the terminal library under `src/kettle/`, formerly termviz) gains an
+  application runtime, `kt_program`: the application supplies `init`, `update`
+  and `view` over its own model; input, resizes, timers, watched descriptors,
+  child processes and signals arrive as messages; effects are queued as
+  commands (`kt_cmd_timer`, `kt_cmd_watch`, `kt_cmd_spawn`, `kt_cmd_exec`,
+  `kt_cmd_quit`, ...) and performed by the runtime. The runtime owns the event
+  loop, terminal modes and restoration on every exit path. A burst of input
+  costs one frame, each frame leaves as one write inside a synchronized update,
+  a repaint never erases the display, and an idle program does not wake.
+  `testing.h` runs the same loop without a terminal under a virtual clock.
+  `examples/counter.c` is a complete application in about 100 lines; see
+  "Writing an application" in `src/kettle/README.md`.
+- kettle key events carry modifiers and named keys (`Ctrl`, `Alt`, `Shift`;
+  Tab, Enter, Escape, Backspace, Delete, Insert, F1 to F12), and `keymap.h`
+  adds chord bindings: one table drives matching, hints and a text
+  configuration format.
+- The control centre's commands while you type to an attached agent are
+  configurable. Write `$HYDRA_HOME/tui/keys.conf` (or name a file in
+  `HYDRA_TUI_KEYS`); `hydra tui --print-keys` prints the keys in effect in the
+  file's syntax and reports a file it cannot read. A partly entered chord is
+  shown in the status line with what may follow, and a key that does not
+  continue it is reported instead of being dropped silently. See "TUI keys" in
+  `docs/USAGE.md`.
+
+- kettle programs can wait for an answer from inside `update` by running the
+  loop themselves (`kt_program_next`, `kt_program_dispatch`,
+  `kt_program_render`), and can lend the terminal to a foreground child and
+  take it back (`kt_program_release`, `kt_program_reclaim`). SIGQUIT ends a
+  program with the terminal restored, like SIGINT. `sequence_ms` lets a key
+  split by a slow link arrive whole while a lone Escape stays prompt.
+
+- kettle has a styling layer (`style.h`, "Styling" in `src/kettle/README.md`,
+  `examples/themes.c`). A style is a value (`struct kt_style`: foreground,
+  background, attributes); a colour is the terminal default, an RGB value, a
+  palette index or a theme token, and `KT_KEEP` draws over whatever surface is
+  already there. Themes are data (`kt_theme_dark`, `kt_theme_light`,
+  `kt_theme_terminal`, or an application's own) and are set through the
+  runtime; changing one repaints every cell without erasing the screen. The
+  presenter emits the colour and attribute sequences itself and converts to
+  what the terminal can show (24-bit, 256, 16 or no colour, detected from
+  `NO_COLOR`, `COLORTERM`, `TERM` and `CLICOLOR_FORCE`, or set in
+  `kt_options`).
+- kettle drawing and layout helpers: `kt_fill`, borders as data (light,
+  rounded, heavy, double, left bar, each with an ASCII form) with titles,
+  titled rules, text measured in display columns with alignment and ellipsis
+  truncation, and rectangle helpers (inset, cut from an edge, centre, split by
+  fixed, percentage, minimum and flexible constraints).
+
+- kettle components (`components.h`, "Components" in `src/kettle/README.md`,
+  `examples/components.c`): a footer and full help generated from keymaps
+  (the short form drops lower-priority keys to fit and says so), list (with
+  filter-as-you-type, sections and match highlighting), table, viewport,
+  single-line text input, confirmation dialog, form, modal stack with a
+  dimmed backdrop, tabs, spinner, progress bar, toasts and a command palette
+  with fuzzy matching. Each is a caller-owned struct with `init`, `update` and
+  `view`, draws with theme tokens, takes its keys from a rebindable binding
+  table, and wakes the program only while it animates. `struct kt_binding`
+  gains `group` and `priority` for the generated help.
+- Statistics covers interactive work, not only recorded workflow runs. While
+  a control centre is open it notes, from tmux's record of each head's last
+  output, when a head starts and stops producing terminal output, and records
+  each change as an `activity.changed` event in the head's event log (`hydra
+  adapter activity`; inferred, labelled as such, and overridden by an
+  adapter's exact report for the same time). Time when no control centre was
+  watching is counted as unobserved, never as quiet. The Statistics view
+  opens on head sessions: how many, how long, time active and quiet, the share
+  of session time observed, sessions started per day, and each session's
+  breakdown; `s` switches to workflow runs. `hydra workflow statistics-data`
+  is schema 6: the `H` session rows beside 3.0.0's `T` remote rows, and a
+  closing `Z` row with the session count. Schema 5 (3.0.0) feeds are read as
+  before and readers accept 2 to 6. `statistics-json` and `statistics-compare`
+  export schema 4 for such feeds (schema 3 plus `sessions`). Head sessions are
+  local work: a remote or host location filter leaves none. Tokens and cost
+  are not measured for interactive sessions.
+- Activity events live in a separate, bounded per-session log
+  (`instances/<id>/activity.jsonl`) instead of the head's lifecycle log. When
+  a session ends Hydra writes a small summary of it under the project
+  (`projects/<p>/sessions/`), which Statistics reads instead of replaying
+  events, so finished sessions stay countable after `hydra kill`; an open
+  session's older activity is folded into a checkpoint. A head observed for
+  100 hours keeps about 15 KB of activity instead of 1.5 MB, and the feed for
+  20 such heads takes about 35 ms instead of 0.5 s. `hydra cleanup` now
+  records `lifecycle.torn-down` for a session it finds dead.
+
+### Changed
+
+- **Breaking (control centre):** `hydra tui` has four screens instead of ten
+  tabs: 1 Work, 2 Inbox, 3 Hosts and 4 Stats (the keys `1` to `4`, or the
+  configurable `screen.*` chords while you type to an agent). The old
+  `--view` names open the screen or page that replaced them, and key names
+  from earlier keys files still load. Tab no longer changes screens: it
+  moves between a screen's panes. For one release the old screen letters
+  `W`, `I`, `H` and `D` still open Work, Inbox, Hosts and Stats, with a note
+  naming the new key. "What moved" in `docs/USAGE.md` lists every key whose
+  meaning changed.
+  - **Work** replaces Heads, Details, Coordination, Overview, Workflows and
+    the Workspace layouts. The list of heads, their runs, remote tasks and
+    retired run heads sits beside the selected head's latest output, shown
+    read-only and captured once per refresh. Enter or `a` talks to the agent,
+    and `ctrl+]` leaves input with the conversation still drawn. A side pane
+    has three pages, switched with `[` and `]`; Tab moves between panes.
+    Details shows the head: its task's objective, the workflow step that
+    targets it, and whether its agent has exited. Plan approves (`E`),
+    requests changes (`F`),
+    lands the worker (`L`), reviews and shows the run's status. Run shows the
+    graph, the steps and the selected step's evidence, paged with PgUp/PgDn.
+    A plan an agent published but Hydra has not yet validated is shown in
+    words, not as its JSON. Below 120 columns the conversation and the
+    pages share one pane. The
+    new-task form asks whether to plan first (the default) or just do it:
+    the objective then becomes the agent's first prompt on its own branch.
+  - **Inbox** replaces Attention and Recovery. One list holds everything
+    waiting for you, in sections ordered by what blocks work: Decisions,
+    Failed, Ready for review, Agents, Repairs, Your actions, and a collapsed
+    Seen group. Each item is acted on where it is listed, after a
+    confirmation:
+    - `Y`/`N` decide a request (on a remote host only while its observation
+      is fresh);
+    - `R` resumes a run or restarts a stopped terminal;
+    - `F` sends a failure or plan back;
+    - `L` lands a finished plan's worker;
+    - `c` runs a finding's check, and `x` removes a leftover worktree;
+    - `o` opens the item in Work, and Esc comes back.
+
+    The Inbox tab carries a badge with the number of items.
+  - **Hosts** is a list beside a detail pane:
+    - The list shows This machine (its heads, tmux and Hydra versions and
+      the agents on its PATH, read when Hosts opens), the hosts Hydra
+      observes, unfinished setups and "+ Add a host".
+    - Enter on a host opens Work filtered to it, and Esc comes back.
+    - A setup's steps and the current step show in the detail pane. A
+      running step has a spinner and its elapsed time; `c` cancels it and
+      Esc leaves it running.
+    - The add-host form, the host-key trust and every plan open as dialogs.
+      Trusting a host key needs a typed `yes`. A plan is approved with `y`
+      only; Enter never approves it.
+    - `[` and `]` switch between Hosts and the Onboarding page (`O` still
+      opens it). The Onboarding page's keys are in the keys file and its
+      footer and help, like every other screen's.
+  - **Stats** shows its pages (Sessions, Runs and, when the sample records
+    remote steps, Cohorts) on one frame. Four tiles sit above the charts and
+    tables, and Enter opens a row's evidence. `/` filters as you type, `w`
+    cycles the workflow filter and `L` the location filter. `g` opens a
+    session's head or a run in Work. An empty sample is told apart from one
+    the filters hide.
+- The control centre has a new frame: a dark theme by default (`--theme`,
+  `HYDRA_TUI_THEME` and the palette still choose the terminal or light theme),
+  a top bar with `◆ hydra`, numbered tabs and the view's title, titled rules
+  instead of boxes around panes, a status chip (`● live`, `▲ stale`, ...) and
+  a filled selection bar in the Work list and Recovery.
+- A running plan no longer compiles the plan again before every step. It is
+  compiled once when the run is admitted; before each step, at the finish and
+  on resume, Hydra checks the compiled plan against the approved digest and
+  the run's copied inputs against digests recorded at the start. An untracked
+  file or a new commit in your checkout no longer stops a running plan (a
+  moved HEAD is recorded once as a warning), while a changed compiled plan or
+  copied input still does. Steps start about a quarter of a second sooner and
+  a run uses about 20% less CPU. Plan digests use a built-in SHA-256 (same
+  values). A 3.0.0 expansion round is admitted the same way: its run records
+  its own digests and every new step passes the same guard.
+- **Breaking (keys):** the control centre has one key table. Its footer and
+  `?` help are generated from it, and duplicate keys in a view are refused.
+  `I` always opens Attention: plan import moved to the `:` palette ("import
+  plan files") and refresh moved to `ctrl+r`. `--print-keys` and the keys
+  file list every action by group; keys files from earlier versions still
+  load. The letters A, B, `[` and `]` no longer move the Attention selection
+  (arrows do), and `ctrl+]` gives focus back to the navigation while keeping
+  the conversation on screen below 120 columns. 3.0.0's keys are bindings of
+  the table and keep their meaning: `L` (location), `r` (observe a host again),
+  `x` on a remote head (interrupt), `a` on a remote head (attach), `Y`/`N`/`R`/`X`
+  on a remote task row, `O` and `r` in Hosts, `C` and `L` in Statistics,
+  Space/b in an attention item's detail. What differs from 3.0.0: the agent-pane
+  chords (below); `I` no longer imports plan files in the workspace; help is
+  generated from the table (two columns where they fit) instead of 3.0.0's
+  fixed list, and scrolls with j/k, the arrows, PgUp/PgDn and Space/b; the
+  keys-file rows `heads.attach` and `heads.interrupt` of the fleet keymap are
+  no longer used (`heads.talk` and `head.remove` do both jobs, as `a` and `x`
+  did in 3.0.0), and `hydra fleet tui` has the one keymap, without the local
+  statistics pages.
+- Every question, form and result in the control centre opens over a dimmed
+  view. Confirmations default to Cancel, `y` accepts, and nothing asks you to
+  type a word or a request ID. This covers 3.0.0's typed confirmations too:
+  a remote task decision, interrupting a remote head and `fleet enroll apply`
+  from the onboarding view confirm a dialog that names the exact task and
+  host, head and host, or intent digest and command, instead of typing
+  `approve`, `yes` or 12 digest characters. New task is one form (task name showing its
+  branch, agent chosen from the available agents, objective). The `:` palette
+  searches as you type over the actions that apply and Hydra's commands;
+  read-only commands open in an output viewer. Outcomes show as toasts, and
+  failed actions stay listed for the session ("Your failed actions" in the
+  palette). Help scrolls.
+- Approving a plan in the control centre is one action: `E` on a revision
+  that has not been validated validates exactly that revision and runs it
+  when validation is ready. If the draft changes first or validation finds a
+  problem, nothing runs. Approve and reject in the run monitor confirm the
+  exact request (the one Attention lists for the run, or the run's one
+  undecided request in its evidence, as in 3.0.0), and send nothing if the
+  run or request changed while the dialog was open.
+- Attention in a project with no workflow runs says so instead of
+  "unavailable".
+
+- The control centre's three themes are unchanged in 24-bit and 256-colour
+  terminals. With `NO_COLOR` it now marks titles, muted text and the selection
+  with bold, dim and reverse instead of showing plain text only; in a
+  16-colour terminal it uses the terminal's sixteen colours instead of sending
+  256-colour sequences. Agent output in attached panes keeps palette colours
+  as palette colours, so it shows in your terminal's own palette, and an
+  agent's 24-bit colours are converted when the terminal does not announce
+  24-bit support (set `COLORTERM=truecolor` if yours supports it but does not
+  say so).
+- **Breaking (library):** `enum kt_style` and per-application style callbacks
+  (`kt_app.style`, the callback arguments of `kt_write_row` and `kt_present`)
+  are replaced by `struct kt_style`, themes and `struct kt_paint`. The nine
+  stock names (`KT_BASE` to `KT_FOCUS`) remain as styles; compare styles with
+  `kt_style_equal`. `KT_EXPLICIT` and `KT_COLOR_DEFAULT` are gone
+  (`KT_DEFAULT` is zero).
+- The control centre (`hydra tui`) runs on the kettle runtime instead of a
+  40 ms polling loop. Typing to an attached agent echoes as the agent answers
+  (about 1 ms in the loop, where every key used to wait for the next tick);
+  agent output and finished background reads are drawn when they arrive; a
+  burst of keys or a paste costs one frame; each frame is a single write
+  inside a synchronized update; and resizing, switching theme or layout, and
+  opening or closing a prompt or confirmation repaint without erasing the
+  screen. An idle control centre writes nothing and wakes only for its
+  2-second refresh. Agent panes keep updating while an action runs. It draws
+  on the alternate screen, so the terminal's previous contents return on exit.
+- The control centre reads the head snapshot from Hydra's state store in its
+  own process instead of running `hydra tui --data` every two seconds. A
+  refresh costs one `tmux` call and a few `git status` calls whatever the
+  number of heads (with 20 heads: about 10 ms and 6 processes, where it took
+  about 2 s and 2000). Uncommitted-file counts are re-read for the selected
+  head and any worktree whose index or `HEAD` changed at every refresh, and
+  for the rest four at a time, so the count for an unselected head can lag an
+  edit by a few refreshes. `hydra tui --data` is unchanged and remains the
+  reference; `make test-parity` requires the two readers to agree byte for
+  byte.
+- Running a workflow costs far less engine overhead per step: the run driver
+  reads every step's state in one pass per scheduling question instead of one
+  process per step, wakes when a step finishes instead of waiting for its
+  next one-second poll, `workflow status` reads its run in one pass, and JSON
+  strings that need no escaping are written without forking. A 64-step chain
+  of empty steps went from about 150 s to about 60 s, a 20-step chain from 35 s
+  to 19 s; event order and recorded state are unchanged.
+- No key in the control centre waits for a subprocess. Opening Workflows or
+  Statistics, refreshing them, opening a run's graph, the output preview and
+  an attached agent's history start their read in the background and show
+  what is known (or a "Loading..." line) until it arrives; they used to block
+  input for up to two seconds.
+- Arrow and page keys no longer act as commands behind an open overlay: over a
+  result they scroll it, and over help they only close it.
+- A large paste to an attached agent is delivered in full instead of being cut
+  at the client's queue.
+- **Breaking:** `Ctrl-]` now returns input from an attached agent to Hydra, and
+  the other agent-pane commands moved from the `Ctrl-B` prefix to `Ctrl-\`
+  (`Ctrl-\ x` close view, `Ctrl-\ n` next agent, `Ctrl-\ [` scroll, ...).
+  `Ctrl-B` reaches the agent, so the tmux it runs in answers its usual prefix
+  and an outer tmux no longer collides with Hydra. `docs/USAGE.md` shows a keys
+  file that restores the previous chords. A remote agent pane (3.0.0) uses the
+  same chords: 3.0.0's `Ctrl-B Tab`, `Ctrl-B x`, `Ctrl-B r`, `Ctrl-B n` and
+  `Ctrl-B q` are `Ctrl-]`, `Ctrl-\ x`, `Ctrl-\ r`, `Ctrl-\ n` and `Ctrl-\ q`,
+  and the history chord (`Ctrl-\ [`, 3.0.0's `Ctrl-B [`) still forwards the host
+  tmux's own `Ctrl-B [`, with `Ctrl-\ ]` (3.0.0's `Ctrl-B ]`) leaving it.
+- **Breaking (library):** the termviz library is renamed kettle: `src/kettle/`,
+  `kettle.h`, the `kt_`/`KT_` prefixes, and the `test-kettle`, `example-kettle`
+  and `test-kettle-export` targets. Style callbacks receive the output stream
+  (`void (*)(void *, FILE *, enum kt_style)`); `kt_terminal_begin`/`_end` are
+  replaced by the runtime; control keys decode as a letter with `KT_MOD_CTRL`
+  rather than as their byte value.
+
+### Removed
+
+- **Breaking:** the basic shell TUI (`hydra tui --basic`) and the silent
+  fallback to it. Without the native helper, `hydra tui` says what is needed
+  and that `hydra list` and `hydra switch` work without it, and exits 1; if the
+  helper exits unexpectedly, the terminal is restored and its status is
+  reported and returned. `hydra tui --basic` is a usage error. 3.0.0's wording
+  of the basic TUI's empty list goes with it.
+
+### Fixed
+
+- Approving a plan in the control centre runs only the revision its dialog
+  named. If the agent published a newer revision while the dialog was open,
+  nothing is approved.
+- `q` in the control centre's output viewer closes it instead of quitting
+  Hydra.
+- `hydra-fleet` reads JSON with non-ASCII text again when built against
+  json-c 0.18 (Ubuntu 26.04), whose strict parser rejected every character
+  from U+0080: receipts, plans and records with an accented letter or a
+  symbol failed to load. Hydra now checks UTF-8 itself (RFC 3629, so overlong
+  forms and encoded surrogates are refused on every json-c version) and parses
+  the same text on 0.17 and 0.18.
+- The control centre opens on the first local head when a remote observation
+  answers before the local one, instead of selecting the first remote head.
+- Keys that arrive in one burst can no longer scroll the onboarding view past
+  its last row, and `G` in an attention review reaches the end even right after
+  a change of view.
+- Workflow steps run in parallel no longer fail with `state_unavailable` when
+  the admission lock is busy for more than two seconds: execution owners now
+  wait up to their queue deadline (`HYDRA_ADMISSION_QUEUE_SECONDS`, default
+  60) before giving up.
+- A workflow run records its own driver as its owner, so a run whose CLI
+  process died is no longer shown as stale while its driver works, and
+  `workflow resume` can no longer start a second driver on it.
+  `workflow cancel` now signals the driver itself.
+- A failed workflow run no longer prints `find: 'sed' terminated by signal 13`.
+- `hydra workflow plan validate` and `compile` report a draft with missing or
+  wrongly typed members as a validation error instead of aborting (several
+  shapes crashed `hydra-fleet`), and `plan propose` refuses a draft that lacks
+  a member every plan requires.
+- Plan admission names its failure (`digest_mismatch`, `branch_exists`,
+  `source_changed`, `materialize_failed`) instead of one generic
+  `invalid_or_stale_plan`, and every planning error carries recovery text for
+  its own command.
+- A plan launch that started no run says why in the control centre and can
+  be launched again; the planning dependencies pane follows the launched
+  run's state; the plan review shows the text of a script the plan carries.
+- A plan result whose worker left uncommitted or untracked work says it is
+  not landable as is, lists the paths and how to commit them; the review,
+  the Work panel and the docs give one land command, and the suggested
+  cleanup uses `--protect-untracked` so it cannot delete the verified work.
+
 ## [3.0.0] - 2026-10-17
 
 Hydra 3.0.0 makes the control centre one workspace for local and remote work:

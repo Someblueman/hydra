@@ -1,25 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 #include "internal.h"
+#include "attention.h"
 
-#define ATTENTION_TEXT 128U
-#define ATTENTION_REASON 256U
-#define ATTENTION_DIGEST 65U
 #define ATTENTION_LINE 8192U
 #define ATTENTION_DUPLICATES 1024U
 #define ATTENTION_OPS 32U
-#define ATTENTION_GROUP ((size_t)-1)
 
-struct attention_item {
-    char source[ATTENTION_TEXT]; char kind[ATTENTION_TEXT]; char reason[ATTENTION_REASON];
-    char project[ATTENTION_TEXT]; char host[ATTENTION_TEXT]; char task[ATTENTION_TEXT];
-    char run[ATTENTION_TEXT]; char step[ATTENTION_TEXT]; char attempt[ATTENTION_TEXT];
-    char head[ATTENTION_TEXT]; char instance[ATTENTION_TEXT]; char request[ATTENTION_TEXT];
-    char binding[ATTENTION_TEXT]; char revision[ATTENTION_DIGEST]; char identity[ATTENTION_DIGEST];
-    char freshness[ATTENTION_TEXT]; char route_kind[ATTENTION_TEXT]; char navigable[ATTENTION_TEXT];
-    char label[ATTENTION_TEXT]; char detail[ATTENTION_REASON];
-    bool unseen;
-};
-struct attention_seen { char identity[ATTENTION_DIGEST]; char revision[ATTENTION_DIGEST]; };
 /* Seen markers persist per user through `hydra workflow attention-seen`. The
  * store survives snapshot replacement; local marks apply at once and the
  * queued public command records them. */
@@ -30,17 +16,8 @@ struct attention_store {
     size_t op_count;
     bool running_list, failed;
 };
-struct native_attention {
-    struct attention_item items[NATIVE_ATTENTION_ITEMS];
-    struct attention_seen seen[NATIVE_ATTENTION_SEEN];
-    struct attention_store *store;
-    size_t count, seen_count, selected, scroll, detail_scroll;
-    bool detail, stale, have_good, loading, partial, truncated, on_group, seen_open;
-    unsigned need_count, seen_group_count, stale_count, unknown_count, expired_count, failure_count;
-    char error[TEXT], feedback[TEXT];
-};
 
-static void review_identity(const struct attention_item *item, struct native_review_identity *id)
+void attention_review_identity(const struct attention_item *item, struct native_review_identity *id)
 {
     memset(id, 0, sizeof(*id));
     copy_text(id->source, sizeof(id->source), item->source);
@@ -58,18 +35,6 @@ static void review_identity(const struct attention_item *item, struct native_rev
     copy_text(id->revision, sizeof(id->revision), item->revision);
     copy_text(id->identity, sizeof(id->identity), item->identity);
     copy_text(id->label, sizeof(id->label), item->label);
-}
-
-static bool item_selected(const struct native_attention *view)
-{ return view && !view->on_group && view->selected < view->count; }
-
-static void sync_review(struct app *app)
-{
-    struct native_attention *view = app->attention;
-    struct native_review_identity id;
-    if (!item_selected(view)) { native_review_sync(app, NULL, false); return; }
-    review_identity(&view->items[view->selected], &id);
-    native_review_sync(app, &id, view->have_good && !view->stale);
 }
 
 static bool put_field(char *dst, size_t cap, const char *value, size_t maximum)
@@ -233,13 +198,20 @@ static bool parse_stream(FILE *input, struct native_attention *view)
  * it out of the list and never counts as approving or rejecting it. A failure
  * likewise stays until its run is resolved (the step succeeds, or a later run
  * of the same plan succeeds); marking it seen resolves nothing. */
-static bool is_failure(const struct attention_item *item) { return !strcmp(item->kind, "failure"); }
-static bool needs_decision(const struct attention_item *item)
-{ return !strcmp(item->kind, "approval") || !strcmp(item->kind, "permission") || is_failure(item); }
-static bool eligible(const struct attention_item *item)
-{ return needs_decision(item) || !strcmp(item->kind, "result"); }
-static bool in_seen_group(const struct attention_item *item)
-{ return !item->unseen && !needs_decision(item); }
+
+bool attention_is_failure(const struct attention_item *item) { return !strcmp(item->kind, "failure"); }
+bool attention_is_approval(const struct attention_item *item)
+{ return !strcmp(item->kind, "approval") || !strcmp(item->kind, "permission"); }
+bool attention_needs_decision(const struct attention_item *item)
+{ return attention_is_approval(item) || attention_is_failure(item); }
+bool attention_eligible(const struct attention_item *item)
+{ return attention_needs_decision(item) || !strcmp(item->kind, "result"); }
+bool attention_in_seen_group(const struct attention_item *item)
+{ return !item->unseen && !attention_needs_decision(item); }
+#define is_failure attention_is_failure
+#define needs_decision attention_needs_decision
+#define eligible attention_eligible
+#define in_seen_group attention_in_seen_group
 static void classify(struct native_attention *view)
 {
     size_t i;
@@ -266,38 +238,6 @@ static void apply_seen(struct native_attention *view)
 
 /* Row order: failures, then the other items needing the user, then one
  * collapsible Seen group. */
-static size_t build_rows(const struct native_attention *view, size_t *rows)
-{
-    size_t i, n = 0U;
-    for (i = 0U; i < view->count; i++) if (is_failure(&view->items[i])) rows[n++] = i;
-    for (i = 0U; i < view->count; i++) if (!in_seen_group(&view->items[i]) && !is_failure(&view->items[i])) rows[n++] = i;
-    if (view->seen_group_count) rows[n++] = ATTENTION_GROUP;
-    for (i = 0U; view->seen_open && i < view->count; i++) if (in_seen_group(&view->items[i])) rows[n++] = i;
-    return n;
-}
-static size_t current_row(const struct native_attention *view, const size_t *rows, size_t n)
-{
-    size_t i;
-    for (i = 0U; i < n; i++) {
-        if (view->on_group ? rows[i] == ATTENTION_GROUP : rows[i] == view->selected) return i;
-    }
-    return 0U;
-}
-static void select_row(struct native_attention *view, size_t row)
-{
-    view->on_group = row == ATTENTION_GROUP;
-    if (!view->on_group) view->selected = row;
-}
-/* Keep a valid selection after regrouping (a seen item may have moved). */
-static void settle_selection(struct native_attention *view)
-{
-    size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), i;
-    /* An open detail keeps its item even after it moves into the collapsed group. */
-    if (view->detail && item_selected(view)) return;
-    if (!n) { view->on_group = false; view->selected = 0U; return; }
-    for (i = 0U; i < n; i++) if (view->on_group ? rows[i] == ATTENTION_GROUP : rows[i] == view->selected) return;
-    select_row(view, rows[0]);
-}
 
 /* ---- persistent seen store ------------------------------------------------ */
 
@@ -368,7 +308,7 @@ static void complete_op(struct app *app, struct attention_store *store)
     if (input) fclose(input);
     if (!store->failed && !pending) {
         memcpy(view->seen, next->seen, sizeof(view->seen)); view->seen_count = next->seen_count;
-        apply_seen(view); settle_selection(view);
+        apply_seen(view);
     }
     if (store->failed) copy_text(view->error, sizeof(view->error), "Seen markers are unavailable; marks last only for this session");
     free(next);
@@ -384,13 +324,20 @@ static void store_tick(struct app *app)
         store->op_count--; store->failed = true;
     }
 }
-/* Let queued markers reach the store before the client exits (bounded). */
+/* Let queued markers reach the store before the client exits (bounded); a
+ * listing in flight answers nobody now and is stopped. */
 static void store_flush(struct app *app)
 {
     const struct timespec pause = {0, 10000000L};
     struct attention_store *store = app->attention ? app->attention->store : NULL;
     unsigned waited = 0U;
     while (store && (store->job.pid || store->op_count) && waited++ < 300U) {
+        if (store->job.pid && store->running_list && store->op_count) {
+            native_capture_destroy(&store->job);
+            memmove(store->ops, store->ops + 1U, (store->op_count - 1U) * sizeof(store->ops[0]));
+            store->op_count--;
+            continue;
+        }
         if (!store->job.pid && store->ops[0].list) { store->op_count = 0U; break; }
         store_tick(app);
         (void)nanosleep(&pause, NULL);
@@ -404,16 +351,18 @@ void native_attention_destroy(struct app *app)
     store_flush(app);
     free(app->attention->store); free(app->attention); app->attention = NULL;
 }
-static void retain_state(struct native_attention *old, struct native_attention *next, char *selected_id, bool *detail)
+/* What a new snapshot keeps of the old: the seen markers, their store and
+ * the last feedback. Inbox keeps its own selection by identity. */
+static void retain_state(struct native_attention *old, struct native_attention *next)
 {
     if (!old) return;
-    if (item_selected(old)) copy_text(selected_id, ATTENTION_DIGEST, old->items[old->selected].identity);
-    next->scroll = old->scroll; next->detail_scroll = old->detail_scroll; next->seen_count = old->seen_count;
-    memcpy(next->seen, old->seen, sizeof(next->seen)); *detail = old->detail;
+    next->seen_count = old->seen_count; memcpy(next->seen, old->seen, sizeof(next->seen));
     next->store = old->store; old->store = NULL;
-    next->seen_open = old->seen_open; next->on_group = old->on_group;
+    next->read_at = old->read_at;
     copy_text(next->feedback, sizeof(next->feedback), old->feedback);
 }
+bool attention_present(const char *value) { return value[0] && strcmp(value, "-"); }
+#define present attention_present
 static void attention_error(struct app *app, const char *message)
 {
     if (!app->attention) return;
@@ -421,30 +370,11 @@ static void attention_error(struct app *app, const char *message)
     app->attention->stale = app->attention->have_good;
     copy_text(app->attention->error, sizeof(app->attention->error), message);
 }
-static void finalize_attention(struct native_attention *next, const char *selected_id, bool detail)
-{
-    size_t i;
-    bool found = false;
-    for (i = 0U; i < next->count && selected_id[0] && !found; i++) {
-        if (!strcmp(selected_id, next->items[i].identity)) { next->selected = i; found = true; }
-    }
-    if (!found) next->selected = 0U;
-    next->detail = found && detail;
-    next->have_good = true;
-    next->stale = false;
-    apply_seen(next);
-    if (!found && !next->on_group) {
-        /* Without a retained selection the first row is selected: a failure when there is one. */
-        size_t rows[NATIVE_ATTENTION_ITEMS + 1U];
-        if (build_rows(next, rows)) select_row(next, rows[0]);
-    }
-    settle_selection(next);
-}
 static void accept_attention(struct app *app, FILE *input)
 {
-    struct native_attention *next = calloc(1U, sizeof(*next)); char selected_id[ATTENTION_DIGEST] = ""; bool detail = false;
+    struct native_attention *next = calloc(1U, sizeof(*next));
     if (!next) { if (input) fclose(input); return; }
-    retain_state(app->attention, next, selected_id, &detail);
+    retain_state(app->attention, next);
     if (!input || !parse_stream(input, next)) {
         if (input) fclose(input);
         if (app->attention) { app->attention->store = next->store; }
@@ -453,45 +383,27 @@ static void accept_attention(struct app *app, FILE *input)
         return;
     }
     fclose(input);
-    finalize_attention(next, selected_id, detail);
+    next->have_good = true;
+    next->good_at = time(NULL);
+    apply_seen(next);
     next->loading = false;
     free(app->attention); app->attention = next;
 }
 static void capture_failure(struct app *app)
 { attention_error(app, app->attention && app->attention->have_good ? "Attention unavailable; showing last good snapshot" : "Attention unavailable; no valid snapshot yet"); }
-/* Headless fixtures: one attention stream read from a file, with no refresh
- * and no seen store; a second unreadable file leaves the first as the stale
- * last good snapshot, as a failed refresh does. */
-bool native_attention_load(struct app *app, const char *path)
-{
-    FILE *input = fopen(path, "r");
-    if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
-    if (!app->attention) { if (input) fclose(input); return false; }
-    accept_attention(app, input);
-    return app->attention->have_good;
-}
-/* The exact review of the selected item, read from a framed document file. */
-bool native_attention_review_load(struct app *app, const char *path)
-{
-    struct native_review_identity id;
-    if (!item_selected(app->attention)) return false;
-    review_identity(&app->attention->items[app->attention->selected], &id);
-    return native_review_load(app, &id, path);
-}
 void native_attention_tick(struct app *app, bool request)
 {
     struct native_capture *job; char *argv[4];
     struct attention_op list = {"", "", false, true};
     if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
     if (!app->attention || !app->observations) return;
-    job = &app->observations->jobs[4];
+    job = &app->observations->jobs[OBSERVE_ATTENTION];
     if (job->pid && native_capture_step(job)) {
         FILE *input = native_capture_take(job);
         if (input) accept_attention(app, input); else capture_failure(app);
     }
     store_tick(app);
-    sync_review(app);
-    if (!request || app->view != 9) return;
+    if (!request || !native_observations_attention_due(app, app->attention->read_at)) return;
     /* A refresh always rereads the seen store, even while the previous
      * attention snapshot is still loading. */
     enqueue(app->attention, &list);
@@ -501,7 +413,45 @@ void native_attention_tick(struct app *app, bool request)
     argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "tui");
     argv[2] = (char *)(app->fleet ? "attention-data" : "--attention-data"); argv[3] = NULL;
     app->attention->loading = true;
+    app->attention->read_at = time(NULL);
     if (!native_capture_start(job, argv, app->fleet ? 13000L : 25000L)) capture_failure(app);
+}
+
+/* Starts an attention read wherever the user is (the run monitor needs the
+ * requests waiting on its runs); the result arrives with the next tick. */
+void native_attention_read(struct app *app)
+{
+    struct native_capture *job;
+    char *argv[4];
+    if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
+    if (!app->attention || !app->observations) return;
+    job = &app->observations->jobs[OBSERVE_ATTENTION];
+    if (job->pid) return;
+    /* One stream for local and remote items; the compatibility entry keeps
+     * the fleet helper's own stream. */
+    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "tui");
+    argv[2] = (char *)(app->fleet ? "attention-data" : "--attention-data"); argv[3] = NULL;
+    app->attention->loading = true;
+    app->attention->read_at = time(NULL);
+    if (!native_capture_start(job, argv, app->fleet ? 13000L : 25000L)) capture_failure(app);
+}
+
+/* The approval request waiting on a run in the last good attention
+ * snapshot, and its step; false when none is known (or the list is stale). */
+bool native_attention_run_request(const struct app *app, const char *run, char *request, size_t size,
+                                  char *step, size_t step_size)
+{
+    const struct native_attention *view = app->attention;
+    size_t i;
+    if (!view || !view->have_good || view->stale) return false;
+    for (i = 0U; i < view->count; i++) {
+        const struct attention_item *item = &view->items[i];
+        if (strcmp(item->run, run) || !present(item->request) || strcmp(item->kind, "approval")) continue;
+        copy_text(request, size, item->request);
+        copy_text(step, step_size, item->step);
+        return true;
+    }
+    return false;
 }
 
 /* ---- wording ---------------------------------------------------------------- */
@@ -515,7 +465,7 @@ static const char *failure_title(const struct attention_item *item)
     for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(item->reason, map[i][0])) return map[i][1];
     return "Failed";
 }
-static const char *item_title(const struct attention_item *item)
+const char *attention_item_title(const struct attention_item *item)
 {
     static const char *const map[][2] = {{"approval", "Approval needed"}, {"approval_expired", "Approval expired"},
         {"result", "Result ready for review"}, {"permission", "Permission requested"}};
@@ -524,10 +474,9 @@ static const char *item_title(const struct attention_item *item)
     for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(item->kind, map[i][0])) return map[i][1];
     return "Needs inspection";
 }
-static bool present(const char *value) { return value[0] && strcmp(value, "-"); }
 /* "kill-dry-run · repo-check · on builder": the task, its step and, away
  * from this machine, its host. */
-static void item_subject(const struct app *app, const struct attention_item *item, char *out, size_t size)
+void attention_item_subject(const struct app *app, const struct attention_item *item, char *out, size_t size)
 {
     const char *name = present(item->label) ? item->label : present(item->task) ? item->task : present(item->run) ? item->run : "unnamed";
     out[0] = '\0';
@@ -542,7 +491,7 @@ static void attempt_text(const struct attention_item *item, char *out, size_t si
     if (present(item->attempt)) text_append(out, size, " (attempt %s)", number);
 }
 /* What happened and what the review will show. Keys are not repeated here:
- * the footer and the detail's Next row carry them. */
+ * the detail's Next paragraph and its buttons carry them. */
 static const char *reason_text(const char *reason)
 {
     static const char *const map[][2] = {
@@ -581,7 +530,7 @@ static const char *kind_text(const struct attention_item *item)
     if (is_failure(item)) return "failed";
     return "could not be classified by Hydra";
 }
-static void item_why(const struct attention_item *item, char *out, size_t size)
+void attention_item_why(const struct attention_item *item, char *out, size_t size)
 {
     char attempt[48];
     const char *known = reason_text(item->reason);
@@ -595,362 +544,81 @@ static void item_why(const struct attention_item *item, char *out, size_t size)
     if (is_failure(item) && present(item->detail)) text_append(out, size, " It decides %s.", item->detail);
     if (!strcmp(item->freshness, "stale")) text_append(out, size, " The source could not be re-read; this is its last observation.");
 }
-static const char *seen_status(const struct attention_item *item)
+const char *attention_seen_status(const struct attention_item *item)
 {
     if (item->unseen) return is_failure(item) ? "New: not marked seen yet; listed until the run is resolved." : "New: not marked seen yet.";
     if (is_failure(item)) return "Seen, but still needs your decision until the run is resolved.";
     return needs_decision(item) ? "Seen, but still needs your decision." : "Seen at this revision; a new revision shows it again.";
 }
-/* The STATE column: freshness when it is not fresh, then the seen state. */
-static void state_text(const struct attention_item *item, char *out, size_t size)
+
+/* What the user can do about the item, by the keys that act on it here. */
+const char *attention_next_text(const struct app *app, const struct attention_item *item)
 {
-    out[0] = '\0';
-    if (strcmp(item->freshness, "fresh")) text_append(out, size, "%s", item->freshness);
-    if (item->unseen && eligible(item)) text_append(out, size, "%sNEW", out[0] ? " " : "");
-    else if (!item->unseen) text_append(out, size, "%s%s", out[0] ? " " : "", needs_decision(item) ? "seen, needs decision" : "seen");
-}
-static const char *next_text(const struct attention_item *item)
-{
-    if (is_failure(item)) return "r reviews the failed requirement and its log. To send the plan back, open its planning conversation from Work: F requests changes, V validates the revision and E runs it.";
-    if (!strcmp(item->kind, "approval") || !strcmp(item->kind, "permission")) return "r reviews the request and its evidence; the decision itself is made in the run's monitor (C in the workspace: Y approve, N reject).";
+    bool remote = present(item->host) && strcmp(item->host, "local");
+    if (is_failure(item)) return app->fleet || remote ? "r reviews the failed requirement and its log, as its host retained them."
+        : "r reviews the failed requirement and its log. F sends it back to the agent that planned the run, with your note; R resumes the run once it can continue.";
+    if (!strcmp(item->kind, "approval") || !strcmp(item->kind, "permission")) return remote
+        ? "r reviews the request and its evidence. Y approves and N rejects it on its host, after a confirmation, while the host's observation is fresh."
+        : "r reviews the request and its evidence. Y approves and N rejects it, after a confirmation; a decision alone never resumes a run.";
     if (!strcmp(item->kind, "result")) return "r reviews what was produced, how it was checked and the changes on the worker branch; s marks the item seen once you have.";
     if (!strcmp(item->kind, "approval_expired")) return "r reviews the expired request; a new request appears here when the step asks again.";
     return "r shows the records Hydra could read; inspect them before acting.";
 }
 
-/* ---- rendering ---------------------------------------------------------------- */
+/* ---- what Inbox asks of the snapshot -------------------------------------- */
 
-struct cursor { size_t line, from, to; };
-static size_t text_width(const struct app *app)
-{ return app->content_width > 2 ? (size_t)app->content_width - 1U : 1U; }
-/* Bytes of text that fit in room: break at a space in the second half of the
- * line when there is one, and never inside a UTF-8 sequence. */
-static size_t wrap_take(const char *text, size_t room)
+size_t attention_find(const struct app *app, const char *identity, const char *revision)
 {
-    size_t take = strlen(text);
-    if (take <= room) return take;
-    take = room;
-    while (take > room / 2U && text[take] != ' ') take--;
-    if (text[take] != ' ') take = room;
-    while (take > 1U && ((unsigned char)text[take] & 0xC0U) == 0x80U) take--;
-    return take;
-}
-/* Word wrap into the content width; lines outside [from, to) are measured only. */
-static void wrap(struct app *app, struct cursor *at, const char *first, const char *next, const char *text, enum tone tone)
-{
-    size_t width = text_width(app);
-    const char *prefix = first;
-    do {
-        size_t room = width > strlen(prefix) + 8U ? width - strlen(prefix) : 8U, take = wrap_take(text, room);
-        if (at->line >= at->from && at->line < at->to) { style(app, tone); linef(app, "%s%.*s", prefix, (int)take, text); style(app, TONE_BASE); }
-        at->line++;
-        text += take;
-        while (*text == ' ') text++;
-        prefix = next;
-    } while (*text);
-}
-/* Row columns: WHAT (the kind of item), TASK · STEP, and STATE at the right.
- * Below 64 columns the row is one wrapped sentence instead. */
-struct attention_columns { int what, task_x, task, state_x, state; bool compact; };
-static void attention_layout(const struct app *app, struct attention_columns *k)
-{
-    int width = app->content_width;
-    k->compact = width < 64;
-    k->what = 24; k->state = width >= 100 ? 22 : 20;
-    k->task_x = 2 + k->what + 1;
-    k->state_x = width - k->state;
-    k->task = k->state_x - 1 - k->task_x;
-}
-/* The subject within width: whole, then without its host, then without its
- * step, then the name with an ellipsis; a cut never lands inside a word. */
-static void fit_subject(const struct app *app, const struct attention_item *item, size_t width, char *out, size_t size)
-{
-    const char *sep = dot(app);
-    char text[384];
+    const struct native_attention *view = app->attention;
     size_t i;
-    item_subject(app, item, text, sizeof(text));
-    for (i = 0U; i < 2U && strlen(text) > width; i++) {
-        char *last = NULL, *at = text;
-        while ((at = strstr(at, sep)) != NULL) { last = at; at += strlen(sep); }
-        if (!last) break;
-        *last = '\0';
-    }
-    fit_text(app, text, width, out, size);
-}
-static enum tv_style what_tone(const struct attention_item *item)
-{
-    if (is_failure(item) || (needs_decision(item) && !strcmp(item->freshness, "fresh"))) return TV_WARNING;
-    return item->unseen && eligible(item) ? TV_STRONG : TV_MUTED;
-}
-static void render_title_row(struct app *app, struct cursor *at, const struct attention_item *item, bool selected)
-{
-    struct attention_columns k;
-    char state[48], cell[384];
-    enum tv_style row = selected ? TV_SELECTED : TV_BASE;
-    attention_layout(app, &k);
-    state_text(item, state, sizeof(state));
-    if (k.compact) {
-        char subject[384], title[640];
-        item_subject(app, item, subject, sizeof(subject));
-        snprintf(title, sizeof(title), "%s%s%s%s%s", item_title(item), dot(app), subject, state[0] ? "  " : "", state);
-        wrap(app, at, selected ? "> " : "  ", "  ", title, selected ? TONE_SELECTED : (enum tone)what_tone(item));
-        return;
-    }
-    if (at->line >= at->from && at->line < at->to && app->line < app->limit) {
-        if (selected) column(app, 0, app->content_width, TV_SELECTED, "");
-        column(app, 0, 2, row, selected ? ">" : " ");
-        fit_text(app, item_title(item), (size_t)k.what, cell, sizeof(cell));
-        column(app, 2, k.what, selected ? TV_SELECTED : what_tone(item), cell);
-        fit_subject(app, item, (size_t)k.task, cell, sizeof(cell));
-        column(app, k.task_x, k.task, row, cell);
-        fit_text(app, state, (size_t)k.state, cell, sizeof(cell));
-        column(app, k.state_x, k.state, selected ? TV_SELECTED : item->unseen && eligible(item) ? TV_WARNING : TV_MUTED, cell);
-        app->line++;
-    }
-    at->line++;
-}
-static void render_item(struct app *app, struct cursor *at, const struct attention_item *item, bool selected)
-{
-    char why[768];
-    render_title_row(app, at, item, selected);
-    item_why(item, why, sizeof(why));
-    wrap(app, at, "    ", "    ", why, selected ? TONE_SELECTED : TONE_MUTED);
-}
-static void render_group(struct app *app, struct cursor *at, const struct native_attention *view, bool selected)
-{
-    char text[160];
-    text[0] = '\0';
-    text_append(text, sizeof(text), "[%s] Seen (%u)  %s", view->seen_open ? "-" : "+", view->seen_group_count,
-        view->seen_open ? "Enter collapses" : "collapsed; Enter shows them");
-    wrap(app, at, selected ? "> " : "  ", "  ", text, selected ? TONE_SELECTED : TONE_MUTED);
-}
-static void render_row(struct app *app, struct cursor *at, const struct native_attention *view, size_t row, bool selected)
-{
-    if (row == ATTENTION_GROUP) render_group(app, at, view, selected);
-    else render_item(app, at, &view->items[row], selected);
-}
-static void render_heading(struct app *app)
-{
-    struct attention_columns k;
-    attention_layout(app, &k);
-    if (k.compact || app->line >= app->limit) return;
-    column(app, 2, k.what, TV_MUTED, "WHAT");
-    column(app, k.task_x, k.task, TV_MUTED, "TASK");
-    column(app, k.state_x, k.state, TV_MUTED, "STATE");
-    app->line++;
-}
-static void render_empty(struct app *app)
-{
-    linef(app, "");
-    style(app, TONE_STRONG); linef(app, "Nothing needs your attention."); style(app, TONE_BASE);
-    linef(app, "");
-    paragraph(app, "Attention lists what needs a decision or a look from you: an approval request a step is waiting on, a failed check, a result ready for review, or a terminal that stopped. For example, a plan step asks you to approve before it merges.", TV_BASE);
-    linef(app, "");
-    paragraph(app, "Items stay listed until the request is resolved; Enter shows what an item asks and r reviews a result.", TV_MUTED);
-}
-static void render_rows(struct app *app, struct native_attention *view)
-{
-    size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), selected = current_row(view, rows, n), i;
-    size_t available, start = 0U, end = 0U;
-    struct cursor measure = {0U, 0U, 0U}, draw;
-    if (!n) { render_empty(app); return; }
-    render_heading(app);
-    available = app->limit > app->line ? (size_t)(app->limit - app->line) : 1U;
-    for (i = 0U; i < n; i++) {
-        if (i == selected) start = measure.line;
-        render_row(app, &measure, view, rows[i], false);
-        if (i == selected) end = measure.line;
-    }
-    /* The selected item stays in view; one taller than the view shows its start. */
-    if (view->scroll > start) view->scroll = start;
-    if (end > view->scroll + available) view->scroll = end - available > start ? start : end - available;
-    draw = (struct cursor){0U, view->scroll, view->scroll + available};
-    for (i = 0U; i < n && draw.line < draw.to; i++) render_row(app, &draw, view, rows[i], i == selected);
-}
-static void snapshot_notes(struct app *app, const struct native_attention *view)
-{
-    struct cursor at = {0U, 0U, SIZE_MAX};
-    if (view->stale) wrap(app, &at, "", "", "STALE: last good attention snapshot. The latest refresh failed; press I to refresh again.", TONE_WARNING);
-    if (view->truncated) wrap(app, &at, "", "", "Only part of the attention list could be read (a size limit was reached); some items may be missing.", TONE_WARNING);
-    else if (view->partial) wrap(app, &at, "", "", view->unknown_count ? "Some records could not be read completely; they are listed below as Needs inspection."
-        : "Some records could not be read completely; the list may be incomplete.", TONE_WARNING);
-    if (view->error[0]) wrap(app, &at, "", "", view->error, TONE_WARNING);
-    if (view->feedback[0]) wrap(app, &at, "", "", view->feedback, TONE_SUCCESS);
-}
-/* Identity in explicit groups: the full digests on rows of their own. */
-/* One row of the detail, skipped while the detail is scrolled past it. */
-static void detail_row(struct app *app, size_t *skip, const char *text, enum tv_style tone)
-{
-    if (*skip) { (*skip)--; return; }
-    if (app->line < app->limit) { style(app, (enum tone)tone); linef(app, "%s", text); style(app, TONE_BASE); }
-}
-static void detail_pair(struct app *app, size_t *skip, const char *left_label, const char *left, enum tv_style left_tone,
-                        const char *right_label, const char *right, enum tv_style right_tone)
-{
-    if (*skip) { (*skip)--; return; }
-    pair(app, left_label, left, left_tone, right_label, right, right_tone);
-}
-/* Identity in an explicit group; the full digests take rows of their own. */
-static void render_identity(struct app *app, const struct attention_item *item, size_t *skip)
-{
-    char kind[280], route[160];
-    snprintf(kind, sizeof(kind), "%s%s%s", item->kind, dot(app), item->reason);
-    snprintf(route, sizeof(route), "%s%s%s", item->route_kind, dot(app), !strcmp(item->navigable, "1") ? "navigable" : "not navigable");
-    detail_row(app, skip, "", TV_BASE);
-    detail_row(app, skip, "IDENTITY", TV_BORDER);
-    detail_pair(app, skip, "Kind", kind, TV_BASE, "Source", item->source, TV_BASE);
-    detail_pair(app, skip, "Project", item->project, TV_BASE, "Host", item->host, TV_BASE);
-    detail_pair(app, skip, "Task", item->task, TV_BASE, "Run", item->run, TV_BASE);
-    detail_pair(app, skip, "Step", item->step, TV_BASE, "Attempt", item->attempt, TV_BASE);
-    detail_pair(app, skip, "Head", item->head, TV_BASE, "Instance", item->instance, TV_BASE);
-    detail_pair(app, skip, "Request", item->request, TV_BASE, "Binding", item->binding, TV_BASE);
-    labelled_skip(app, DETAIL_LABEL, "Freshness", item->freshness, strcmp(item->freshness, "fresh") ? TV_WARNING : TV_BASE, skip);
-    labelled_skip(app, DETAIL_LABEL, "Route", route, TV_BASE, skip);
-    /* A 64-digit digest and its label fit 80 columns with an 11-wide label. */
-    labelled_skip(app, DETAIL_LABEL - 1, "Revision", item->revision, TV_MUTED, skip);
-    labelled_skip(app, DETAIL_LABEL - 1, "Identity", item->identity, TV_MUTED, skip);
-}
-/* The detail scrolls with Space and b when it is taller than the view; a
- * scroll that would leave the screen empty is pulled back. */
-static void render_detail(struct app *app, struct native_attention *view)
-{
-    const struct attention_item *item = &view->items[view->selected];
-    char subject[384], text[768];
-    size_t skip = view->detail_scroll;
-    int top = app->line;
-    item_subject(app, item, subject, sizeof(subject));
-    snprintf(text, sizeof(text), "%s%s%s", item_title(item), dot(app), subject);
-    detail_row(app, &skip, "ATTENTION DETAIL", TV_MUTED);
-    paragraph_skip(app, text, TV_STRONG, &skip);
-    labelled_skip(app, DETAIL_LABEL, "Status", seen_status(item), item->unseen && eligible(item) ? TV_WARNING : TV_MUTED, &skip);
-    item_why(item, text, sizeof(text));
-    labelled_skip(app, DETAIL_LABEL, "Why", text, TV_BASE, &skip);
-    labelled_skip(app, DETAIL_LABEL, "Next", next_text(item), TV_BASE, &skip);
-    if (!skip) snapshot_notes(app, view);
-    render_identity(app, item, &skip);
-    if (skip && view->detail_scroll) {
-        view->detail_scroll = view->detail_scroll > skip ? view->detail_scroll - skip : 0U;
-        app->line = top;
-        render_detail(app, view);
-    }
-}
-static void render_summary(struct app *app, const struct native_attention *view)
-{
-    const char *sep = dot(app);
-    char counts[160], lead[64];
-    snprintf(lead, sizeof(lead), "ATTENTION  %u need you", view->stale ? 0U : view->need_count);
-    snprintf(counts, sizeof(counts), "%s%u seen%s%u stale%s%u unknown", sep, view->seen_group_count, sep, view->stale_count, sep, view->unknown_count);
-    if (app->line < app->limit) {
-        column(app, 0, (int)strlen(lead), TV_STRONG, lead);
-        column(app, (int)strlen(lead), app->content_width - (int)strlen(lead), TV_MUTED, counts);
-        app->line++;
-    }
-    style(app, TONE_WARNING);
-    if (view->failure_count) linef(app, "%u failed check%s or step%s need%s a decision", view->failure_count,
-        view->failure_count == 1U ? "" : "s", view->failure_count == 1U ? "" : "s", view->failure_count == 1U ? "s" : "");
-    if (view->expired_count) linef(app, "%u expired approval request%s", view->expired_count, view->expired_count == 1U ? "" : "s");
-    style(app, TONE_BASE);
-}
-static void render_loading(struct app *app)
-{
-    lead_block(app, "ATTENTION", "Loading what needs you...");
-    linef(app, "");
-    paragraph(app, "Hydra is reading the approval requests, failed checks and sealed results of this project's runs and, when hosts are registered, of remote work. The list appears when the read completes; nothing is decided or acknowledged by looking.", TV_MUTED);
-}
-static void render_unavailable(struct app *app, const struct native_attention *view)
-{
-    lead_block(app, "ATTENTION", "Attention is unavailable right now.");
-    labelled(app, "Why", view->error, TV_WARNING);
-    linef(app, "");
-    paragraph(app, "Nothing can be listed until a valid attention snapshot is read. Press I to refresh; nothing is decided or acknowledged by looking.", TV_MUTED);
-}
-bool native_attention_detail_open(const struct app *app)
-{ return app->attention && app->attention->detail && item_selected(app->attention); }
-/* A list is on screen: a good snapshot was read (it may be stale). */
-bool native_attention_listed(const struct app *app)
-{ return app->attention && app->attention->have_good; }
-void render_attention(struct app *app)
-{
-    struct native_attention *view = app->attention;
-    if (native_review_render(app)) return;
-    if (!view || (!view->have_good && !view->error[0])) { render_loading(app); return; }
-    if (!view->have_good) { render_unavailable(app, view); return; }
-    if (view->detail && item_selected(view)) { render_detail(app, view); return; }
-    view->detail_scroll = 0U;
-    render_summary(app, view);
-    snapshot_notes(app, view);
-    render_rows(app, view);
+    if (!view || !view->have_good || view->stale) return SIZE_MAX;
+    for (i = 0U; i < view->count; i++)
+        if (!strcmp(view->items[i].identity, identity) && !strcmp(view->items[i].revision, revision)) return i;
+    return SIZE_MAX;
 }
 
-/* ---- keys -------------------------------------------------------------------- */
-
-static bool attention_move(struct native_attention *view, char key)
-{
-    size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), at;
-    int direction = key == 'j' || key == 'B' || key == ']' ? 1 : key == 'k' || key == 'A' || key == '[' ? -1 : 0;
-    if (!direction) return false;
-    if (!n) return true;
-    at = current_row(view, rows, n);
-    if (direction > 0 && at + 1U < n) at++;
-    else if (direction < 0 && at) at--;
-    select_row(view, rows[at]);
-    view->feedback[0] = '\0';
-    return true;
-}
-static bool open_review(struct app *app, char key)
-{
-    struct native_attention *view = app->attention;
-    struct native_review_identity id;
-    if (key != 'r' || !item_selected(view)) return false;
-    if (view->stale) { copy_text(app->notice, sizeof(app->notice), "Refresh attention before reviewing a stale selection"); return true; }
-    review_identity(&view->items[view->selected], &id);
-    native_review_open(app, &id);
-    return true;
-}
 /* s toggles the marker for the exact identity and revision; it is recorded
  * through the public command and never changes the item itself. */
-static void toggle_seen(const struct app *app, struct native_attention *view)
+void attention_toggle_seen(struct app *app, size_t index)
 {
-    struct attention_item *item = &view->items[view->selected];
-    struct attention_op op = {"", "", !item->unseen, false};
-    size_t rows[NATIVE_ATTENTION_ITEMS + 1U], position, n;
+    struct native_attention *view = app->attention;
+    struct attention_item *item;
+    struct attention_op op = {"", "", false, false};
     char subject[384], title[512];
+    if (!view || index >= view->count) return;
+    item = &view->items[index];
+    op.clear = !item->unseen;
     copy_text(op.identity, sizeof(op.identity), item->identity);
     copy_text(op.revision, sizeof(op.revision), item->revision);
     if (item->unseen) remember_revision(view, item->identity, item->revision);
     else forget_identity(view, item->identity);
-    item_subject(app, item, subject, sizeof(subject));
+    attention_item_subject(app, item, subject, sizeof(subject));
     title[0] = '\0'; view->feedback[0] = '\0';
-    text_append(title, sizeof(title), "%s%s%s", item_title(item), dot(app), subject);
+    text_append(title, sizeof(title), "%s%s%s", attention_item_title(item), dot(app), subject);
     text_append(view->feedback, sizeof(view->feedback), op.clear ? "Marked new again: %s" : needs_decision(item) ?
         "Marked seen: %s. It stays listed until someone decides." : "Marked seen: %s. Moved to Seen.", title);
-    position = current_row(view, rows, build_rows(view, rows));
     apply_seen(view);
     enqueue(view, &op);
-    /* In the list, the next row takes the marked row's place. */
-    if (!view->detail && (n = build_rows(view, rows))) select_row(view, rows[position < n ? position : n - 1U]);
-    settle_selection(view);
 }
-static void attention_enter(struct native_attention *view)
+
+/* Headless fixtures: one attention stream read from a file, with no refresh
+ * and no seen store; a second unreadable file leaves the first as the stale
+ * last good snapshot, as a failed refresh does. */
+bool native_attention_load(struct app *app, const char *path)
 {
-    if (view->on_group) { view->seen_open = !view->seen_open; view->scroll = 0U; return; }
-    if (view->count) view->detail = !view->detail;
-    view->detail_scroll = 0U;
+    FILE *input = fopen(path, "r");
+    if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
+    if (!app->attention) { if (input) fclose(input); return false; }
+    accept_attention(app, input);
+    return app->attention->have_good;
 }
-bool native_attention_key(struct app *app, char key)
+
+/* A project whose workflow read succeeded with no runs has nothing for the
+ * attention read to find (that read then fails for want of run storage):
+ * the list is empty for a known reason, not unavailable. Registered hosts
+ * may still have remote items, so they are read as usual. */
+bool attention_no_runs(const struct app *app)
 {
-    struct native_attention *view = app->attention; bool handled = true;
-    if (!view) return false;
-    if (native_review_key(app, key) || open_review(app, key)) return true;
-    if (attention_move(view, key)) { sync_review(app); return true; }
-    if (key == '\r' || key == '\n') attention_enter(view);
-    else if ((key == ' ' || key == 'b') && view->detail) {
-        size_t page = app->rows > 10 ? (size_t)app->rows / 2U : 4U;
-        view->detail_scroll = key == ' ' ? view->detail_scroll + page : view->detail_scroll > page ? view->detail_scroll - page : 0U;
-    }
-    else if (key == 's' && item_selected(view)) toggle_seen(app, view);
-    else if (key == 27) { if (view->detail) { view->detail = false; settle_selection(view); } else app->view = 0; }
-    else if (key == 'I') native_attention_tick(app, true);
-    else handled = false;
-    return handled;
+    if (app->fleet || app->model.host_count || !app->workflows || app->workflow_stale || app->workflows->run_count) return false;
+    return !app->attention || !app->attention->have_good;
 }

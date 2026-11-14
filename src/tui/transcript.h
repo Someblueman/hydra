@@ -1,10 +1,10 @@
 #ifndef HYDRA_TUI_TRANSCRIPT_H
 #define HYDRA_TUI_TRANSCRIPT_H
-#include "../termviz/termviz.h"
-#include "../termviz/terminal.h"
+#include "../kettle/kettle.h"
+#include "../kettle/terminal.h"
 /* Read-only transcripts of captured terminal output (tmux capture-pane -e,
  * provider streams, command logs). Each logical line is interpreted by a
- * termviz terminal model, so UTF-8 widths, joined emoji, SGR colors, CR/BS/TAB
+ * kettle terminal model, so UTF-8 widths, joined emoji, SGR colors, CR/BS/TAB
  * and DEC graphics follow the attached pane exactly, while cursor movement,
  * OSC/DCS payloads and other control sequences never reach the outer terminal.
  * Lines wrap at the view width; each continuation row starts with a marker.
@@ -14,9 +14,9 @@
 #define TRANSCRIPT_MODEL_COLUMNS 512
 
 struct transcript {
-    struct tv_terminal_model model;
-    struct tv_cell primary[TRANSCRIPT_MODEL_COLUMNS * 2], alternate[TRANSCRIPT_MODEL_COLUMNS * 2];
-    struct tv_cell line[TRANSCRIPT_COLUMNS];
+    struct kt_terminal_model model;
+    struct kt_cell primary[TRANSCRIPT_MODEL_COLUMNS * 2], alternate[TRANSCRIPT_MODEL_COLUMNS * 2];
+    struct kt_cell line[TRANSCRIPT_COLUMNS];
     size_t count;
     bool truncated, diff;
     size_t diff_indent;
@@ -43,10 +43,10 @@ size_t transcript_parse(struct transcript *t, const char *text, size_t length);
 size_t transcript_rows(const struct transcript *t, int width);
 /* Draws wrapped rows [first, first + height) of the last parsed line into
  * rows y.. of the area; cells without their own style take tone. */
-int transcript_draw(const struct transcript *t, struct tv_canvas *c, struct tv_rect area,
-                    size_t first, enum tv_style tone, bool color);
+int transcript_draw(const struct transcript *t, struct kt_canvas *c, struct kt_rect area,
+                    size_t first, struct kt_style tone, bool color);
 /* Lays out a whole document into area: trailing blank lines are omitted,
  * unified diffs are toned and provider hints are detected. */
-void transcript_render(struct transcript *t, struct tv_canvas *c, struct tv_rect area,
+void transcript_render(struct transcript *t, struct kt_canvas *c, struct kt_rect area,
                        const char *text, size_t length, struct transcript_layout *layout);
 #endif

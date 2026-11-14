@@ -149,11 +149,85 @@ authentication and qualification remain separate from help probes.
 
 ## Objective planning
 
-Use [`hydra workflow plan`](../README.md#plan-an-objective) to author a bounded JSON plan,
-compile and review its source/input/policy bindings, then run the exact accepted
-artifact through this same scheduler. Final success requires artifact-bound
-verification reports for the declared deliverables. This optional native path
-does not change workflow schema 1 or shell-only execution.
+An agent plans the work with you in its head, then publishes a short plan:
+
+```json
+{
+  "plan": "simple-1",
+  "objective": "Add a greeting file and a test for it",
+  "steps": [
+    {"id": "implement", "agent": "Create greeting.txt with a friendly greeting and tests/greeting.sh that fails unless it is non-empty."},
+    {"id": "check", "run": ["make", "check"]}
+  ],
+  "done_when": [{"criterion": "make check passes with the new test", "check": "check"}]
+}
+```
+
+`hydra plan schema` describes every member. An `agent` step gives the worker
+agent its complete instructions; a `run` step is a command; each `done_when`
+criterion names the run step that checks it. Steps run in order unless they
+list `needs`. All of them run on one new worker branch (`worker`, by default
+`<id>-work`, with `id` taken from the objective's first words). After each agent
+step Hydra commits what the agent changed there, and a check passes when its
+command exits 0 on that commit: Hydra writes the check's evidence ("make check
+exited 0 on commit ...") itself. Hydra leaves out new files that look like
+secrets (`.env` files, private keys and key stores, `credentials`, `.netrc`
+and similar; not `*.example` or `*.sample`): they stay untracked in the
+worker's worktree and are listed in the step attempt's `withheld` file, and
+`hydra land` keeps that worker head instead of removing it.
+
+The agent publishes with `hydra plan propose plan.json`. Each publication is a
+new revision, checked at once against the project's plan policy; the agent sees
+each problem and how to fix it, for example a tool the policy does not allow.
+You review and decide from your own terminal or the control centre:
+
+| Command | What it does |
+|---|---|
+| `hydra plan show [<head>]` | The plan in words: steps, instructions, commands, "changes only branch X", limits in minutes, done-when, scripts' text. `--technical` shows the compiled preview, `--json` the projection in [CONTRACTS](CONTRACTS.md). |
+| `hydra plan approve [<head>]` | Compiles the current revision afresh, shows it, asks once and runs exactly that revision in the background. `--accept <sha256>` for automation. |
+| `hydra plan status [<run>]` | The run's steps and what to do next. |
+| `hydra plan review [<run>]` | The result: verdict, the worker's commit and diff, each check with its log. |
+| `hydra land <worker>` | After you confirm, merges the verified commit into your checkout's current branch; never pushes; removes the worker head, keeps its branch. |
+| `hydra plan policy` | The project's plan policy in words; `--allow-tool`, `--remove-tool`, `--reset` change it. |
+
+What stays guaranteed:
+
+- Nothing runs without your approval of the exact revision shown. The approval
+  binds the compiled plan it displayed; the launch is refused if the draft,
+  assets, policy or source binding changed in between.
+- A republished plan is a new revision and needs approving again.
+- Nothing lands without review: `hydra land` takes only the commit the run's
+  checks ran on, and refuses when the worker branch has moved since or your
+  checkout has uncommitted changes to tracked files.
+- Plans write only to heads they create (`@spawned:*`), from a clean source
+  binding, under a narrow default policy with no retries or repairs.
+- No suggested action deletes uncommitted work: landing keeps a worker head
+  whose worktree holds anything not on its branch, and the suggested cleanup
+  uses `hydra kill --protect-untracked`.
+- Approving, running a plan, landing its result and changing the policy are
+  refused from inside an agent's head (`HYDRA_HEAD_ID` or `HYDRA_INSTANCE_ID`
+  set), unless `HYDRA_PLAN_ALLOW_AGENT=1`. This guards against an obedient agent
+  approving its own plan; it is not a security boundary, since the agent runs as
+  you with your files.
+
+The default plan policy allows tools `sh`, `git`, `make` and the planning
+head's own `profile:<name>`, writes `@spawned:*`, one step at a time, four heads,
+3600 seconds summed over exec timeouts, 1 MiB of artifacts, a `disk_mb` of at
+least 1024, and no retries or repairs. Hydra writes it once per project;
+`hydra workflow plan proposal <head> --local-policy` prints the policy a head
+plans under.
+
+## Advanced plans
+
+`hydra workflow plan` keeps the full planning surface for experts: the schema 1
+and schema 2 JSON plans (`hydra workflow plan schema`), explicit policy files,
+`validate`, `compile`, `show`, `run --accept`, `result`, obligations, relations,
+reuse policies, repair rounds, staged plans, `explain` and `compare`. These are
+frozen: they keep working and are not part of the agent's planning prompt or the
+default review. Every expert plan runs through the same scheduler, and final
+success requires artifact-bound verification reports for the declared
+deliverables. This optional native path does not change workflow schema 1 or
+shell-only execution.
 
 A policy's `writes` may contain the exact scope `@spawned:*`. It authorizes a
 plan's declared `<head>:<path>` or `<head>:*` scopes only for heads created by
@@ -161,14 +235,11 @@ that plan's own spawn steps. Plans must still name those heads; admission refuse
 spawn branches that already exist, so the scope never covers the source checkout
 or an existing head.
 
-The guided local policy that Hydra writes when you review an agent proposal with
-`P` allows tools `sh`, `git`, `make` and the head's own `profile:<name>` (omitted
-when the head has no profile), writes `@spawned:*`, one worker, four heads, 3600
-seconds summed over exec timeouts, 1 MiB of artifacts, a plan `disk_mb` of at
-least 1024, and no retries or repairs. A typical implementation plan spawns a
-headless worker head, runs an agent exec step there with `profile`, an inline
-`prompt`, `result_file` and `timeout`, then verifies on that worker head with
-the repository's own checks and a check step that writes an object report.
+A schema 1 implementation plan spawns a headless worker head, runs an agent exec
+step there with `profile`, an inline `prompt`, `result_file` and `timeout`, then
+verifies on that worker head. A check with `"method": "command"` takes the agent
+step's `commit` output as its subject and Hydra writes its report; a check with
+`"method": "executable"` runs its own script that writes an object report.
 `result_file` equals the name and path of a declared output of that step.
 
 ### Heads a plan run creates
@@ -182,20 +253,26 @@ planning head, so Work shows the task you started rather than every head
 Runs start collapsed; Enter, `l` and `h` expand and collapse them, and the header
 counts run heads inside their run.
 
-A headless head has no terminal. Details shows `headless (no terminal)`, the agent
+A headless head has no terminal. Its Details page shows `headless (no terminal)`, the agent
 of its current or last step (`codex · step implement · running`), the executable
 version, the model and reasoning effort, tokens and duration. A model the provider
 reports is shown as reported; one read from its configuration is labelled
-"configured default … (not observed)"; otherwise it is unknown. `p` shows the
-running step's live events (or a command's output, or a finished step's declared
-result) in place of a terminal preview. Overview's run panel lists every step with
-its kind and role, state, attempts, duration and head, and what comes next.
+"configured default … (not observed)"; otherwise it is unknown. The conversation
+pane shows the running step's live events (or a command's output, or a finished
+step's declared result) in place of a terminal. The run's Run page in Work lists
+every step with its kind and role, state, attempts, duration and head, and what
+comes next.
 
 When the run succeeds, fails or is cancelled, verifier heads are retired with
 `hydra kill --protect-untracked` after their evidence is sealed in the run record;
 their branches are kept, and a verifier head with changes is kept for you to
-review. Worker heads stay until you land (`hydra land <worker>`) or dismiss (`x`,
-which removes the head and keeps its branch) the result. Each retirement is a run
+review. Worker heads stay until you land or dismiss (`x`, which removes the head
+and keeps its branch) the result. Land it with `hydra land <worker>`, which
+merges the verified commit into your current branch and then removes the worker
+head. Hydra commits an agent step's changes, so the result is on the branch;
+when the worker's worktree still has uncommitted or untracked files (made after
+the run), the result review says so and lists them. Remove a plan's other heads with
+`hydra kill <head> --protect-untracked`, which refuses while such files remain. Each retirement is a run
 event (`head.retired`, `head.retire_skipped`, `head.retire_failed`); a failed
 retirement is reported and never changes the run result.
 
@@ -235,8 +312,14 @@ the acceptance digest binds their exact bytes:
 Changing a prompt or any asset byte changes the compiled digest: a previously
 approved digest no longer admits the changed plan, and the workspace treats a
 republished asset set like a changed draft that must be validated again.
-Admission and every step's binding check recompile from the artifact's own
-embedded inputs, so republishing a proposal never alters a run in progress.
+Admission recompiles from the artifact's own embedded inputs, so republishing
+a proposal never alters a run in progress. After admission the plan is not
+compiled again: the check before every step, at the finish and on resume
+guards the plan as approved and the inputs the run copied, not your checkout.
+An untracked file, an edit or a new commit in the source while a plan runs
+does not stop it (a moved source commit is recorded once in the run's
+`plan-warnings`); a changed `compiled.json`, data manifest, definition or
+copied input does, as a `stale_plan` step.
 The runtime materializes these inputs as workflow data declarations with
 `"source": "bundle"`, read from `bundle/` beside the admitted definition.
 
@@ -269,38 +352,42 @@ notices in that head's inbox, so they are recorded even when the TUI is closed.
 
 ### Reviewing a finished plan
 
-Attention (`I` in the TUI) lists what needs you as sentences such as "Result
+Inbox (`2` in the TUI) lists what needs you as sentences such as "Result
 ready for review · kill-dry-run · verify". Steps that declare no outputs, such as
 spawn steps, are not results and never appear. `r` opens the review of the
 selected item. For a compiled plan run it starts with the result: the verdict,
 the deliverable's text, each requirement and the check that covered it, the
 verify step's exact command with a summary of its output (`L` shows the full
 log), duration, agent, executable version and tokens per step, and the worker
-branch's commits, files and diff as they are now. It ends with the commands that
-would land the worker branch (`git merge --no-ff <branch>` in your checkout) and
-remove the plan's heads; Hydra never runs them. `n`/`N` move between sections.
+branch's commits, files and diff at the verified commit (with a note when the
+branch has moved since). It ends with the one command that lands the result,
+`hydra land <worker>`, and those that remove the plan's other heads.
+`hydra plan review` prints the same review without identifiers to copy. `n`/`N` move between sections.
 Technical identity and retained-contract checks follow the result.
 
 `s` marks an item seen. The marker is kept per user under `$HYDRA_HOME`, moves the
 item to a collapsed Seen group and out of the count, and lasts until the item
 changes. An approval that is marked seen stays listed until someone decides.
-The Statistics view (`D`) shows the same token counts per step and run, with
-totals for the selected range. Since 3.0 it also reads the remote evidence of
-steps that ran as fleet tasks: `C` opens the remote cohorts page, which groups the
+Stats (`4` in the TUI) shows the same token counts per step and run, with
+totals for the selected range. Its Sessions page (`[` / `]`) covers the heads you work
+in directly: session length and the time each terminal was active, quiet or
+unobserved, described under [TUI](USAGE.md#tui). Since 3.0 it also reads the remote evidence of
+steps that ran as fleet tasks: `C` opens the Cohorts page, which groups the
 scope's steps by location (local or remote), receiving host, placement mode
 (`auto` from a placement record, otherwise `pinned`), assignment generation and
 agent provider, and shows per cohort the runs, steps, outcomes, wall time, CPU,
 peak RSS and transport bytes that the task receipts and transport records carry
 ([telemetry block 1](FLEET.md#task-telemetry)). `L` cycles the location filter
 (all, local, remote, then each recorded host) on every statistics page, the same
-location notion the workspace uses; `0` clears it with the other filters. A
+location notion Work uses; `0` clears it with the other filters. A
 measurement the protocol did not supply is shown as `unknown`, a partly reported
 one as `value (n/N)`, and each cohort names how many steps are unmeasured and the
 recorded reason (`no task receipt` for local steps, `no telemetry block` for
 receivers that do not record it, `receipt unverified`, or the owner's own reason
 such as `peak_rss_bytes=rss_not_distinguishable`). Nothing unmeasured is ever
 shown as zero, and transport time is not recorded at all. `hydra workflow
-statistics-json` exports the same cohorts and telemetry (export schema 3).
+statistics-json` exports the same cohorts and telemetry (export schema 3, or 4
+when the feed also lists head sessions).
 
 ### Inspecting, evaluating and deciding between compiled plans
 

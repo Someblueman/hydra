@@ -88,16 +88,17 @@ json_object *plan_assets_load(json_object *plan, const char *directory, json_obj
     }
     return assets;
 }
+#define ASSET_FIX "publish again with each --asset NAME=FILE naming a distinct plan ID and a regular text file"
 json_object *plan_proposal_asset(const char *name, const char *file, const char *directory) {
     char path[F_PATH]; json_object *text = NULL; const char *bytes; int length;
     if (!plan_id(name))
-        return f_error("workflow plan propose", "invalid_asset", "asset names are plan IDs: lowercase letters, digits and single - or _ separators");
+        return plan_failure("workflow plan propose", "invalid_asset", "asset names are plan IDs: lowercase letters, digits and single - or _ separators", ASSET_FIX);
     text = text_file(open(file, O_RDONLY | O_NOFOLLOW | O_NONBLOCK));
-    if (!text) return f_error("workflow plan propose", "invalid_asset", "each --asset must name a regular UTF-8 text file of at most 64 KiB without NUL bytes; symlinks are refused");
+    if (!text) return plan_failure("workflow plan propose", "invalid_asset", "each --asset must name a regular UTF-8 text file of at most 64 KiB without NUL bytes; symlinks are refused", ASSET_FIX);
     bytes = json_object_get_string(text); length = json_object_get_string_len(text);
     if (f_path(path, sizeof(path), directory, name) || f_write(path, bytes, (size_t)length, false)) {
         json_object_put(text);
-        return f_error("workflow plan propose", "invalid_asset", "asset names must be unique and the proposal must be writable");
+        return plan_failure("workflow plan propose", "invalid_asset", "asset names must be unique and the proposal must be writable", ASSET_FIX);
     }
     json_object_put(text); return f_success("workflow plan propose", json_object_new_object());
 }
@@ -112,13 +113,14 @@ static json_object *step_inputs(json_object *plan, const char *id) {
 }
 static void asset_input(json_object *plan, json_object *declaration, json_object *assets, json_object *files, json_object *errors) {
     const char *const keys[] = {"asset", "type", "max_bytes", NULL};
-    const char *name = f_string(declaration, "asset"); json_object *text = f_field(assets, name); char path[80];
+    const char *name = f_string(declaration, "asset"); json_object *text; char path[80];
     if (!f_number_is(plan, "schema_version", 1)) {
         plan_error(errors, "data.inputs", "unsupported_asset", "asset inputs are available to schema 1 local plans"); return;
     }
     if (!task_keys(declaration, keys) || !plan_id(name)) {
         plan_error(errors, "data.inputs", "invalid_asset", "an asset input declares exactly asset (a plan ID), type and max_bytes"); return;
     }
+    text = f_field(assets, name);
     if (!json_object_is_type(text, json_type_string)) {
         asset_error(errors, "missing_asset", "the plan names an asset that was not supplied; publish it with hydra workflow plan propose <draft.json> --asset NAME=FILE or pass --assets-dir", name);
         return;

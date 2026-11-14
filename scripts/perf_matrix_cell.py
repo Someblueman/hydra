@@ -34,10 +34,10 @@ class Durations:
 
 def _attach(client: Observer, fixture: Fixture, expected: int) -> list[dict[str, Any]]:
     deadline_ns = time.monotonic_ns() + 15_000_000_000
-    client.input("workspace", b"W")
-    client.visible("HYDRA / PLAN TOGETHER", deadline_ns=deadline_ns)
+    client.input("workspace", b"1")
+    client.visible("enter/a talk", deadline_ns=deadline_ns)
     client.input("attach", b"a")
-    client.visible("INPUT TO AGENT", deadline_ns=deadline_ns)
+    client.visible("keys go to the agent", deadline_ns=deadline_ns)
     while time.monotonic_ns() < deadline_ns:
         clients = fixture.terminal_clients()
         if len(clients) == expected:

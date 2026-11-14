@@ -132,6 +132,69 @@ static bool parse_usage(struct hs_model *m, char **f) {
     u->recorded = true;
     return true;
 }
+static bool parse_run(struct hs_model *m, char **f) {
+    struct hs_run *r;
+    size_t i;
+    if (m->run_count == HS_RUNS || !id(f[1])) return false;
+    for (i = 0; i < m->run_count; i++) if (!strcmp(m->runs[i].id, f[1])) return false;
+    r = &m->runs[m->run_count++];
+    if (!copy(r->id, sizeof(r->id), f[1]) || !copy(r->name, sizeof(r->name), f[2]) ||
+        !copy(r->state, sizeof(r->state), f[3]) || !copy(r->project, sizeof(r->project), f[4])) return false;
+    r->created = iso_time(f[5]);
+    if (r->created > m->observed) r->created = 0;
+    if (strcmp(f[6], "partial") && strcmp(f[6], "complete")) return false;
+    r->partial = !strcmp(f[6], "partial");
+    run_metrics(r, f, m->observed);
+    return true;
+}
+
+/* A time is "-" (unknown) or an epoch; one after the sample is not believed. */
+static bool session_time(const struct hs_model *m, const char *text, uint64_t *value, bool *known) {
+    *known = number(text, 253402300799ULL, value);
+    if (!*known) return !strcmp(text, "-");
+    *known = *value && *value <= m->observed;
+    return true;
+}
+
+static bool session_seconds(const char *text, uint64_t *value, bool *known) {
+    *known = number(text, 4294967295ULL, value);
+    return *known || !strcmp(text, "-");
+}
+
+static bool session_kind(struct hs_session *s, const char *mode, const char *state, const char *outcome) {
+    static const char *const outcomes[] = {"-", "done", "failed", "blocked", "abandoned", "canceled"};
+    size_t i;
+    if (strcmp(mode, "interactive") && strcmp(mode, "headless")) return false;
+    s->headless = !strcmp(mode, "headless");
+    if (!strcmp(state, "open")) s->state = HS_SESSION_OPEN;
+    else if (!strcmp(state, "ended")) s->state = HS_SESSION_ENDED;
+    else if (!strcmp(state, "superseded")) s->state = HS_SESSION_SUPERSEDED;
+    else return false;
+    for (i = 0; i < sizeof(outcomes) / sizeof(outcomes[0]); i++)
+        if (!strcmp(outcome, outcomes[i])) return usage_text(s->outcome, sizeof(s->outcome), outcome);
+    return false;
+}
+
+/* H rows (schema 6): one head session. An open session has no end, and an
+ * end before the start is not an end. */
+static bool parse_session(struct hs_model *m, char **f) {
+    struct hs_session *s;
+    size_t i;
+    if (m->session_count == HS_SESSIONS || !id(f[1]) || !id(f[2])) return false;
+    for (i = 0; i < m->session_count; i++) if (!strcmp(m->sessions[i].instance, f[2])) return false;
+    s = &m->sessions[m->session_count++];
+    if (!copy(s->head, sizeof(s->head), f[1]) || !copy(s->instance, sizeof(s->instance), f[2]) ||
+        !copy(s->branch, sizeof(s->branch), f[3]) || !usage_text(s->profile, sizeof(s->profile), f[4]) ||
+        !session_kind(s, f[5], f[6], f[9])) return false;
+    if (!session_time(m, f[7], &s->started, &s->started_known) || !session_time(m, f[8], &s->ended, &s->ended_known) ||
+        !session_seconds(f[10], &s->active, &s->active_known) || !session_seconds(f[11], &s->quiet, &s->quiet_known) ||
+        !session_seconds(f[12], &s->unobserved, &s->unobserved_known) ||
+        !session_seconds(f[13], &s->reported, &s->reported_known)) return false;
+    if (s->state == HS_SESSION_OPEN && strcmp(f[8], "-")) return false;
+    if (s->started_known && s->ended_known && s->ended < s->started) s->ended_known = false;
+    return true;
+}
+
 /* T rows (schema 5) attach one dispatched attempt's remote evidence to an
  * existing step. Text fields keep "-" as unknown; counts keep "-" unknown. */
 static bool parse_remote(struct hs_model *m, char **f) {
@@ -154,53 +217,67 @@ static bool parse_remote(struct hs_model *m, char **f) {
     r->recorded = true;
     return true;
 }
+
+static bool parse_header(struct hs_model *m, char **f, size_t count) {
+    if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strlen(f[1]) != 1 || f[1][0] < '2' || f[1][0] > '6' ||
+        !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
+    m->schema_version = (unsigned)(f[1][0] - '0');
+    return true;
+}
+
+/* Z closes the feed with the row counts; schema 6 adds the session count. */
+static bool parse_end(const struct hs_model *m, char **f, size_t count) {
+    uint64_t value;
+    if (count != (m->schema_version >= 6 ? 4U : 3U)) return false;
+    if (!number(f[1], HS_RUNS, &value) || value != m->run_count ||
+        !number(f[2], HS_STEPS, &value) || value != m->step_count) return false;
+    return count == 3 || (number(f[3], HS_SESSIONS, &value) && value == m->session_count);
+}
+
+static bool parse_row(struct hs_model *m, char **f, size_t count, bool *ended) {
+    if (count == 2 && !strcmp(f[0], "X")) {
+        m->warnings++;
+        return copy(m->warning, sizeof(m->warning), f[1]);
+    }
+    if (run_row(f, count, m->schema_version)) return parse_run(m, f);
+    if (count == 10 && !strcmp(f[0], "S")) return parse_step(m, f);
+    if (count == 11 && m->schema_version >= 4 && !strcmp(f[0], "U")) return parse_usage(m, f);
+    if (count == 14 && m->schema_version >= 5 && !strcmp(f[0], "T")) return parse_remote(m, f);
+    if (count == 14 && m->schema_version >= 6 && !strcmp(f[0], "H")) return parse_session(m, f);
+    if (strcmp(f[0], "Z")) return false;
+    *ended = parse_end(m, f, count);
+    return *ended;
+}
+
+/* Splits a row at its tabs in place; 0 when it has more than 15 fields. */
+static size_t split_row(char *line, char **f) {
+    size_t count = 1;
+    char *p;
+    f[0] = line;
+    for (p = line; *p; p++) if (*p == '\t') {
+        if (count == 15) return 0;
+        *p = '\0'; f[count++] = p + 1;
+    }
+    return count;
+}
+
 bool hs_load(FILE *input, struct hs_model *m) {
     char line[2048];
     size_t bytes = 0;
     bool header = false, ended = false;
     memset(m, 0, sizeof(*m));
     while (fgets(line, sizeof(line), input)) {
-        char *f[15] = {0}, *p;
-        size_t n = strlen(line), count = 1, i;
-        uint64_t value;
+        char *f[15] = {0};
+        size_t n = strlen(line), count;
         if (ended || !n || line[n-1] != '\n' || (bytes += n) > 1024U * 1024U) return false;
-        line[n-1] = '\0'; f[0] = line;
-        for (p = line; *p; p++) if (*p == '\t') {
-            if (count == 15) return false;
-            *p = '\0'; f[count++] = p + 1;
-        }
+        line[n-1] = '\0';
+        count = split_row(line, f);
+        if (!count) return false;
         if (!header) {
-            if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") ||
-                (strcmp(f[1], "2") && strcmp(f[1], "3") && strcmp(f[1], "4") && strcmp(f[1], "5")) ||
-                !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
-            m->schema_version = (unsigned)(f[1][0] - '0');
+            if (!parse_header(m, f, count)) return false;
             header = true; continue;
         }
-        if (count == 2 && !strcmp(f[0], "X")) {
-            m->warnings++; if (!copy(m->warning, sizeof(m->warning), f[1])) return false;
-        } else if (run_row(f, count, m->schema_version)) {
-            struct hs_run *r;
-            if (m->run_count == HS_RUNS || !id(f[1])) return false;
-            for (i = 0; i < m->run_count; i++) if (!strcmp(m->runs[i].id, f[1])) return false;
-            r = &m->runs[m->run_count++];
-            if (!copy(r->id, sizeof(r->id), f[1]) || !copy(r->name, sizeof(r->name), f[2]) ||
-                !copy(r->state, sizeof(r->state), f[3]) || !copy(r->project, sizeof(r->project), f[4])) return false;
-            r->created = iso_time(f[5]);
-            if (r->created > m->observed) r->created = 0;
-            if (strcmp(f[6], "partial") && strcmp(f[6], "complete")) return false;
-            r->partial = !strcmp(f[6], "partial");
-            run_metrics(r, f, m->observed);
-        } else if (count == 10 && !strcmp(f[0], "S")) {
-            if (!parse_step(m, f)) return false;
-        } else if (count == 11 && m->schema_version >= 4 && !strcmp(f[0], "U")) {
-            if (!parse_usage(m, f)) return false;
-        } else if (count == 14 && m->schema_version >= 5 && !strcmp(f[0], "T")) {
-            if (!parse_remote(m, f)) return false;
-        } else if (count == 3 && !strcmp(f[0], "Z")) {
-            if (!number(f[1], HS_RUNS, &value) || value != m->run_count ||
-                !number(f[2], HS_STEPS, &value) || value != m->step_count) return false;
-            ended = true;
-        } else return false;
+        if (!parse_row(m, f, count, &ended)) return false;
     }
     return header && ended && !ferror(input);
 }
@@ -226,6 +303,24 @@ bool hs_matches(const struct hs_model *m, size_t run, const struct hs_filter *f)
         else if (!hs_run_remote(m, run, strcmp(f->location, "remote") ? f->location : NULL)) return false;
     }
     return contains(r->name, f->query) || contains(r->id, f->query) || contains(r->project, f->query);
+}
+
+bool hs_session_matches(const struct hs_model *m, size_t session, const struct hs_filter *f) {
+    const struct hs_session *s = &m->sessions[session];
+    if (f->days && (!s->started_known || m->observed - s->started > (uint64_t)f->days * 86400)) return false;
+    if (f->attention && strcmp(s->outcome, "failed") && strcmp(s->outcome, "blocked")) return false;
+    /* Head sessions are local work: a remote or host filter leaves none. */
+    if (f->location[0] && strcmp(f->location, "local")) return false;
+    return contains(s->branch, f->query) || contains(s->profile, f->query) ||
+           contains(s->head, f->query) || contains(s->instance, f->query);
+}
+
+bool hs_session_length(const struct hs_model *m, const struct hs_session *s, uint64_t *seconds) {
+    if (!s->started_known) return false;
+    if (s->state == HS_SESSION_OPEN) { *seconds = m->observed - s->started; return true; }
+    if (!s->ended_known) return false;
+    *seconds = s->ended - s->started;
+    return true;
 }
 
 /* A run is remote when any recorded step ran as a remote task; with a host,

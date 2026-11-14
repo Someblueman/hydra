@@ -16,6 +16,15 @@ from pathlib import Path
 
 from bench_i1_pty import Observer
 
+# Stable product text of the four-screen control centre. The top bar names
+# the screens by their keys; the brand before them differs by character set.
+TOP_BAR = ("1 Work", "4 Stats")
+# The Conversation rule while keys go to the agent ("typing to codex ·
+# Ctrl-] leave"), and the status line once Ctrl-] gave them back.
+TYPING = "typing to "
+LEFT_INPUT = "Keys go to Hydra"
+RIGHT = b"\x1b[C"
+
 
 def run(argv: list[str], cwd: Path, env: dict[str, str]) -> str:
     result = subprocess.run(
@@ -105,7 +114,7 @@ class Journey:
             40 if self.columns > 80 else 24,
         )
         self.observer.wait("raw-ready", timeout=15)
-        self.see("HYDRA /")
+        self.see_all(*TOP_BAR)
 
     def see(self, text: str) -> str:
         assert self.observer
@@ -201,6 +210,53 @@ class Journey:
         self.observer.input(f"action-{len(self.proof)}", value)
         self.proof.append({"keys_hex": value.hex(), "at_ns": time.monotonic_ns()})
 
+    def agent_choices(self) -> list[str]:
+        """The new-task form's agent choices in order: the project default,
+        each agent `hydra agent list` reports available, then a plain shell."""
+        names = ["project default"]
+        for row in self.cli("agent", "list").splitlines():
+            fields = row.split()
+            if len(fields) >= 2 and fields[1] == "yes" and fields[0] != "none" and fields[0] not in names:
+                names.append(fields[0])
+        return [*names, "none"]
+
+    def new_task(self, name: str, agent: str, objective: str = "", direct: bool = False) -> str:
+        """Fill the new-task form from its visible fields: the task, the agent
+        (moved to with Right, as the choice row lists them), the objective
+        and how the agent starts; Enter submits."""
+        self.keys(b"n")
+        form = self.see_all("New task", "Agent", "Objective")
+        choices = self.agent_choices()
+        self.check(agent in choices and agent in form, f"The new-task form offers the agent {agent!r}")
+        self.keys(name.encode())
+        self.keys(b"\t" + RIGHT * choices.index(agent) + b"\t")
+        if objective:
+            self.keys(objective.encode())
+        if direct:
+            self.keys(b"\t" + RIGHT)
+        self.keys(b"\r")
+        return form
+
+    def attach_agent(self, key: bytes = b"a") -> str:
+        """Talk to the selected head: its Conversation takes the keys."""
+        self.keys(key)
+        screen = self.see(TYPING)
+        self.attached = True
+        return screen
+
+    def leave_agent(self) -> str:
+        self.keys(b"\x1d")
+        self.attached = False
+        return self.see(LEFT_INPUT)
+
+    def escape(self, times: int = 1) -> None:
+        """Esc on its own each time: an Esc followed at once by another key
+        reads as that key with Alt held."""
+        for _ in range(times):
+            time.sleep(0.2)
+            self.keys(b"\x1b")
+            time.sleep(0.3)
+
     def seed(self) -> None:
         self.cli("init", "--no-agent")
         self.cli("spawn", "sample", "--no-agent")
@@ -278,3 +334,77 @@ def sessions_of(j: Journey) -> list[str]:
     return listing.stdout.split() if listing.returncode == 0 else []
 
 
+def footer(screen: str) -> str:
+    rows = screen.rstrip("\n").splitlines()
+    return rows[-1] if rows else ""
+
+
+def see_footer(j: Journey, text: str, absent: str = "", timeout: float = 10) -> str:
+    """Wait for a settled screen whose footer offers ``text`` (and not ``absent``)."""
+    assert j.observer
+    screen, receipt = j.observer._visible(
+        lambda screen, record: record["parser_complete"] and text in footer(screen)
+        and not (absent and absent in footer(screen)),
+        time.monotonic_ns() + int(timeout * 1e9), f"footer {text!r}")
+    j.proof.append({"expect_footer": text, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+    return screen
+
+
+def page(j: Journey, key: bytes, *texts: str, presses: int = 5) -> str:
+    """Press a page key ([ or ]) until a page showing every text is up."""
+    for _ in range(presses):
+        try:
+            return j.see_all(*texts, timeout=1.5)
+        except TimeoutError:
+            j.keys(key)
+    return j.see_all(*texts)
+
+
+def selected(row: str) -> bool:
+    """A list row with the selection bar in its first column ('>' without
+    Unicode; a collapsed run's '>' sits further in)."""
+    return row[1:2] in (">", "\u258c")
+
+
+def select(j: Journey, text: str, presses: int = 10) -> str:
+    """Move the focused list's selection to the row showing ``text``."""
+    for key in (b"k", b"j"):
+        for _ in range(presses):
+            time.sleep(0.3)
+            screen = j.screen()
+            if any(text in row and selected(row) for row in screen.splitlines()):
+                return screen
+            j.keys(key)
+    raise AssertionError(f"no list row showing {text!r} could be selected")
+
+
+def list_column(screen: str) -> list[str]:
+    """The Work list's rows: the columns left of the pane beside it, as its
+    titled rule ("Heads ---- 3  ...") ends."""
+    rows = screen.splitlines()
+    for row in rows:
+        match = re.match(r"\s*Heads[^-\u2500]*[-\u2500]+ \S+ ", row)
+        if match:
+            return [r[:match.end()] for r in rows]
+    return rows
+
+
+def column_prose(screen: str, anchor: str) -> str:
+    """Text of the pane that shows ``anchor`` on its left edge, rows rejoined:
+    every row from the anchor's column rightwards (panes have no borders)."""
+    for row in screen.splitlines():
+        x = row.find(anchor)
+        if x >= 0:
+            return " ".join(" ".join(r[x:] for r in screen.splitlines()).split())
+    return ""
+
+
+def see_column(j: Journey, anchor: str, *texts: str, timeout: float = 15) -> str:
+    """Wait for the pane whose left edge shows ``anchor`` to say every text."""
+    assert j.observer
+    screen, receipt = j.observer._visible(
+        lambda screen, record: record["parser_complete"]
+        and all(text in column_prose(screen, anchor) for text in texts),
+        time.monotonic_ns() + int(timeout * 1e9), f"{texts!r} beside {anchor!r}")
+    j.proof.append({"expect_column": [anchor, *texts], "snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+    return screen

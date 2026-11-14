@@ -157,6 +157,16 @@ EOF
     printf '%s' "$_cleaned"
 }
 
+# A head found without its terminal has ended. Record that its instance was
+# torn down, as teardown does, so its session ends then and is summarised.
+_clean_dead_head_ended() {
+    command -v lifecycle_load_head >/dev/null 2>&1 && command -v event_emit >/dev/null 2>&1 || return 0
+    lifecycle_load_head "$1" 2>/dev/null || return 0
+    event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.torn-down hydra local \
+        '{"reconciled":true}' >/dev/null 2>&1 || return 0
+    lifecycle_summarise_sessions "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID"
+}
+
 # Mark head records with dead sessions as stopped.
 # Returns: Number removed on stdout
 clean_dead_heads() {
@@ -172,6 +182,7 @@ clean_dead_heads() {
         if [ "$_mode" = headless ] || { [ -n "$_session" ] && tmux_session_exists "$_session"; }; then
             :
         elif state_update_field "$_branch" desired-state stopped; then
+            _clean_dead_head_ended "$_branch"
             _dead_cleaned=$((_dead_cleaned + 1))
             if [ -n "$_branch" ]; then
                 _dead_branches="${_dead_branches}${_branch}

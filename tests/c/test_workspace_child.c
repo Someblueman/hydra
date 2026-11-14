@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 /* Controlled real PTY client: exercise alternate screen, cursor, styles and
- * actual input/resize. It does not use the termviz implementation. */
+ * actual input/resize. It does not use the kettle implementation. */
 int main(void) {
     struct termios original, raw;
     struct winsize size;

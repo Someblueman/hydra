@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work  2 Inbox 2  3 Hosts  4 Stats             2 heads · 1 running  
+                                                                               
+ Needs you ───────────────────────────────────────────────── 2 · enter opens ──
+ Ready for review 1                                                            
+ ▌✓ Ready to land: kill-dry-run-worker                                         
+ ▌  plan run kill-dry-run succeeded · L lands it                               
+ Agents 1                                                                      
+  ▲ Terminal stopped: notes-cleanup                                            
+    worktree and files kept · R restarts it                                    
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   2 items need you · decisions first, then failures                   
+ ↑/↓ select • enter open • L land • o open in Work • ? help • q quit           

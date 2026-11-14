@@ -84,12 +84,6 @@ _load_libs() {
     done
 }
 
-# Basic UI actions are loaded only when native dispatch falls back or --basic is selected.
-_load_tui_basic_libs() {
-    _load_libs layout hooks yaml spawn spawn_bulk kill parallel github dashboard \
-        cmd_spawn cmd_queue cmd_list cmd_session cmd_messages
-}
-
 # Execution commands share this order; spawn also needs layout before state.
 _load_runtime_libs() {
     _load_libs output paths locks git tmux "$@" state identity state_v2 events project profiles lifecycle admission admission_runtime
@@ -124,6 +118,11 @@ _load_libs_for_cmd() {
             _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
                 workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow
             ;;
+        plan)
+            _load_runtime_libs
+            _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
+                workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow cmd_plan
+            ;;
         lifecycle|outcome|wait|adapter|resume|notify)
             _load_runtime_libs
             _load_libs notify operations cmd_evidence
@@ -138,7 +137,7 @@ _load_libs_for_cmd() {
             ;;
         context|sync|land|integrate)
             _load_runtime_libs
-            _load_libs notify hooks messages operations parallel integration integration_verified \
+            _load_libs notify hooks messages operations parallel integration integration_verified cmd_fleet workflow_plan integration_plan \
                 integration_verified_actions kill limits spawn cmd_integration
             ;;
         du|gc|worktree)
@@ -172,15 +171,15 @@ _load_libs_for_cmd() {
             _load_libs notify hooks yaml spawn cmd_queue cmd_evidence
             ;;
         doctor|cleanup)
-            _load_libs paths maintenance tmux state git locks identity state_v2 output messages profiles spawn \
-                project parallel worktree_ops cmd_queue cmd_maintenance
+            _load_libs paths maintenance tmux state git locks identity state_v2 events lifecycle output messages \
+                profiles spawn project parallel worktree_ops cmd_queue cmd_maintenance
             ;;
         dashboard|dashboard-exit)
             _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
             _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
-                lifecycle limits parallel worktree_ops maintenance tui
+                lifecycle limits parallel worktree_ops maintenance tui_native tui
             ;;
         queue)
             _load_runtime_libs layout
@@ -199,9 +198,9 @@ _load_libs_for_cmd() {
             ;;
         *)
             _load_libs output paths locks git tmux layout state completion dashboard github hooks yaml spawn \
-                spawn_bulk kill limits maintenance tui cmd_spawn cmd_queue cmd_list cmd_session cmd_group \
-                cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion identity state_v2 project \
-                parallel worktree_ops
+                spawn_bulk kill limits maintenance tui_native tui cmd_spawn cmd_queue cmd_list cmd_session \
+                cmd_group cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion identity \
+                state_v2 project parallel worktree_ops
             ;;
     esac
 }

@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "statistics_cohorts.h"
+#include "statistics.h"
 /* Agent evidence in the statistics view: tokens, agent, version, model and
  * effort come from exec receipts. Unknown is named, never shown as zero. */
 
@@ -43,7 +43,7 @@ void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size)
 }
 
 /* Word-wraps text into at most rows lines of width cells; returns rows used. */
-int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text) {
+int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, struct kt_style tone, const char *text) {
     int used = 0;
     while (*text && used < rows && width > 0) {
         size_t length = strlen(text), take = length <= (size_t)width ? length : (size_t)width;
@@ -52,42 +52,11 @@ int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum
             while (space > 0 && text[space] != ' ') space--;
             if (space > 0) take = space;
         }
-        dashboard_text(c, x, y + used++, width, tone, "%.*s", (int)take, text);
+        canvas_text(c, x, y + used++, width, tone, "%.*s", (int)take, text);
         text += take;
         while (*text == ' ') text++;
     }
     return used;
-}
-
-/* The scope side panel: token totals, cost only when reported, and the
- * resource metrics Hydra does not collect, said in full. */
-void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s) {
-    static const char *const labels[] = {"in", "cached", "out"};
-    char value[24], cost[48];
-    int row = y, end = y + rows;
-    size_t i;
-    dashboard_text(c, x, row++, width, TV_STRONG, "Agent tokens");
-    if (!s->agent_steps && row < end) dashboard_text(c, x, row++, width, TV_MUTED, "no agent steps");
-    for (i = 0; s->agent_steps && i < 3 && row < end; i++) {
-        statistics_count(s->usage[i], s->usage_known[i] > 0, value, sizeof(value));
-        dashboard_text(c, x, row++, width, TV_BASE, "%-7s %s", labels[i], value);
-    }
-    if (s->agent_steps && row < end)
-        dashboard_text(c, x, row++, width, TV_MUTED, "%zu of %zu reported", s->usage_known[HS_TOKENS_IN], s->agent_steps);
-    cost_text(s->usage[HS_COST_MICROUSD], s->usage_known[HS_COST_MICROUSD] > 0, cost, sizeof(cost));
-    if (s->agent_steps && row < end) dashboard_text(c, x, row++, width, TV_MUTED, "%s", cost);
-    if (row + 1 < end) row++;
-    if (!s->remote_steps) {
-        row += statistics_wrap(c, x, row, width, end - row, TV_MUTED,
-            "CPU and memory: not measured for local steps (no task receipt); remote task receipts report them (C cohorts).");
-    } else {
-        char cpu[40], rss[40], note[160];
-        statistics_remote_text(HS_CPU_MICROSECONDS, s->remote[HS_CPU_MICROSECONDS], s->remote_known[HS_CPU_MICROSECONDS], s->remote_steps, cpu, sizeof(cpu));
-        statistics_remote_text(HS_PEAK_RSS_BYTES, s->remote[HS_PEAK_RSS_BYTES], s->remote_known[HS_PEAK_RSS_BYTES], s->remote_steps, rss, sizeof(rss));
-        snprintf(note, sizeof(note), "Remote CPU %s, peak RSS %s from %zu task receipts; local steps unmeasured.", cpu, rss, s->remote_steps);
-        row += statistics_wrap(c, x, row, width, end - row, TV_MUTED, note);
-    }
-    if (row + 1 < end) statistics_wrap(c, x, row + 1, width, end - row - 1, TV_MUTED, "0 resets filters");
 }
 
 /* Per-run token total for the run table; empty when the run has no agent step. */
@@ -125,16 +94,16 @@ void statistics_step_agent(const struct hs_step *s, bool compact, char *out, siz
 }
 
 /* The expanded block for the first visible step of the selected run. */
-void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s) {
+void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct hs_model *m, const struct hs_step *s) {
     char text[512], tokens[96], cost[48], seconds[32] = "time unknown";
     const struct hs_usage *u = &s->usage;
     uint64_t duration;
     int row = r.y;
     if (hs_duration(m, s, &duration)) (void)snprintf(seconds, sizeof(seconds), "%llus", (unsigned long long)duration);
-    dashboard_text(c, r.x, row++, r.width, TV_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
+    canvas_text(c, r.x, row++, r.width, KT_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
         s->attempts, s->attempts == 1 ? "" : "s");
     if (!u->recorded) {
-        statistics_wrap(c, r.x, row, r.width, r.height - 1, TV_MUTED,
+        statistics_wrap(c, r.x, row, r.width, r.height - 1, KT_MUTED,
             strcmp(s->kind, "exec") ? "Not an agent step: no tokens apply." : "No agent receipt was recorded for this step.");
         return;
     }
@@ -144,6 +113,64 @@ void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct 
                  u->profile[0] ? u->profile : "unknown", u->version[0] ? u->version : "not recorded",
                  u->model[0] ? u->model : "not recorded", u->effort[0] ? u->effort : "not recorded") >= (int)sizeof(text))
         text[sizeof(text) - 1] = '\0';
-    row += statistics_wrap(c, r.x, row, r.width, r.height - 2, TV_BASE, text);
-    dashboard_text(c, r.x, row, r.width, TV_BASE, "Tokens %s; %s.", tokens, cost);
+    row += statistics_wrap(c, r.x, row, r.width, r.height - 2, KT_BASE, text);
+    canvas_text(c, r.x, row, r.width, KT_BASE, "Tokens %s; %s.", tokens, cost);
+}
+
+/* ---- run evidence -------------------------------------------------------- */
+
+static void step_row(struct kt_canvas *c, struct kt_rect r, int row, const struct hs_model *m, const struct hs_step *s) {
+    char seconds[24] = "--", attempts[24] = "--", agent[160];
+    uint64_t duration;
+    bool compact = r.width < 100;
+    if (hs_duration(m, s, &duration)) (void)snprintf(seconds, sizeof(seconds), "%llu", (unsigned long long)duration);
+    if (s->attempts_known) (void)snprintf(attempts, sizeof(attempts), "%u", s->attempts);
+    statistics_step_agent(s, compact, agent, sizeof(agent));
+    canvas_text(c, r.x, row, r.width, hs_state(s->state) == HS_FAILED ? KT_WARNING : KT_BASE,
+        compact ? "%-16.16s %-10.10s %3s %5s  %s" : "%-20.20s %-15.15s %5s %8s  %s", s->id, s->state, attempts, seconds, agent);
+}
+
+/* The run's totals over its recorded steps. */
+static void run_totals(struct kt_canvas *c, struct kt_rect r, int row, const struct hs_model *m, size_t run_index) {
+    struct hs_summary totals;
+    char tokens[192];
+    size_t i;
+    memset(&totals, 0, sizeof(totals));
+    for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run_index) hs_usage_add(&totals, &m->steps[i]);
+    statistics_scope_tokens(&totals, tokens, sizeof(tokens));
+    canvas_text(c, r.x, row, r.width, KT_BASE, "Run %s", tokens);
+}
+
+/* The steps from the scroll position; the first one shown is detailed below
+ * them when there is room. */
+static void run_steps(const struct statistics_view *v, struct kt_canvas *c, struct kt_rect r, size_t run_index) {
+    const struct hs_step *first = NULL;
+    size_t i, ordinal = 0;
+    int row = r.y, bottom = r.y + r.height - (r.height > 8 ? 5 : 0);
+    for (i = 0; i < v->model->step_count && row < bottom; i++) {
+        const struct hs_step *s = &v->model->steps[i];
+        if (s->run != run_index || ordinal++ < v->step_scroll) continue;
+        if (!first) first = s;
+        step_row(c, r, row++, v->model, s);
+    }
+    if (row == r.y) canvas_text(c, r.x, row, r.width, KT_WARNING, "No step evidence at this scroll position");
+    if (first && r.height > 8) statistics_step_detail(c, (struct kt_rect){r.x, bottom + 1, r.width, 4}, v->model, first);
+}
+
+void stats_run_evidence(struct app *app, struct kt_canvas *c, struct kt_rect r, bool focused) {
+    const struct statistics_view *v = app->statistics;
+    const struct hs_run *run;
+    struct kt_rect inner = {r.x + 2, r.y, r.width - 3, r.height};
+    size_t run_index;
+    stats_rule(c, (struct kt_rect){r.x, r.y, r.width, 1}, "Run evidence", "latest attempts", focused);
+    if (!v->count) { canvas_text(c, inner.x, r.y + 1, inner.width, KT_WARNING, "Selected run no longer matches"); return; }
+    run_index = v->visible[v->selected]; run = &v->model->runs[run_index];
+    canvas_text(c, inner.x, r.y + 1, inner.width, KT_STRONG, "%s / %s", run->name, run->state);
+    canvas_text(c, inner.x, r.y + 2, inner.width, KT_MUTED, "%s", run->id);
+    run_totals(c, inner, r.y + 3, v->model, run_index);
+    if (r.height < 7) return;
+    canvas_text(c, inner.x, r.y + 4, inner.width, KT_STYLE(KT_COLOR_FAINT, KT_COLOR_SURFACE, 0),
+                   inner.width < 100 ? "STEP             STATE      TRY  SECS  AGENT TOKENS IN/CACHED/OUT"
+                                     : "STEP                 STATE           TRIES  SECONDS  AGENT / TOKENS");
+    run_steps(v, c, (struct kt_rect){inner.x, r.y + 5, inner.width, r.height - 5}, run_index);
 }

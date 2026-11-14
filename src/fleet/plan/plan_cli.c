@@ -48,7 +48,11 @@ static json_object *compile_command(const char *plan_path, const char *policy_pa
     char digest[65];
     plan = plan_read(plan_path); policy = plan_read(policy_path);
     if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
-    else compiled = compile_plan(plan, policy, source, assets_dir, errors);
+    else {
+        json_object *lowered = plan_lowered(plan, policy, errors);
+        json_object_put(plan); plan = lowered;
+        if (plan) compiled = compile_plan(plan, policy, source, assets_dir, errors);
+    }
     if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
     if (compiled && output) {
         const char *text; json_object *canonical = plan_canonical(compiled);
@@ -69,7 +73,7 @@ static json_object *schema_command(void) {
     };
     for (size_t i = 0; i < sizeof(schema) / sizeof(schema[0]); i++) {
         if (fputs(schema[i], stdout) == EOF)
-            return f_error("workflow plan schema", "io_error", "cannot write schema");
+            return plan_failure("workflow plan schema", "io_error", "cannot write schema", "write the schema to a writable output, for example hydra workflow plan schema > schema.json");
     }
     return NULL;
 }
@@ -97,7 +101,7 @@ static json_object *result_command(char **argv, bool *printed) {
     json_object *result = NULL;
     char path[F_PATH];
     (void)printed;
-    if (retention_expired(argv[1])) return f_error("workflow plan result", "evidence_expired", "the declared audit window expired; retained state is not a currently verifiable outcome");
+    if (retention_expired(argv[1])) return plan_failure("workflow plan result", "evidence_expired", "the declared audit window expired; retained state is not a currently verifiable outcome", "run an accepted plan again for an outcome that can be verified now");
 
     char *state = NULL;
     if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);
@@ -149,14 +153,73 @@ done:
     json_object_put(errors); json_object_put(compiled); return result;
 }
 
+/* Admission errors keep the command name runs have always reported. */
+static json_object *run_failure(const char *code, const char *message, const char *recovery) {
+    return plan_failure("workflow plan", code, message, recovery);
+}
+static json_object *admission_digest_error(enum plan_admission status, const char *accepted) {
+    char message[256];
+    if (status == PLAN_DIGEST_FORMAT) {
+        (void)snprintf(message, sizeof(message), "--accept takes the full 64-character lowercase hex digest; the %zu-character value given is not one", strlen(accepted));
+        return run_failure("digest_mismatch", message, "copy the whole Acceptance digest line from workflow plan show <compiled.json>");
+    }
+    return run_failure("digest_mismatch", "the accepted digest is not this artifact's digest: it was accepted for another compilation, or the file changed since",
+                        "review workflow plan show <compiled.json> and accept the digest it prints");
+}
+/* A recompiled artifact whose digest differs: name the binding that moved when it is the source. */
+static json_object *admission_changed_error(json_object *compiled, json_object *fresh) {
+    json_object *was = f_field(compiled, "source"), *now = f_field(fresh, "source");
+    const char *before = f_string(was, "commit"), *after = f_string(now, "commit");
+    const char *root = f_string(was, "root"), *here = f_string(now, "root");
+    char message[2 * F_PATH + 128];
+    if (before && after && strcmp(before, after))
+        (void)snprintf(message, sizeof(message), "the source checkout moved from commit %.12s to %.12s since this artifact was compiled", before, after);
+    else if (root && here && strcmp(root, here))
+        (void)snprintf(message, sizeof(message), "this artifact was compiled from %s, not from the checkout %s it is run in", root, here);
+    else (void)snprintf(message, sizeof(message), "recompiling this artifact against the source gives another digest: its repository inputs, context files or agent profiles changed since it was compiled");
+    return run_failure("source_changed", message, "compile the plan again from this checkout, review it with workflow plan show and accept the new digest");
+}
+static json_object *admission_error(enum plan_admission status, json_object *compiled, json_object *fresh, json_object *errors, const char *accepted) {
+    json_object *result, *data;
+    if (status == PLAN_DIGEST_FORMAT || status == PLAN_DIGEST_MISMATCH) return admission_digest_error(status, accepted);
+    if (status == PLAN_CHANGED) return admission_changed_error(compiled, fresh);
+    if (status == PLAN_UNDIGESTIBLE || !json_object_array_length(errors))
+        return run_failure("invalid_or_stale_plan", "the compiled artifact is not a supported plan compilation", "pass the file workflow plan compile wrote, or compile the plan again");
+    result = run_failure("source_changed", "this artifact no longer compiles against the source; see data.diagnostics", diagnostic_recovery(errors));
+    data = json_object_new_object();
+    json_object_object_add(data, "diagnostics", json_object_get(errors));
+    json_object_object_add(result, "data", data);
+    return result;
+}
+static json_object *heads_error(int status, const char *source, const char *ref) {
+    char message[F_PATH + 256], recovery[512];
+    if (status < 0) {
+        (void)snprintf(message, sizeof(message), "could not check whether %s exists in %s", ref, source);
+        return run_failure("invalid_source", message, "run the plan from the project's main checkout");
+    }
+    /* refs/heads/<branch> is named as the branch, refs/remotes/<remote>/<branch> as <remote>/<branch>. */
+    const char *name = !strncmp(ref, "refs/heads/", 11) ? ref + 11 : !strncmp(ref, "refs/remotes/", 13) ? ref + 13 : ref;
+    (void)snprintf(message, sizeof(message), "the spawn branch %s already exists in %s", name, source);
+    (void)snprintf(recovery, sizeof(recovery), "give the spawn step an unused branch name, then compile and accept again; or delete the branch %s once any work on it is kept", name);
+    return run_failure("branch_exists", message, recovery);
+}
+/* Admission refuses before anything runs; each refusal names its own cause. */
 static json_object *admit_command(char **argv, bool *printed) {
-    json_object *result = NULL;
-    json_object *compiled = NULL;
+    json_object *compiled = plan_read(argv[1]), *errors, *fresh = NULL, *result;
+    enum plan_admission status; char conflict[PLAN_REF] = ""; int heads;
     (void)printed;
-
-    compiled = plan_read(argv[1]);
-    if (compiled && !plan_admit(compiled, argv[2], argv[3]) && !plan_heads_available(compiled, argv[2]) && !plan_materialize(compiled, argv[4])) result = f_success("workflow plan admit", json_object_new_object());
-    json_object_put(compiled);
+    if (!compiled)
+        return run_failure("invalid_or_stale_plan", "the compiled artifact is missing, is not a bounded JSON object without duplicate members, or exceeds 256 KiB",
+                            "pass the file workflow plan compile wrote");
+    errors = json_object_new_array();
+    status = plan_admission(compiled, argv[2], argv[3], errors, &fresh);
+    if (status != PLAN_ADMITTED) result = admission_error(status, compiled, fresh, errors, argv[3]);
+    else if ((heads = plan_heads_available(compiled, argv[2], conflict))) result = heads_error(heads, argv[2], conflict);
+    else if (plan_materialize(compiled, argv[4]))
+        result = run_failure("materialize_failed", "could not stage the admitted definition, data and inputs for the run",
+                              "check free space and permissions in the temporary directory, then run the plan again");
+    else result = f_success("workflow plan admit", json_object_new_object());
+    json_object_put(fresh); json_object_put(errors); json_object_put(compiled);
     return result;
 }
 
@@ -202,6 +265,40 @@ static json_object *roles_command(char **argv, bool *printed) {
     }
     json_object_put(compiled);
     return NULL;
+}
+
+static json_object *hooks_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    if (compiled && !plan_hooks(compiled, stdout)) *printed = true;
+    json_object_put(compiled);
+    return NULL;
+}
+
+/* The commit a run's agent steps left on a worker head, as recorded. */
+static json_object *head_commit_command(char **argv, bool *printed) {
+    char path[F_PATH], commit[65];
+    json_object *compiled = f_path(path, sizeof(path), argv[1], "compiled.json") ? NULL : plan_read(path);
+    if (compiled && !plan_head_commit(argv[1], f_field(compiled, "plan"), argv[2], commit)) { puts(commit); *printed = true; }
+    json_object_put(compiled);
+    return NULL;
+}
+
+static json_object *guard_command(char **argv, bool *printed) {
+    bool record = argv[2] != NULL;
+    (void)printed;
+    if (record && strcmp(argv[2], "--record")) return NULL;
+    return plan_run_guard(argv[1], record) ?
+        plan_failure("workflow plan guard", "stale_plan", "the run's compiled plan, definition, data or copied inputs are not the ones admitted",
+                     "inspect the run directory; nothing in it may change while the run lasts") :
+        f_success("workflow plan guard", json_object_new_object());
+}
+
+static json_object *command_report_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_command_report(argv[1], argv[2], argv[3]) ?
+        plan_failure("workflow plan command-report", "check_unbound", "the check did not start and end on the commit it checks, or its plan is not the accepted one",
+                     "inspect the worker head: a command check must not move the head it runs on") :
+        f_success("workflow plan command-report", json_object_new_object());
 }
 
 static json_object *timeout_command(char **argv, bool *printed) {
@@ -286,13 +383,13 @@ static json_object *check_context_command(char **argv, bool *printed) {
 static json_object *step_check_command(char **argv, bool *printed) {
     (void)printed;
     return plan_step_check(argv[1], argv[2]) ?
-        f_error("workflow plan step-check", "validation_rejected", "required evidence is missing, invalid, failed or inconclusive") :
+        plan_failure("workflow plan step-check", "validation_rejected", "required evidence is missing, invalid, failed or inconclusive", "inspect the step's report and the evidence it was checked against; the step passes only with fresh passing evidence") :
         f_success("workflow plan step-check", json_object_new_object());
 }
 
 static json_object *repair_command(char **argv, bool *printed) {
     int status = plan_repair(argv[1], !strcmp(argv[0], "repair-resume"));
-    if (status < 0) return f_error("workflow plan repair", "repair_state_invalid", "recorded repair state is invalid; do not start replacement work");
+    if (status < 0) return plan_failure("workflow plan repair", "repair_state_invalid", "recorded repair state is invalid; do not start replacement work", "inspect the run's repair records with hydra workflow status before resuming or abandoning the run");
     printf("%d\n", status); *printed = true; return NULL;
 }
 static json_object *inspect_command(char **argv, bool *printed) {
@@ -328,10 +425,25 @@ static json_object *compile_dispatch(int argc, char **argv, bool *matched) {
     return compile_command(argv[1], argv[2], argv[3], compile ? argv[4] : NULL, assets);
 }
 
-/* Failed operations without their own data carry the generic recovery advice. */
+/* The short planning flow's commands take their own argument counts. */
+typedef json_object *(*flow_call)(int argc, char **argv);
+static flow_call flow_command(const char *name) {
+    static const struct { const char *name; flow_call call; } flows[] = {
+        {"check", plan_check_cli}, {"policy-for", plan_policy_for_cli}, {"policy-tool", plan_policy_tool_cli},
+        {"policy-text", plan_policy_text_cli}, {"review-text", plan_review_text_cli}, {"summary", plan_summary_cli},
+        {"detach", plan_detach_cli}, {"verified-commit", plan_verified_commit_cli},
+    };
+    for (size_t i = 0; i < sizeof(flows) / sizeof(flows[0]); i++)
+        if (!strcmp(name, flows[i].name)) return flows[i].call;
+    return NULL;
+}
+
+/* Commands that fail without saying why share this catch-all; errors that
+ * already carry recovery text keep their own. */
 static json_object *with_recovery(json_object *result) {
-    if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
-    if (f_field(result, "error") && !f_field(result, "data"))
+    if (!result) return plan_failure("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification",
+                                     "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
+    if (f_field(result, "error") && !f_field(result, "data") && !f_field(f_field(result, "error"), "recovery"))
         f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
     return result;
 }
@@ -342,6 +454,7 @@ static bool prefixed_command(int argc, char **argv, bool *printed, json_object *
     if (!strncmp(argv[0], "expansion-", 10)) { *result = plan_expansion_cli(argc, argv, printed); return true; }
     return false;
 }
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -368,6 +481,11 @@ json_object *plan_cli(int argc, char **argv) {
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
         {"roles", 2, roles_command},
+        {"hooks", 2, hooks_command},
+        {"head-commit", 3, head_commit_command},
+        {"command-report", 4, command_report_command},
+        {"guard", 2, guard_command},
+        {"guard", 3, guard_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},
@@ -383,9 +501,10 @@ json_object *plan_cli(int argc, char **argv) {
     json_object *result = NULL;
     bool printed = false, compile = false;
     if (argc == 1 && !strcmp(argv[0], "schema")) return schema_command();
+    if (argc >= 1 && flow_command(argv[0])) return flow_command(argv[0])(argc, argv);
     if (argc >= 1) result = compile_dispatch(argc, argv, &compile);
-    if (compile) return result ? result : f_error("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>");
-    if (prefixed_command(argc, argv, &printed, &result)) return printed ? NULL : result;
+    if (compile) return result ? result : plan_failure("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>", "run hydra workflow plan --help");
+    if (prefixed_command(argc, argv, &printed, &result)) return printed ? NULL : with_recovery(result);
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (argc != commands[i].argc || strcmp(argv[0], commands[i].name)) continue;
         result = commands[i].call(argv, &printed);

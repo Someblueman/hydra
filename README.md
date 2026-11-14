@@ -20,9 +20,12 @@ use ordinary shell sessions alongside agents.
 [![Release](https://img.shields.io/github/v/release/Someblueman/hydra)](https://github.com/Someblueman/hydra/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Hydra: native mission control, real agent output, and remote fleet attach](assets/demos/quick-tour.gif)
+![hydra tui: the Work screen with heads, workflow runs and a remote head beside an agent's live conversation, then talking to the agent, the Plan and Run pages, an Inbox approval dialog, Hosts, Stats and help](assets/demos/quick-tour.gif)
 
-[Demo transcript and recording instructions](assets/demos/README.md)
+A tour of the four screens of `hydra tui`, recorded from this checkout against a
+throwaway repository: real heads, plan and workflow runs, a scripted stand-in for
+the agent and a recorded remote-host observation.
+[What it shows and how to re-record it](assets/demos/README.md)
 
 **v3.0.0** makes the control centre one workspace for local and remote work:
 `hydra tui` shows the heads and tasks of your registered hosts beside local work,
@@ -40,8 +43,9 @@ and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
 
-- **Lead from native mission control.** Browse heads, inspect activity and changes,
-  and launch actions from the native C TUI. The shell TUI provides a fallback.
+- **Lead from native mission control.** Four screens in the native C TUI: Work
+  (your heads beside each agent's conversation and its details, plan and run),
+  Inbox (everything waiting for you, acted on in place), Hosts and Stats.
 - **Run coding agents across your fleet.** Select agent profiles and task prompts,
   bootstrap trusted SSH hosts, launch remote heads and workflows, and attach to
   their sessions. Inspect host-qualified heads in the native fleet view.
@@ -53,8 +57,8 @@ and [usability testing](docs/USABILITY-TESTING.md).
 - **Coordinate work.** Run finite workflows with named inputs, sealed outputs,
   durable approval waits and bounded retries. Exchange messages, declare file
   scopes, and detect collisions between heads.
-- **Deliver an objective.** Let an agent propose a local plan, inspect its compiled
-  scope, and run it with independent checks of the final code or report.
+- **Deliver an objective.** Let an agent propose a short plan, read and approve it
+  in one step, and land the commit its checks verified.
 - **Review and integrate.** Inspect diffs and provenance, run verification gates,
   and use guarded integration commands to assemble changes.
 
@@ -89,7 +93,8 @@ qualification await sign-in; Claude remote qualification remains deferred.
 
 GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
-running the installer.
+running the installer. `hydra tui` is then unavailable; `hydra list` and
+`hydra switch` work without the native helper.
 
 Upgrading from 1.9? Review the compatibility and backup notes in
 [Contracts](docs/CONTRACTS.md) before upgrading.
@@ -125,7 +130,7 @@ shell. [Agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) desc
 ## Inspect and finish
 
 ```sh
-hydra tui                         # native mission control, with basic fallback
+hydra tui                         # native mission control
 hydra diff feature/search --stat
 hydra exec --branch feature/search -- make test # use your project's test command
 hydra review feature/search --json
@@ -135,10 +140,13 @@ To steer an agent, queue an inbox message with `hydra send feature/search "Revie
 the failing test"`; read it with `hydra recv --peek` inside that head. A queued
 message is not evidence of consumption or completion.
 
-Use `hydra tui --basic` for the shell interface. In the native control centre,
-`Tab` moves between tabs (or workspace panes), arrows select, `Enter` opens and
-`Esc` steps back. `n` starts a task, `a` talks to the selected agent, `x` removes
-heads after an in-app confirmation, `:` opens actions, `?` shows help and `q` exits.
+In the native control centre `1`-`4` switch between Work, Inbox, Hosts and
+Stats, `Tab` moves between a screen's panes, `[` / `]` between a pane's pages,
+arrows select, `Enter` opens and `Esc` steps back. In Work `n` starts a task,
+Enter (or `a`) talks to the selected agent, `x` removes heads after an in-app
+confirmation; Inbox is where approvals, failed checks and results to review wait.
+`:` searches every action, `?` shows the keys for where you are and `q` exits.
+See [TUI](docs/USAGE.md#tui) for each screen.
 
 After reviewing and preserving the work you need, stop the head from your original
 terminal:
@@ -170,7 +178,7 @@ hydra fleet tui
 Remote heads and tasks then appear in `hydra tui` beside local work, with their
 host and observation age; `L` filters by location, `a` attaches and `x`
 interrupts through the fleet commands, and `hydra fleet tui` opens the same
-control centre filtered to remote work. Agent executables and repositories live
+four screens with the location filter set to remote work. Agent executables and repositories live
 on the host that runs the work. See [fleet setup](docs/FLEET.md) for pinned
 bootstrap, host requirements, remote workflows, and recovery behavior.
 `hydra fleet discover --source ssh-config|
@@ -186,24 +194,40 @@ replayable (`hydra fleet placement explain|replay`); explicit host pinning is th
 default. 
 ## Plan an objective
 
-The optional native helper supports `hydra workflow plan`: discover the JSON
-schema, validate an agent-authored proposal, compile and review an immutable
-DAG, then execute it with an exact acceptance digest. Retrieve the final
-verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
-require bound validation, hand off collected Git commits, and support bounded
-candidate repair.
-Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
-`hydra workflow plan evaluate` compares two compiled alternatives by decomposition,
-fixed-graph scheduling and placement with ranges and explicit unknowns, `plan
-decision` records why one was selected and replays that comparison from its
-recorded inputs, and `make test-plan-eval` measures held-out planning quality.
-`hydra workflow plan expand` admits a bounded expansion of a finished run as a
-new version compiled under the same policy, with retries kept apart from new
-claims and every round run with its own exact digest.
-Planning does not call a model itself; an ordinary agent authors the proposal
-through the CLI. Plans carry their own inline agent prompts and proposal assets,
-bound by the acceptance digest, so planning never commits to your checkout. See the
-the [planning examples](examples/planning/README.md).
+Ask an agent in a head to plan the work with you. It writes a short plan
+(`hydra plan schema` prints the format on one screen): the objective, the
+steps, the command that checks the work and what counts as done, and publishes
+it with `hydra plan propose plan.json`. Hydra checks it against the project's
+plan policy at once and tells the agent what to fix. Then, from your own
+terminal:
+
+```sh
+hydra plan show       # the plan in words: steps, instructions, commands, limits
+hydra plan approve    # shows it again and asks once; runs exactly that revision
+hydra plan status     # follow the run
+hydra plan review     # the result: verdict, the worker's commit and diff, checks
+hydra land <worker>   # merge the verified commit into your current branch
+```
+
+Every step runs on one new worker branch; Hydra commits the agent's changes
+there and a check passes when its command exits 0 on that commit. Nothing runs
+without your approval of the exact revision shown, a republished plan needs
+approving again, and landing is a local merge you confirm, never a push.
+Approving from inside an agent's head is refused. See
+[workflows](docs/workflows.md#objective-planning) for the flow and its advanced
+plans (`hydra workflow plan`: the full schema, custom checks, schema 2,
+obligations, repair and reuse) and the [planning examples](examples/planning/README.md).
+
+For comparing and growing plans, `hydra workflow plan evaluate` compares two
+compiled alternatives by decomposition, fixed-graph scheduling and placement with
+ranges and explicit unknowns, `plan decision` records why one was selected and
+replays that comparison from its recorded inputs, and `make test-plan-eval`
+measures held-out planning quality. `hydra workflow plan expand` admits a bounded
+expansion of a finished run as a new version compiled under the same policy, with
+retries kept apart from new claims; each round runs with its own exact digest and
+its steps pass the same per-step guard as any approved plan. Use `hydra workflow
+replay <run-id>` to check recorded scheduling choices. Planning does not call a
+model itself; an ordinary agent authors the proposal through the CLI.
 
 ## Documentation
 
@@ -227,10 +251,12 @@ The fleet build additionally needs pkg-config and JSON-C development files.
 Fleet C code is grouped under `src/fleet/{agent,auth,plan,task,workflow,transport,support}`.
 Domain headers expose their own contracts; support headers cover bounded files,
 JSON and subprocess capture. The native TUI lives in `src/tui/`, with independently
-compiled model, adapter, process, selection, rendering, input and terminal modules.
-Workspace views include A/B/C layouts, attached tmux clients, draft validation,
-exact-digest execution and selected-run evidence. Statistics and graph rendering
-use the reusable `src/termviz/` components; see its [standalone library guide](src/termviz/STANDALONE.md).
+compiled model, adapter, selection, rendering, input and terminal modules, one
+binding table for every key (`keys.c`, `bindings.c`) and a module per screen
+(`work*.c`, `inbox*.c`, `hosts*.c`, `statistics*.c`). Work's panes hold attached
+tmux clients, the plan with its approval, and the selected run's graph and
+evidence. Dialogs, help, the palette, toasts, statistics and graph rendering use
+the reusable `src/kettle/` components; see its [standalone library guide](src/kettle/STANDALONE.md).
 
 Testing requires a C99 compiler, JSON-C development files and pkg-config in
 addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds

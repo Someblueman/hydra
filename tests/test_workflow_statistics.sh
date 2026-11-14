@@ -70,12 +70,12 @@ run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/
 assert_equal succeeded "$(sed -n '1p' "$run_dir/state" 2>/dev/null)" "the local run succeeded"
 
 "$HYDRA_BIN" workflow statistics-data > "$base/local.tsv" 2>/dev/null
-assert_equal "HYDRA_STATISTICS${tab}5" "$(sed -n '1p' "$base/local.tsv" | cut -f1-2)" "statistics-data is schema 5"
+assert_equal "HYDRA_STATISTICS${tab}6" "$(sed -n '1p' "$base/local.tsv" | cut -f1-2)" "statistics-data is schema 6 (T and H rows)"
 assert_equal 0 "$(grep -c "^T${tab}" "$base/local.tsv")" "a local run has no T rows"
 "$HYDRA_BIN" workflow statistics-json > "$base/local.json" 2>/dev/null
 assert_success $? "statistics-json exports the local run"
-grep -q '"schema_version":3' "$base/local.json"
-assert_success $? "the export is schema 3"
+grep -q '"schema_version":4' "$base/local.json"
+assert_success $? "the export is schema 4 (schema 3 sections plus sessions)"
 grep -q '"remote":{"state":"unavailable","remote_steps":0,"transfer_bytes":null' "$base/local.json"
 assert_success $? "remote evidence is unavailable, not zero, for local steps"
 grep -q '"local_steps":"no task receipt: CPU, memory and transport are not measured for local steps"' "$base/local.json"

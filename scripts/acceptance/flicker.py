@@ -17,6 +17,7 @@ from pathlib import Path
 
 from acceptance import vt
 from acceptance.harness import Case, case
+from usability.journey import see_footer
 
 FRAME_GAP_NS = 5_000_000
 RECORDING_LIMIT = 2 * 1024 * 1024  # bytes retained per phase as evidence
@@ -122,7 +123,7 @@ def flicker(j: Case) -> None:
     rows = 40 if j.columns > 80 else 24
     j.open()
     j.keys(b"1")
-    j.see_all("[Work]", "alpha", "beta")
+    j.see_all("alpha", "beta", "2 heads")
     time.sleep(1.0)
     recording = Recording(j)
     # Idle on the Work list for 30 s: only clock/status may change.
@@ -132,21 +133,18 @@ def flicker(j: Case) -> None:
     recording.mark("idle-end")
     selected_after = j.selected_row()
     # Streaming: attach to alpha and let its shell print 300 lines.
-    j.keys(b"a")
-    j.see("Typing goes to the agent")
-    j.attached = True
+    j.attach_agent()
     time.sleep(1.0)
     recording.mark("stream-start")
     j.tmux("send-keys", "-t", "alpha", "for i in $(seq 1 300); do echo streamed line $i; sleep 0.02; done", "Enter")
     time.sleep(9)
     recording.mark("stream-end")
-    j.keys(b"\x02\t")
-    j.attached = False
-    j.see("Keys go to Hydra")
-    j.keys(b"\x02x")  # close the agent view so later pane cycling stays in Hydra
+    j.leave_agent()
+    j.keys(b"\x1cx")  # close the agent view so later pane cycling stays in Hydra
     time.sleep(0.5)
-    j.keys(b"\x1b\x1b1")
-    j.see("[Work]")
+    j.escape(2)
+    j.keys(b"1")
+    see_footer(j, "x remove")
     # Polling: local state changes made by the CLI while the UI refreshes.
     time.sleep(1.0)
     recording.mark("poll-start")
@@ -156,9 +154,7 @@ def flicker(j: Case) -> None:
     time.sleep(3)
     recording.mark("poll-end")
     j.see("gamma")
-    # Pane switches inside the Workspace and across views.
-    j.keys(b"W")
-    j.see("[Workspace]")
+    # Pane switches inside Work (Tab moves the focus) and across screens.
     time.sleep(0.5)
     recording.mark("switch-start")
     for _ in range(6):
@@ -173,7 +169,7 @@ def flicker(j: Case) -> None:
     resize_window(j, "resize-1", 140 if j.columns == 80 else 80, 40 if j.columns == 80 else 24)
     resize_window(j, "resize-2", j.columns, rows)
     recording.mark("resize-end")
-    j.see("[Work]")
+    j.see_all("alpha", "gamma")
 
     stats = recording.analyse([("idle", "idle-start", "idle-end"), ("stream", "stream-start", "stream-end"),
                                ("poll", "poll-start", "poll-end"), ("switch", "switch-start", "switch-end"),
@@ -194,7 +190,7 @@ def flicker(j: Case) -> None:
              and selected_before != "" and idle["cursor_hidden_throughout"] in (True, None),
              detail=f"selected {selected_before!r} -> {selected_after!r}; cursor positions {idle['cursor_positions']}")
     for name, bullet, label in (("stream", "U6.b", "streaming agent output"), ("poll", "U6.c", "polling state"),
-                                ("switch", "U6.d", "pane and view switches")):
+                                ("switch", "U6.d", "pane and screen switches")):
         phase = stats[name]
         j.record(bullet, f"{label}: zero full-screen clears over {phase['frames']} refreshes",
                  phase["full_clears"] == 0, detail=json.dumps(phase), evidence=[evidence, f"recording-{name}.raw"])

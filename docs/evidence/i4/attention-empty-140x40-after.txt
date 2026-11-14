@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ATTENTION  0 need you · 0 seen · 0 stale · 0 unknown                                                                                    │
-│                                                                                                                                         │
-│ Nothing needs your attention.                                                                                                           │
-│                                                                                                                                         │
-│ Attention lists what needs a decision or a look from you: an approval request a step is waiting on, a failed check, a result ready for  │
-│ review, or a terminal that stopped. For example, a plan step asks you to approve before it merges.                                      │
-│                                                                                                                                         │
-│ Items stay listed until the request is resolved; Enter shows what an item asks and r reviews a result.                                  │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit                                                     
+ ◆ hydra  1 Work   2 Inbox 1   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 1 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Agents 1                                                        ▲ Terminal stopped: notes-cleanup                                         
+ ▌▲ Terminal stopped: notes-cleanup                              worktree and files kept · R restarts it                                   
+ ▌  worktree and files kept · R restarts it                                                                                                
+                                                                 What happened                                                             
+                                                                 The terminal session for notes-cleanup is no longer running. Its worktree 
+                                                                 and files are kept; nothing was removed from the repository. R restarts   
+                                                                 its terminal and agent in the same worktree (hydra resume --terminal); o  
+                                                                 opens the head in Work.                                                   
+                                                                                                                                           
+                                                                 Head        notes-cleanup                                                 
+                                                                 Agent       claude                                                        
+                                                                                                                                           
+                                                                 R Restart terminal    c Run check    o Open in Work                       
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   1 item needs you · decisions first, then failures                                                                               
+ ↑/↓ select • enter open • R resume • o open in Work • c run check • tab/shift+tab pane • [/] page • : commands • ? help • q quit          

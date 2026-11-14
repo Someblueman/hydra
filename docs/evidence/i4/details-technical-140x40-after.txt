@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Technical details: kill-dry-run-worker ────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ IDENTITY                                                                                                                                │
-│ Head        head_bbbbbbbbbbbbbbbb   instance_bbbbbbbbbbbbbbbb                                                                           │
-│ Session     - (headless)   profile: none                                                                                                │
-│ Group       -   PR: -                                                                                                                   │
-│                                                                                                                                         │
-│ LIFECYCLE                                                                                                                               │
-│ Outcome     declared: none   desired: headless                                                                                          │
-│ Observed    idle (reported)   liveness: unavailable   display: UNAVAILABLE                                                              │
-│ Activity    6 events  0 signals  0 messages  0 gates (0 approved)                                                                       │
-│ Coordinate  0 claims  0 scopes  0 queued  0 resources  1 changed files                                                                  │
-│                                                                                                                                         │
-│ ADAPTER                                                                                                                                 │
-│ Adapter     adapter: none   confidence: exact                                                                                           │
-│                                                                                                                                         │
-│ SOURCES                                                                                                                                 │
-│ Lifecycle   lifecycle source: /tmp/hydra/state/head_worker                                                                              │
-│ Adapter     adapter source: hydra capabilities --json                                                                                   │
-│ Notify      notification source: /tmp/hydra/state/notifications (0 configured; delivery delegated)                                      │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- d close technical details  Esc back  ? help  q quit                                                                                       
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
+                                                                                                                                           
+ Heads ─────────────────────── 3  kill-dry-run-worker ───────────────── latest output · read-only  Details  Run ─────────────────────────  
+  ● add-kill           codex      ✓ worker · codex · step implement · succeeded · headless, no t…  IDENTITY                                
+    ▾ ✓ plan run kill… 4/4                                                                         Head        head_bbbbbbbbbbbbbbbb       
+ ▌    ✓ worker kill-d… codex      Reading the step output...                                                   instance_bbbbbbbbbbbbbbbb   
+      ○ verifier kill… retired                                                                     Session     - (headless)   profile:     
+  ▲ notes-cleanup      claude                                                                                  none                        
+                                                                                                   Group       -   PR: -                   
+                                                                                                                                           
+                                                                                                   LIFECYCLE                               
+                                                                                                   Outcome     declared: none   desired:   
+                                                                                                               headless                    
+                                                                                                   Observed    idle (reported)             
+                                                                                                               liveness: unavailable       
+                                                                                                               display: UNAVAILABLE        
+                                                                                                   Activity    6 events  0 signals  0      
+                                                                                                               messages  0 gates (0        
+                                                                                                               approved)                   
+                                                                                                   Coordinate  0 claims  0 scopes  0       
+                                                                                                               queued  0 resources  1      
+                                                                                                               changed files               
+                                                                                                                                           
+                                                                                                   ADAPTER                                 
+                                                                                                   Adapter     adapter: none               
+                                                                                                               confidence: exact           
+                                                                                                                                           
+                                                                                                   SOURCES                                 
+                                                                                                   Lifecycle   lifecycle source:           
+                                                                                                               /tmp/hydra/state/head_work  
+                                                                                                               er                          
+                                                                                                   Adapter     adapter source: hydra       
+                                                                                                               capabilities --json         
+                                                                                                   Notify      notification source:        
+                                                                                                               /tmp/hydra/state/notificat  
+                                                                                                               ions (0 configured;         
+                                                                                                               delivery delegated)         
+  2 heads · 1 needs you                                                                                                                    
+  ● live   kill-dry-run-worker · done                                                                                                      
+ ↑/↓ select • ←/→ collapse/expand • x remove • n new task • / filter • L location • tab/shift+tab pane • [/] page • ? help • q quit        

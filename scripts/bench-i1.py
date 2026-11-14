@@ -42,10 +42,10 @@ def live_input_gate(
     client: Observer, worker: dict[str, Any], fixture: Fixture
 ) -> dict[str, Any]:
     deadline_ns = client.started_ns + 15_000_000_000
-    client.input("workspace", b"W")
-    client.visible("HYDRA / PLAN TOGETHER", deadline_ns=deadline_ns)
+    client.input("workspace", b"1")
+    client.visible("enter/a talk", deadline_ns=deadline_ns)
     client.input("attach", b"a")
-    client.visible("INPUT TO AGENT", deadline_ns=deadline_ns)
+    client.visible("keys go to the agent", deadline_ns=deadline_ns)
     attached_clients = await_attachment_count(fixture, 1, deadline_ns)
     client.input("first", b"ECHO FIRST\n")
     prefix = "ACK " + worker["token"] + " "
@@ -155,8 +155,8 @@ def readiness(
                 attached = True
                 report["live_input_gate"] = live_input_gate(client, workers[0], fixture)
                 if args.preview != "open":
-                    client.input("close-readiness-terminal", b"\x02x\x1b")
-                    client.visible("HYDRA / WORK")
+                    client.input("close-readiness-terminal", b"\x1cx\x1b")
+                    client.visible("enter to talk")
                     attached = False
                 report["view_action_gate"] = view_actions(
                     client,
@@ -219,10 +219,10 @@ def measure(args: argparse.Namespace, fixture: Fixture, report: dict[str, Any]) 
             roots[spawn["observer_pid"]] = "pty-observer"
             if args.preview == "open":
                 deadline_ns = client.started_ns + 15_000_000_000
-                client.input("workspace", b"W")
-                client.visible("HYDRA / PLAN TOGETHER", deadline_ns=deadline_ns)
+                client.input("workspace", b"1")
+                client.visible("enter/a talk", deadline_ns=deadline_ns)
                 client.input("attach", b"a")
-                client.visible("INPUT TO AGENT", deadline_ns=deadline_ns)
+                client.visible("keys go to the agent", deadline_ns=deadline_ns)
                 await_attachment_count(fixture, index + 1, deadline_ns)
         if fixture.mode == "interactive":
             server = fixture.command(

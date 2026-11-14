@@ -1,0 +1,21 @@
+FRAME 1 60x20
+ ◆  1 Work  2 Inbox ·  3 Hosts  4 Stats                    
+                                                           
+ Hosts  Onboarding  ───────────────────────────────── 4 ── 
+ ▌◆ This machine                                   3 heads 
+  Observed 3                                               
+  ● builder                                 1 head · fresh 
+  ▲ archive                            1 head · stale 300s 
+  ▲ offline                        disconnected · -- heads 
+  + Add a host                   set up a machine over SSH 
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+  ● live   Remote live · 3 remote hosts                    
+ ↑/↓ select • enter open • A add host • ? help • q quit    

@@ -8,6 +8,14 @@
  * paths that keep their head and tail, and the lead block every screen
  * opens with (what it is, its state, and what the user can do). */
 
+/* One row of formatted text at x, y, clipped to width. */
+void canvas_text(struct kt_canvas *c, int x, int y, int width, struct kt_style tone, const char *format, ...) {
+    char buffer[1024];
+    va_list args;
+    va_start(args, format); vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
+    kt_text(c, (struct kt_rect){x, y, width, 1}, buffer, tone);
+}
+
 static const char *ellipsis(const struct app *app) { return app->ascii ? "..." : "\xe2\x80\xa6"; }
 static size_t ellipsis_columns(const struct app *app) { return app->ascii ? 3U : 1U; }
 
@@ -59,21 +67,10 @@ static size_t wrap_chunk(const char *text, size_t length, size_t width) {
     return cut;
 }
 
-/* How many rows paragraph() needs for text at this width. */
-size_t wrapped_rows(const char *text, size_t width) {
-    size_t length = strlen(text), offset = 0U, rows = 0U;
-    while (offset < length) {
-        offset += wrap_chunk(text + offset, length - offset, width ? width : 1U);
-        offset += strspn(text + offset, " ");
-        rows++;
-    }
-    return rows;
-}
-
 /* "Label       text" with the text wrapped under itself; the label column
  * is label_width wide. The first *skip rows are counted off instead of
  * drawn (a scrolled detail); rows beyond the content area are not drawn. */
-void labelled_skip(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone, size_t *skip) {
+void labelled_skip(struct app *app, int label_width, const char *label, const char *text, struct kt_style tone, size_t *skip) {
     size_t length = strlen(text), offset = 0U, width;
     int saved_x = app->content_x, saved_width = app->content_width;
     bool first = true;
@@ -87,7 +84,7 @@ void labelled_skip(struct app *app, int label_width, const char *label, const ch
         if (*skip) { (*skip)--; first = false; continue; }
         if (app->line >= app->limit) break;
         snprintf(piece, sizeof(piece), "%.*s", (int)(chunk < sizeof(piece) ? chunk : sizeof(piece) - 1U), text + start);
-        if (first) column(app, -label_width, label_width, TV_MUTED, label);
+        if (first) column(app, -label_width, label_width, KT_MUTED, label);
         column(app, 0, app->content_width, tone, piece);
         app->line++;
         first = false;
@@ -95,17 +92,17 @@ void labelled_skip(struct app *app, int label_width, const char *label, const ch
     app->content_x = saved_x; app->content_width = saved_width;
 }
 
-void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone) {
+void labelled_at(struct app *app, int label_width, const char *label, const char *text, struct kt_style tone) {
     size_t skip = 0U;
     if (app->line >= app->limit) return;
     labelled_skip(app, label_width, label, text, tone, &skip);
 }
 
 /* Wrapped prose after skipping *skip rows, as labelled_skip does. */
-void paragraph_skip(struct app *app, const char *text, enum tv_style tone, size_t *skip) {
+void paragraph_skip(struct app *app, const char *text, struct kt_style tone, size_t *skip) {
     size_t length = strlen(text), offset = 0U, width = app->content_width > 0 ? (size_t)app->content_width : 1U;
     int saved = app->tone;
-    app->tone = (int)tone;
+    app->tone = (int)style_tone(tone);
     while (offset < length) {
         size_t chunk = wrap_chunk(text + offset, length - offset, width);
         if (*skip) (*skip)--;
@@ -116,14 +113,14 @@ void paragraph_skip(struct app *app, const char *text, enum tv_style tone, size_
     app->tone = saved;
 }
 
-void labelled(struct app *app, const char *label, const char *text, enum tv_style tone) {
+void labelled(struct app *app, const char *label, const char *text, struct kt_style tone) {
     labelled_at(app, DETAIL_LABEL, label, text, tone);
 }
 
 /* Two labelled values per row where the view is wide enough to keep both
  * readable; one per row otherwise, so neither is cut. */
-void labelled_pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
-                   const char *right_label, const char *right, enum tv_style right_tone) {
+void labelled_pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
+                   const char *right_label, const char *right, struct kt_style right_tone) {
     if (app->content_width >= 110 && (int)strlen(left) < app->content_width / 2 - 13 &&
         (int)strlen(right) < app->content_width / 2 - 12) {
         pair(app, left_label, left, left_tone, right_label, right, right_tone); return;
@@ -136,75 +133,5 @@ void labelled_pair(struct app *app, const char *left_label, const char *left, en
  * rows of a detail screen say what is being looked at. */
 void lead_block(struct app *app, const char *eyebrow, const char *title) {
     if (eyebrow && eyebrow[0]) { style(app, TONE_MUTED); linef(app, "%s", eyebrow); style(app, TONE_BASE); }
-    paragraph(app, title, TV_STRONG);
-}
-
-/* "Label  value" where the label is a key the user can press, drawn as the
- * NEXT groups do: key, two spaces, what it does. */
-void key_row(struct app *app, const char *key, const char *action) {
-    char text[512];
-    snprintf(text, sizeof(text), "%s  %s", key, action);
-    paragraph(app, text, TV_BASE);
-}
-
-/* Where the kept tail of a footer starts: a trailing "? help  q quit", else a
- * trailing "q quit", else the end (nothing is kept). */
-static const char *hints_tail(const char *hints, const char *end) {
-    const char *at = strstr(hints, "? help  q quit");
-    if (at && at + 14 == end) return at;
-    if (end - hints >= 6 && !strcmp(end - 6, "q quit")) return end - 6;
-    return end;
-}
-
-/* Length of the hint starting at `at`: up to the next two spaces or `limit`,
- * without trailing spaces. */
-static size_t hint_length(const char *at, const char *limit) {
-    const char *next = strstr(at, "  ");
-    size_t length = next && next < limit ? (size_t)(next - at) : (size_t)(limit - at);
-    while (length && at[length - 1U] == ' ') length--;
-    return length;
-}
-
-/* The start of the hint after the one of `length` at `at` (an empty one is
- * a stray pair of spaces). */
-static const char *next_hint(const char *at, size_t length) {
-    at += length ? length : 2U;
-    while (*at == ' ') at++;
-    return at;
-}
-
-/* Appends one hint (two spaces apart from the previous one) if it fits in
- * `width` columns with `reserve` columns kept free; false when it does not. */
-static bool append_hint(char *out, size_t size, size_t *used, const char *text, size_t length,
-                        size_t width, size_t reserve) {
-    size_t gap = *used ? 2U : 0U;
-    if (*used + gap + length + reserve > width || *used + length + 3U >= size) return false;
-    *used += (size_t)snprintf(out + *used, size - *used, "%s%.*s", gap ? "  " : "", (int)length, text);
-    return true;
-}
-
-/* Appends the kept tail when it still fits after the hints already placed. */
-static void append_tail(char *out, size_t size, size_t used, const char *tail, size_t width) {
-    size_t length = strlen(tail), gap = used ? 2U : 0U;
-    if (used + 2U + length < size && used + gap + length <= width) snprintf(out + used, size - used, "%s%s", gap ? "  " : "", tail);
-}
-
-/* A footer that does not fit drops whole "key action" hints (separated by
- * two spaces) from its right, keeping a trailing "? help" and "q quit", so
- * no hint is cut mid-word; hints that fit are returned unchanged. */
-const char *fit_hints(const char *hints, size_t width, char *out, size_t size) {
-    const char *end = hints + strlen(hints), *tail, *at = hints;
-    size_t used = 0U, tail_length, reserve;
-    if ((size_t)(end - hints) <= width || size == 0U) return hints;
-    tail = hints_tail(hints, end);
-    tail_length = (size_t)(end - tail);
-    reserve = tail_length ? 2U + tail_length : 0U;
-    out[0] = '\0';
-    while (at < tail) {
-        size_t length = hint_length(at, tail);
-        if (length && !append_hint(out, size, &used, at, length, width, reserve)) break;
-        at = next_hint(at, length);
-    }
-    if (tail_length) append_tail(out, size, used, tail, width);
-    return out;
+    paragraph(app, title, KT_STRONG);
 }

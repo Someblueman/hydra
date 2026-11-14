@@ -13,6 +13,10 @@ BUILD_DIR ?= build
 # Build and analysis share recursive discovery so domain directories cannot
 # silently omit native sources from the quality gate.
 NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
+# Named in prerequisite lists below, which make expands as it reads them.
+# src/kettle/tools holds standalone programs with their own main(); they
+# link the library but are never part of it.
+KETTLE_SOURCES = $(filter-out src/kettle/tools/%,$(filter src/kettle/%.c,$(NATIVE_SOURCES)))
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Sanitizer diagnostics must fail a case even when its output is captured.
@@ -55,7 +59,7 @@ test-fast:
 	@for name in $(FAST_SHELL_TESTS); do \
 		BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "fast-$$name" "tests/test_$${name}.sh" || exit 1; \
 	done
-	@$(MAKE) -j1 test-c test-tui test-parity test-termviz
+	@$(MAKE) -j1 test-c test-tui test-parity test-kettle
 	@$(BUILD_DIR)/test-statistics
 	@echo "Running fast native fleet unit tests..."
 	@for binary in $(FAST_NATIVE_BINS); do \
@@ -88,45 +92,100 @@ build-core: $(BUILD_DIR)/hydra-core
 
 build-tui: $(BUILD_DIR)/hydra-tui
 
-.PHONY: test-termviz example-termviz example-workspace test-workspace-pty test-visualization sanitize-workspace
-test-visualization: build-tui test-termviz $(BUILD_DIR)/test-statistics
+.PHONY: test-kettle example-kettle example-workspace example-counter example-themes example-components test-workspace-pty test-program-pty test-visualization sanitize-workspace
+test-visualization: build-tui test-kettle $(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
-$(BUILD_DIR)/test-termviz: tests/c/test_termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle: tests/c/test_kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/test-termviz-present: tests/c/test_termviz_present.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_present.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-present: tests/c/test_kettle_present.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_present.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/test-termviz-workspace: tests/c/test_termviz_workspace.c src/termviz/workspace.c src/termviz/workspace.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_workspace.c src/termviz/workspace.c -o $@
+$(BUILD_DIR)/test-kettle-style: tests/c/test_kettle_style.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_style.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/test-termviz-unicode: tests/c/test_termviz_unicode.c $(TERMVIZ_SOURCES) src/termviz/termviz.h src/termviz/unicode_tables.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_unicode.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-draw: tests/c/test_kettle_draw.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_draw.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/test-termviz-terminal: tests/c/test_termviz_terminal.c $(TERMVIZ_SOURCES) src/termviz/terminal.h src/termviz/terminal_internal.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_terminal.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-workspace: tests/c/test_kettle_workspace.c src/kettle/workspace.c src/kettle/workspace.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_workspace.c src/kettle/workspace.c -o $@
 
-$(BUILD_DIR)/test-termviz-input: tests/c/test_termviz_input.c $(TERMVIZ_SOURCES) src/termviz/input.h src/termviz/tree.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_input.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-unicode: tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) src/kettle/kettle.h src/kettle/unicode_tables.inc | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) -o $@
 
-test-termviz: $(BUILD_DIR)/test-termviz $(BUILD_DIR)/test-termviz-present $(BUILD_DIR)/test-termviz-workspace $(BUILD_DIR)/test-termviz-unicode $(BUILD_DIR)/test-termviz-terminal $(BUILD_DIR)/test-termviz-input
-	$(BUILD_DIR)/test-termviz
-	$(BUILD_DIR)/test-termviz-present
-	$(BUILD_DIR)/test-termviz-workspace
-	$(BUILD_DIR)/test-termviz-unicode
-	$(BUILD_DIR)/test-termviz-terminal
-	$(BUILD_DIR)/test-termviz-input
+$(BUILD_DIR)/test-kettle-terminal: tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) src/kettle/terminal.h src/kettle/terminal_internal.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/termviz-example: examples/termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/termviz examples/termviz.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-input: tests/c/test_kettle_input.c $(KETTLE_SOURCES) src/kettle/input.h src/kettle/tree.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_input.c $(KETTLE_SOURCES) -o $@
 
-$(BUILD_DIR)/termviz-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(TERMVIZ_SOURCES) src/termviz/workspace.h src/termviz/input.h src/termviz/terminal_posix.c src/termviz/posix.h src/termviz/pty_posix.c src/termviz/pty_posix.h examples/workspace_demo.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/termviz examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(TERMVIZ_SOURCES) -o $@
+$(BUILD_DIR)/test-kettle-keymap: tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) src/kettle/keymap.h src/kettle/input.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) -o $@
+
+# The runtime: headless driver cases, then real child processes on a private PTY.
+$(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_program.c $(KETTLE_SOURCES) -o $@
+
+# The counter example's own test, written with the headless driver.
+$(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter_test.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes_test.c $(KETTLE_SOURCES) -o $@
+
+# Components: pure parts drawn into a canvas, then interaction under the headless driver.
+$(BUILD_DIR)/test-kettle-components: tests/c/test_kettle_components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_components.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/test-kettle-widgets: tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/test-kettle-components-example: examples/components_test.c examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components_test.c $(KETTLE_SOURCES) -o $@
+
+test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example
+	$(BUILD_DIR)/test-kettle
+	$(BUILD_DIR)/test-kettle-present
+	$(BUILD_DIR)/test-kettle-style
+	$(BUILD_DIR)/test-kettle-draw
+	$(BUILD_DIR)/test-kettle-workspace
+	$(BUILD_DIR)/test-kettle-unicode
+	$(BUILD_DIR)/test-kettle-terminal
+	$(BUILD_DIR)/test-kettle-input
+	$(BUILD_DIR)/test-kettle-keymap
+	$(BUILD_DIR)/test-kettle-program
+	$(BUILD_DIR)/test-kettle-counter
+	$(BUILD_DIR)/test-kettle-themes
+	$(BUILD_DIR)/test-kettle-components
+	$(BUILD_DIR)/test-kettle-widgets
+	$(BUILD_DIR)/test-kettle-components-example
+
+$(BUILD_DIR)/kettle-example: examples/kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/kettle.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) examples/workspace_demo.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/kettle-counter: examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/kettle-themes: examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/kettle-components: examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components.c $(KETTLE_SOURCES) -o $@
+
+# A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
+$(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/kettle/program_fixture.c $(KETTLE_SOURCES) -o $@
+
+test-program-pty: $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/kettle-components
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-program-pty"
 
 $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_workspace_child.c -o $@
 
-test-workspace-pty: example-workspace build-tui $(BUILD_DIR)/test-workspace-child
+test-workspace-pty: test-program-pty example-workspace build-tui $(BUILD_DIR)/test-workspace-child
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
 
 $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
@@ -140,9 +199,15 @@ test-statistics: $(BUILD_DIR)/test-statistics build-tui
 sanitize-statistics:
 	@$(MAKE) BUILD_DIR=build/statistics-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-statistics
 
-example-workspace: $(BUILD_DIR)/termviz-workspace
+example-workspace: $(BUILD_DIR)/kettle-workspace
 
-example-termviz: $(BUILD_DIR)/termviz-example
+example-kettle: $(BUILD_DIR)/kettle-example
+
+example-counter: $(BUILD_DIR)/kettle-counter
+
+example-themes: $(BUILD_DIR)/kettle-themes
+
+example-components: $(BUILD_DIR)/kettle-components
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -173,61 +238,62 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-# src/termviz/tools holds standalone programs with their own main(); they
-# link the library but are never part of it.
-TERMVIZ_SOURCES = $(filter-out src/termviz/tools/%,$(filter src/termviz/%.c,$(NATIVE_SOURCES)))
-TERMVIZ_HEADERS = $(wildcard src/termviz/*.h src/termviz/*.inc)
-TERMVIZ_OBJECTS = $(patsubst src/termviz/%.c,$(BUILD_DIR)/termviz/%.o,$(TERMVIZ_SOURCES))
+KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
+KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
 TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
 
-$(BUILD_DIR)/termviz/%.o: src/termviz/%.c
+$(BUILD_DIR)/kettle/%.o: src/kettle/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
 $(TUI_DATA_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS)
+$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS)
 	$(CC) $(CORE_CFLAGS) $^ -o $@
 
--include $(TUI_OBJECTS:.o=.d) $(TERMVIZ_OBJECTS:.o=.d) $(TUI_DATA_OBJECTS:.o=.d)
+-include $(TUI_OBJECTS:.o=.d) $(KETTLE_OBJECTS:.o=.d) $(TUI_DATA_OBJECTS:.o=.d)
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc tests/c/test_tui_measure.inc tests/c/test_tui_measure_session.inc tests/c/test_tui_layout.inc tests/c/test_tui_remote.inc $(TERMVIZ_OBJECTS) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c $(TERMVIZ_OBJECTS) -o $@
+$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc tests/c/test_tui_measure.inc tests/c/test_tui_measure_session.inc tests/c/test_tui_layout.inc tests/c/test_tui_remote.inc $(KETTLE_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c $(KETTLE_OBJECTS) -o $@
 
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-$(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
 .PHONY: test-tui-actions
 test-tui-actions: $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-actions
 
-$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h src/tui/plan_draft.c src/tui/plan_draft.h src/tui/setup_json.c src/tui/setup_json.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
 
-$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(TERMVIZ_OBJECTS)
-	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(TERMVIZ_OBJECTS) -o $@
+$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(KETTLE_OBJECTS)
+	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(KETTLE_OBJECTS) -o $@
 
-$(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-$(BUILD_DIR)/test-tui-setup-upgrade: tests/c/test_tui_setup_upgrade.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-keymap: tests/c/test_tui_keymap.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-$(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-setup-upgrade: tests/c/test_tui_setup_upgrade.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-setup-upgrade $(BUILD_DIR)/test-tui-onboarding
+$(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-keymap $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-setup-upgrade $(BUILD_DIR)/test-tui-onboarding
 	$(BUILD_DIR)/test-tui-input
+	$(BUILD_DIR)/test-tui-keymap
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
 	$(BUILD_DIR)/test-tui-transcript
@@ -254,12 +320,15 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-remote-setup"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-responsive-reads"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-refresh-cost"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-onboarding"
 
-test-parity: build-core
+test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
+	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_parity.sh
 
-test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 sanitize-core:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
@@ -542,7 +611,7 @@ quality-c-flags:
 
 quality-c:
 	@pkg-config --exists json-c
-	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c tests/native/*.c tests/fixture/*.c tests/termviz/*.c examples/planning/native/*.c examples/planning/feature/*.c) -- $(QUALITY_C_FLAGS)
+	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c tests/native/*.c tests/fixture/*.c tests/kettle/*.c examples/planning/native/*.c examples/planning/feature/*.c) -- $(QUALITY_C_FLAGS)
 
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
@@ -553,12 +622,13 @@ test-attached-pty: build-tui
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-terminal-restore"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-interactive-loop"
 sanitize-attached:
 	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 
-.PHONY: test-termviz-export
-test-termviz-export:
-	sh tests/termviz/test_export.sh
+.PHONY: test-kettle-export
+test-kettle-export:
+	sh tests/kettle/test_export.sh
 
 .PHONY: test-plan-workspace sanitize-plan-workspace
 test-plan-workspace: build-tui build-fleet
@@ -572,9 +642,9 @@ sanitize-plan-workspace:
 	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace
 
 sanitize-workspace:
-	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-termviz test-workspace-pty
+	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
 
-$(BUILD_DIR)/termviz-workspace $(BUILD_DIR)/termviz-example $(BUILD_DIR)/test-termviz $(BUILD_DIR)/test-termviz-present $(BUILD_DIR)/test-termviz-unicode $(BUILD_DIR)/test-termviz-terminal $(BUILD_DIR)/test-termviz-input: $(TERMVIZ_HEADERS)
+$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example $(BUILD_DIR)/kettle-components: $(KETTLE_HEADERS)
 
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
@@ -620,9 +690,9 @@ test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)
 
 # Replays captured terminal bytes through the product's own terminal
-# interpreter (src/termviz) and prints exact cells; see docs/VISUAL-REVIEW.md.
-$(BUILD_DIR)/termviz-cells: src/termviz/tools/cells.c $(TERMVIZ_OBJECTS) src/termviz/terminal.h
-	$(CC) $(CORE_CFLAGS) src/termviz/tools/cells.c $(TERMVIZ_OBJECTS) -o $@
+# interpreter (src/kettle) and prints exact cells; see docs/VISUAL-REVIEW.md.
+$(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle/terminal.h
+	$(CC) $(CORE_CFLAGS) src/kettle/tools/cells.c $(KETTLE_OBJECTS) -o $@
 
 # Visual review without manual runs (U4, I4, 2.9.0 Hosts screens): drives the
 # prefix-installed native TUI over a PTY through fixture states at 80x24 and
@@ -632,13 +702,13 @@ $(BUILD_DIR)/termviz-cells: src/termviz/tools/cells.c $(TERMVIZ_OBJECTS) src/ter
 # columns from an earlier output directory.
 VISUAL_REVIEW_OUTPUT ?= $(BUILD_DIR)/visual-review
 .PHONY: visual-review test-visual-lint
-visual-review: build-core build-tui build-fleet $(BUILD_DIR)/termviz-cells
+visual-review: build-core build-tui build-fleet $(BUILD_DIR)/kettle-cells
 	python3 scripts/visual_review/run.py --output "$(abspath $(VISUAL_REVIEW_OUTPUT))" \
-		--cells "$(abspath $(BUILD_DIR))/termviz-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)")
+		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)")
 
 # The bounded, deterministic layout lint over the captures (captures them
 # first when the output directory has none).
-test-visual-lint: $(BUILD_DIR)/termviz-cells
+test-visual-lint: $(BUILD_DIR)/kettle-cells
 	@if [ ! -f "$(VISUAL_REVIEW_OUTPUT)/manifest.json" ]; then $(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)"; fi
 	python3 scripts/visual_review/lint.py "$(abspath $(VISUAL_REVIEW_OUTPUT))"
 
@@ -648,7 +718,7 @@ test-visual-lint: $(BUILD_DIR)/termviz-cells
 # guided setup, a real fixture-agent task, reconnection and the existing
 # installation, missing prerequisites, failed sign-in and interrupted cases.
 .PHONY: test-u10-loopback
-test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/termviz-cells
+test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/kettle-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
 

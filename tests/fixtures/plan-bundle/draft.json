@@ -36,7 +36,7 @@
       "args": {
         "head": "bundle-worker",
         "profile": "codex",
-        "prompt": "Inline worker brief (bundle-marker-1).\nCreate greeting.txt containing a friendly greeting and tests/greeting.sh that fails unless greeting.txt is non-empty.\nDo not commit.",
+        "prompt": "Inline worker brief (bundle-marker-1).\nCreate greeting.txt containing a friendly greeting and tests/greeting.sh that fails unless greeting.txt is non-empty.\nHydra commits your changes when you finish.",
         "result_file": "summary",
         "timeout": 120
       }

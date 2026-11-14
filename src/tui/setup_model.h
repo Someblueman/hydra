@@ -84,6 +84,9 @@ bool setup_status_finished(const char *status);
  * or newer) when preflight reported it as not ok; NULL otherwise. Keyed on
  * the requirement name, never on its detail text. */
 const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e);
+/* Requirements stop setup until they are installed: preflight reported
+ * prerequisite_missing, or a blocking requirement is not ok. */
+bool setup_preflight_blocked(const struct setup_envelope *e);
 /* First step that is neither done nor skipped, or NULL. */
 const struct setup_step *setup_open_step(const struct setup_envelope *e);
 /* One-line summary for a host list row. */

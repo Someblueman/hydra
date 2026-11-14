@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "fleet_budget.h"
+#include "attention.h"
+#include "inbox.h"
 void record_snapshot(struct app *app, bool valid) {
     size_t i;
     double queue = 0;
@@ -20,20 +22,8 @@ void record_snapshot(struct app *app, bool valid) {
     app->history_valid[app->history_count++] = valid && known;
     app->snapshot_stale = !valid;
     if (valid) app->snapshot_at = time(NULL);
-}
-FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms) {
-    struct native_capture capture={.fd=-1};
-    char *argv[]={(char *)app->hydra,(char *)command,(char *)option,NULL};
-    FILE *input;
-    if (!native_capture_start(&capture,argv,budget_ms)) return NULL;
-    while (!native_capture_step(&capture)) {
-        struct timespec pause={0,10000000L};
-        (void)nanosleep(&pause,NULL);
-    }
-    if (capture.timed_out) copy_text(app->notice,sizeof(app->notice),"shell data adapter timed out; showing last good snapshot");
-    input=native_capture_take(&capture);
-    if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
-    return input;
+    /* Inbox's gates and published plans belong to these heads. */
+    if (valid) inbox_refresh(app);
 }
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
@@ -60,80 +50,35 @@ int accept_model_data(struct app *app, FILE *input) {
 bool head_stale(const struct app *app, const struct head *h) {
     return head_remote(h) ? app->remote_stale : app->snapshot_stale;
 }
+/* The tmux session this control centre runs in, so a removal can leave the
+ * terminal in use alone. The loop keeps running while tmux answers. */
 void refresh_current_session(struct app *app) {
-    int pipefd[2], status = 0, ready, attempt;
-    pid_t pid;
-    ssize_t length = 0;
-    posix_spawn_file_actions_t actions;
     char output[TEXT] = "";
     char *argv[] = {(char *)"tmux", (char *)"display-message", (char *)"-p",
                     (char *)"#{session_name}", NULL};
-    struct timeval timeout = {1, 0};
-    struct timespec delay = {0, 50000000L};
     app->current_session[0] = '\0';
-    if (getenv("TMUX") == NULL || pipe(pipefd) != 0) return;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-    if (posix_spawnp(&pid, "tmux", &actions, NULL, argv, environ) != 0) {
-        posix_spawn_file_actions_destroy(&actions);
-        close(pipefd[0]); close(pipefd[1]); return;
-    }
-    posix_spawn_file_actions_destroy(&actions);
-    close(pipefd[1]);
-    {
-        fd_set readfds;
-        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
-        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
-    }
-    if (ready > 0) length = read(pipefd[0], output, sizeof(output) - 1U);
-    close(pipefd[0]);
-    for (attempt = 0; attempt < 20; attempt++) {
-        ready = waitpid(pid, &status, WNOHANG);
-        if (ready == pid) break;
-        if (ready < 0 && errno != EINTR) break;
-        (void)nanosleep(&delay, NULL);
-    }
-    if (ready != pid) { (void)kill(pid, SIGKILL); (void)waitpid(pid, &status, 0); }
-    if (length > 0 && ready == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        output[length] = '\0';
-        output[strcspn(output, "\r\n")] = '\0';
-        copy_text(app->current_session, sizeof(app->current_session), output);
-    }
-}
-/* A headless head has no pane: its preview is the bounded, read-only view of
- * the step that runs (or last ran) on it, read without blocking the UI. */
-static void headless_preview_start(struct app *app, const struct head *h) {
-    struct native_capture *job;
-    char *argv[] = {(char *)app->hydra, (char *)"tui", (char *)"--head-output", (char *)h->branch, NULL};
-    if (!app->observations) return;
-    if (strcmp(app->preview_head, h->branch)) {
-        copy_text(app->preview_head, sizeof(app->preview_head), h->branch);
-        app->preview_text[0] = '\0';
-    }
-    job = &app->observations->preview;
-    if (job->pid) return;
-    if (!native_capture_start(job, argv, 4000L))
-        copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable: the reader could not start");
+    if (getenv("TMUX") == NULL || run_captured(app, argv, output, sizeof(output), 1000L) != 0) return;
+    output[strcspn(output, "\r\n")] = '\0';
+    copy_text(app->current_session, sizeof(app->current_session), output);
 }
 
-void headless_preview_tick(struct app *app) {
-    struct native_capture *job;
-    FILE *input;
-    size_t used;
-    if (!app->observations) return;
-    job = &app->observations->preview;
-    if (!job->pid || !native_capture_step(job)) return;
-    input = native_capture_take(job);
-    if (!input) {
-        if (!app->preview_text[0]) copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable");
-        return;
-    }
-    used = fread(app->preview_text, 1, sizeof(app->preview_text) - 1U, input);
-    app->preview_text[used] = '\0';
-    fclose(input);
+/* The preview is read in the background: a pane's recent output from tmux,
+ * or, for a headless head, the bounded view of the step that runs (or last
+ * ran) on it. One read is in flight at a time; a request made meanwhile
+ * starts when it ends. */
+static bool preview_start(struct app *app, const struct head *h) {
+    struct native_observations *o = app->observations;
+    char target[TEXT + 8U];
+    /* Joined lines (-J) with their colors (-e): Hydra wraps them to the view
+     * and renders SGR itself; the pane's history before the screen gives context. */
+    char *pane[] = {(char *)"tmux", (char *)"capture-pane", (char *)"-p", (char *)"-e", (char *)"-J",
+                    (char *)"-S", (char *)"-40", (char *)"-t", target, NULL};
+    char *step[] = {(char *)app->hydra, (char *)"tui", (char *)"--head-output", (char *)h->branch, NULL};
+    snprintf(target, sizeof(target), "%s:0.0", h->session);
+    o->preview_again = false;
+    o->preview_headless = head_headless(h);
+    copy_text(o->preview_branch, sizeof(o->preview_branch), h->branch);
+    return native_capture_start(&o->preview, o->preview_headless ? step : pane, o->preview_headless ? 4000L : 1000L);
 }
 
 /* A full buffer keeps its newest half from a line start, so a large capture
@@ -145,39 +90,64 @@ static size_t preview_keep_tail(char *text, size_t used) {
     return used - start;
 }
 
-/* Joined lines (-J) with their colors (-e): Hydra wraps them to the view and
- * renders SGR itself; the pane's history before the screen gives context. */
-static void terminal_preview(struct app *app, const struct head *h) {
-    struct output_child child;
-    size_t used = 0U;
-    bool failed = false;
-    char target[TEXT + 8U];
-    char *argv[] = {(char *)"tmux", (char *)"capture-pane", (char *)"-p", (char *)"-e", (char *)"-J",
-                    (char *)"-S", (char *)"-40", (char *)"-t", target, NULL};
-    snprintf(target, sizeof(target), "%s:0.0", h->session);
-    app->preview_text[0] = '\0';
-    if (output_start(&child, argv, 1000L)) return;
+static void preview_read(struct app *app, FILE *input) {
+    size_t used = 0U, length;
     for (;;) {
-        ssize_t length;
         if (used + 1U >= sizeof(app->preview_text)) used = preview_keep_tail(app->preview_text, used);
-        length = output_read(&child, app->preview_text + used, sizeof(app->preview_text) - used - 1U);
-        if (length == 0) break;
-        if (length < 0) { failed = true; break; }
-        used += (size_t)length;
+        length = fread(app->preview_text + used, 1, sizeof(app->preview_text) - used - 1U, input);
+        if (!length) break;
+        used += length;
     }
     app->preview_text[used] = '\0';
-    if (output_finish(&child, failed)) {
-        copy_text(app->preview_text, sizeof(app->preview_text), child.timed_out ? "preview timed out" : "preview unavailable");
-    }
+}
+
+/* Shows a finished read. A headless head keeps the output it showed when a
+ * later read fails; a pane says that its preview is unavailable. */
+static void preview_accept(struct app *app, FILE *input, bool headless, bool timed_out) {
+    if (input) { preview_read(app, input); fclose(input); return; }
+    if (!headless) copy_text(app->preview_text, sizeof(app->preview_text), timed_out ? "preview timed out" : "preview unavailable");
+    else if (!app->preview_text[0]) copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable");
+}
+
+bool preview_loading(const struct app *app) {
+    return app->observations && app->observations->preview.pid != 0;
+}
+
+/* Whether the head the conversation shows has had no read yet: the first
+ * snapshot's selection is read at once rather than at the next refresh. */
+bool preview_unread(struct app *app) {
+    const struct head *h = work_output_head(app);
+    return h && !head_remote(h) && strcmp(app->preview_head, h->branch) != 0 && !preview_loading(app);
 }
 
 void capture_preview(struct app *app) {
+    struct native_observations *o = app->observations;
     const struct head *h;
-    if (!app->preview || app->model.head_count == 0U) return;
+    if (!o || !work_preview_wanted(app)) return;
     retarget_selection(app);
-    h = selected_head(app);
+    h = work_output_head(app);
     if (h == NULL || head_remote(h)) return;
-    if (head_headless(h)) { headless_preview_start(app, h); return; }
-    app->preview_head[0] = '\0';
-    terminal_preview(app, h);
+    /* Output read for another head is not this head's. */
+    if (strcmp(app->preview_head, h->branch)) {
+        copy_text(app->preview_head, sizeof(app->preview_head), h->branch);
+        app->preview_text[0] = '\0';
+    }
+    if (o->preview.pid) { o->preview_again = true; return; }
+    if (!preview_start(app, h) && head_headless(h))
+        copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable: the reader could not start");
+}
+
+void preview_tick(struct app *app) {
+    struct native_observations *o = app->observations;
+    const struct head *h;
+    bool timed_out, current;
+    if (!o || !o->preview.pid || !native_capture_step(&o->preview)) return;
+    timed_out = o->preview.timed_out;
+    h = work_preview_wanted(app) ? work_output_head(app) : NULL;
+    current = h && !strcmp(o->preview_branch, h->branch) && !strcmp(app->preview_head, h->branch) &&
+              o->preview_headless == head_headless(h);
+    if (current) preview_accept(app, native_capture_take(&o->preview), o->preview_headless, timed_out);
+    else native_capture_destroy(&o->preview);
+    /* Another head was selected, or p was pressed again, during the read. */
+    if (!current || o->preview_again) capture_preview(app);
 }

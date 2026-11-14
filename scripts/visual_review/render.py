@@ -1,11 +1,11 @@
-"""Render a termviz-cells screen (exact colours and attributes) to HTML and SVG."""
+"""Render a kettle-cells screen (exact colours and attributes) to HTML and SVG."""
 
 from __future__ import annotations
 
 import html
 
 # Defaults for cells the program left on the terminal's own colours: the same
-# values tests/termviz/screen_support.c assumes for an unthemed terminal.
+# values tests/kettle/screen_support.c assumes for an unthemed terminal.
 DEFAULT_FG = "dddddd"
 DEFAULT_BG = "161616"
 ATTR_BOLD, ATTR_DIM, ATTR_ITALIC, ATTR_UNDERLINE, ATTR_REVERSE = 1, 2, 4, 8, 16

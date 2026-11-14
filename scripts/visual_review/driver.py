@@ -1,8 +1,8 @@
 """A small stdlib pseudo-terminal driver for the native TUI.
 
 The driver keeps every byte the program wrote (``raw``) and interprets the
-cumulative stream through the product's own terminal model (``termviz-cells``,
-built from src/termviz/tools/cells.c) whenever a screen is needed, so a capture
+cumulative stream through the product's own terminal model (``kettle-cells``,
+built from src/kettle/tools/cells.c) whenever a screen is needed, so a capture
 taken at any point is exactly what a terminal of that size would show.
 """
 

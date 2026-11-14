@@ -28,8 +28,9 @@ case_runner=
 TMPDIR="$case_root/tmp"
 TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
-# A case started from inside tmux must not see (or act on) the caller's server.
-unset TMUX TMUX_PANE
+# A case started from inside tmux must not see (or act on) the caller's server,
+# and one started from an agent's head must not run as that agent.
+unset TMUX TMUX_PANE HYDRA_HEAD_ID HYDRA_INSTANCE_ID
 # Git configuration injected through the environment (some CI and cloud
 # containers export GIT_CONFIG_COUNT/KEY_n/VALUE_n) reaches every fixture
 # repository, and review routes refuse it as a repository redirect by design

@@ -3,6 +3,9 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "snapshot.h"
+#include "attention.h"
+#include "inbox.h"
 /* Command-line parsing and process entry point. */
 
 static int parse_size(const char *value, int *cols, int *rows) {
@@ -18,9 +21,11 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
+          "  [--view work|inbox|hosts|stats] (and the earlier names: heads, detail, coordination,\n"
+          "   overview, workflows, workspace, attention, recovery, statistics)\n"
           "  [--location all|local|remote|HOST]\n"
-          "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
+          "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
+          "  [--store|--data]\n"
           "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
           "   [--statistics-fixture FILE] [--attention-fixture FILE]... [--review-fixture FILE]\n"
           "   [--onboarding-fixture FILE [--onboarding-intent FILE]\n"
@@ -28,13 +33,27 @@ static void usage(FILE *out) {
           "   [--keys KEYS]... --size COLSxROWS --frames N]\n", out);
 }
 
-static int parse_view(const char *name) {
-    static const char *names[] = {"heads", "detail", "coordination", "recovery", "overview", "workflows", "hosts", "workspace", "statistics", "attention"};
+/* The four screens by name, and the names of earlier versions: the views
+ * that became pages of Work open it on that page, Attention and Recovery
+ * open Inbox. *page is the Work page, or -1. */
+static int parse_view(const char *name, int *page) {
+    static const struct { const char *name; int view, page; } names[] = {
+        {"work", 7, -1}, {"heads", 7, -1}, {"workspace", 7, -1}, {"detail", 7, WORK_DETAILS},
+        {"coordination", 7, WORK_DETAILS}, {"overview", 7, WORK_RUN}, {"workflows", 7, WORK_RUN},
+        {"inbox", 9, -1}, {"attention", 9, -1}, {"recovery", 9, -1}, {"hosts", 6, -1},
+        {"stats", 8, -1}, {"statistics", 8, -1}};
     size_t i;
-    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-        if (!strcmp(name, names[i])) return (int)i;
-    }
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        if (!strcmp(name, names[i].name)) { *page = names[i].page; return names[i].view; }
     return -1;
+}
+
+/* The page --view or --diagnostics asked for shows until the selection moves. */
+static void start_page(struct app *app, int page) {
+    if (page < 0 || app->view != 7 || !native_workspace_init(app)) return;
+    if (page == WORK_RUN && !work_page_available(app, WORK_RUN) && overview_run(app) != SIZE_MAX) { app->run_row = true; app->workflow_run = overview_run(app); }
+    app->workspace->chosen = page;
+    app->workspace->chosen_for[0] = '\0';
 }
 
 /* A fixture is one observation; a local and a remote one compose like the
@@ -65,7 +84,8 @@ static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
     size_t i;
     /* An unreadable stream is a screen too: unavailable, or stale after a good one. */
     for (i = 0; i < f->attention_count; i++) (void)native_attention_load(app, f->attention[i]);
-    if (app->view == 7 && f->key_count) native_workspace_prepare(app);
+    inbox_refresh(app);
+    if (app->view == 7) (void)native_workspace_init(app);
     /* The first key string selects the item the review binds to; the second
      * navigates inside the review. */
     for (i = 0; f->key_count && f->keys[0][i]; i++) headless_key(app, f->keys[0][i]);
@@ -79,7 +99,7 @@ static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
 
 static int render_fixture(struct app *app, const char *fixture, const char *remote_fixture, const char *workflow_fixture,
                       const char *statistics_fixture, const struct onboarding_fixtures *onboarding,
-                      const struct screen_fixtures *screen, unsigned frames) {
+                      const struct screen_fixtures *screen, unsigned frames, int page) {
     unsigned frame;
     int status = accept_fixture(app, fixture);
     if (!status && remote_fixture) status = accept_fixture(app, remote_fixture);
@@ -90,7 +110,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     }
     if (status) return status;
     record_snapshot(app, true);
-    if (workflow_fixture && refresh_workflows(app, workflow_fixture)) return 2;
+    if (workflow_fixture && load_workflow_fixture(app, workflow_fixture)) return 2;
     /* --task selects a head, as it does when the interactive view opens; a
      * remote task is selected by its task id. */
     if (app->pending_task[0] && head_for_branch(app, app->pending_task))
@@ -100,14 +120,17 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
         for (i = 0; i < app->model.task_count; i++)
             if (!strcmp(app->model.tasks[i].task_id, app->pending_task)) { app->task_row = true; app->task_selected = i; }
     }
-    if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
+    if (statistics_fixture && load_statistics_fixture(app, statistics_fixture)) return 2;
+    start_page(app, page);
     if (!prepare_screen(app, screen)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);
     free(app->workflows);
     native_review_destroy(app);
     native_attention_destroy(app);
+    inbox_destroy(app);
     native_workspace_destroy(app);
     native_onboarding_destroy(app);
+    hosts_destroy(app);
     statistics_destroy(app);
     transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
@@ -124,6 +147,11 @@ static void initialize_app(struct app *app) {
     app->cols = 80; app->rows = 24;
     app->no_color = getenv("NO_COLOR") != NULL;
     app->ascii = strcasecmp(nl_langinfo(CODESET), "UTF-8") != 0;
+    /* Dark by default: the terminal's own sixteen colours cannot show the
+     * surfaces the screens are drawn with. --theme and HYDRA_TUI_THEME choose
+     * another, the palette's "Theme" cycles them. */
+    app->theme = 1;
+    app->view = 7;
 }
 
 static bool location_option(struct app *app, const char *value) {
@@ -142,9 +170,32 @@ static bool frame_option(const char *value, unsigned *frames) {
     return parse_unsigned(value, frames) && *frames > 0U && *frames <= 100U;
 }
 
-static void diagnostic_option(struct app *app, bool explicit_view) {
+static void diagnostic_option(struct app *app, bool explicit_view, int *page) {
     app->diagnostics = true;
-    if (!explicit_view) app->view = 1;
+    if (!explicit_view) { app->view = 7; *page = WORK_DETAILS; }
+}
+
+/* Prints the keys in effect as a keys file. A file that was not applied as
+ * written is reported on stderr and fails the command, so it also validates. */
+static int print_keys_option(struct app *app) {
+    const struct native_keys *keys = native_keys(app);
+    native_keys_print(app, stdout);
+    if (keys->problem[0]) fprintf(stderr, "hydra-tui: %s\n", keys->problem);
+    if (fflush(stdout) != 0 || ferror(stdout)) return 3;
+    return keys->problem[0] ? 1 : 0;
+}
+
+/* Options that only set a flag; false for anything else. --store: the
+ * launching CLI's state store may be read here instead of asking that CLI
+ * for the head snapshot. --data prints that snapshot and exits. */
+static bool flag_option(struct app *app, const char *option, bool *print_keys, bool *print_data) {
+    if (strcmp(option, "--no-color") == 0) app->no_color = true;
+    else if (strcmp(option, "--ascii") == 0) app->ascii = true;
+    else if (strcmp(option, "--print-keys") == 0) *print_keys = true;
+    else if (strcmp(option, "--store") == 0) app->store = true;
+    else if (strcmp(option, "--data") == 0) *print_data = true;
+    else return false;
+    return true;
 }
 
 static bool theme_option(struct app *app, const char *theme) {
@@ -162,7 +213,8 @@ int main(int argc, char **argv) {
     struct screen_fixtures screen = {{NULL, NULL}, NULL, {NULL, NULL}, 0, 0};
     unsigned frames = 1U;
     int index;
-    bool explicit_view = false;
+    bool explicit_view = false, print_keys = false, print_data = false;
+    int page = -1;
     const char *theme = getenv("HYDRA_TUI_THEME");
     initialize_app(&app);
     for (index = 1; index < argc; index++) {
@@ -202,31 +254,37 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[index], "--view") == 0 && index + 1 < argc) {
             const char *view = argv[++index];
             explicit_view = true;
-            app.view = parse_view(view);
+            app.view = parse_view(view, &page);
             if (app.view < 0) return 2;
-            app.graph_follow = app.view == 5;
-        } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view);
+            app.graph_follow = page == WORK_RUN;
+        } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view, &page);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
-        else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
-        else if (strcmp(argv[index], "--ascii") == 0) app.ascii = true;
-        else { usage(stderr); return 2; }
+        else if (!flag_option(&app, argv[index], &print_keys, &print_data)) { usage(stderr); return 2; }
     }
+    if (print_data) return snapshot_print(app.hydra, stdout);
     if (!theme_option(&app, theme)) return 2;
+    /* Deterministic rendering reads a keys file only when one is named. */
+    native_keys_load(&app, fixture == NULL);
+    if (print_keys) return print_keys_option(&app);
     if (fixture != NULL) {
-        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, &onboarding, &screen, frames);
+        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, &onboarding, &screen, frames, page);
     }
     if (remote_fixture || workflow_fixture || statistics_fixture || onboarding.export_file || onboarding.intent_file ||
         screen.attention_count || screen.review || screen.key_count) { usage(stderr); return 2; }
-    if (!explicit_view && !app.diagnostics) app.view = 7;
+    /* Work is the view unless --view named another (initialize_app). */
+    start_page(&app, page);
     index = interactive_main(&app);
     free(app.workflows);
     native_workspace_destroy(&app);
     native_terminals_destroy(&app);
     native_observations_destroy(&app);
+    native_activity_destroy(&app);
     native_attention_destroy(&app);
+    inbox_destroy(&app);
     native_plan_destroy(&app);
     native_setup_destroy(&app);
     native_onboarding_destroy(&app);
+    hosts_destroy(&app);
     statistics_destroy(&app);
     transcript_free(app.transcript);
     frame_free(&app);

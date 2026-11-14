@@ -290,7 +290,7 @@ if [ "$TUI_MODE" != never ]; then
         if [ "$tui_needs_build" -eq 1 ] && command -v "$tui_compiler" >/dev/null 2>&1; then
             echo "Building native mission-control TUI by default..."
             if ! make -C "$SCRIPT_DIR" build-tui; then
-                echo "Warning: native TUI build failed; installing the basic shell fallback only" >&2
+                echo "Warning: native TUI build failed; installing without it ('hydra tui' will not be available)" >&2
             fi
         fi
     fi
@@ -310,7 +310,7 @@ if [ "$TUI_MODE" != never ]; then
          [ "$("$SCRIPT_DIR/build/hydra-tui" --version 2>/dev/null || true)" = "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
         TUI_SOURCE="$SCRIPT_DIR/build/hydra-tui"
     elif [ -x "$SCRIPT_DIR/build/hydra-tui" ]; then
-        echo "Warning: ignoring stale local native TUI; installing the basic shell fallback only" >&2
+        echo "Warning: ignoring stale local native TUI; installing without it ('hydra tui' will not be available)" >&2
     fi
 fi
 

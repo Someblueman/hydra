@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ EXACT REVIEW / references                                                                                                               │
-│ kill-dry-run · implement                                                                                                                │
-│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                   │
-│                                                                                                                                         │
-│ REFERENCES  3 recorded                                                                                                                  │
-│ > log         recorded preview   /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/output.log                       │
-│   transcript  inaccessible       /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/implement/attempt-1/transcript.log                │
-│   pr          supplied, unopened https://github.com/example/hydra/pull/84                                                               │
-│                                                                                                                                         │
-│ Reference 1/3: log / available                                                                                                          │
-│ /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/output.log                                                        │
-│ Enter shows the preview the producer recorded (bounded, read-only).                                                                     │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- j/k select  Enter open  l/t/p add log/transcript/PR  i identity  Esc back  ? help  q quit                                                 
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     EXACT REVIEW / references                                                 
+  ◐ Approve merge-gate: notes-cleanup                            kill-dry-run · implement                                                  
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                     
+ Failed 1                                                                                                                                  
+  ✗ Check failed: kill-dry-run                                   REFERENCES  3 recorded                                                    
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    > log         recorded preview   /tmp/hydra-fi…erify/attempt-1/output.log 
+ Ready for review 3                                                transcript  inaccessible       /tmp/hydra-fi…t/attempt-1/transcript.log 
+ ▌✓ Result ready: kill-dry-run                                     pr          supplied, unopened https://github.com/example/hydra/pull/84 
+ ▌  run run_2cdf8bbe1a4e · step implement · attempt 1 · new                                                                                
+  ✓ Result ready: feature-build                                  Reference 1/3: log / available                                            
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…    /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/outp
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…        ut.log                                                                
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new      Enter opens the full log (read-only); the preview the producer recorded   
+ Agents 1                                                            shows when the file cannot be read.                                   
+  ▲ Terminal stopped: notes-cleanup                                                                                                        
+    worktree and files kept · R restarts it                                                                                                
+ Repairs 2                                                                                                                                 
+  ▲ (stale) Approval expired: docs-refresh                                                                                                 
+    run run_55aa66bb77cc · step release-gate · attempt 1                                                                                   
+  ▲ Needs inspection: index-rebuild                                                                                                        
+    run run_aa11bb22cc33 · on archive                                                                                                      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ scroll • space/b page • enter open reference • plus add reference • L full log • tab/shift+tab pane • [/] page • ? help • q quit      

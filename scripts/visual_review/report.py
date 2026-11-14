@@ -66,7 +66,7 @@ def write(output: Path, manifest: dict, findings: dict, baseline: Path | None) -
         + (f" · baseline: {html.escape(str(baseline))}" if baseline else "")
         + "</p>",
         "<p>Each screen is the exact cell grid a terminal of that size would show, rendered with the theme's own "
-        "colours through the product's terminal interpreter (termviz). Captures are deterministic fixtures reached "
+        "colours through the product's terminal interpreter (kettle). Captures are deterministic fixtures reached "
         "with real key presses over a PTY; they establish layout, colour, wrapping and focus, not aesthetic quality, "
         "which remains the reviewer's judgement on this page. The usual sizes are 80x24 and 140x40; the variants are "
         "the dark and light themes and no-colour mode.</p>",

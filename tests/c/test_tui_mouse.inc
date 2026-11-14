@@ -4,6 +4,9 @@ static void mouse_input(struct session *session, const char *report) {
     write_input(session->master, report, strlen(report));
 }
 
+/* At 80x24 Work's list starts on the second row: its rule, then one head a
+ * row (feature-live on row 3, feature-stale on row 4, as the terminal
+ * counts); the shared pane's page strip is on row 2 from column 27. */
 static void test_mouse(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     struct winsize size;
@@ -11,61 +14,64 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal")) return;
     result(wait_for_markers(&session, "\033[?1006h", "\033[?2004h", 1000), "raw mode enables mouse and bracketed paste reporting");
     (void)wait_for_model(&session);
-    (void)wait_for_marker(&session, "Enter details", 1000);
-    mouse_input(&session, "\033[<0;8;6M");
-    result(wait_for_marker(&session, ">  feature-stale", 1000), "click selects the painted row");
-    mouse_input(&session, "\033[<0;12;2M");
-    result(wait_for_marker(&session, "Details: feature-stale", 1000), "click Details opens selected head");
-    mouse_input(&session, "\033[<0;3;2M");
-    (void)wait_for_marker(&session, "[Work]", 1000);
+    (void)wait_for_marker(&session, "talk", 1000);
+    mouse_input(&session, "\033[<0;8;4M");
+    result(wait_for_selected(&session, "feature-stale", 1000), "click selects the painted row");
+    mouse_input(&session, "\033[<0;42;2M"); /* Details in the shared pane's page strip */
+    result(wait_for_marker(&session, "Session     terminal gone", 1000), "a click on a page's name shows that page");
+    mouse_input(&session, "\033[<0;13;1M"); /* the Work tab */
+    (void)wait_for_marker(&session, "Heads  ", 1000);
     mouse_input(&session, "\033[<65;8;6M");
-    result(wait_for_marker(&session, ">  feature-unavailable", 1000), "wheel down has keyboard selection parity");
+    result(wait_for_selected(&session, "feature-unavailable", 1000), "wheel down has keyboard selection parity");
     mouse_input(&session, "\033[<64;8;6M");
-    result(wait_for_marker(&session, ">  feature-stale", 1000), "wheel up has keyboard selection parity");
+    result(wait_for_selected(&session, "feature-stale", 1000), "wheel up has keyboard selection parity");
     mouse_input(&session, "\033[<0;8;5m\033[<32;8;5M\033[<4;8;5M\033[<0;0;5M\033[<0;8;25M\033[<0;-1;5M\033[<0;999999999999;5M\033[Mqqq");
     /* Observe a unique response after the whole invalid-report batch. A row
      * marker also appears in intermediate frames and is not an input barrier. */
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "invalid mouse report batch preserves the next key");
     write_input(session.master, "?", 1U);
-    result(wait_for_marker(&session, "Row 2 of 3", 1000), "release, drag, modifiers and invalid coordinates do not select");
+    result(wait_for_selected(&session, "feature-stale", 1000), "release, drag, modifiers and invalid coordinates do not select");
     memset(overlong, '9', sizeof(overlong));
     memcpy(overlong, "\033[<0;", 5U);
     memcpy(overlong + sizeof(overlong) - 5U, ";5M", 4U);
     overlong[sizeof(overlong) - 1U] = '\0';
     mouse_input(&session, overlong);
     write_input(session.master, "k", 1U);
-    result(wait_for_marker(&session, ">  feature-live", 1000), "overlong mouse report drains without breaking the next key");
-    mouse_input(&session, "\033[<0;40;2M");
-    result(wait_for_marker(&session, "RECOVERY  4", 1000), "click Recovery changes view");
-    mouse_input(&session, "\033[<0;8;6M");
-    result(wait_for_marker(&session, "> Leftover lock", 1000), "recovery row click selects finding");
-    write_input(session.master, "d", 1U);
-    result(wait_for_marker(&session, "Inspect     hydra", 1000), "clicked recovery finding retains keyboard diagnostics");
-    write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "> Leftover lock", 1000), "Escape closes the finding explanation and stays in Recovery");
-    sleep_ms(60);
-    write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "[Work]", 1000), "a second Escape returns to Work");
-    write_input(session.master, "/", 1U);
-    result(wait_for_markers(&session, "INPUT TO HYDRA / text field", "Search heads:", 1000) && wait_for_raw(&session),
-           "native search prompt keeps terminal input in raw mode");
-    write_input(session.master, "unavailable\n", 12U);
-    (void)wait_for_marker(&session, "Search: unavailable", 1000);
-    mouse_input(&session, "\033[<0;8;5M");
+    result(wait_for_selected(&session, "feature-live", 1000), "overlong mouse report drains without breaking the next key");
+    mouse_input(&session, "\033[<0;20;1M"); /* the Inbox tab */
+    result(wait_for_markers(&session, "Needs you", "Approve S-1: T-1", 3000), "click Inbox changes view");
+    mouse_input(&session, "\033[<0;8;7M"); /* the second item's first line */
+    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "an Inbox row click selects its item");
+    mouse_input(&session, "\033[<0;8;8M"); /* its second line */
+    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "either line of a two-line item selects it");
+    mouse_input(&session, "\033[<65;8;7M");
+    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "wheel down in Inbox has keyboard selection parity");
     write_input(session.master, "\r", 1U);
-    result(wait_for_marker(&session, "Details: feature-unavailable", 1000), "filtered click maps to the original head index");
+    result(wait_for_marker(&session, "has approval gates", 1000), "Enter opens the clicked item's detail");
     write_input(session.master, "\033", 1U);
-    (void)wait_for_marker(&session, "[Work]", 1000);
+    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "Escape closes the detail and keeps the selection");
+    sleep_ms(60);
+    write_input(session.master, "1", 1U);
+    result(wait_for_marker(&session, "Heads  ", 1000), "1 returns to Work");
+    write_input(session.master, "/", 1U);
+    result(wait_for_marker(&session, "Filter heads", 1000) && wait_for_raw(&session),
+           "native filter prompt keeps terminal input in raw mode");
+    write_input(session.master, "unavailable\n", 12U);
+    (void)wait_for_marker(&session, "Filter: unavailable", 1000);
+    mouse_input(&session, "\033[<0;8;3M");
+    result(wait_for_selected(&session, "feature-unavailable", 1000), "filtered click maps to the original head index");
+    write_input(session.master, "\033", 1U);
+    (void)wait_for_marker(&session, "feature-stale", 1000);
     memset(&size, 0, sizeof(size)); size.ws_col = 40; size.ws_row = 10;
     (void)ioctl(session.master, TIOCSWINSZ, &size);
-    (void)wait_for_marker(&session, "Enter open", 1500);
-    mouse_input(&session, "\033[<0;8;5M");
-    result(wait_for_marker(&session, ">  feature-stale", 1000), "minimum-size scrolled click selects the visible row");
-    mouse_input(&session, "\033[<65;8;5M");
-    result(wait_for_marker(&session, ">  feature-unavail", 1000), "wheel scroll keeps selection visible after resize");
+    (void)wait_for_marker(&session, "1/2 tab", 1500);
+    mouse_input(&session, "\033[<0;8;4M");
+    result(wait_for_selected(&session, "feature-stale", 1000), "minimum-size click selects the visible row");
+    mouse_input(&session, "\033[<65;8;4M");
+    result(wait_for_selected(&session, "feature-unavail", 1000), "wheel scroll keeps selection visible after resize");
     write_input(session.master, "q", 1U);
-    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 1000), "quit disables both mouse modes");
+    result(wait_for_marker(&session, "\033[?1002l\033[?1006l", 1000), "quit disables mouse reporting");
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "mouse session restores exact terminal state");
     close_session(&session);
 }

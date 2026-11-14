@@ -50,6 +50,13 @@ print_summary_failure() {
 # Usage: json_escape <string>
 # Returns: Escaped string on stdout
 json_escape() {
+    # Identifiers, timestamps and key=value details need no escaping: print
+    # them as they are. The set is spelled out, never a range, because a
+    # range in a bracket expression depends on the locale's collation.
+    case "$1" in
+        *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:=/@,+\ -]*) ;;
+        *) printf '%s' "$1"; return 0 ;;
+    esac
     # json_escape operates on POSIX C strings (NUL cannot appear in $1).
     # Named JSON escapes for ", \, and common C0; remaining C0 as \u00XX.
     # Bytes >= 32 (including UTF-8 payload bytes) are emitted unchanged; do

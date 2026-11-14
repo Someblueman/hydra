@@ -343,6 +343,7 @@ main() {
     test_json_escape_other_c0
     test_json_escape_mixed_special
     test_json_escape_utf8
+    test_json_escape_matches_bytewise
 
     # Unit tests for JSON helpers
     test_json_kv

@@ -62,7 +62,7 @@ case "${1:-}:${2:-}" in
         ;;
     workflow:tui-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
-        cat "$fixture_dir/workflow-v1.tsv"
+        cat "${HYDRA_TEST_WORKFLOW_FIXTURE:-$fixture_dir/workflow-v1.tsv}"
         ;;
     tui:--remote-data)
         # The remote observation beside the local one; absent unless a test
@@ -74,6 +74,14 @@ case "${1:-}:${2:-}" in
         else
             cat "$HYDRA_TEST_REMOTE_FIXTURE"
         fi
+        ;;
+    workflow:--workspace-control)
+        # Inbox decisions: the exact argv the control owner receives.
+        if [ -n "${HYDRA_TEST_CONTROL_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_CONTROL_ARGV"; fi
+        ;;
+    resume:--terminal)
+        if [ -n "${HYDRA_TEST_RESUME_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_RESUME_ARGV"; fi
+        printf 'Terminal restarted for %s\n' "${3:-}"
         ;;
     workflow:attention-data|fleet:attention-data|tui:--attention-data)
         if [ -n "${HYDRA_TEST_ATTENTION_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_ATTENTION_FAIL_FILE" ]; then exit 1; fi
@@ -88,10 +96,16 @@ case "${1:-}:${2:-}" in
         [ -n "${HYDRA_TEST_SEEN_FILE:-}" ] || exit 1
         # Clients mark and list concurrently: serialize like the real store
         # and never share a temporary file between processes.
+        # A client that quits stops its read, which may hold the lock: the
+        # lock goes with the holder, and one held for seconds is abandoned
+        # (every real holder finishes in milliseconds).
         seen_lock="$HYDRA_TEST_SEEN_FILE.lock"; seen_wait=0
         until mkdir "$seen_lock" 2>/dev/null; do
-            seen_wait=$((seen_wait + 1)); [ "$seen_wait" -lt 200 ] || exit 1; sleep 0.05
+            seen_wait=$((seen_wait + 1)); [ "$seen_wait" -lt 200 ] || exit 1
+            [ "$seen_wait" -ne 60 ] || rmdir "$seen_lock" 2>/dev/null
+            sleep 0.05
         done
+        trap 'rmdir "$seen_lock" 2>/dev/null; exit 143' TERM INT HUP
         touch "$HYDRA_TEST_SEEN_FILE"; seen_tmp="$HYDRA_TEST_SEEN_FILE.tmp.$$"
         case "${3:-}" in
             mark) { grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE"; printf '%s\t%s\n' "$4" "$5"; } > "$seen_tmp" && mv "$seen_tmp" "$HYDRA_TEST_SEEN_FILE" ;;
@@ -128,10 +142,19 @@ case "${1:-}:${2:-}" in
         printf 'FAKE SPAWN %s\n' "$*"
         ;;
     group:create)
+        if [ -n "${HYDRA_TEST_GROUP_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_GROUP_ARGV"; fi
         printf 'FAKE GROUP %s\n' "$*"
         ;;
     kill:*)
         printf 'FAKE KILL %s\n' "$*"
+        ;;
+    land:*)
+        if [ -n "${HYDRA_TEST_LAND_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_LAND_ARGV"; fi
+        printf 'Landed %s\n' "${2:-}"
+        ;;
+    gate:approve)
+        if [ -n "${HYDRA_TEST_GATE_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_GATE_ARGV"; fi
+        printf 'Gate approved\n'
         ;;
     gc:*)
         printf 'FAKE GC'

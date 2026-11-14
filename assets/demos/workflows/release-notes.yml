@@ -1,0 +1,28 @@
+version: 1
+id: release-notes
+description: Draft the release notes, then wait for sign-off
+resources:
+  disk_mb: 1
+steps:
+  - id: create
+    kind: spawn
+    needs: []
+    idempotent: false
+    args:
+      branch: release-notes
+      terminal_mode: headless
+  - id: draft
+    kind: exec
+    needs: [create]
+    idempotent: true
+    args:
+      head: release-notes
+      argv: [sh, -c, "echo drafting notes for 3 merged changes; sleep 1; echo NOTES.md written"]
+  - id: publish
+    kind: approval-wait
+    needs: [draft]
+    idempotent: false
+    args:
+      head: release-notes
+      name: publish
+      message: Publish the drafted release notes

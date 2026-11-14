@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work  2 Inbox .  3 Hosts  4 Stats             3 heads / 1 running  
+                                                                               
+ Runs ----------------------------------------- all recorded / all workflows   
+ 8 runs / 11 steps / 3 need attention / timing 6/11                            
+                                                                               
+ Workflow runs --------------------------------------- 1 of 8 / newest first   
+  RUN                          STATE                CREATED                    
+> visualization-proof          * running            09-07 13:30 UTC            
+  release-check                + succeeded          09-07 13:00 UTC            
+  recovery-check               x failed             09-07 12:00 UTC            
+  recovery-check               ! recovery-required  09-07 08:00 UTC            
+  release-check                + succeeded          09-06 13:00 UTC            
+  release-check                + succeeded          09-05 14:00 UTC            
+  release-check                - cancelled          08-28 04:00 UTC            
+  imported-work                ? -                  unknown date               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  * live   Workflow runs / all recorded / all workflows                        
+ ^/v select | enter evidence | T range | / filter | g graph | ? help | q quit  

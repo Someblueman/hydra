@@ -11,7 +11,7 @@ test_count=0 pass_count=0 fail_count=0
 e2e="$root/e2e"
 cleanup() {
     if [ -x "$e2e/bin/tmux" ]; then
-        for e2e_head in bundle-worker planner; do
+        for e2e_head in bundle-worker planner greet-work moved-work; do
             (cd "$e2e/repo" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" kill "$e2e_head" --force) >/dev/null 2>&1
         done
         PATH="$e2e/bin:$PATH" tmux kill-server >/dev/null 2>&1
@@ -46,6 +46,19 @@ for input in '{"objective":"x","objective":"y","steps":[{}]}' '{"broken":' '{"ob
     cmp -s "$head/planning/draft.json" "$root/original.json"
     assert_success $? 'rejected publication preserves the previous draft'
 done
+# A draft without a member the schema requires is refused by name, and
+# validation of the same file reports it instead of aborting.
+sed '/^  "requirements": \[/,/^  \],/d' "$REPO/tests/fixtures/plan/plan.json" > "$root/no-requirements.json"
+"$HYDRA_BIN" workflow plan propose "$root/no-requirements.json" --branch proposal > "$root/missing.out" 2>&1
+assert_failure $? 'a draft without requirements cannot be published'
+if grep -q '"code":"invalid_proposal"' "$root/missing.out" && grep -q 'lacks required plan members: requirements;' "$root/missing.out"; then check=0; else check=1; fi
+assert_success "$check" 'the refusal names the missing member'
+cmp -s "$head/planning/draft.json" "$root/original.json"
+assert_success $? 'a draft missing a required member preserves the previous draft'
+"$HYDRA_BIN" workflow plan validate "$root/no-requirements.json" "$REPO/tests/fixtures/plan/policy.json" > "$root/missing.json" 2>&1
+assert_equal 1 "$?" 'validation of a draft without requirements fails without aborting'
+if grep -q '"path":"requirements","code":"invalid_collection"' "$root/missing.json"; then check=0; else check=1; fi
+assert_success "$check" 'validation names the missing requirements collection'
 dd if=/dev/zero bs=262145 count=1 2>/dev/null | tr '\000' ' ' > "$root/oversized.json"
 "$HYDRA_BIN" workflow plan propose "$root/oversized.json" --branch proposal >/dev/null 2>&1
 assert_failure $? 'oversized input is refused before replacement'
@@ -99,8 +112,10 @@ assert_success $? 'a refused asset preserves the previous draft and assets'
 dd if=/dev/zero bs=65537 count=1 2>/dev/null | tr '\000' 'a' > "$root/oversized-asset"
 "$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal --asset verifier="$root/oversized-asset" >/dev/null 2>&1
 assert_failure $? 'an asset over 64 KiB is refused'
-"$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal >/dev/null 2>&1
+"$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal > "$root/asset.out" 2>&1
 assert_failure $? 'a draft naming an unpublished asset is refused'
+if grep -q '"recovery":"publish again with one --asset NAME=FILE' "$root/asset.out" && ! grep -q 'head availability' "$root/asset.out"; then check=0; else check=1; fi
+assert_success "$check" 'the refusal tells the agent how to publish, not how to run a plan'
 "$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal --asset verifier="$root/verifier.sh" --asset extra="$root/verifier.sh" > "$root/asset.out" 2>&1
 assert_failure $? 'an asset no data input references is refused'
 grep -q asset_mismatch "$root/asset.out"
@@ -162,6 +177,9 @@ assert_equal 64 "${#first}" 'the first revision has an acceptance digest'
 "$HYDRA_BIN" workflow plan show "$e2e/first.json" > "$e2e/first.txt"
 grep -q 'prompt text: Inline worker brief (bundle-marker-1)' "$e2e/first.txt" && grep -q 'Input verifier: carried by this plan as assets/verifier' "$e2e/first.txt"
 assert_success $? 'the approval preview shows the inline prompt and the carried asset'
+grep -Fqx '      | test -s greeting.txt' "$e2e/first.txt" &&
+    grep -Fq '      | printf '"'"'{"schema_version":1,"verdict":"pass",' "$e2e/first.txt"
+assert_success $? 'the approval preview shows the text of the script the plan carries'
 "$HYDRA_BIN" workflow plan explain "$e2e/first.json" | grep -q '"prompt":{"bytes":'
 assert_success $? 'explain summarizes the inline prompt'
 sed 's/make check passed in the worker head/make check passed in the worker head (revision 2)/' "$bundle/verifier.sh" > "$worktree/verifier.sh"
@@ -188,10 +206,59 @@ grep -q 'bundle-marker-1' "$worker/received-prompt"
 assert_success $? 'the worker agent received the inline prompt'
 if [ -s "$worker/greeting.txt" ] && [ -f "$worker/tests/greeting.sh" ]; then check=0; else check=1; fi
 assert_success "$check" 'the worker changed its own head'
+# Hydra commits what the agent step left, so the checks ran on a commit.
+assert_equal 'Hydra plan add-greeting: implement' "$(git -C "$worker" log -1 --format=%s)" 'the agent step is committed on the worker branch'
+if git -C "$worker" ls-files --error-unmatch greeting.txt tests/greeting.sh >/dev/null 2>&1; then check=0; else check=1; fi
+assert_success "$check" 'the commit carries the worker changes'
+assert_equal '' "$(git -C "$worker" status --porcelain)" 'nothing the worker made is left uncommitted'
 run_dir="$HYDRA_HOME/state/v2/projects/$e2e_project/workflows/runs/$run"
+commit="$(git -C "$worker" rev-parse HEAD)"
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/implement/attempt-1/commit")" 'the agent step records the commit it left'
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/repo-checks/attempt-1/head-commit")" 'the repository check started on that commit'
+assert_equal "$commit" "$(sed -n '1p' "$run_dir/steps/verify/attempt-1/head-commit-after")" 'the verifier ended on that commit'
+assert_equal "$commit" "$("$HYDRA_FLEET_BIN" workflow-plan head-commit "$run_dir" bundle-worker)" 'the run binds the worker head to that commit'
 assert_equal succeeded "$(sed -n '1p' "$run_dir/steps/repo-checks/state")" 'the repository check ran on the worker head after implementation'
 assert_equal '' "$(git status --porcelain)" 'the source checkout is still clean after the run'
 assert_equal 1 "$(git rev-list --count HEAD)" 'the run committed nothing to the source'
+
+# The short form: make check is the only check, and its evidence is that the
+# command exited 0 on the commit the agent step left.
+sed 's/"plan": "simple-1",/"plan": "simple-1", "worker": "greet-work",/' "$REPO/tests/fixtures/plan-simple/draft.json" > "$worktree/simple.json"
+(cd "$worktree" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" plan propose simple.json >/dev/null)
+assert_success $? 'the planning agent publishes a short plan'
+"$HYDRA_BIN" workflow plan proposal planner --local-policy > "$e2e/projection"
+"$HYDRA_BIN" workflow plan compile "$draft" "$policy" "$e2e/simple.json" --assets-dir "$assets" > "$e2e/simple-compile.json"
+assert_success $? 'the short plan compiles under the guided policy'
+simple="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$e2e/simple-compile.json")"
+PATH="$e2e/bin:$PATH" "$HYDRA_BIN" workflow plan run "$e2e/simple.json" --accept "$simple" > "$e2e/simple-run.out" 2> "$e2e/simple-run.err"
+assert_success $? 'the short plan runs'
+simple_run="$(sed -n '1p' "$e2e/simple-run.out")"
+greet="$("$HYDRA_BIN" path greet-work)"
+greet_commit="$(git -C "$greet" rev-parse HEAD)"
+"$HYDRA_BIN" workflow plan result "$simple_run" > "$e2e/simple-result.json"
+grep -q '"verdict":"pass"' "$e2e/simple-result.json" && grep -q "\"evidence\":\"make check exited 0 on commit $greet_commit\"" "$e2e/simple-result.json"
+assert_success $? 'the built-in check binds make check to the worker commit'
+simple_dir="$runs/$simple_run"
+assert_equal "$greet_commit" "$(cat "$simple_dir/steps/implement/attempt-1/artifacts/commit")" 'the verified deliverable is the worker commit'
+if git -C "$greet" ls-files --error-unmatch greeting.txt tests/greeting.sh >/dev/null 2>&1; then check=0; else check=1; fi
+assert_success "$check" 'the checked commit contains the worker changes'
+# A check whose command moves the head it checks proves nothing: no report.
+sed -e 's/"plan": "simple-1",/"plan": "simple-1", "worker": "moved-work",/' \
+    -e 's/"run": \["make", "check"\]/"run": ["git", "commit", "--allow-empty", "-q", "-m", "moved"]/' \
+    "$REPO/tests/fixtures/plan-simple/draft.json" > "$worktree/simple.json"
+(cd "$worktree" && PATH="$e2e/bin:$PATH" "$HYDRA_BIN" plan propose simple.json >/dev/null)
+"$HYDRA_BIN" workflow plan proposal planner --local-policy > "$e2e/projection"
+"$HYDRA_BIN" workflow plan compile "$draft" "$policy" "$e2e/moved.json" --assets-dir "$assets" > "$e2e/moved-compile.json"
+moved="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$e2e/moved-compile.json")"
+PATH="$e2e/bin:$PATH" "$HYDRA_BIN" workflow plan run "$e2e/moved.json" --accept "$moved" > "$e2e/moved-run.out" 2>&1
+assert_failure $? 'a check that moves its head fails the run'
+moved_run="$(sed -n '1p' "$e2e/moved-run.out")"
+assert_equal failed "$(sed -n '1p' "$runs/$moved_run/steps/check/state")" 'the check step fails'
+grep -q '"type":"step.check_unbound"' "$runs/$moved_run/events.jsonl"
+assert_success $? 'the run records that the check was not bound to its commit'
+if [ ! -e "$runs/$moved_run/steps/check/attempt-1/outputs/report.json" ]; then check=0; else check=1; fi
+assert_success "$check" 'no report stands for the unbound check'
+for e2e_head in greet-work moved-work; do PATH="$e2e/bin:$PATH" "$HYDRA_BIN" kill "$e2e_head" --force >/dev/null 2>&1; done
 cd "$root" || exit 1
 printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

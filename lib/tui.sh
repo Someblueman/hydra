@@ -1,69 +1,98 @@
 #!/bin/sh
-# TUI (Terminal User Interface) for Hydra
+# 'hydra tui': option dispatch for the native control centre and the private
+# data, output and attach entry points it calls back into.
 # POSIX-compliant shell script
-#
-# Provides an interactive terminal interface for managing Hydra sessions.
-# Uses tput for terminal control and stty for raw input mode.
-# shellcheck disable=SC2034
 
-# Global TUI state (POSIX-safe: no arrays, simple variables)
-TUI_SELECTED=0          # Currently selected item index
-TUI_OFFSET=0            # Scroll offset for long lists
-TUI_ROWS=24             # Terminal rows
-TUI_COLS=80             # Terminal cols
-TUI_ITEM_COUNT=0        # Number of items in list
-TUI_TEMP_LIST=""        # Temp file for session list
-TUI_SAVED_STTY=""       # Saved terminal settings
-TUI_RUNNING=1           # Main loop control
-TUI_CURRENT_SESSION=""  # Cached current tmux session name
-TUI_NEEDS_REDRAW=1      # Flag to avoid unnecessary redraws
-TUI_HELP_VISIBLE=0      # Help overlay visibility flag
-TUI_SEARCH_MODE=0       # Search/filter input mode active
-TUI_SEARCH_PATTERN=""   # Current search pattern
-TUI_ACTIVITY_DIR=""     # Directory for activity tracking
-TUI_MULTI_SELECT=""     # Space-separated list of selected indices (multi-select mode)
-TUI_PREVIEW_VISIBLE=0   # Preview panel visibility (0=hidden, 1=visible)
-TUI_PREVIEW_LINES=5     # Number of preview lines to show
-TUI_WIDE_COLS=100       # Minimum width for two-panel layout
-TUI_HINT_SHOWN=0        # One-time keybinding hint shown
-TUI_LAST_COLS=0         # Track terminal resize
-TUI_LAST_ROWS=0         # Track terminal resize
-
-# Terminal control codes (initialized by tui_init_colors)
-TUI_CLEAR=""
-TUI_HOME=""
-TUI_HIDE_CURSOR=""
-TUI_SHOW_CURSOR=""
-TUI_BOLD=""
-TUI_REVERSE=""
-TUI_RESET=""
-TUI_GREEN=""
-TUI_RED=""
-TUI_YELLOW=""
-TUI_BLUE=""
-TUI_DIM=""
-
-# Load TUI submodules (order matters)
-_tui_load_modules() {
-    if [ -n "${_TUI_MODULES_LOADED:-}" ]; then
-        return 0
-    fi
-    _tdir="${HYDRA_LIB_DIR:-}"
-    if [ -z "$_tdir" ]; then
-        _tdir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
-    fi
-    for _mod in tui_init tui_data tui_render tui_input tui_actions; do
-        # shellcheck disable=SC1090
-        . "$_tdir/${_mod}.sh"
-    done
-    _TUI_MODULES_LOADED=1
+# Entry point for TUI command
+# Usage: cmd_tui [option ...]
+# Returns: the native control centre's status, 1 when it is unavailable,
+#          2 on a usage error
+cmd_tui() {
+    case "${1:-}" in
+        --attach)
+            shift
+            _load_lib tui_attach
+            tui_attach_instance "$@"
+            return $?
+            ;;
+        --basic)
+            echo "Error: the basic shell TUI was removed; 'hydra tui' opens the native control centre" >&2
+            echo "Next: run 'hydra tui', or use 'hydra list' and 'hydra switch' without the native helper" >&2
+            return 2
+            ;;
+        --capabilities)
+            shift
+            if [ "${1:-}" = --json ]; then
+                shift
+                [ $# -eq 0 ] || return 2
+                tui_native_capabilities 1
+            else
+                [ $# -eq 0 ] || return 2
+                tui_native_capabilities 0
+            fi
+            return $?
+            ;;
+        --data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_data
+            return $?
+            ;;
+        --remote-data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_remote_data
+            return $?
+            ;;
+        --attention-data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_attention_data
+            return $?
+            ;;
+        --onboarding-home)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_onboarding_home
+            return $?
+            ;;
+        --orphan-rows)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_orphans
+            return $?
+            ;;
+        --head-output)
+            shift
+            [ $# -eq 1 ] || return 2
+            _load_lib cmd_fleet
+            _load_lib tui_head_output
+            tui_head_output "$1"
+            return $?
+            ;;
+        --headless-fixture)
+            shift
+            tui_native_exec --headless-fixture "$@"
+            return $?
+            ;;
+        --print-keys)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_exec --print-keys
+            return $?
+            ;;
+        '')
+            tui_native_run
+            return $?
+            ;;
+        --task|--view|--theme|--ascii|--no-color|--location)
+            tui_native_run "$@"
+            return $?
+            ;;
+        *)
+            echo "Error: unknown TUI option '$1'" >&2
+            echo "Usage: hydra tui [--capabilities [--json]|--task BRANCH|--view NAME|--location all|local|remote|HOST|--theme NAME|--ascii|--no-color|--print-keys|--headless-fixture FILE ...]" >&2
+            return 2
+            ;;
+    esac
 }
-_tui_entry_dir="${HYDRA_LIB_DIR:-}"
-if [ -z "$_tui_entry_dir" ]; then
-    _tui_entry_dir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
-fi
-# Native dispatch does not need the basic renderer or action implementations.
-for _tui_entry in tui_native tui_main; do
-    # shellcheck disable=SC1090
-    . "${_tui_entry_dir}/${_tui_entry}.sh"
-done

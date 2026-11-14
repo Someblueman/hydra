@@ -8,6 +8,19 @@ workflow_plan_tool() (
     cmd_fleet_dispatch workflow-plan "$@"
 )
 
+# Usage: workflow_plan_agent_guard <command> <action>
+# Refuses to approve or run a plan from inside an agent's head, where Hydra
+# sets HYDRA_HEAD_ID and HYDRA_INSTANCE_ID, unless HYDRA_PLAN_ALLOW_AGENT=1.
+# This guards against an obedient agent approving its own plan; it is not a
+# security boundary, since the agent runs as the same user with the same files.
+workflow_plan_agent_guard() {
+    [ -n "${HYDRA_HEAD_ID:-}${HYDRA_INSTANCE_ID:-}" ] || return 0
+    [ "${HYDRA_PLAN_ALLOW_AGENT:-}" != 1 ] || return 0
+    cli_error "$1" agent_environment "refusing to $2 from inside an agent's head (HYDRA_HEAD_ID or HYDRA_INSTANCE_ID is set): the user approves plans" \
+        "approve it from your own terminal with hydra plan approve, or in the control centre; experts can set HYDRA_PLAN_ALLOW_AGENT=1"
+    return 1
+}
+
 cmd_workflow_plan() (
     _cwp_action="${1:-}"
     case "$_cwp_action" in
@@ -90,6 +103,8 @@ cmd_workflow_plan() (
                 cli_error 'workflow plan' acceptance_required 'run requires <compiled.json> --accept <sha256>' 'review workflow plan show and accept its exact digest'
                 exit 1
             fi
+            # A launch owner was already checked when it started.
+            [ -n "${_workflow_plan_launch:-}" ] || workflow_plan_agent_guard 'workflow plan' 'run a plan' || exit 1
             _cwp_root="$(workflow_repo_root)" || exit 1
             _workflow_plan_stage="$(mktemp -d)" || exit 1
             trap 'rm -rf "$_workflow_plan_stage"' EXIT
@@ -160,19 +175,34 @@ workflow_plan_initialize() {
     # retiring verifier heads when the run finishes.
     hydra_private_touch "$1/plan-roles.tsv" || return 1
     workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
+    # Exec steps on the plan's own heads: agent steps are followed by a commit,
+    # commands record the commit they ran on (see workflow_plan_step_hook).
+    hydra_private_touch "$1/plan-hooks.tsv" || return 1
+    workflow_plan_tool hooks "$1/compiled.json" > "$1/plan-hooks.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     if [ -n "${_workflow_plan_expansion:-}" ]; then
         _load_lib workflow_plan_expansion
         workflow_plan_expansion_link "$1" || return 1
     fi
-    workflow_plan_bindings_match "$1"
+    # Admission compiled the plan afresh against the source moments ago; the
+    # run's definition must be exactly that plan's projection. Its digests are
+    # then recorded for the guard before every step.
+    workflow_plan_projection_match "$1" && workflow_plan_tool guard "$1" --record >/dev/null
 }
 
-workflow_plan_bindings_match() (
-    [ -f "$1/compiled.json" ] || exit 0
+# Usage: workflow_plan_bindings_match <run-dir>
+# The check before each step, at the finish and on resume: the plan as it was
+# approved and the inputs the run copied, never the live checkout (see
+# plan_run_guard). An untracked or changed file in the source does not stop a
+# running plan; a moved source commit is only recorded in plan-warnings.
+workflow_plan_bindings_match() {
+    [ -f "$1/compiled.json" ] || return 0
+    workflow_plan_tool guard "$1" >/dev/null
+}
+
+workflow_plan_projection_match() (
     _wpb_dir="$1"
-    workflow_plan_tool bindings "$_wpb_dir/compiled.json" "$(workflow_repo_root)" "$(sed -n '1p' "$_wpb_dir/plan-accepted")" >/dev/null || exit 1
     workflow_plan_tool data-match "$_wpb_dir/compiled.json" "$_wpb_dir" >/dev/null || exit 1
     _wpb_tmp="$(mktemp -d)" || exit 1
     trap 'rm -rf "$_wpb_tmp"' EXIT
@@ -188,6 +218,97 @@ workflow_plan_bindings_match() (
     [ "$(sed -n '1p' "$_wpb_dir/parallelism")" = "$_wpb_parallel" ] &&
         [ "$(sed -n '1p' "$_wpb_dir/disk-mb")" = "$_wpb_disk" ] &&
         [ "$(sed -n '1p' "$_wpb_dir/max-heads")" = "$_wpb_heads" ]
+)
+
+# Usage: workflow_plan_step_hook <run-dir> <step>
+# Prints "<kind><TAB><head>[<TAB><check>]" for an exec step on one of the
+# plan's own heads (kind agent, command or run), or nothing.
+workflow_plan_step_hook() {
+    [ -f "$1/plan-hooks.tsv" ] || return 0
+    awk -F '\t' -v id="$2" '$1 == id { sub(/^[^\t]*\t/, ""); print; exit }' "$1/plan-hooks.tsv"
+}
+
+# Usage: workflow_plan_worktree <run-dir> <branch>
+# The worktree of the head the run's project records for branch.
+workflow_plan_worktree() {
+    _wpw_project="$(sed -n '1p' "$1/project-id")"
+    _wpw_head="$(state_v2_find_head_by_branch "$_wpw_project" "$2")" || return 1
+    _wpw_dir="$(state_v2_head_dir "$_wpw_project" "$_wpw_head")" || return 1
+    _wpw_tree="$(sed -n '1p' "$_wpw_dir/worktree" 2>/dev/null || true)"
+    [ -n "$_wpw_tree" ] && [ -d "$_wpw_tree" ] || return 1
+    printf '%s\n' "$_wpw_tree"
+}
+
+# Usage: workflow_plan_record_commit <worktree> <file>
+workflow_plan_record_commit() {
+    _wprc_commit="$(git -C "$1" rev-parse --verify HEAD 2>/dev/null)" || return 1
+    workflow_atomic_scalar "$2" "$_wprc_commit"
+}
+
+# Usage: workflow_plan_secret_path <path>
+# Names of new files that look like secrets (environment files, private keys,
+# key stores, credential files). Narrow on purpose: a match is left out of
+# Hydra's commit, so a broad pattern would drop real work.
+workflow_plan_secret_path() {
+    _wpsp_base="$(printf '%s' "${1##*/}" | tr '[:upper:]' '[:lower:]')"
+    case "$_wpsp_base" in
+        *.example|*.sample|*.template|*.dist) return 1 ;;
+        .env|.env.*|*.pem|*.key|*.p12|*.pfx|*.jks|*.keystore|id_rsa*|id_dsa*|id_ecdsa*|id_ed25519*|\
+        credentials|credentials.*|.netrc|.npmrc|.pypirc) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Usage: workflow_plan_withhold <worktree> <attempt-dir>
+# Unstages new files that look like secrets before Hydra commits an agent
+# step, and lists them in <attempt-dir>/withheld. They stay in the worktree
+# as untracked files, so `hydra land` keeps the worker head instead of
+# removing them, and the review lists them as uncommitted work.
+workflow_plan_withhold() {
+    _wph_list="$(git -C "$1" -c core.quotepath=false diff --cached --name-only --diff-filter=A)" || return 1
+    _wph_held=''
+    while IFS= read -r _wph_path; do
+        [ -n "$_wph_path" ] || continue
+        workflow_plan_secret_path "$_wph_path" || continue
+        git -C "$1" rm --cached -q -- "$_wph_path" >/dev/null || return 1
+        _wph_held="$_wph_held$_wph_path
+"
+    done <<EOF
+$_wph_list
+EOF
+    [ -n "$_wph_held" ] || return 0
+    hydra_private_touch "$2/withheld" && printf '%s' "$_wph_held" > "$2/withheld"
+}
+
+# Usage: workflow_plan_commit <run-dir> <step> <worktree> <attempt-dir>
+# After an agent step, commits whatever it left in its worker head (tracked,
+# new and deleted files, as .gitignore allows, except new files that look like
+# secrets: see workflow_plan_withhold), so the checks, the review and
+# landing all refer to one commit. Commit hooks and signing are not run: the
+# plan's checks verify the work. A step that changed nothing records the head
+# commit as it is. The commit is also offered to the step as its "commit"
+# output, unless the step's command wrote that file itself.
+workflow_plan_commit() (
+    _wpc_dir="$1" _wpc_step="$2" _wpc_tree="$3" _wpc_attempt="$4"
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+    git -C "$_wpc_tree" add -A >/dev/null || exit 1
+    workflow_plan_withhold "$_wpc_tree" "$_wpc_attempt" || exit 1
+    if ! git -C "$_wpc_tree" diff --cached --quiet; then
+        _wpc_plan="$(sed -n '1p' "$_wpc_dir/graph.tsv" | cut -f2)"
+        _wpc_run="$(sed -n '1p' "$_wpc_dir/run-id")"
+        set -- -c commit.gpgsign=false
+        [ -n "$(git -C "$_wpc_tree" config user.name 2>/dev/null)" ] || set -- "$@" -c user.name=Hydra
+        [ -n "$(git -C "$_wpc_tree" config user.email 2>/dev/null)" ] || set -- "$@" -c user.email=hydra@localhost
+        git -C "$_wpc_tree" "$@" commit --no-verify -q \
+            -m "Hydra plan $_wpc_plan: $_wpc_step" \
+            -m "Hydra committed what the agent step $_wpc_step of run $_wpc_run left in this worktree, so the plan's checks, its review and landing refer to this commit." \
+            >/dev/null || exit 1
+    fi
+    workflow_plan_record_commit "$_wpc_tree" "$_wpc_attempt/commit" || exit 1
+    if [ -n "${HYDRA_WORKFLOW_OUTPUTS_DIR:-}" ] && [ -d "$HYDRA_WORKFLOW_OUTPUTS_DIR" ] &&
+        [ ! -e "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" ] && [ ! -L "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" ]; then
+        cp "$_wpc_attempt/commit" "$HYDRA_WORKFLOW_OUTPUTS_DIR/commit" || exit 1
+    fi
 )
 
 workflow_plan_expired() {

@@ -574,6 +574,24 @@ static void diff_text(json_object *out, const char *repo, const char *range)
     free(text);
 }
 
+#define REVIEW_UNCOMMITTED_PATHS 10
+
+/* Uncommitted changes and untracked files in the worker's worktree are not on
+ * its branch, so landing the branch would leave them behind. The first
+ * porcelain lines name them; the count covers all of them. */
+static void uncommitted_paths(json_object *out, const char *worktree, char *text)
+{
+    json_object *paths = json_object_new_array();
+    int count = 0;
+    for (char *line = strtok(text, "\n"); line; line = strtok(NULL, "\n")) {
+        if (count++ < REVIEW_UNCOMMITTED_PATHS)
+            json_object_array_add(paths, json_object_new_string(line));
+    }
+    f_string_add(out, "worktree", worktree);
+    json_object_object_add(out, "uncommitted_paths", paths);
+    json_object_object_add(out, "uncommitted_count", json_object_new_int(count));
+}
+
 static void worktree_state(json_object *out, const char *head)
 {
     char *worktree = review_scalar(head, "worktree"), *text = NULL;
@@ -582,6 +600,8 @@ static void worktree_state(json_object *out, const char *head)
     if (worktree && !lstat(worktree, &st) && S_ISDIR(st.st_mode))
         text = git_text(worktree, args, 64U * 1024U);
     json_object_object_add(out, "uncommitted_changes", text ? json_object_new_boolean(*text != 0) : NULL);
+    if (text && *text)
+        uncommitted_paths(out, worktree, text);
     free(text);
     free(worktree);
 }
@@ -603,6 +623,22 @@ static long long step_finished(const struct rr *r)
     if (attempt_dir(r, f_string(first, "step"), attempt) && !epoch_at(attempt, "completed-at", &at))
         at = 0;
     return at;
+}
+
+/* The commit the run's agent step left on the worker head: the diff shows that
+ * commit, which is what the checks ran on and what landing merges, and says
+ * when the branch has moved on since. */
+static void bind_verified(const struct rr *r, json_object *out, const char *branch, const char *base, const char *tip,
+                          char *range, size_t size)
+{
+    char commit[65];
+    int bound = plan_head_commit(r->run, r->plan, branch, commit);
+    if (bound == -2)
+        json_object_object_add(out, "checks_on_commit", json_object_new_boolean(false));
+    if (bound || snprintf(range, size, "%s..%s", base, commit) >= (int)size)
+        return;
+    f_string_add(out, "verified_commit", commit);
+    json_object_object_add(out, "tip_moved", json_object_new_boolean(strcmp(tip, commit) != 0));
 }
 
 static json_object *review_changes(const struct rr *r)
@@ -629,6 +665,7 @@ static json_object *review_changes(const struct rr *r)
     f_string_add(out, "state", "observed");
     f_string_add(out, "base", base);
     f_string_add(out, "tip", tip);
+    bind_verified(r, out, branch, base, tip, range, sizeof(range));
     json_object_object_add(out, "commits", commit_rows(r->repo, range, step_finished(r)));
     json_object_object_add(out, "files", file_rows(r->repo, range));
     diff_text(out, r->repo, range);
@@ -657,24 +694,71 @@ static char *shell_word(const char *text)
     return out;
 }
 
-/* Hydra never merges on the reviewer's behalf; it only names the commands. */
-static json_object *review_next(const struct rr *r, json_object *steps)
+/* Work in the worker's worktree that its branch lacks is kept by committing it
+ * there; landing the branch then carries it. */
+static void review_keep(const struct rr *r, json_object *out, json_object *changes)
+{
+    json_object *uncommitted = f_field(changes, "uncommitted_changes");
+    const char *worktree = f_string(changes, "worktree");
+    char line[F_PATH * 2], subject[160], *where, *message;
+    if (!uncommitted)
+        return;
+    json_object_object_add(out, "landable", json_object_new_boolean(!json_object_get_boolean(uncommitted)));
+    if (!json_object_get_boolean(uncommitted) || !worktree)
+        return;
+    (void)snprintf(subject, sizeof(subject), "Result of plan %s", f_string(r->plan, "id") ? f_string(r->plan, "id") : "run");
+    where = shell_word(worktree);
+    message = shell_word(subject);
+    if (where && message &&
+        snprintf(line, sizeof(line), "cd %s && git add -A && git commit -m %s", where, message) < (int)sizeof(line))
+        f_string_add(out, "keep", line);
+    free(where);
+    free(message);
+}
+
+/* Where hydra land merged this run's result: "commit<TAB>branch<TAB>merge". */
+static void review_landed(const struct rr *r, json_object *out)
+{
+    char *text = review_scalar(r->run, "landed"), *fields[3], *cursor = text;
+    size_t i;
+    for (i = 0; i < 3 && cursor; i++) {
+        fields[i] = cursor;
+        cursor = strchr(cursor, '\t');
+        if (cursor)
+            *cursor++ = 0;
+    }
+    if (i == 3 && (task_hex(fields[2], 40) || task_hex(fields[2], 64))) {
+        json_object *landed = json_object_new_object();
+        f_string_add(landed, "commit", fields[0]);
+        f_string_add(landed, "into", fields[1]);
+        f_string_add(landed, "merge", fields[2]);
+        json_object_object_add(out, "landed", landed);
+    }
+    free(text);
+}
+
+/* The one way to land a result is hydra land, which merges only the verified
+ * commit into the checkout's current branch after confirmation, never pushes,
+ * and then removes the worker head but keeps its branch. Removing the plan's
+ * other heads with --protect-untracked refuses while a worktree still holds
+ * uncommitted or untracked work, so a cleanup cannot discard it. */
+static json_object *review_next(const struct rr *r, json_object *steps, json_object *changes)
 {
     json_object *out = json_object_new_object(), *cleanup = json_object_new_array();
     const char *branch = changes_branch(r);
     char line[F_PATH * 2];
-    char *repo = r->repo[0] ? shell_word(r->repo) : NULL;
-    if (branch && repo && snprintf(line, sizeof(line), "cd %s && git merge --no-ff %s", repo, branch) < (int)sizeof(line))
+    if (branch && plan_id(branch) && snprintf(line, sizeof(line), "hydra land %s", branch) < (int)sizeof(line))
         f_string_add(out, "land", line);
+    review_keep(r, out, changes);
+    review_landed(r, out);
     for (size_t i = 0; i < rr_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i);
         const char *kind = f_string(step, "kind"), *head = f_string(step, "head");
-        if (kind && head && !strcmp(kind, "spawn") && plan_id(head) &&
-            snprintf(line, sizeof(line), "hydra kill %s", head) < (int)sizeof(line))
+        if (kind && head && !strcmp(kind, "spawn") && plan_id(head) && (!branch || strcmp(head, branch)) &&
+            snprintf(line, sizeof(line), "hydra kill %s --protect-untracked", head) < (int)sizeof(line))
             json_object_array_add(cleanup, json_object_new_string(line));
     }
     json_object_object_add(out, "cleanup", cleanup);
-    free(repo);
     return out;
 }
 
@@ -694,7 +778,7 @@ static const char *review_verdict(const struct rr *r, const char *state)
 json_object *review_result(const char *run, const char *project, json_object *delivery)
 {
     char path[F_PATH];
-    json_object *compiled, *out, *steps;
+    json_object *compiled, *out, *steps, *changes;
     struct rr r = {run, project, NULL, delivery, ""};
     char *state, *repo;
     if (f_path(path, sizeof(path), run, "compiled.json") || !(compiled = plan_read(path)))
@@ -715,8 +799,9 @@ json_object *review_result(const char *run, const char *project, json_object *de
     json_object_object_add(out, "checks", review_checks_detail(&r));
     steps = review_steps(&r);
     json_object_object_add(out, "steps", steps);
-    json_object_object_add(out, "changes", review_changes(&r));
-    json_object_object_add(out, "next", review_next(&r, steps));
+    changes = review_changes(&r);
+    json_object_object_add(out, "changes", changes);
+    json_object_object_add(out, "next", review_next(&r, steps, changes));
     free(state);
     json_object_put(compiled);
     return out;
