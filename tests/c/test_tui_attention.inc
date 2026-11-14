@@ -30,7 +30,12 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     write_input(session.master, "\033", 1U);
     sleep_ms(100);
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "Heads  ", 1000), "Esc leaves the detail, then Inbox for Work");
+    sleep_ms(150);
+    /* Inbox was opened as a screen (2), not a jump: Esc never leaves it. */
+    result(wait_for_marker(&session, "Decisions 3", 1000) && !wait_for_marker(&session, "Heads  ", 300),
+           "Esc leaves the detail and then stays on Inbox, which was not a jump");
+    write_input(session.master, "1", 1U);
+    result(wait_for_marker(&session, "Heads  ", 1000), "1 then opens Work");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "attention exits with terminal restored");
     close_session(&session);
