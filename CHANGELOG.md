@@ -127,6 +127,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edit by a few refreshes. `hydra tui --data` is unchanged and remains the
   reference; `make test-parity` requires the two readers to agree byte for
   byte.
+- Running a workflow costs far less engine overhead per step: the run driver
+  reads every step's state in one pass per scheduling question instead of one
+  process per step, wakes when a step finishes instead of waiting for its
+  next one-second poll, `workflow status` reads its run in one pass, and JSON
+  strings that need no escaping are written without forking. A 64-step chain
+  of empty steps went from about 150 s to about 60 s, a 20-step chain from 35 s
+  to 19 s; event order and recorded state are unchanged.
 - No key in the control centre waits for a subprocess. Opening Workflows or
   Statistics, refreshing them, opening a run's graph, the output preview and
   an attached agent's history start their read in the background and show
@@ -156,6 +163,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and that `hydra list` and `hydra switch` work without it, and exits 1; if the
   helper exits unexpectedly, the terminal is restored and its status is
   reported and returned. `hydra tui --basic` is a usage error.
+
+### Fixed
+
+- Workflow steps run in parallel no longer fail with `state_unavailable` when
+  the admission lock is busy for more than two seconds: execution owners now
+  wait up to their queue deadline (`HYDRA_ADMISSION_QUEUE_SECONDS`, default
+  60) before giving up.
+- A workflow run records its own driver as its owner, so a run whose CLI
+  process died is no longer shown as stale while its driver works, and
+  `workflow resume` can no longer start a second driver on it.
+  `workflow cancel` now signals the driver itself.
+- A failed workflow run no longer prints `find: 'sed' terminated by signal 13`.
 
 ## [2.9.0] - 2026-09-28
 
