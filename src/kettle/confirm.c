@@ -3,7 +3,9 @@
 
 /* A question in a dialog panel with buttons. */
 
-#define ALL 1U
+#define ALL KT_CONFIRM_SCOPE_ALL
+#define MORE KT_CONFIRM_SCOPE_MORE
+#define BACK KT_CONFIRM_SCOPE_BACK
 #define BUTTON_GAP 2
 
 static const struct kt_binding confirm_keys[KT_CONFIRM_ACTIONS] = {
@@ -16,6 +18,14 @@ static const struct kt_binding confirm_keys[KT_CONFIRM_ACTIONS] = {
               KT_UI_CHORD(KT_KEY_TAB, 0)),
     KT_UI_ROW(KT_CONFIRM_PRESS, "confirm.press", "press", ALL, NULL, -1, 2, KT_UI_CHORD(KT_KEY_ENTER, 0),
               KT_UI_CHORD(' ', 0)),
+    KT_UI_ROW(KT_CONFIRM_SCROLL_UP, "confirm.up", "back", BACK, NULL, -1, 2, KT_UI_CHORD(KT_KEY_UP, 0),
+              KT_UI_CHORD('k', 0)),
+    KT_UI_ROW(KT_CONFIRM_SCROLL_DOWN, "confirm.down", "more", MORE, NULL, 0, 2, KT_UI_CHORD(KT_KEY_DOWN, 0),
+              KT_UI_CHORD('j', 0)),
+    KT_UI_ROW(KT_CONFIRM_PAGE_UP, "confirm.page-up", "page", BACK, NULL, -1, 1, KT_UI_CHORD(KT_KEY_PAGE_UP, 0),
+              KT_UI_NO_CHORD),
+    KT_UI_ROW(KT_CONFIRM_PAGE_DOWN, "confirm.page-down", "page", MORE, NULL, -1, 1, KT_UI_CHORD(KT_KEY_PAGE_DOWN, 0),
+              KT_UI_NO_CHORD),
 };
 
 void kt_confirm_init(struct kt_confirm *c, const char *title, const char *body, const char *accept,
@@ -41,7 +51,6 @@ void kt_confirm_init(struct kt_confirm *c, const char *title, const char *body, 
     memcpy(c->keys, confirm_keys, sizeof(confirm_keys));
 }
 
-uint32_t kt_confirm_scope(const struct kt_confirm *c) { (void)c; return ALL; }
 
 struct kt_keymap kt_confirm_keymap(struct kt_confirm *c) {
     struct kt_keymap map;
@@ -54,7 +63,37 @@ int kt_confirm_height(const struct kt_confirm *c, int width) {
     return kt_paragraph_height(c->body, width - 6) + 6;
 }
 
-void kt_confirm_place(struct kt_confirm *c, struct kt_rect area) { c->area = area; }
+/* Inside the border; a dialog given fewer rows than it needs gives up its
+ * blank rows first, so the question keeps the room. */
+static bool cramped(const struct kt_confirm *c, struct kt_rect area) { return area.height < kt_confirm_height(c, area.width); }
+static struct kt_rect inside_of(const struct kt_confirm *c, struct kt_rect area) {
+    return cramped(c, area) ? kt_rect_inset(area, 1, 3, 1, 3) : kt_rect_inset(area, 2, 3, 2, 3);
+}
+
+/* The body's room: the inside above the buttons and the gap over them. */
+static struct kt_rect body_rect(const struct kt_confirm *c, struct kt_rect area) {
+    return kt_rect_inset(inside_of(c, area), 0, 0, cramped(c, area) ? 1 : 2, 0);
+}
+
+/* The furthest the body scrolls: its rows beyond the room it has. */
+static size_t scroll_limit(const struct kt_confirm *c) {
+    struct kt_rect room = body_rect(c, c->area);
+    int rows = room.width > 0 ? kt_paragraph_height(c->body, room.width) : 0;
+    return room.height > 0 && rows > room.height ? (size_t)(rows - room.height) : 0;
+}
+
+bool kt_confirm_more(const struct kt_confirm *c) { return c->area.width > 0 && c->scroll < scroll_limit(c); }
+
+uint32_t kt_confirm_scope(const struct kt_confirm *c) {
+    return ALL | (kt_confirm_more(c) ? MORE : 0U) | (c->scroll ? BACK : 0U);
+}
+
+void kt_confirm_place(struct kt_confirm *c, struct kt_rect area) {
+    size_t limit;
+    c->area = area;
+    limit = scroll_limit(c);
+    if (c->scroll > limit) c->scroll = limit;
+}
 
 /* The buttons, left to right, ending at the inside's right edge. */
 static void button_rects(const struct kt_confirm *c, struct kt_rect inside, struct kt_rect *rects) {
@@ -67,13 +106,6 @@ static void button_rects(const struct kt_confirm *c, struct kt_rect inside, stru
         rects[i] = (struct kt_rect){x, inside.y + inside.height - 1, width, 1};
         x += width + BUTTON_GAP;
     }
-}
-
-/* Inside the border; a dialog given fewer rows than it needs gives up its
- * blank rows first, so the question keeps the room. */
-static bool cramped(const struct kt_confirm *c, struct kt_rect area) { return area.height < kt_confirm_height(c, area.width); }
-static struct kt_rect inside_of(const struct kt_confirm *c, struct kt_rect area) {
-    return cramped(c, area) ? kt_rect_inset(area, 1, 3, 1, 3) : kt_rect_inset(area, 2, 3, 2, 3);
 }
 
 static enum kt_confirm_result press(struct kt_confirm *c, size_t button) {
@@ -94,14 +126,31 @@ static enum kt_confirm_result click(struct kt_confirm *c, const struct kt_msg *m
     return KT_CONFIRM_HANDLED;
 }
 
+/* The body moved by rows (negative: up), kept within its rows. */
+static enum kt_confirm_result scroll_by(struct kt_confirm *c, long rows) {
+    size_t limit = scroll_limit(c);
+    if (rows < 0) c->scroll = (size_t)-rows > c->scroll ? 0 : c->scroll - (size_t)-rows;
+    else c->scroll = c->scroll + (size_t)rows > limit ? limit : c->scroll + (size_t)rows;
+    return KT_CONFIRM_HANDLED;
+}
+
+static long page_rows(const struct kt_confirm *c) {
+    int rows = body_rect(c, c->area).height - 1;
+    return rows > 1 ? rows : 1;
+}
+
 static enum kt_confirm_result perform(struct kt_confirm *c, int action) {
     size_t n = c->button_count ? c->button_count : 1;
     switch (action) {
+    case KT_CONFIRM_SCROLL_UP: return scroll_by(c, -1);
+    case KT_CONFIRM_SCROLL_DOWN: return scroll_by(c, 1);
+    case KT_CONFIRM_PAGE_UP: return scroll_by(c, -page_rows(c));
+    case KT_CONFIRM_PAGE_DOWN: return scroll_by(c, page_rows(c));
     case KT_CONFIRM_ACCEPT: return press(c, c->accept);
     case KT_CONFIRM_CANCEL: return press(c, c->cancel);
     case KT_CONFIRM_PREVIOUS: c->focus = (c->focus + n - 1) % n; return KT_CONFIRM_HANDLED;
     case KT_CONFIRM_NEXT: c->focus = (c->focus + 1) % n; return KT_CONFIRM_HANDLED;
-    case KT_CONFIRM_PRESS: return press(c, c->focus);
+    case KT_CONFIRM_PRESS: return c->keyed ? KT_CONFIRM_HANDLED : press(c, c->focus);
     default: return KT_CONFIRM_HANDLED;
     }
 }
@@ -110,8 +159,9 @@ enum kt_confirm_result kt_confirm_update(struct kt_confirm *c, const struct kt_m
     bool consumed;
     int action;
     (void)cmds;
+    if (kt_ui_wheel(msg)) return scroll_by(c, kt_ui_wheel(msg));
     if (msg->type == KT_MSG_MOUSE) return click(c, msg);
-    action = kt_ui_action(c->keys, KT_CONFIRM_ACTIONS, &c->chord, ALL, msg, &consumed);
+    action = kt_ui_action(c->keys, KT_CONFIRM_ACTIONS, &c->chord, kt_confirm_scope(c), msg, &consumed);
     if (action >= 0) return perform(c, action);
     return consumed ? KT_CONFIRM_HANDLED : KT_CONFIRM_IGNORED;
 }
@@ -135,6 +185,15 @@ static struct kt_style button_style(const struct kt_confirm *c, size_t i) {
     return style;
 }
 
+/* The body from its scrolled row, clipped to its room. */
+static void body_view(const struct kt_confirm *c, struct kt_canvas *canvas, struct kt_rect room) {
+    struct kt_canvas view;
+    int skip = (int)c->scroll;
+    if (room.width < 1 || room.height < 1) return;
+    if (!skip || !kt_canvas_view(&view, canvas, room)) { (void)kt_paragraph(canvas, room, c->body, c->style.body); return; }
+    (void)kt_paragraph(&view, (struct kt_rect){0, -skip, room.width, room.height + skip}, c->body, c->style.body);
+}
+
 void kt_confirm_view(const struct kt_confirm *c, struct kt_canvas *canvas, struct kt_rect area) {
     struct kt_binding keys[KT_CONFIRM_ACTIONS];
     struct kt_help_source hints;
@@ -147,11 +206,11 @@ void kt_confirm_view(const struct kt_confirm *c, struct kt_canvas *canvas, struc
     if (accept[0]) keys[KT_CONFIRM_ACCEPT].label = accept;
     hints.bindings = keys;
     hints.count = KT_CONFIRM_ACTIONS;
-    hints.scope = ALL;
+    hints.scope = kt_confirm_scope(c);
     (void)kt_ui_dialog(canvas, area, c->title, c->destructive ? c->style.border_destructive : c->style.border,
                        c->style.title, &hints, 1, &c->style.hints);
     inside = inside_of(c, area);
-    (void)kt_paragraph(canvas, kt_rect_inset(inside, 0, 0, cramped(c, area) ? 1 : 2, 0), c->body, c->style.body);
+    body_view(c, canvas, body_rect(c, area));
     button_rects(c, inside, rects);
     for (i = 0; i < c->button_count; i++) {
         struct kt_style style = button_style(c, i);

@@ -429,12 +429,20 @@ struct kt_keymap kt_viewport_keymap(struct kt_viewport *viewport);
  * focused button; a click presses the button under it. A destructive
  * question draws its border and its accepting button in the danger colour.
  * Given fewer rows than kt_confirm_height, it drops its blank rows first so
- * the body keeps as much room as there is.
+ * the body keeps as much room as there is; a body still taller than its room
+ * scrolls (up and down, j and k, the page keys), and the bottom edge then
+ * offers "more" while rows remain below.
  * Buttons are the caller's strings: the first two are cancel and accept as
- * set by init, and a third may be added for another way out (_CHOSEN). */
+ * set by init, and a third may be added for another way out (_CHOSEN).
+ * A keyed question answers only to its keys and clicks: Enter and space press
+ * no button, so a stray Enter never accepts (or cancels) it. */
 #define KT_CONFIRM_BUTTONS 3
 enum kt_confirm_action { KT_CONFIRM_ACCEPT, KT_CONFIRM_CANCEL, KT_CONFIRM_PREVIOUS, KT_CONFIRM_NEXT,
-                         KT_CONFIRM_PRESS, KT_CONFIRM_ACTIONS };
+                         KT_CONFIRM_PRESS, KT_CONFIRM_SCROLL_UP, KT_CONFIRM_SCROLL_DOWN, KT_CONFIRM_PAGE_UP,
+                         KT_CONFIRM_PAGE_DOWN, KT_CONFIRM_ACTIONS };
+/* Scope bits of the bindings: always, rows below the body's room, rows
+ * scrolled off its top. kt_confirm_scope says which are live. */
+enum { KT_CONFIRM_SCOPE_ALL = 1, KT_CONFIRM_SCOPE_MORE = 2, KT_CONFIRM_SCOPE_BACK = 4 };
 enum kt_confirm_result {
     KT_CONFIRM_IGNORED, KT_CONFIRM_HANDLED,
     KT_CONFIRM_ACCEPTED, KT_CONFIRM_CANCELLED,
@@ -451,7 +459,8 @@ struct kt_confirm {
     size_t accept, cancel;     /* the buttons y and n press                    */
     size_t focus;              /* the button Enter presses                     */
     size_t chosen;             /* the button pressed last                      */
-    bool destructive;
+    size_t scroll;             /* body rows scrolled off the top               */
+    bool destructive, keyed;
     struct kt_rect area;
     struct kt_confirm_style style;
     struct kt_binding keys[KT_CONFIRM_ACTIONS];
@@ -466,6 +475,8 @@ void kt_confirm_view(const struct kt_confirm *confirm, struct kt_canvas *canvas,
 void kt_confirm_place(struct kt_confirm *confirm, struct kt_rect area);
 /* Rows the dialog needs at a width, its border included. */
 int kt_confirm_height(const struct kt_confirm *confirm, int width);
+/* Whether body rows lie below the room the placed dialog gives them. */
+bool kt_confirm_more(const struct kt_confirm *confirm);
 uint32_t kt_confirm_scope(const struct kt_confirm *confirm);
 struct kt_keymap kt_confirm_keymap(struct kt_confirm *confirm);
 

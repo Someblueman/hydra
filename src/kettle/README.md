@@ -380,6 +380,12 @@ the mouse. A destructive one is drawn in the danger colour:
 kt_confirm_init(&m->confirm, "Remove head", question, "Remove", "Cancel", true);
 ```
 
+A body taller than the dialog's room scrolls with the arrows, j and k and the
+page keys, and the bottom edge offers "↓ more" while rows remain below
+(`kt_confirm_more`). Set `keyed` for a question that only its keys and the
+mouse answer: Enter and space then press no button, so a stray Enter never
+approves anything.
+
 **Form.** Labelled text, choice and toggle fields with focus cycling, each
 with its hint or its error; Enter checks every field and reports
 `KT_FORM_SUBMITTED` or `KT_FORM_INVALID`:

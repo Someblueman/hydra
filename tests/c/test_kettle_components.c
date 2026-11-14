@@ -674,6 +674,43 @@ static void confirm(void) {
     }
 }
 
+/* A body taller than its room scrolls, and the bottom edge says more rows
+ * wait below; a keyed question ignores Enter and space on any button. */
+static void confirm_scroll(void) {
+    struct kt_confirm c;
+    struct kt_msg down = key(KT_KEY_DOWN, 0), up = key('k', 0), page = key(KT_KEY_PAGE_DOWN, 0);
+    struct kt_msg enter = key(KT_KEY_ENTER, 0), space = key(' ', 0), tab = key(KT_KEY_TAB, 0), y = key('y', 0);
+    kt_confirm_init(&c, "Install", "one\ntwo\nthree\nfour\nfive\nsix\nseven", "Approve", "Decline", false);
+    c.keyed = true;
+    c.focus = c.cancel;
+    /* Seven body rows, and room for three in a box six rows high. */
+    kt_confirm_place(&c, (struct kt_rect){1, 1, 40, 6});
+    CHECK(kt_confirm_more(&c) && (kt_confirm_scope(&c) & KT_CONFIRM_SCOPE_MORE) && !(kt_confirm_scope(&c) & KT_CONFIRM_SCOPE_BACK));
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(strstr(row(2), "one") != NULL && strstr(row(4), "three") != NULL && strstr(row(5), "four") == NULL);
+    CHECK(strstr(row(6), "\xe2\x86\x93 more") != NULL);
+    CHECK(kt_confirm_update(&c, &down, NULL) == KT_CONFIRM_HANDLED && c.scroll == 1);
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(strstr(row(2), "two") != NULL && strstr(row(4), "four") != NULL);
+    CHECK(kt_confirm_update(&c, &page, NULL) == KT_CONFIRM_HANDLED && c.scroll == 3 && kt_confirm_more(&c));
+    CHECK(kt_confirm_update(&c, &page, NULL) == KT_CONFIRM_HANDLED && c.scroll == 4 && !kt_confirm_more(&c));
+    CHECK(kt_confirm_update(&c, &down, NULL) == KT_CONFIRM_IGNORED && c.scroll == 4);
+    blank(42, 13, true);
+    kt_confirm_view(&c, &canvas, c.area);
+    CHECK(strstr(row(4), "seven") != NULL && strstr(row(6), "more") == NULL);
+    CHECK(kt_confirm_update(&c, &up, NULL) == KT_CONFIRM_HANDLED && c.scroll == 3);
+    /* Keyed: Enter and space press nothing, whichever button has the focus. */
+    CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_HANDLED);
+    CHECK(kt_confirm_update(&c, &tab, NULL) == KT_CONFIRM_HANDLED && c.focus == c.accept);
+    CHECK(kt_confirm_update(&c, &enter, NULL) == KT_CONFIRM_HANDLED && kt_confirm_update(&c, &space, NULL) == KT_CONFIRM_HANDLED);
+    CHECK(kt_confirm_update(&c, &y, NULL) == KT_CONFIRM_ACCEPTED);
+    /* Placed taller, the whole body fits and nothing scrolls. */
+    kt_confirm_place(&c, (struct kt_rect){1, 1, 40, 13});
+    CHECK(c.scroll == 0 && !kt_confirm_more(&c));
+}
+
 /* ---- form ---------------------------------------------------------------- */
 
 static bool needs_name(void *context, const char *text, char *error, size_t capacity) {
@@ -973,6 +1010,7 @@ int main(void) {
     viewport_sideways();
     viewport_canvas();
     confirm();
+    confirm_scroll();
     form_view();
     form_keys();
     form_body();
