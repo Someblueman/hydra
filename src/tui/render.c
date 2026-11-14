@@ -647,12 +647,6 @@ static void render_result(struct app *app) {
     app->result_scroll = layout.scroll;
 }
 
-static void render_content(struct app *app) {
-    if (native_setup_active(app)) native_setup_render(app);
-    else if (native_onboarding_active(app)) native_onboarding_render(app);
-    else render_hosts(app);
-}
-
 /* Each successful refresh takes a new snapshot, so while refreshes keep
  * succeeding an age only restarts every interval and says nothing: a steady
  * "Live" shows instead. The age counts up once the shown data is older than
@@ -716,24 +710,18 @@ void screen_status(struct app *app, char *out, size_t size, struct kt_style *ton
         char label[160];
         text_append(out, size, "%sShowing %s", sep, location_label(app, label, sizeof(label)));
     }
+    if (app->view == 6) hosts_status(app, out, size);
 }
 
-/* The footer is generated from the binding table (key_footer); the remote
- * setup flow and the onboarding view keep their own hints while they own
- * input. NULL: generated. */
+/* The footer is generated from the binding table (key_footer); the
+ * onboarding page keeps its own hints while it owns input. NULL: generated. */
 static const char *hint_line(struct app *app) {
-    if (app->view == 6 && native_setup_active(app)) return native_setup_hints(app, app->cols < 70);
-    if (app->view == 6 && native_onboarding_active(app)) return native_onboarding_hints(app, app->cols < 70);
+    if (app->view == 6 && native_onboarding_active(app) && !hosts_modal_open(app)) return native_onboarding_hints(app, app->cols < 70);
     return NULL;
 }
 
-static const char *panel_title(struct app *app) {
-    if (native_setup_active(app)) return native_setup_title(app);
-    if (native_onboarding_active(app)) return native_onboarding_title(app);
-    return "Hosts";
-}
-
-/* Work and Stats draw their own frame; Inbox and Hosts draw inside this one. */
+/* Work and Stats draw their own frame; Inbox and Hosts draw inside this one,
+ * Hosts' setup modal over all of it. */
 void render(struct app *app, unsigned frame, bool headless) {
     char status[512];
     struct kt_style tone;
@@ -745,13 +733,12 @@ void render(struct app *app, unsigned frame, bool headless) {
     if (!frame_begin(app, headless)) return;
     app->limit = app->rows - 3;
     chrome_header(app, &app->frame, true);
-    if (app->view == 9) inbox_render(app);
-    else if (app->rows >= 6) pane_rule(&app->frame, (struct kt_rect){1, 2, app->frame.width - 1, app->frame.height - 4}, panel_title(app));
-    app->line = 3;
     style(app, TONE_BASE);
-    if (app->view == 6) render_content(app);
+    if (app->view == 9) inbox_render(app);
+    else hosts_render(app);
     app->limit = app->rows;
     screen_status(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));
+    if (app->view == 6) hosts_overlay(app);
     frame_end(app, frame, headless);
 }

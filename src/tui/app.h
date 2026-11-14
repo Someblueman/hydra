@@ -35,6 +35,7 @@ struct native_attention;
 struct native_review;
 struct native_inbox;
 struct native_setup;
+struct native_hosts;
 struct native_snapshot;
 struct native_activity;
 struct native_onboarding;
@@ -72,8 +73,10 @@ struct app {
     struct native_attention *attention;
     struct native_review *review;
     struct native_inbox *inbox;
-    /* In-app remote setup (U10); allocated when Hosts is first used. */
+    /* In-app remote setup (U10) and the Hosts screen; allocated when Hosts
+     * is first used. */
     struct native_setup *setup;
+    struct native_hosts *hosts;
     /* Configurable keys; read through native_keys(), which fills the defaults. */
     struct native_keys keys;
     /* The local head snapshot read from the state store in this process

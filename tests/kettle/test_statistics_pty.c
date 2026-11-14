@@ -235,8 +235,8 @@ static void metric_pages(void) {
  * the empty one that responded has 0. */
 static void hosts_heads(struct kt_session *p) {
     PS("H");
-    PU("HOSTS / latest list response");
-    PU("3 hosts / Enter follows its work");
+    PU("Observed 3");
+    PU("List response: responded");
     CHECK(row_has(p, "offline", "disconnected") && row_has(p, "offline", "-- heads"), "a failed host has unknown heads");
     CHECK(row_has(p, "empty   ", " 0 heads"), "empty distinct from unknown");
 }

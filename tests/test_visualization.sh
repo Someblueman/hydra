@@ -114,8 +114,8 @@ for viz_size in 40x10 80x24 140x40; do
 done
 # The list row names the connection; a host that did not respond shows no
 # head count rather than zero, and the detail keeps the raw list response.
-grep -q 'empty  *connected  *0 heads' "$viz_tmp/hosts.out"
-grep -q 'offline  *disconnected  *-- heads' "$viz_tmp/hosts.out"
+grep -q 'empty  *0 heads' "$viz_tmp/hosts.out"
+grep -q 'offline  *disconnected / -- heads' "$viz_tmp/hosts.out"
 grep -q 'List response: responded' "$viz_tmp/hosts.out"
 for viz_size in 999999999999999999x24 80x9999999999999999 4097x24; do
     if "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --size "$viz_size" >/dev/null 2>&1; then

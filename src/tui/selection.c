@@ -43,16 +43,11 @@ void retarget_selection(struct app *app) {
         if (task_visible(app, &app->model.tasks[index])) { app->task_row = true; app->task_selected = index; return; }
     }
 }
-static void bounded_selection(size_t *index, size_t count, int direction) {
-    if (*index >= count) { *index = 0; return; }
-    if (direction > 0 && *index + 1 < count) (*index)++;
-    if (direction < 0 && *index) (*index)--;
-}
 static bool move_workspace_selection(struct app *app, int direction) {
     switch (app->view) {
         case 8: statistics_move(app, direction); return true;
         case 7: outline_move(app, direction, false); work_selection_changed(app); return true;
-        case 6: bounded_selection(&app->host_selected, hosts_row_count(app), direction); return true;
+        case 6: hosts_move(app, direction); return true;
         default: return false;
     }
 }

@@ -25,7 +25,7 @@ static void enter_view_refresh(struct app *app, int view) {
         native_observations_request(app, OBSERVE_WORKFLOWS);
         capture_preview(app);
     }
-    if (view == 6) native_setup_hosts_refresh(app);
+    if (view == 6) hosts_opened(app);
 }
 
 /* The views of earlier versions are pages of Work now: Details and
@@ -97,7 +97,7 @@ static void jump_return(struct app *app) {
 }
 
 /* A letter that opens a screen is a jump: Esc there comes back. */
-static void jump_to(struct app *app, int view) {
+void screen_jump(struct app *app, int view) {
     if (view == app->view) return;
     app->jump_back = app->view + 1;
     enter_view(app, view);
@@ -108,7 +108,9 @@ void go_back(struct app *app) {
     if (app->result_open) { app->result_open = false; return; }
     if (app->help) { app->help = false; return; }
     if (app->view == 9 && inbox_back(app)) return;
+    if (app->view == 6 && hosts_back(app)) return;
     if (statistics_back(app)) return;
+    if (app->view == 7 && !app->search[0] && hosts_jump_return(app)) return;
     if (app->view == 7 && work_back(app)) return;
     jump_return(app);
 }
@@ -117,10 +119,6 @@ void go_back(struct app *app) {
 static bool mouse_hit(const struct app *app, const unsigned values[3], size_t index) {
     return values[2] >= (unsigned)app->hit_rows[index] && values[2] <= (unsigned)app->hit_bottom[index] &&
         values[1] >= (unsigned)app->hit_left[index] && values[1] <= (unsigned)app->hit_right[index];
-}
-
-static void select_mouse_item(struct app *app, size_t item) {
-    if (app->view == 6) app->host_selected = item;
 }
 
 static void statistics_mouse(struct app *app, const unsigned values[3]) {
@@ -170,12 +168,8 @@ static void handle_mouse(struct app *app, const struct kt_event *e) {
         values[1] > (unsigned)(app->cols - 3)) return;
     for (index = 0U; index < app->hit_count; index++) {
         if (!mouse_hit(app, values, index)) continue;
-        if (app->view == 9) { inbox_click(app, app->hit_items[index], values[0]); return; }
-        if (values[0] == 64U || values[0] == 65U) {
-            move_selection(app, values[0] == 64U ? -1 : 1);
-        } else if (values[0] == 0U) {
-            select_mouse_item(app, app->hit_items[index]);
-        }
+        if (app->view == 9) inbox_click(app, app->hit_items[index], values[0]);
+        else if (app->view == 6) hosts_click(app, app->hit_items[index], values[0]);
         return;
     }
 }
@@ -213,10 +207,9 @@ static void interactive_prompt(struct app *app, char prefix) {
 
 static bool select_view(struct app *app, char key) {
     switch (key) {
-        case '\t': if (app->view == 6) { select_tab(app, 1); return true; } return false;
-        case 'I': jump_to(app, 9); return true;
-        case 'W': jump_to(app, 7); return true;
-        case 'H': jump_to(app, 6); return true;
+        case 'I': screen_jump(app, 9); return true;
+        case 'W': screen_jump(app, 7); return true;
+        case 'H': screen_jump(app, 6); return true;
         default: return false;
     }
 }
@@ -241,27 +234,9 @@ static bool overlay_key(struct app *app, char key) {
     return app->help && help_key(app, key);
 }
 
-/* Hosts: A adds a host, O opens onboarding, r retries one, e / x edit or
- * remove an unfinished setup; head actions do not apply to host rows. */
-static bool hosts_key(struct app *app, char key) {
-    size_t record;
-    if (key == 'A') { native_setup_open_form(app); return true; }
-    if (key == 'O') { native_onboarding_open(app); return true; }
-    if (key == 'r') { hosts_retry_row(app); return true; }
-    if ((key == 'e' || key == 'x') && hosts_setup_selected(app, &record)) {
-        if (key == 'e') native_setup_edit(app, record);
-        else native_setup_remove(app, record);
-        return true;
-    }
-    if (!key || !strchr("/pac xGd", key)) return false;
-    copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host, O opens onboarding");
-    return true;
-}
-
 static bool view_key(struct app *app, char key) {
     if (key == 'D') { statistics_toggle(app); return true; }
-    if (select_view(app, key)) return true;
-    return app->view == 6 && hosts_key(app, key);
+    return select_view(app, key);
 }
 
 /* x: a local head is removed; a remote head's agent is interrupted on its host. */
@@ -303,7 +278,6 @@ static void head_key(struct app *app, char key) {
     switch (key) {
         case 'j': move_selection(app, 1); break;
         case 'k': move_selection(app, -1); break;
-        case '\r': case '\n': if (app->view == 6) hosts_open_row(app); break;
         case '/': case ':': interactive_prompt(app, key); break;
         case 'n': new_task_action(app); break;
         case 'L': location_cycle(app); work_selection_changed(app); break;
@@ -365,8 +339,7 @@ void input_named(struct app *app, uint32_t key, unsigned mods) {
     if (overlay_takes(app, &e)) return;
     /* The statistics view drops its notice on any key, these included. */
     if (app->view == 8 && app->statistics && !app->result_open) app->notice[0] = '\0';
-    if (kt_event_is(&e, KT_KEY_TAB, KT_MOD_SHIFT)) select_tab(app, -1);
-    else if (!mods) arrow_key(app, key);
+    if (!mods) arrow_key(app, key);
 }
 
 /* One key for the binding table: a single character as itself, Escape as
@@ -408,17 +381,21 @@ static void view_key_event(struct app *app, const struct kt_event *e) {
 }
 
 /* A key or mouse event from the terminal, sent to the layer that owns it: an
- * agent pane holding input (or a chord of Hydra's own keys), Ctrl-C, the
- * remote setup flow or the onboarding view, then the views. */
+ * agent pane holding input (or a chord of Hydra's own keys), Ctrl-C, a
+ * setup modal on Hosts or the onboarding page, then the views. */
 void input_event(struct app *app, const struct kt_event *e) {
-    bool setup = native_setup_active(app) && app->view == 6;
-    bool onboarding = !setup && native_onboarding_active(app) && app->view == 6;
+    bool modal = hosts_modal_open(app);
+    bool onboarding = !modal && native_onboarding_active(app) && app->view == 6;
     if (native_terminal_wants(app, e)) { native_terminal_event(app, e); return; }
-    if (e->type == KT_MOUSE) { if (!setup && !onboarding) handle_mouse(app, e); return; }
+    if (e->type == KT_MOUSE) {
+        if (modal) native_setup_event(app, e);
+        else if (!onboarding) handle_mouse(app, e);
+        return;
+    }
     if (e->type != KT_KEY) return;
     if (kt_event_is(e, 'c', KT_MOD_CTRL)) { terminal_request_stop(SIGINT); return; }
-    if (setup) { native_setup_event(app, e); return; }
-    if (onboarding) { (void)native_onboarding_event(app, e); return; }
+    if (modal) { native_setup_event(app, e); return; }
+    if (onboarding && !hosts_onboarding_key(app, e)) { (void)native_onboarding_event(app, e); return; }
     view_key_event(app, e);
 }
 
@@ -430,7 +407,7 @@ void input_paste(struct app *app, const char *bytes, size_t length, bool truncat
         if (truncated) copy_text(app->notice, sizeof(app->notice), "Paste too long: only its beginning was sent");
         return;
     }
-    if (native_setup_active(app) && app->view == 6) { native_setup_paste(app, bytes, length); return; }
+    if (hosts_modal_open(app)) { native_setup_paste(app, bytes, length); return; }
     if (native_onboarding_active(app) && app->view == 6) {
         struct kt_event e;
         memset(&e, 0, sizeof(e));

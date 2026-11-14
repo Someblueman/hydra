@@ -77,10 +77,10 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "Showing host empty", 1000), "Enter follows an empty host's work, filtered to that host");
     result(wait_for_marker(&session, "No host empty to show", 1000), "empty host does not borrow another host's head");
     write_input(session.master, "\033", 1);
-    (void)wait_for_marker(&session, "Heads  ", 2000);
+    result(wait_for_marker(&session, "List response: responded", 2000), "Esc returns to Hosts from the host's work");
     write_input(session.master, "H", 1);
-    result(wait_for_marker(&session, "HOST DETAIL", 2000), "return to hosts after clearing its head filter");
-    mouse_input(&session, "\033[<0;10;8M");
+    result(wait_for_marker(&session, "Observed 3", 2000), "Hosts lists the observed hosts again");
+    mouse_input(&session, "\033[<0;10;7M");
     result(wait_for_marker(&session, "List response: failed", 1000), "mouse selects failed host and its response details");
     write_input(session.master, "q", 1);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "host view restores terminal settings");

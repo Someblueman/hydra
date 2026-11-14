@@ -38,7 +38,6 @@ bool native_onboarding_active(const struct app *app);
 void native_onboarding_open(struct app *app);
 void native_onboarding_tick(struct app *app);
 void native_onboarding_render(struct app *app);
-const char *native_onboarding_title(const struct app *app);
 const char *native_onboarding_hints(const struct app *app, bool narrow);
 void native_onboarding_destroy(struct app *app);
 /* Headless: open the view on recorded envelopes (an export, optionally an

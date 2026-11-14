@@ -101,7 +101,7 @@ static void add_host(struct kt_session *s) {
     kt_until(s, "+ Add a host", 4);
     capture(s, "02-hosts");
     kt_send(s, "A");
-    kt_until(s, "ADD A REMOTE HOST", 4);
+    kt_until(s, "Hydra connects with your own SSH", 4);
     kt_send(s, "deploy@ovh.example.net\tovh");
     kt_until(s, "deploy@ovh.example.net", 3);
     capture(s, "03-form");
@@ -111,14 +111,14 @@ static void add_host(struct kt_session *s) {
 
 static void trust_key(struct kt_session *s) {
     char expected[512];
-    kt_until(s, "TRUST THE HOST KEY OF ovh", 6);
+    kt_until(s, "Trust the host key of ovh?", 6);
     see(s, fingerprint); see(s, "known_hosts");
     capture(s, "04-trust-key");
     kt_send(s, "no\r");
     kt_until(s, "Type yes (the whole word)", 3);
     CHECK(!called("trust-key"), "a wrong confirmation runs nothing");
     kt_send(s, "\x7f\x7fyes\r");
-    kt_until(s, "MISSING REQUIREMENTS ON ovh", 6);
+    kt_until(s, "Missing requirements on ovh", 6);
     kt_format(expected, sizeof(expected), "trust-key ovh --fingerprint %s --json", fingerprint);
     CHECK(called(expected), "typed yes trusts exactly the shown fingerprint");
     CHECK(called("preflight ovh --json"), "the guided flow checks requirements as their own step");
@@ -132,14 +132,14 @@ static void requirements(struct kt_session *s, bool no_tmux) {
     flag("git_fixed");
     kt_send(s, "\r");
     if (no_tmux) {
-        kt_until(s, "HEADS CANNOT RUN ON ovh YET", 6);
+        kt_until(s, "Heads cannot run on ovh yet", 6);
         see(s, "fix: sudo apt-get install tmux"); see(s, "Enter continues setup anyway");
         CHECK(!called("setup ovh --json"), "the pause runs nothing further");
         capture(s, "05b-heads-paused");
         kt_send(s, "\r");
     }
-    kt_until(s, "REVIEW: INSTALL HYDRA ON ovh", 6);
-    CHECK(no_tmux || !kt_contains(s, "HEADS CANNOT RUN"), "other warnings do not pause setup");
+    kt_until(s, "Install Hydra on ovh", 6);
+    CHECK(no_tmux || !kt_contains(s, "Heads cannot run"), "other warnings do not pause setup");
     see(s, "pinned: its digest is recorded");
     capture(s, "06-provision-plan");
 }
@@ -151,18 +151,18 @@ static void provision(struct kt_session *s) {
     CHECK(!called("provision ovh"), "declining runs nothing");
     capture(s, "07-declined");
     kt_send(s, "\r");
-    kt_until(s, "REVIEW: INSTALL HYDRA ON ovh", 6);
+    kt_until(s, "Install Hydra on ovh", 6);
     kt_send(s, "y");
-    kt_until(s, "AGENTS ON ovh", 8);
+    kt_until(s, "Agents on ovh", 8);
     kt_format(expected, sizeof(expected), "provision ovh --approve %s --json", provision_hash);
     CHECK(called(expected), "approval runs the reviewed plan hash");
     CHECK(called("agents ovh --json"), "the agent inventory is shown after provisioning");
     see(s, "Install claude");
     capture(s, "08-agents");
     kt_send(s, "j");
-    kt_until(s, "> Install claude", 3);
+    kt_until(s, "\xe2\x96\x8c Install claude", 3);
     kt_send(s, "\r");
-    kt_until(s, "REVIEW: INSTALL claude ON ovh", 8);
+    kt_until(s, "Install claude on ovh", 8);
     CHECK(called("install-agent ovh --agent claude --json"), "choosing an agent asks the CLI for its installer plan");
     see(s, "curl -fsSL https://claude.ai/install.sh");
     capture(s, "09-install-plan");
@@ -171,7 +171,7 @@ static void provision(struct kt_session *s) {
 static void install_agent(struct kt_session *s) {
     char expected[512];
     kt_send(s, "y");
-    kt_until(s, "SIGN IN TO CLAUDE ON OVH", 10);
+    kt_until(s, "Sign in to claude on ovh", 10);
     kt_format(expected, sizeof(expected), "install-agent ovh --agent claude --approve %s\n", install_hash);
     CHECK(called(expected) && flagged("tty-install"), "the approved installer ran in the terminal without --json");
     CHECK(flagged("installed"), "installer completed");
@@ -195,7 +195,7 @@ static void sign_in(struct kt_session *s, bool fail_once) {
         kt_until(s, "FAKE SIGN-IN: open", 6);
         kt_send(s, "\r");
     }
-    kt_until(s, "ovh IS READY", 10);
+    kt_until(s, "ovh is ready", 10);
     CHECK(flagged("tty-sign-in") && flagged("signed"), "sign-in ran in the terminal");
     capture(s, "13-done");
 }
@@ -227,12 +227,15 @@ static void known_key(int cols, int rows) {
     reset(flags);
     launch(&s, cols, rows);
     add_host(&s);
-    kt_until(&s, "HEADS CANNOT RUN ON ovh YET", 6);
+    kt_until(&s, "Heads cannot run on ovh yet", 6);
     CHECK(called("preflight ovh --json"), "a preflight passed inside the guided run is checked");
     capture(&s, "21-known-key-paused");
     kt_send(&s, "\r");
-    kt_until(&s, "REVIEW: INSTALL HYDRA ON ovh", 6);
+    kt_until(&s, "Install Hydra on ovh", 6);
     CHECK(calls("setup ovh ") == 1, "continuing shows the kept plan without rerunning setup");
+    /* The plan is a modal: its keys are y and n (or Esc); q quits after it. */
+    kt_send(&s, "\033");
+    kt_until(&s, "Not approved: nothing was changed", 3);
     kt_close(&s, "q", 0, 0);
 }
 
@@ -244,7 +247,7 @@ static void changed_key(int cols, int rows) {
     reset(flags);
     launch(&s, cols, rows);
     add_host(&s);
-    kt_until(&s, "THE HOST KEY CHANGED", 6);
+    kt_until(&s, "The host key changed", 6);
     see(&s, "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts");
     kt_pump(&s, .3);
     CHECK(!kt_contains(&s, "Type yes") && !kt_contains(&s, "y approve"), "manual recovery only");
@@ -252,15 +255,16 @@ static void changed_key(int cols, int rows) {
     kt_send(&s, "yes y");
     kt_send(&s, "\r");
     kt_pump(&s, 1);
-    kt_until(&s, "THE HOST KEY CHANGED", 6);
+    kt_until(&s, "The host key changed", 6);
     CHECK(!called("trust-key"), "a changed key is never trusted");
     kt_send(&s, "\033");
     kt_until(&s, "Continue setup", 3);
     kt_close(&s, "q", 0, 0);
 }
 
-/* A hanging step shows what runs and for how long, and Esc or c stops it:
- * the child is gone and the recorded status is shown instead. */
+/* A hanging step shows what runs and for how long, and c stops it: the
+ * child is gone and the recorded status is shown instead. Esc leaves it
+ * running and gives the list the focus; Enter on its row shows it again. */
 /* Starts setup from the form with a ~/ SSH config, which reaches the CLI
  * as an absolute path. */
 static void add_host_tilde(struct kt_session *s) {
@@ -268,7 +272,7 @@ static void add_host_tilde(struct kt_session *s) {
     kt_send(s, "H");
     kt_until(s, "+ Add a host", 4);
     kt_send(s, "A");
-    kt_until(s, "ADD A REMOTE HOST", 4);
+    kt_until(s, "Hydra connects with your own SSH", 4);
     kt_send(s, "deploy@ovh.example.net\tovh\t~/.ssh/hydra-test");
     kt_until(s, "~/.ssh/hydra-test", 3);
     kt_send(s, "\r");
@@ -280,7 +284,7 @@ static void add_host_tilde(struct kt_session *s) {
     CHECK(called(config), "a ~/ SSH config path reaches the CLI as an absolute path");
 }
 
-static void cancel_running(int cols, int rows, const char *key) {
+static void cancel_running(int cols, int rows, bool escape_first) {
     struct kt_session s;
     const char *flags[] = {"slow_host_key", NULL};
     char path[4096], text[64];
@@ -295,9 +299,17 @@ static void cancel_running(int cols, int rows, const char *key) {
     kt_read(path, text, sizeof(text));
     pid = strtol(text, NULL, 10);
     CHECK(pid > 0 && kill((pid_t)pid, 0) == 0, "the slow step is running");
-    kt_send(&s, key);
+    if (escape_first) {
+        kt_send(&s, "\033");
+        kt_until(&s, "keeps running", 4);
+        kt_pump(&s, .3);
+        CHECK(kill((pid_t)pid, 0) == 0 && !called("setup status ovh --json"), "Esc leaves the running step running");
+        kt_send(&s, "A");                  /* A while a step runs shows that step */
+        kt_until(&s, "c cancel step", 4);
+    }
+    kt_send(&s, "c");
     kt_until(&s, "Cancelled: Checking the host key", 6);
-    see(&s, "> Continue setup");
+    see(&s, "\xe2\x96\x8c Continue setup");
     capture(&s, "31-cancelled");
     CHECK(kill((pid_t)pid, 0) != 0, "cancelling stops the step's process");
     CHECK(called("setup status ovh --json"), "after a cancel the recorded status is reread");
@@ -319,19 +331,19 @@ static void edit_setup(int cols, int rows) {
     kt_until(&s, "e edit", 3);
     capture(&s, "40-hosts-unfinished");
     kt_send(&s, "e");
-    kt_until(&s, "EDIT THE SETUP OF ovh", 4);
+    kt_until(&s, "Edit the setup of ovh", 4);
     see(&s, "deploy@ovh.example.net");
     kt_send(&s, "\t\t~/.ssh/hydra-private");
     kt_until(&s, "~/.ssh/hydra-private", 3);
     capture(&s, "41-edit-form");
     kt_send(&s, "\r");
-    kt_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
-    see(&s, "Hydra does not connect");
+    kt_until(&s, "Remove the setup record of ovh?", 6);
+    see(&s, "Hydra does not");
     CHECK(called("setup remove ovh --json"), "an edit asks the CLI for the removal plan");
     CHECK(!flagged("removed"), "nothing is removed before approval");
     capture(&s, "42-edit-removal-plan");
     kt_send(&s, "y");
-    kt_until(&s, "TRUST THE HOST KEY OF ovh", 8);
+    kt_until(&s, "Trust the host key of ovh?", 8);
     kt_format(expected, sizeof(expected), "setup ovh deploy@ovh.example.net --ssh-config %s/.ssh/hydra-private --json", getenv("HOME"));
     CHECK(flagged("removed") && called(expected), "the approved removal restarts setup with the edited SSH config");
     kt_send(&s, "\033");
@@ -348,14 +360,14 @@ static void remove_setup(int cols, int rows) {
     kt_send(&s, "H");
     kt_until(&s, "Check requirements: blocked", 6);
     kt_send(&s, "jx");
-    kt_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
+    kt_until(&s, "Remove the setup record of ovh?", 6);
     see(&s, "Left on remote");
     capture(&s, "43-remove-plan");
     kt_send(&s, "n");
     kt_until(&s, "Kept the setup record for ovh", 4);
     CHECK(!flagged("removed") && !called("--approve"), "declining keeps the record");
     kt_send(&s, "x");
-    kt_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
+    kt_until(&s, "Remove the setup record of ovh?", 6);
     kt_send(&s, "y");
     kt_until(&s, "Removed the setup record for ovh", 6);
     CHECK(flagged("removed"), "y removes the record");
@@ -375,9 +387,9 @@ static void duplicate_name(int cols, int rows) {
     kt_send(&s, "H");
     kt_until(&s, "Check requirements: blocked", 6);
     kt_send(&s, "A");
-    kt_until(&s, "ADD A REMOTE HOST", 4);
+    kt_until(&s, "Hydra connects with your own SSH", 4);
     kt_send(&s, "deploy@ovh.example.net\tovh\r\r");     /* Enter on the name moves on; Enter on the last field submits */
-    kt_until(&s, "ovh ALREADY HAS AN UNFINISHED SETUP", 4);
+    kt_until(&s, "ovh already has an unfinished setup", 4);
     see(&s, "Enter continues that setup");
     CHECK(!called("setup ovh deploy@"), "a duplicate name runs nothing");
     capture(&s, "45-duplicate");
@@ -410,8 +422,8 @@ int main(void) {
     changed_key(140, 40);
     changed_key(80, 24);
     known_key(80, 24);
-    cancel_running(80, 24, "c");
-    cancel_running(140, 40, "\033");
+    cancel_running(80, 24, false);
+    cancel_running(140, 40, true);
     edit_setup(80, 24);
     remove_setup(140, 40);
     duplicate_name(80, 24);
@@ -421,6 +433,6 @@ int main(void) {
     }
     puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, a missing-tmux pause, declined and "
          "approved provision, agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed "
-         "key refused; known key checked; a hanging step shown with its time and cancelled; an unfinished setup edited, removed (and kept), and a duplicate name caught; 140x40 and 80x24");
+         "key refused; known key checked; a hanging step shown with its time, left running by Esc and cancelled by c; an unfinished setup edited, removed (and kept), and a duplicate name caught; 140x40 and 80x24");
     return 0;
 }

@@ -14,14 +14,17 @@ struct kt_event;
  * several. The focused element's scope chain (key_chain) is a set of these
  * bits, and within one chain no key has two meanings (key_chain_conflict).
  * TERMINAL: Hydra's own commands while an agent pane may hold input.
- * VIEWS: Tab and the arrows change screens (Hosts, until it has panes).
+ * VIEWS: Tab changing screens (retired: Tab moves between panes);
+ * VIEW_ARROWS: the arrows change screens (Stats).
  * JUMPS: the letters that open a screen, which Inbox and its review leave to
  * their own keys. STATS_FILTER: the keys while a Stats filter is typed.
  * INBOX: the Inbox list; INBOX_PAGES: its detail pages, there and on the
  * review pages (REVIEW). WORK: every pane of Work; WORK_LIST its list,
  * WORK_CONVERSATION the conversation, WORK_VIEWPORT a pane that scrolls
  * (the conversation and the Details and Plan pages), WORK_PLAN and WORK_RUN
- * the Plan and Run pages of the side pane. */
+ * the Plan and Run pages of the side pane. HOSTS: the Hosts list;
+ * HOSTS_SETUP: the open setup in its detail pane; HOSTS_PANES: Tab and the
+ * page keys of both. */
 enum key_scope {
     KEY_SCOPE_TERMINAL = 1U << 0, KEY_SCOPE_GLOBAL = 1U << 1, KEY_SCOPE_VIEWS = 1U << 2,
     KEY_SCOPE_VIEW_ARROWS = 1U << 3, KEY_SCOPE_WORK_LIST = 1U << 4, KEY_SCOPE_WORK_RUN = 1U << 5,
@@ -29,7 +32,7 @@ enum key_scope {
     KEY_SCOPE_INBOX_PAGES = 1U << 9, KEY_SCOPE_WORK_CONVERSATION = 1U << 10, KEY_SCOPE_HOSTS = 1U << 11,
     KEY_SCOPE_STATISTICS = 1U << 12, KEY_SCOPE_INBOX = 1U << 13, KEY_SCOPE_REVIEW = 1U << 14,
     KEY_SCOPE_HELP = 1U << 15, KEY_SCOPE_RESULT = 1U << 16, KEY_SCOPE_JUMPS = 1U << 17,
-    KEY_SCOPE_STATS_FILTER = 1U << 19
+    KEY_SCOPE_STATS_FILTER = 1U << 19, KEY_SCOPE_HOSTS_SETUP = 1U << 20, KEY_SCOPE_HOSTS_PANES = 1U << 21
 };
 /* Rows follow this order; the first fourteen are the chords of the keys
  * file's first version and keep their names. Footers list entries in this
@@ -56,9 +59,12 @@ enum key_action {
     KEY_STATS_FILTER_KEEP, KEY_STATS_FILTER_CLEAR,
     /* statistics rows of 3.0 whose jobs moved: [ ] and the filter keys */
     KEY_STATS_PAGE, KEY_STATS_WORKFLOW_PREVIOUS, KEY_STATS_WORKFLOW_NEXT, KEY_STATS_FIND, KEY_STATS_REFRESH,
-    /* hosts */
+    /* Hosts: the list, its panes and pages, then the open setup (hosts.c) */
     KEY_HOSTS_UP, KEY_HOSTS_DOWN, KEY_HOSTS_OPEN, KEY_HOSTS_ADD, KEY_HOSTS_EDIT, KEY_HOSTS_REMOVE,
-    KEY_HOSTS_RETRY, KEY_HOSTS_ONBOARDING,
+    KEY_HOSTS_RETRY, KEY_HOSTS_ONBOARDING, KEY_HOSTS_FILTER, KEY_HOSTS_PANE, KEY_HOSTS_PANE_BACK,
+    KEY_HOSTS_PAGE_PREVIOUS, KEY_HOSTS_PAGE_NEXT,
+    KEY_SETUP_UP, KEY_SETUP_DOWN, KEY_SETUP_PAGE_UP, KEY_SETUP_PAGE_DOWN, KEY_SETUP_CONTINUE, KEY_SETUP_CANCEL,
+    KEY_SETUP_BACKGROUND,
     /* Work: the list, the panes that scroll, the Run and Plan pages, then
      * what acts on the selection and on the screen (work.c) */
     KEY_HEADS_UP, KEY_HEADS_DOWN, KEY_HEADS_OPEN, KEY_HEADS_TALK, KEY_HEADS_COLLAPSE, KEY_HEADS_EXPAND,
@@ -88,6 +94,7 @@ enum key_action {
     KEY_ACTIONS
 };
 #define KEY_INBOX_LAST KEY_INBOX_PAGE_NEXT
+#define KEY_HOSTS_LAST KEY_SETUP_BACKGROUND
 /* The first action that is not a Ctrl-chord command of the agent layer. */
 #define KEY_VIEW_ACTIONS KEY_RESULT_UP
 struct native_keys {
@@ -136,7 +143,7 @@ bool key_pending_text(struct app *app, char *out, size_t size);
 /* Every scope chain the control centre can be in, for checking the table. */
 enum key_chain_id {
     KEY_CHAIN_WORK_LIST, KEY_CHAIN_WORK_CONVERSATION, KEY_CHAIN_WORK_DETAILS, KEY_CHAIN_WORK_PLAN, KEY_CHAIN_WORK_RUN,
-    KEY_CHAIN_HOSTS, KEY_CHAIN_STATISTICS, KEY_CHAIN_INBOX,
+    KEY_CHAIN_HOSTS, KEY_CHAIN_HOSTS_SETUP, KEY_CHAIN_STATISTICS, KEY_CHAIN_INBOX,
     KEY_CHAIN_REVIEW, KEY_CHAIN_HELP, KEY_CHAIN_RESULT, KEY_CHAIN_STATS_FILTER, KEY_CHAINS
 };
 extern const uint32_t key_chains[KEY_CHAINS];

@@ -21,6 +21,8 @@
 #define G_FILTER "Filter"
 #define G_INBOX "Inbox"
 #define G_REVIEW "Review"
+#define G_HOSTS "Hosts"
+#define G_SETUP "Setup"
 #define ROW(id, key_scope, key_name, text, key_group, rank) \
     [id] = {.name = key_name, .label = text, .action = id, .scope = key_scope, .group = key_group, .priority = rank}
 #define T KEY_SCOPE_TERMINAL
@@ -112,14 +114,26 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_STATS_FIND, KEY_SCOPE_STATISTICS, "statistics.find", "find", G_STATS, -1),
     ROW(KEY_STATS_REFRESH, KEY_SCOPE_STATISTICS, "statistics.refresh", "refresh", G_STATS, -1),
 
-    ROW(KEY_HOSTS_UP, KEY_SCOPE_HOSTS, "hosts.up", "select", "Hosts", 9),
-    ROW(KEY_HOSTS_DOWN, KEY_SCOPE_HOSTS, "hosts.down", "select", "Hosts", 9),
-    ROW(KEY_HOSTS_OPEN, KEY_SCOPE_HOSTS, "hosts.open", "open", "Hosts", 8),
-    ROW(KEY_HOSTS_ADD, KEY_SCOPE_HOSTS, "hosts.add", "add a host", "Hosts", 7),
-    ROW(KEY_HOSTS_EDIT, KEY_SCOPE_HOSTS, "hosts.edit", "edit", "Hosts", 6),
-    ROW(KEY_HOSTS_REMOVE, KEY_SCOPE_HOSTS, "hosts.remove", "remove", "Hosts", 6),
-    ROW(KEY_HOSTS_RETRY, KEY_SCOPE_HOSTS, "hosts.retry", "observe again", "Hosts", 5),
-    ROW(KEY_HOSTS_ONBOARDING, KEY_SCOPE_HOSTS, "hosts.onboarding", "onboarding", "Hosts", 5),
+    ROW(KEY_HOSTS_UP, KEY_SCOPE_HOSTS, "hosts.up", "select", G_HOSTS, 9),
+    ROW(KEY_HOSTS_DOWN, KEY_SCOPE_HOSTS, "hosts.down", "select", G_HOSTS, 9),
+    ROW(KEY_HOSTS_OPEN, KEY_SCOPE_HOSTS, "hosts.open", "open", G_HOSTS, 8),
+    ROW(KEY_HOSTS_ADD, KEY_SCOPE_HOSTS, "hosts.add", "add host", G_HOSTS, 7),
+    ROW(KEY_HOSTS_EDIT, KEY_SCOPE_HOSTS | KEY_SCOPE_HOSTS_SETUP, "hosts.edit", "edit", G_HOSTS, 6),
+    ROW(KEY_HOSTS_REMOVE, KEY_SCOPE_HOSTS | KEY_SCOPE_HOSTS_SETUP, "hosts.remove", "remove", G_HOSTS, 6),
+    ROW(KEY_HOSTS_RETRY, KEY_SCOPE_HOSTS, "hosts.retry", "observe again", G_HOSTS, 5),
+    ROW(KEY_HOSTS_ONBOARDING, KEY_SCOPE_HOSTS, "hosts.onboarding", "onboarding", G_HOSTS, 2),
+    ROW(KEY_HOSTS_FILTER, KEY_SCOPE_HOSTS, "hosts.filter", "filter", G_HOSTS, 4),
+    ROW(KEY_HOSTS_PANE, KEY_SCOPE_HOSTS_PANES, "hosts.pane", "pane", G_HOSTS, 3),
+    ROW(KEY_HOSTS_PANE_BACK, KEY_SCOPE_HOSTS_PANES, "hosts.pane-previous", "pane", G_HOSTS, 3),
+    ROW(KEY_HOSTS_PAGE_PREVIOUS, KEY_SCOPE_HOSTS_PANES, "hosts.page-previous", "page", G_HOSTS, 2),
+    ROW(KEY_HOSTS_PAGE_NEXT, KEY_SCOPE_HOSTS_PANES, "hosts.page-next", "page", G_HOSTS, 2),
+    ROW(KEY_SETUP_UP, KEY_SCOPE_HOSTS_SETUP, "setup.up", "select", G_SETUP, 9),
+    ROW(KEY_SETUP_DOWN, KEY_SCOPE_HOSTS_SETUP, "setup.down", "select", G_SETUP, 9),
+    ROW(KEY_SETUP_PAGE_UP, KEY_SCOPE_HOSTS_SETUP, "setup.page-up", "page up/down", G_SETUP, -1),
+    ROW(KEY_SETUP_PAGE_DOWN, KEY_SCOPE_HOSTS_SETUP, "setup.page-down", "page up/down", G_SETUP, -1),
+    ROW(KEY_SETUP_CONTINUE, KEY_SCOPE_HOSTS_SETUP, "setup.continue", "continue", G_SETUP, 9),
+    ROW(KEY_SETUP_CANCEL, KEY_SCOPE_HOSTS_SETUP, "setup.cancel", "cancel step", G_SETUP, 8),
+    ROW(KEY_SETUP_BACKGROUND, KEY_SCOPE_HOSTS_SETUP, "setup.background", "background", G_SETUP, 8),
 
     ROW(KEY_HEADS_UP, KEY_SCOPE_WORK_LIST, "heads.up", "select", G_HEADS, 9),
     ROW(KEY_HEADS_DOWN, KEY_SCOPE_WORK_LIST, "heads.down", "select", G_HEADS, 9),
@@ -251,6 +265,8 @@ static const unsigned char key_modes[KEY_ACTIONS] = {
     [KEY_VIEW_5] = MODE_RETIRED, [KEY_VIEW_6] = MODE_RETIRED, [KEY_VIEW_7] = MODE_RETIRED,
     [KEY_VIEW_8] = MODE_RETIRED, [KEY_VIEW_9] = MODE_RETIRED, [KEY_VIEW_CYCLE] = MODE_RETIRED,
     [KEY_VIEW_OVERVIEW] = MODE_RETIRED, [KEY_VIEW_WORKFLOWS] = MODE_RETIRED,
+    /* Tab moves between the panes of a screen, Hosts' too. */
+    [KEY_VIEWS_NEXT] = MODE_RETIRED, [KEY_VIEWS_PREVIOUS] = MODE_RETIRED,
 };
 
 /* Ctrl-] alone leaves agent input; every other agent-layer command follows
@@ -291,7 +307,10 @@ static const char default_keys[] =
     "statistics.page = s\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
     "statistics.find = /\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
-    "hosts.retry = r\nhosts.onboarding = O\n"
+    "hosts.retry = r\nhosts.onboarding = O\nhosts.filter = /\nhosts.pane = tab\nhosts.pane-previous = shift+tab\n"
+    "hosts.page-previous = [\nhosts.page-next = ]\n"
+    "setup.up = up, k\nsetup.down = down, j\nsetup.page-up = pgup\nsetup.page-down = pgdn\nsetup.continue = enter\n"
+    "setup.cancel = c\nsetup.background = b\n"
     "heads.up = up, k\nheads.down = down, j\nheads.open = enter\nheads.talk = a\n"
     "heads.collapse = left, h\nheads.expand = right, l\n"
     "workspace.up = up, k\nworkspace.down = down, j\nheads.page-up = pgup\nheads.page-down = pgdn, space\n"

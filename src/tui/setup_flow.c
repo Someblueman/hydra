@@ -5,7 +5,8 @@
 #include "internal.h"
 #include "setup_flow.h"
 /* Remote setup controller: which CLI child runs, what its envelope leads to,
- * and the keys of each setup screen. Mutations run only as the CLI's own
+ * the actions of each setup screen (the binding table's setup.* and hosts.*
+ * rows) and the keys of its modals. Mutations run only as the CLI's own
  * data.next.argv after the user approved exactly the plan it returned. */
 #define SETUP_STEP_BUDGET_MS (30L * 60L * 1000L)
 #define SETUP_READ_BUDGET_MS (2L * 60L * 1000L)
@@ -45,7 +46,6 @@ void native_setup_destroy(struct app *app) {
 }
 
 bool native_setup_active(const struct app *app) { return app->setup && app->setup->open; }
-bool native_setup_running(const struct app *app) { return app->setup && app->setup->job.active; }
 
 static void setup_notice(struct native_setup *s, const char *text) { copy_text(s->notice, sizeof(s->notice), text); }
 static void close_flow(struct app *app, struct native_setup *s);
@@ -169,7 +169,8 @@ static void no_result(struct native_setup *s, int exit_status) {
 
 static void show(struct native_setup *s) {
     s->screen = setup_screen_for(s->current);
-    s->scroll = 0; s->selected = 0; s->typed[0] = '\0'; s->typed_cursor = 0; s->paused = false;
+    s->scroll = 0; s->selected = 0; s->typed[0] = '\0'; s->paused = false;
+    s->modal.screen = SETUP_SCREEN_NONE;
     if (s->screen == SETUP_SCREEN_HANDOFF && !handoff_prepare(s)) refuse(s);
 }
 
@@ -323,7 +324,7 @@ static void job_finish(struct app *app, struct native_setup *s) {
     if (!s->job.active) native_setup_hosts_refresh(app);
     if (!s->open && !s->job.active && kind != SETUP_JOB_REMOVE)
         snprintf(app->notice, sizeof(app->notice), s->screen == SETUP_SCREEN_DONE ? "Remote host %.100s is set up" :
-                 "Remote setup for %.100s needs you: open Hosts (H) to continue", s->name);
+                 "Remote setup for %.100s needs you: open Hosts (3) to continue", s->name);
 }
 
 void native_setup_tick(struct app *app) {
@@ -339,15 +340,15 @@ void native_setup_open_form(struct app *app) {
     struct native_setup *s = native_setup_state(app);
     if (!s) { copy_text(app->notice, sizeof(app->notice), "Remote setup is unavailable: out of memory"); return; }
     s->open = true;
-    if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; return; }
+    if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; hosts_focus_detail(app, true); return; }
     memset(s->fields, 0, sizeof(s->fields));
     s->focus = SETUP_FIELD_DESTINATION; s->problem[0] = s->notice[0] = s->editing[0] = '\0';
     s->screen = SETUP_SCREEN_FORM; s->automatic = 0; s->replacing = false;
+    s->modal.screen = SETUP_SCREEN_NONE;
 }
 
 static void field_set(struct setup_field *f, const char *text) {
     copy_text(f->text, sizeof(f->text), text);
-    f->cursor = strlen(f->text);
 }
 
 /* Edit reopens the form with the record's binding. It is offered only while
@@ -370,6 +371,7 @@ void native_setup_edit(struct app *app, size_t record) {
     field_set(&s->fields[SETUP_FIELD_NAME], r->name);
     field_set(&s->fields[SETUP_FIELD_CONFIG], r->config);
     copy_text(s->editing, sizeof(s->editing), r->name);
+    s->modal.screen = SETUP_SCREEN_NONE;
 }
 
 static void remove_plan_start(struct app *app, struct native_setup *s) {
@@ -387,6 +389,7 @@ void native_setup_remove(struct app *app, size_t record) {
     if (s->job.active) { copy_text(app->notice, sizeof(app->notice), "A setup step is still running; wait for its result"); return; }
     s->open = true; s->automatic = 0; s->notice[0] = '\0'; s->replacing = false; s->editing[0] = '\0';
     copy_text(s->name, sizeof(s->name), s->records[record].name);
+    hosts_focus_detail(app, true);
     remove_plan_start(app, s);
 }
 
@@ -394,6 +397,7 @@ void native_setup_resume(struct app *app, const char *name) {
     struct native_setup *s = native_setup_state(app);
     if (!s) return;
     s->open = true; s->automatic = 0; s->notice[0] = '\0';
+    hosts_focus_detail(app, true);
     if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; return; }
     s->agents_offered = false;
     copy_text(s->name, sizeof(s->name), name);
@@ -403,8 +407,13 @@ void native_setup_resume(struct app *app, const char *name) {
 
 static void close_flow(struct app *app, struct native_setup *s) {
     s->open = false;
+    hosts_focus_detail(app, false);
     if (s->job.active) snprintf(app->notice, sizeof(app->notice), "Setup for %.100s keeps running; Hosts shows its progress", s->name);
     native_setup_hosts_refresh(app);
+}
+
+void native_setup_close(struct app *app) {
+    if (app->setup && app->setup->open) close_flow(app, app->setup);
 }
 
 /* ---- Actions ---- */
@@ -421,6 +430,7 @@ static const struct setup_record *find_record(const struct native_setup *s, cons
 static void form_start(struct app *app, struct native_setup *s) {
     const struct setup_record *r = find_record(s, s->name);
     bool edited = s->editing[0] && !strcmp(s->editing, s->name);
+    hosts_focus_detail(app, true);
     if (edited && r && !strcmp(r->destination, s->destination) && !strcmp(r->config, s->config)) {
         s->editing[0] = '\0';
         native_setup_resume(app, s->name);
@@ -438,20 +448,26 @@ static void form_start(struct app *app, struct native_setup *s) {
     guided_start(app, s, true);
 }
 
+/* The form's fields are checked as the CLI would; a problem shows at its
+ * field, which takes the focus. */
 static void submit_form(struct app *app, struct native_setup *s) {
     struct setup_field *f = s->fields;
     const char *problem;
     char config[sizeof(s->config)];
     if (!f[SETUP_FIELD_NAME].text[0]) {
         setup_default_name(f[SETUP_FIELD_DESTINATION].text, f[SETUP_FIELD_NAME].text, sizeof(f[0].text));
-        f[SETUP_FIELD_NAME].cursor = strlen(f[SETUP_FIELD_NAME].text);
+        kt_textinput_set(&s->modal.inputs[SETUP_FIELD_NAME], f[SETUP_FIELD_NAME].text);
     }
     if ((problem = setup_destination_problem(f[SETUP_FIELD_DESTINATION].text))) s->focus = SETUP_FIELD_DESTINATION;
     else if ((problem = setup_name_problem(f[SETUP_FIELD_NAME].text))) s->focus = SETUP_FIELD_NAME;
     else if (!setup_config_expand(f[SETUP_FIELD_CONFIG].text, getenv("HOME"), config, sizeof(config))) {
         problem = "~ needs HOME set to an absolute path; enter the full path instead"; s->focus = SETUP_FIELD_CONFIG;
     } else if ((problem = setup_config_problem(config))) s->focus = SETUP_FIELD_CONFIG;
-    if (problem) { copy_text(s->problem, sizeof(s->problem), problem); return; }
+    if (problem) {
+        copy_text(s->modal.fields[s->focus].error, sizeof(s->modal.fields[0].error), problem);
+        kt_form_focus(&s->modal.form, (size_t)s->focus);
+        return;
+    }
     s->problem[0] = '\0';
     copy_text(s->destination, sizeof(s->destination), f[SETUP_FIELD_DESTINATION].text);
     copy_text(s->name, sizeof(s->name), f[SETUP_FIELD_NAME].text);
@@ -474,7 +490,7 @@ static void approve(struct app *app, struct native_setup *s) {
 /* Declining a removal keeps the record: an edit returns to its form. */
 static void decline_removal(struct app *app, struct native_setup *s) {
     if (s->replacing) {
-        s->replacing = false; s->screen = SETUP_SCREEN_FORM;
+        s->replacing = false; s->screen = SETUP_SCREEN_FORM; s->modal.screen = SETUP_SCREEN_NONE;
         snprintf(s->problem, sizeof(s->problem), "Not changed: the setup %.100s keeps its destination and SSH config", s->name);
         return;
     }
@@ -545,22 +561,10 @@ static void preflight_enter(struct app *app, struct native_setup *s) {
     guided_start(app, s, false);
 }
 
-static void trust_enter(struct app *app, struct native_setup *s) {
-    if (!strcmp(s->typed, "yes")) approve(app, s);
-    else setup_notice(s, "Type yes (the whole word) to trust this key, or press Esc to decline");
-}
-
 static void enter(struct app *app, struct native_setup *s) {
     switch (s->screen) {
-        case SETUP_SCREEN_FORM:
-            /* Enter moves through the fields like Tab; only the last field starts setup. */
-            if (s->focus + 1 < SETUP_FORM_FIELDS) s->focus++;
-            else submit_form(app, s);
-            break;
         case SETUP_SCREEN_STEPS: step_enter(app, s); break;
         case SETUP_SCREEN_AGENTS: agents_enter(app, s); break;
-        case SETUP_SCREEN_TRUST_KEY: trust_enter(app, s); break;
-        case SETUP_SCREEN_PLAN: setup_notice(s, "Press y to approve this exact plan, or n / Esc to decline"); break;
         case SETUP_SCREEN_HANDOFF: handoff_start(app, s); break;
         case SETUP_SCREEN_PREFLIGHT: preflight_enter(app, s); break;
         case SETUP_SCREEN_ERROR: error_enter(app, s); break;
@@ -571,8 +575,8 @@ static void enter(struct app *app, struct native_setup *s) {
     }
 }
 
-/* Esc or c on a running step: stop it; its result is replaced by the
- * recorded status (cancelled_finish). */
+/* c on a running step: stop it; its result is replaced by the recorded
+ * status (cancelled_finish). */
 static void cancel_job(struct native_setup *s) {
     char label[96], notice[160];
     if (!s->job.active) return;
@@ -582,12 +586,15 @@ static void cancel_job(struct native_setup *s) {
     setup_notice(s, notice);
 }
 
+/* Esc: a modal declines, the duplicate screen returns to its form, a
+ * running step keeps running while focus goes back to the list (Esc never
+ * stops a step; c does), and a step's own screen returns to the steps. */
 static void back(struct app *app, struct native_setup *s) {
     switch (s->screen) {
         case SETUP_SCREEN_TRUST_KEY: case SETUP_SCREEN_PLAN: decline(app, s); return;
-        case SETUP_SCREEN_RUNNING: cancel_job(s); return;
-        case SETUP_SCREEN_DUPLICATE: s->screen = SETUP_SCREEN_FORM; s->focus = SETUP_FIELD_NAME; return;
-        case SETUP_SCREEN_FORM: case SETUP_SCREEN_STEPS: case SETUP_SCREEN_DONE:
+        case SETUP_SCREEN_DUPLICATE:
+            s->screen = SETUP_SCREEN_FORM; s->focus = SETUP_FIELD_NAME; s->modal.screen = SETUP_SCREEN_NONE; return;
+        case SETUP_SCREEN_FORM: case SETUP_SCREEN_STEPS: case SETUP_SCREEN_DONE: case SETUP_SCREEN_RUNNING:
             close_flow(app, s); return;
         default: break;
     }
@@ -595,58 +602,9 @@ static void back(struct app *app, struct native_setup *s) {
     s->screen = SETUP_SCREEN_STEPS; s->selected = 0; s->scroll = 0;
 }
 
-/* ---- Keys ---- */
-
-static bool text_screen(const struct native_setup *s) {
-    return s->screen == SETUP_SCREEN_FORM || s->screen == SETUP_SCREEN_TRUST_KEY;
-}
-
-static void text_target(struct native_setup *s, char **text, size_t *size, size_t **cursor) {
-    if (s->screen == SETUP_SCREEN_FORM) {
-        *text = s->fields[s->focus].text; *size = sizeof(s->fields[0].text); *cursor = &s->fields[s->focus].cursor;
-    } else { *text = s->typed; *size = sizeof(s->typed); *cursor = &s->typed_cursor; }
-}
-
-static void text_insert(struct native_setup *s, const char *bytes, size_t count) {
-    char *text; size_t size, *cursor, length, i;
-    text_target(s, &text, &size, &cursor);
-    length = strlen(text);
-    for (i = 0; i < count && length + 1 < size; i++) {
-        unsigned char c = (unsigned char)bytes[i];
-        if (c < 32 || c == 127) continue;
-        memmove(text + *cursor + 1, text + *cursor, length - *cursor + 1);
-        text[(*cursor)++] = (char)c; length++;
-    }
-}
-
-/* Cursor movement within the focused text; false for other keys. */
-static bool cursor_key(uint32_t key, size_t *cursor, size_t length) {
-    if (key == KT_KEY_LEFT) { if (*cursor) (*cursor)--; }
-    else if (key == KT_KEY_RIGHT) { if (*cursor < length) (*cursor)++; }
-    else if (key == KT_KEY_HOME) *cursor = 0;
-    else if (key == KT_KEY_END) *cursor = length;
-    else return false;
-    return true;
-}
-
-/* Editing keys of the focused text; false for keys the screen handles. */
-static bool text_key(struct native_setup *s, const struct kt_event *e) {
-    char *text; size_t size, *cursor, length;
-    text_target(s, &text, &size, &cursor);
-    length = strlen(text);
-    if (*cursor > length) *cursor = length;
-    if (kt_event_is(e, KT_KEY_BACKSPACE, 0) || kt_event_is(e, 'h', KT_MOD_CTRL)) {
-        if (*cursor) { memmove(text + *cursor - 1, text + *cursor, length - *cursor + 1); (*cursor)--; }
-    } else if (!cursor_key(e->key, cursor, length)) {
-        if (!kt_event_text(e)) return false;
-        text_insert(s, e->bytes, e->length);
-    }
-    s->problem[0] = '\0';
-    return true;
-}
+/* ---- Actions of the binding table ---- */
 
 static void move(struct native_setup *s, int direction) {
-    if (s->screen == SETUP_SCREEN_FORM) { s->focus = (s->focus + SETUP_FORM_FIELDS + direction) % SETUP_FORM_FIELDS; return; }
     if (s->screen == SETUP_SCREEN_STEPS || s->screen == SETUP_SCREEN_AGENTS) {
         size_t last = s->screen == SETUP_SCREEN_STEPS ? s->current->step_count : s->current->choice_count;
         if (direction < 0 && s->selected) s->selected--;
@@ -671,61 +629,150 @@ static void page(struct app *app, struct native_setup *s, int direction) {
 }
 
 /* e edits or x removes the unfinished setup the form's name belongs to. */
-static void duplicate_key(struct app *app, struct native_setup *s, uint32_t key) {
+static void duplicate_key(struct app *app, struct native_setup *s, enum key_action action) {
     const struct setup_record *r = find_record(s, s->duplicate);
-    if (!r) { s->screen = SETUP_SCREEN_FORM; return; }
-    if (key == 'e') native_setup_edit(app, (size_t)(r - s->records));
+    if (!r) { s->screen = SETUP_SCREEN_FORM; s->modal.screen = SETUP_SCREEN_NONE; return; }
+    if (action == KEY_HOSTS_EDIT) native_setup_edit(app, (size_t)(r - s->records));
     else native_setup_remove(app, (size_t)(r - s->records));
 }
 
-/* Single-letter commands of screens without a text field. */
-static void letter(struct app *app, struct native_setup *s, uint32_t key) {
-    if (key == 'j') move(s, 1);
-    else if (key == 'k') move(s, -1);
-    else if (key == 'y' && s->screen == SETUP_SCREEN_PLAN) approve(app, s);
-    else if (key == 'n' && s->screen == SETUP_SCREEN_PLAN) decline(app, s);
-    else if (key == 'c' && s->screen == SETUP_SCREEN_RUNNING) cancel_job(s);
-    else if ((key == 'e' || key == 'x') && s->screen == SETUP_SCREEN_DUPLICATE) duplicate_key(app, s, key);
-    else if (key == 'b' && s->screen == SETUP_SCREEN_RUNNING && !s->job.cancelled) close_flow(app, s);
-    else if (key == 'q' && !s->job.active) app->running = false;
+static bool running(const struct native_setup *s) {
+    return s->screen == SETUP_SCREEN_RUNNING && s->job.active && !s->job.cancelled;
 }
 
-/* Focus and scroll: Tab / Shift-Tab and arrows move, pages scroll. */
-static bool navigation_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
-    uint32_t key = e->key;
-    if (kt_event_is(e, KT_KEY_TAB, KT_MOD_SHIFT)) move(s, -1);
-    else if (kt_event_is(e, KT_KEY_TAB, 0) || key == KT_KEY_DOWN) move(s, 1);
-    else if (key == KT_KEY_UP) move(s, -1);
-    else if (key == KT_KEY_PAGE_UP || key == KT_KEY_PAGE_DOWN) page(app, s, key == KT_KEY_PAGE_UP ? -1 : 1);
-    else return false;
-    return true;
+bool native_setup_applies(const struct app *app, enum key_action action) {
+    const struct native_setup *s = app->setup;
+    struct setup_explanation x;
+    if (!s || !s->open || native_setup_modal_open(app)) return false;
+    switch (action) {
+    case KEY_SETUP_CONTINUE:
+        if (s->screen == SETUP_SCREEN_ERROR) { setup_explain(s->current->code, &x); return x.action != NULL; }
+        return s->screen != SETUP_SCREEN_RUNNING;
+    case KEY_SETUP_CANCEL: case KEY_SETUP_BACKGROUND: return running(s);
+    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return s->screen == SETUP_SCREEN_DUPLICATE;
+    default: return true;
+    }
 }
 
-static void screen_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
-    uint32_t key = e->key;
-    if (navigation_key(app, s, e)) return;
-    if (kt_event_is(e, KT_KEY_ENTER, 0) || kt_event_is(e, 'j', KT_MOD_CTRL)) enter(app, s);
-    else if (key == KT_KEY_ESCAPE) back(app, s);
-    else if (!text_screen(s) && !e->mods && key < 128) letter(app, s, key);
-}
-
-static void setup_event(struct app *app, struct native_setup *s, const struct kt_event *e) {
-    if (e->type != KT_KEY) return;
+void native_setup_perform(struct app *app, enum key_action action) {
+    struct native_setup *s = app->setup;
+    if (!s || !s->open) return;
     s->automatic = 0;
-    if (text_screen(s) && e->key != KT_KEY_ESCAPE && text_key(s, e)) return;
-    screen_key(app, s, e);
+    switch (action) {
+    case KEY_SETUP_UP: case KEY_SETUP_DOWN: move(s, action == KEY_SETUP_UP ? -1 : 1); break;
+    case KEY_SETUP_PAGE_UP: case KEY_SETUP_PAGE_DOWN: page(app, s, action == KEY_SETUP_PAGE_UP ? -1 : 1); break;
+    case KEY_SETUP_CONTINUE: enter(app, s); break;
+    case KEY_SETUP_CANCEL: if (running(s)) cancel_job(s); break;
+    case KEY_SETUP_BACKGROUND: if (running(s)) close_flow(app, s); break;
+    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: if (s->screen == SETUP_SCREEN_DUPLICATE) duplicate_key(app, s, action); break;
+    case KEY_BACK: back(app, s); break;
+    default: break;
+    }
 }
 
-/* Keys while the flow is open on Hosts. */
+/* What Enter does on each screen, as its footer names it. */
+static const char *continue_label(const struct native_setup *s) {
+    static char action[96];
+    struct setup_explanation x;
+    switch (s->screen) {
+    case SETUP_SCREEN_STEPS: return s->selected ? "inspect" : "continue";
+    case SETUP_SCREEN_KEY_CHANGED: return "check again";
+    case SETUP_SCREEN_PREFLIGHT: return s->paused ? "continue anyway" : "continue";
+    case SETUP_SCREEN_AGENTS: return "run";
+    case SETUP_SCREEN_UNKNOWN: return "reconcile";
+    case SETUP_SCREEN_HANDOFF: return "hand over";
+    case SETUP_SCREEN_DONE: return "close";
+    case SETUP_SCREEN_DUPLICATE: return "continue that setup";
+    case SETUP_SCREEN_ERROR:
+        setup_explain(s->current->code, &x);
+        copy_text(action, sizeof(action), x.action && !strncmp(x.action, "Enter ", 6) ? x.action + 6 : "retry");
+        return action;
+    default: return "continue";
+    }
+}
+
+const char *native_setup_label(const struct app *app, enum key_action action) {
+    const struct native_setup *s = app->setup;
+    if (!s) return action == KEY_SETUP_CONTINUE ? "continue" : "select";
+    if (action == KEY_SETUP_CONTINUE) return continue_label(s);
+    return s->screen == SETUP_SCREEN_STEPS || s->screen == SETUP_SCREEN_AGENTS ? "select" : "scroll";
+}
+
+/* ---- The modals' keys ---- */
+
+/* Enter moves through the fields like Tab; only the last field starts setup. */
+static void form_event(struct app *app, struct native_setup *s, const struct kt_msg *msg) {
+    struct kt_form *form = &s->modal.form;
+    enum kt_form_result result;
+    if (msg->type == KT_MSG_KEY && kt_event_is(&msg->u.event, KT_KEY_ENTER, 0) && form->focus + 1 < form->count) {
+        kt_form_focus(form, form->focus + 1);
+        s->focus = (int)form->focus;
+        return;
+    }
+    result = kt_form_update(form, msg, app->cmds);
+    s->focus = (int)form->focus;
+    if (result == KT_FORM_SUBMITTED) submit_form(app, s);
+    else if (result == KT_FORM_CANCELLED) back(app, s);
+}
+
+/* The key is trusted only by typing yes and Enter; anything else is refused
+ * at the field and runs nothing. */
+static void trust_event(struct app *app, struct native_setup *s, const struct kt_msg *msg) {
+    enum kt_form_result result = kt_form_update(&s->modal.form, msg, app->cmds);
+    if (result == KT_FORM_SUBMITTED && !strcmp(s->typed, "yes")) approve(app, s);
+    else if (result == KT_FORM_SUBMITTED || result == KT_FORM_INVALID)
+        setup_notice(s, "Type yes (the whole word) to trust this key, or press Esc to decline");
+    else if (result == KT_FORM_CANCELLED) decline(app, s);
+}
+
+/* y approves exactly this plan and n or Esc declines; Enter never answers. */
+static void plan_event(struct app *app, struct native_setup *s, const struct kt_msg *msg) {
+    enum kt_confirm_result result = kt_confirm_update(&s->modal.question, msg, app->cmds);
+    bool removal = !strcmp(s->current->plan_kind, "remove");
+    s->scroll = s->modal.question.scroll;
+    if (result == KT_CONFIRM_ACCEPTED) approve(app, s);
+    else if (result == KT_CONFIRM_CANCELLED) decline(app, s);
+    else if (msg->type == KT_MSG_KEY && (msg->u.event.key == KT_KEY_ENTER || msg->u.event.key == ' '))
+        setup_notice(s, removal ? "Press y to remove the record, or n / Esc to keep it"
+                                : "Press y to approve this exact plan, or n / Esc to decline");
+}
+
+static void modal_message(struct app *app, struct native_setup *s, const struct kt_msg *msg) {
+    s->automatic = 0;
+    setup_modal_sync(app, s);
+    if (s->screen == SETUP_SCREEN_FORM) form_event(app, s, msg);
+    else if (s->screen == SETUP_SCREEN_TRUST_KEY) trust_event(app, s, msg);
+    else plan_event(app, s, msg);
+}
+
+/* Keys and the mouse while a setup modal is open. Escape and a key typed in
+ * quick succession arrive as that key with Alt: Escape acts here, then the
+ * key goes wherever it belongs now. A line feed is Enter. */
 void native_setup_event(struct app *app, const struct kt_event *e) {
     struct native_setup *s = app->setup;
-    if (s && s->open) setup_event(app, s, e);
+    struct kt_msg msg;
+    if (!native_setup_modal_open(app)) return;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = e->type == KT_MOUSE ? KT_MSG_MOUSE : KT_MSG_KEY;
+    msg.u.event = *e;
+    if (e->type == KT_KEY && e->mods == KT_MOD_ALT && e->length == 2 && e->bytes[0] == '\033' && e->key < KT_KEY_UP) {
+        struct kt_event key = *e;
+        msg.u.event.key = KT_KEY_ESCAPE; msg.u.event.mods = 0; msg.u.event.length = 1;
+        modal_message(app, s, &msg);
+        key.mods = 0; key.bytes[0] = e->bytes[1]; key.length = 1;
+        if (app->running) input_event(app, &key);
+        return;
+    }
+    if (kt_event_is(e, 'j', KT_MOD_CTRL)) { msg.u.event.key = KT_KEY_ENTER; msg.u.event.mods = 0; }
+    modal_message(app, s, &msg);
 }
 
 /* Pasted text goes into the focused field; elsewhere it is ignored. */
 void native_setup_paste(struct app *app, const char *bytes, size_t length) {
     struct native_setup *s = app->setup;
-    if (!s || !s->open) return;
-    s->automatic = 0;
-    if (text_screen(s)) text_insert(s, bytes, length);
+    struct kt_msg msg;
+    if (!native_setup_modal_open(app) || s->screen == SETUP_SCREEN_PLAN) return;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = KT_MSG_PASTE; msg.u.paste.bytes = bytes; msg.u.paste.length = length;
+    modal_message(app, s, &msg);
 }

@@ -12,7 +12,6 @@
  * which key_chain_check enforces for the built-in table and every keys file. */
 
 #define CHAIN_BASE (KEY_SCOPE_TERMINAL | KEY_SCOPE_GLOBAL)
-#define CHAIN_VIEW (CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEWS | KEY_SCOPE_VIEW_ARROWS)
 #define CHAIN_WORK (CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_WORK)
 /* Every chain includes the agent layer's chords: they are Hydra's in every
  * view, so no key of a view may start one of them. Work's chains are its
@@ -23,7 +22,9 @@ const uint32_t key_chains[KEY_CHAINS] = {
     [KEY_CHAIN_WORK_DETAILS] = CHAIN_WORK | KEY_SCOPE_WORK_VIEWPORT,
     [KEY_CHAIN_WORK_PLAN] = CHAIN_WORK | KEY_SCOPE_WORK_PLAN | KEY_SCOPE_WORK_VIEWPORT,
     [KEY_CHAIN_WORK_RUN] = CHAIN_WORK | KEY_SCOPE_WORK_RUN,
-    [KEY_CHAIN_HOSTS] = CHAIN_VIEW | KEY_SCOPE_HOSTS,
+    /* Hosts: the list, and the open setup in the detail pane. */
+    [KEY_CHAIN_HOSTS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_HOSTS | KEY_SCOPE_HOSTS_PANES,
+    [KEY_CHAIN_HOSTS_SETUP] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_HOSTS_SETUP | KEY_SCOPE_HOSTS_PANES,
     /* Stats: Tab moves between its panes and w is its workflow filter. */
     [KEY_CHAIN_STATISTICS] = CHAIN_BASE | KEY_SCOPE_JUMPS | KEY_SCOPE_VIEW_ARROWS | KEY_SCOPE_STATISTICS,
     [KEY_CHAIN_INBOX] = CHAIN_BASE | KEY_SCOPE_INBOX | KEY_SCOPE_INBOX_PAGES,
@@ -36,7 +37,7 @@ const uint32_t key_chains[KEY_CHAINS] = {
 static enum key_chain_id view_chain(const struct app *app) {
     if (app->view == 9) return inbox_chain(app);
     if (app->view == 8) return statistics_typing(app) ? KEY_CHAIN_STATS_FILTER : KEY_CHAIN_STATISTICS;
-    if (app->view == 6) return KEY_CHAIN_HOSTS;
+    if (app->view == 6) return hosts_chain(app);
     return work_chain(app);
 }
 
@@ -97,21 +98,19 @@ static bool heads_applies(const struct app *app, enum key_action action) {
     }
 }
 
-/* Inbox and Work decide their own rows; false when action is not one of theirs. */
+/* Inbox, Hosts and Work decide their own rows; false when action is not one of theirs. */
 static bool owner_applies(const struct app *app, enum key_action action, bool *applies) {
     if (action >= KEY_REVIEW_UP && action <= KEY_INBOX_LAST) { *applies = inbox_applies(app, action); return true; }
+    if (hosts_applies(app, action, applies)) return true;
     return work_applies(app, action, applies);
 }
 
 bool key_applies(const struct app *app, enum key_action action) {
-    size_t record;
     bool applies;
     if (owner_applies(app, action, &applies)) return applies;
     if (action >= KEY_HEAD_REMOVE && action <= KEY_HEAD_TECHNICAL) return heads_applies(app, action);
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) return statistics_applies(app, action);
     switch (action) {
-    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return hosts_setup_selected(app, &record);
-    case KEY_HOSTS_RETRY: return app->model.host_count || app->remote_stale;
     case KEY_BACK: return app->view != 7 || app->jump_back || app->search[0] || app->location[0] || app->diagnostics ||
         (app->workspace && app->workspace->layout.focus != WORK_PANE_LIST) || (app->inbox && app->inbox->jumped) ||
         (app->statistics && (app->statistics->graph_open || app->statistics->head_open));
@@ -122,21 +121,16 @@ bool key_applies(const struct app *app, enum key_action action) {
 /* ---- dispatch ------------------------------------------------------------ */
 
 /* The key each action stands for in the views' own handlers (input.c). */
-#define NAMED(key) (0x200000U + (uint32_t)(key))
-#define SHIFT_TAB NAMED(1)
 static uint32_t action_key(enum key_action action) {
     static const uint32_t keys[KEY_ACTIONS] = {
         [KEY_RESULT_UP] = 'k', [KEY_RESULT_DOWN] = 'j', [KEY_RESULT_PAGE_UP] = KT_KEY_PAGE_UP,
         [KEY_RESULT_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_RESULT_CLOSE] = 27, [KEY_RESULT_QUIT] = 'q',
         [KEY_HELP_UP] = 'k', [KEY_HELP_DOWN] = 'j', [KEY_HELP_PAGE_UP] = KT_KEY_PAGE_UP,
         [KEY_HELP_PAGE_DOWN] = KT_KEY_PAGE_DOWN, [KEY_HELP_CLOSE] = 27,
-        [KEY_HOSTS_UP] = 'k', [KEY_HOSTS_DOWN] = 'j', [KEY_HOSTS_OPEN] = '\r', [KEY_HOSTS_ADD] = 'A',
-        [KEY_HOSTS_EDIT] = 'e', [KEY_HOSTS_REMOVE] = 'x', [KEY_HOSTS_RETRY] = 'r', [KEY_HOSTS_ONBOARDING] = 'O',
         [KEY_TASK_NEW] = 'n', [KEY_HEAD_REMOVE] = 'x', [KEY_HEAD_MARK] = ' ', [KEY_HEAD_MARK_ALL] = 'A',
         [KEY_HEAD_GROUP] = 'G', [KEY_HEAD_TECHNICAL] = 'd', [KEY_HEADS_SEARCH] = '/',
         [KEY_HEADS_LOCATION] = 'L', [KEY_HEADS_RETRY] = 'r',
-        [KEY_VIEWS_NEXT] = '\t', [KEY_VIEWS_PREVIOUS] = SHIFT_TAB, [KEY_VIEWS_LEFT] = KT_KEY_LEFT,
-        [KEY_VIEWS_RIGHT] = KT_KEY_RIGHT,
+        [KEY_VIEWS_LEFT] = KT_KEY_LEFT, [KEY_VIEWS_RIGHT] = KT_KEY_RIGHT,
         [KEY_VIEW_1] = '1', [KEY_VIEW_2] = '2', [KEY_VIEW_3] = '3', [KEY_VIEW_4] = '4', [KEY_VIEW_5] = '5',
         [KEY_VIEW_6] = '6', [KEY_VIEW_7] = '7', [KEY_VIEW_8] = '8', [KEY_VIEW_9] = '9',
         [KEY_VIEW_CYCLE] = 'v', [KEY_VIEW_WORKSPACE] = 'W', [KEY_VIEW_OVERVIEW] = 'o', [KEY_VIEW_WORKFLOWS] = 'w',
@@ -164,8 +158,8 @@ void key_perform(struct app *app, enum key_action action) {
     if (work_perform(app, action)) return;
     if (action >= KEY_STATS_UP && action <= KEY_STATS_FILTER_CLEAR) { statistics_perform(app, action); return; }
     if (inbox_perform(app, action)) return;
-    if (key == SHIFT_TAB) input_named(app, KT_KEY_TAB, KT_MOD_SHIFT);
-    else if (key >= KT_KEY_UP) input_named(app, key, 0);
+    if (hosts_perform(app, action)) return;
+    if (key >= KT_KEY_UP) input_named(app, key, 0);
     else if (key) input_character(app, (char)key);
 }
 
@@ -202,6 +196,9 @@ static void applying(const struct app *app, struct kt_binding *rows) {
      * Enter talks to a head and expands or collapses a run. */
     if (remote_head_selected(app) && !app->marked_count) rows[KEY_HEAD_REMOVE].label = "interrupt";
     rows[KEY_HEADS_OPEN].label = work_open_label(app);
+    rows[KEY_HOSTS_OPEN].label = hosts_open_label(app);
+    rows[KEY_SETUP_UP].label = rows[KEY_SETUP_DOWN].label = native_setup_label(app, KEY_SETUP_UP);
+    rows[KEY_SETUP_CONTINUE].label = native_setup_label(app, KEY_SETUP_CONTINUE);
     rows[KEY_STATS_GRAPH].label = statistics_graph_label(app);
     rows[KEY_STATS_PAGE_PREVIOUS].label = rows[KEY_STATS_PAGE_NEXT].label = statistics_page_label(app);
 }

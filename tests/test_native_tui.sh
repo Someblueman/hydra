@@ -363,6 +363,31 @@ for golden_case in remote-runs:140x40: remote-runs:80x24: remote-sessions:140x40
         assert_success $? "golden Stats frame $golden_name at $golden_size ($golden_mode)"
     done
 done
+# Golden Hosts frames: This machine beside the observed hosts at every layout
+# (side by side from 90 columns, stacked from 70, the list alone below), a
+# disconnected host selected (j moves down the list), the add-host form as a
+# modal (A), the Onboarding page and the fleet entry's hosts.
+for golden_case in remote:140x40: remote:100x30: remote:80x24: remote:60x20: remote-offline:140x40:jjj \
+    remote-offline:80x24:jjj add-host:140x40:A add-host:80x24:A; do
+    golden_name="${golden_case%%:*}"; golden_rest="${golden_case#*:}"; golden_size="${golden_rest%%:*}"
+    for golden_mode in plain ascii; do
+        golden_flag=
+        [ "$golden_mode" = ascii ] && golden_flag=--ascii
+        "$tui" $golden_flag --keys "${golden_rest#*:}" --headless-fixture "$fixture" --remote-fixture "$repo_root/tests/fixtures/tui/remote-v3.tsv" \
+            --size "$golden_size" --view hosts > "$test_root/golden.out"
+        cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/hosts-$golden_name-$golden_size-$golden_mode.txt"
+        assert_success $? "golden Hosts frame $golden_name at $golden_size ($golden_mode)"
+    done
+done
+for golden_size in 140x40 80x24; do
+    "$tui" --headless-fixture "$fixture" --onboarding-fixture "$repo_root/tests/fixtures/tui/onboarding/qualify-two.json" \
+        --size "$golden_size" --view hosts > "$test_root/golden.out"
+    cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/hosts-onboarding-$golden_size-plain.txt"
+    assert_success $? "golden Hosts frame of the Onboarding page at $golden_size"
+done
+"$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v2.tsv" --size 140x40 --view hosts > "$test_root/golden.out"
+cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/hosts-fleet-140x40-plain.txt"
+assert_success $? "golden Hosts frame of the fleet entry"
 "$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v2.tsv" --size 140x40 --view statistics > "$test_root/golden.out"
 cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/statistics-fleet-140x40-plain.txt"
 assert_success $? "golden Stats frame of the fleet's hosts"
@@ -786,11 +811,24 @@ if grep -Fq 'builder/' "$test_root/location-local.txt"; then assert_success 1 't
 contains 'stale, 300s old' "$test_root/stale-detail.txt" 'a stale remote head shows its observation age'
 contains 'not its current state' "$test_root/stale-detail.txt" 'a stale observation is never presented as current'
 contains 'nothing here completes or stops it' "$test_root/stale-detail.txt" 'a stale observation does not complete or stop work'
-"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view hosts > "$test_root/unified-hosts.txt"
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view hosts --keys jjj > "$test_root/unified-hosts.txt"
 contains 'offline' "$test_root/unified-hosts.txt" 'a host that did not answer is listed'
 contains 'disconnected' "$test_root/unified-hosts.txt" 'a host that did not answer is disconnected'
 contains 'never observed' "$test_root/unified-hosts.txt" 'a never-observed host says so instead of claiming an age'
 contains 'r retries' "$test_root/unified-hosts.txt" 'hosts offer an explicit retry'
+contains 'r observe again' "$test_root/unified-hosts.txt" 'the footer offers observing the hosts again'
+contains 'Observed 3' "$test_root/unified-hosts.txt" 'observed hosts are listed in their own section'
+contains '* This machine' "$test_root/unified-hosts.txt" 'This machine leads the list'
+# Enter on an observed host opens Work filtered to that host; Esc comes back
+# to Hosts with the host still selected and Work's own filter as it was.
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view hosts --keys "j$(printf '\r')" > "$test_root/hosts-follow.txt"
+contains 'Heads / host builder' "$test_root/hosts-follow.txt" 'Enter on an observed host lands in Work filtered to it'
+if grep -Fq 'feature-live' "$test_root/hosts-follow.txt"; then assert_success 1 'the followed host shows only its work'; else assert_success 0 'the followed host shows only its work'; fi
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view hosts --keys "j$(printf '\r\033')" > "$test_root/hosts-back.txt"
+contains 'builder --------' "$test_root/hosts-back.txt" 'Esc in Work returns to Hosts on the host it followed'
+contains 'Observed 3' "$test_root/hosts-back.txt" 'Esc returns to the Hosts list'
+"$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 100x24 --view hosts --keys "j$(printf '\r\033')1" > "$test_root/hosts-back-work.txt"
+if grep -Fq 'host builder' "$test_root/hosts-back-work.txt"; then assert_success 1 'returning to Hosts restores the location filter Work had'; else assert_success 0 'returning to Hosts restores the location filter Work had'; fi
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
 contains '3 local / 3 remote' "$test_root/unified-overview.txt" 'the top bar counts remote work apart'
 contains '1 of 3 hosts disconnected' "$test_root/unified-overview.txt" 'the top bar names disconnected hosts'

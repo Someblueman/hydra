@@ -197,10 +197,7 @@ src/tui/detail_remote.c	task_detail	20
 src/tui/evidence.c	native_evidence_tick	22
 src/tui/fleet_controls.c	disabled_reason	16
 src/tui/forms.c	prompt_text	45
-src/tui/hosts.c	render_hosts	30
-src/tui/input.c	handle_mouse	43
-src/tui/input.c	head_key	17
-src/tui/input.c	input_character	17
+src/tui/input.c	handle_mouse	19
 src/tui/links.c	native_links_load	21
 src/tui/main.c	main	71
 src/tui/main.c	render_fixture	29

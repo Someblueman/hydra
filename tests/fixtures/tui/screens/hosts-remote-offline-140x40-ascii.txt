@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                               3 local / 3 remote / 1 of 3 hosts disconnected / 1 running  
+                                                                                                                                           
+ Hosts  Onboarding  -------------------- 4 --   offline ------------------------------------------------------------------ disconnected -- 
+  * This machine                      3 heads   List response: failed                                                                      
+  Observed 3                                    Connection: disconnected; ssh_failed / never observed                                      
+  * builder                    1 head / fresh   Observation: unknown / age -                                                               
+  ! archive               1 head / stale 300s   ssh_failed                                                                                 
+ >! offline           disconnected / -- heads                                                                                              
+  + Add a host      set up a machine over SSH   Last confirmed: -                                                                          
+                                                0 task observations                                                                        
+                                                Process liveness: unobserved                                                               
+                                                CPU / memory / load: unavailable                                                           
+                                                Disconnected: rows are the last observation; r retries.                                    
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live   Remote live / 3 remote hosts                                                                                                    
+ ^/v select | enter open | A add host | r observe again | O onboarding | / filter | [/] page | : commands | esc back | ? help | q quit     

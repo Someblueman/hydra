@@ -2,6 +2,7 @@
 #define HYDRA_TUI_SETUP_FLOW_H
 #include "setup_model.h"
 #include "../kettle/input.h"
+#include "../kettle/components.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <time.h>
@@ -23,9 +24,10 @@ enum setup_job {
     SETUP_JOB_REMOVE     /* its data.next.argv after the user approved that plan */
 };
 
+struct app;
 #define SETUP_FORM_FIELDS 3
 enum { SETUP_FIELD_DESTINATION, SETUP_FIELD_NAME, SETUP_FIELD_CONFIG };
-struct setup_field { char text[1024]; size_t cursor; };
+struct setup_field { char text[1024]; };
 
 #define SETUP_RECORDS SETUP_LISTED_MAX
 /* upgrade: a finished setup whose host runs another Hydra (Enter upgrades it). */
@@ -41,6 +43,19 @@ struct setup_capture {
     bool active, eof, reaped, failed, timed_out, cancelled;
 };
 
+/* The modal a screen shows over the steps: the add-host form, the host-key
+ * form (a field that accepts only yes) and a plan's keyed confirmation. The
+ * components stay between frames; their texts are written again for each. */
+struct setup_modal {
+    struct kt_form form;
+    struct kt_field fields[SETUP_FORM_FIELDS];
+    struct kt_textinput inputs[SETUP_FORM_FIELDS];
+    struct kt_confirm question;
+    enum setup_screen screen;     /* the screen the components were made for */
+    bool removal;                 /* the plan they were made for removes a record */
+    char title[200], body[8192];
+};
+
 /* Members are ordered by alignment; see the comments for their roles. */
 struct native_setup {
     /* What the screen shows, and the buffer the next result is parsed into;
@@ -48,9 +63,10 @@ struct native_setup {
      * guided result while its preflight is checked (held_valid). */
     struct setup_envelope *current, *incoming, *sweep_result, *held;
     time_t job_started;
-    size_t handoff_argc, selected, scroll, typed_cursor, record_count;
+    size_t handoff_argc, selected, scroll, record_count;
     struct setup_capture job, sweep;
     struct setup_field fields[SETUP_FORM_FIELDS];
+    struct setup_modal modal;
     enum setup_screen screen;
     enum setup_job job_kind;
     int focus, handoff_exit;
@@ -72,6 +88,10 @@ struct native_setup {
     struct setup_record records[SETUP_RECORDS];
     char handoff[SETUP_ARG_MAX][SETUP_ARG_TEXT];
 };
+
+/* The modal's components made for the current screen, and its title and
+ * body written for this terminal (setup_modal.c). */
+void setup_modal_sync(const struct app *app, struct native_setup *s);
 
 /* Child capture (setup_capture.c): stdout only, stdin and stderr /dev/null,
  * private session. A running capture is stopped only on its deadline or when

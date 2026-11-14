@@ -246,23 +246,23 @@ static void keep(const char *name, int cols, int rows, const char *text) {
 struct screen_case { const char *file, *label; int exit_status; const char *must[4]; const char *never[3]; };
 
 static const struct screen_case screens[] = {
-    {"host-key-approval.json", "trust-key", 3, {"TRUST THE HOST KEY OF ovh", "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8", "Type yes to trust", "type yes, then Enter"}, {"y approve", NULL, NULL}},
-    {"host-key-changed.json", "key-changed", 1, {"THE HOST KEY CHANGED", "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts", "Enter check again", "SHA256:Q2hhbmdl"}, {"Type yes", "y approve", "trust this key"}},
+    {"host-key-approval.json", "trust-key", 3, {"Trust the host key of ovh?", "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8", "Type yes to trust", "enter trust"}, {"y approve", NULL, NULL}},
+    {"host-key-changed.json", "key-changed", 1, {"The host key changed", "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts", "enter check again", "SHA256:Q2hhbmdl"}, {"Type yes", "y approve", "trust this key"}},
     {"host-key-ambiguous.json", "key-ambiguous", 1, {"known_hosts already has a different entry", "ssh-keygen -F", "Enter checks again", NULL}, {"Type yes", "y approve", NULL}},
-    {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "fix: sudo apt-get install git", "never uses sudo"}, {NULL, NULL, NULL}},
-    {"preflight-ok.json", "preflight-ok", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "group-writable umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
-    {"preflight-tmux.json", "preflight-tmux", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "fix: sudo apt-get install tmux", "Enter continues setup"}, {"BLOCKS", "HEADS CANNOT RUN", NULL}},
-    {"provision-approval.json", "provision-pinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", "Install location", "Hydra release download"}, {"Not a release build", "UNPINNED", NULL}},
-    {"provision-approval-unpinned.json", "provision-unpinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "Not a release build: this helper", "Binary SHA-256", "own hydra-fleet helper"}, {"UNPINNED", NULL, NULL}},
-    {"install-approval.json", "install-approval", 3, {"REVIEW: INSTALL claude ON ovh", "umask 022; curl -fsSL https://claude.ai/install.sh", "succeeds;", "y approve"}, {NULL, NULL, NULL}},
-    {"agents.json", "agents", 0, {"AGENTS ON ovh", "> Continue setup", "Install claude", "Sign in to codex"}, {NULL, NULL, NULL}},
+    {"preflight-blocked.json", "preflight-blocked", 1, {"Missing requirements on ovh", "BLOCKS", "fix: sudo apt-get install git", "never uses sudo"}, {NULL, NULL, NULL}},
+    {"preflight-ok.json", "preflight-ok", 0, {"Requirements on ovh", "Nothing blocks setup", "group-writable umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
+    {"preflight-tmux.json", "preflight-tmux", 0, {"Requirements on ovh", "Nothing blocks setup", "fix: sudo apt-get install tmux", "Enter continues setup"}, {"BLOCKS", "Heads cannot run", NULL}},
+    {"provision-approval.json", "provision-pinned", 3, {"Install Hydra on ovh", "pinned: its digest is recorded", "Install location", "Hydra release download"}, {"Not a release build", "UNPINNED", NULL}},
+    {"provision-approval-unpinned.json", "provision-unpinned", 3, {"Install Hydra on ovh", "Not a release build: this helper", "Binary SHA-256", "own hydra-fleet helper"}, {"UNPINNED", NULL, NULL}},
+    {"install-approval.json", "install-approval", 3, {"Install claude on ovh", "umask 022; curl -fsSL https://claude.ai/install.sh", "succeeds;", "y approve"}, {NULL, NULL, NULL}},
+    {"agents.json", "agents", 0, {"Agents on ovh", "\xe2\x96\x8c Continue setup", "Install claude", "Sign in to codex"}, {NULL, NULL, NULL}},
     {"agents.json", "agents-inventory", 0, {"cursor-agent", "recorded location", "not installed", "codex-cli 0.46.0"}, {NULL, NULL, NULL}},
-    {"outcome-unknown.json", "outcome-unknown", 4, {"cannot tell whether", "never installs twice", "Enter reconciles", "exit 4"}, {NULL, NULL, NULL}},
-    {"sign-in-tty.json", "sign-in-handoff", 1, {"SIGN IN TO CLAUDE ON OVH", "hydra remote sign-in ovh --agent claude", "return here at once", "after a failure"}, {"--json", NULL, NULL}},
+    {"outcome-unknown.json", "outcome-unknown", 4, {"cannot tell whether", "installs twice", "Enter reconciles", "exit 4"}, {NULL, NULL, NULL}},
+    {"sign-in-tty.json", "sign-in-handoff", 1, {"Sign in to claude on ovh", "hydra remote sign-in ovh --agent claude", "return here at once", "after a failure"}, {"--json", NULL, NULL}},
     {"sign-in-failed.json", "sign-in-failed", 1, {"Sign-in did not finish", "sign-in exited with a nonzero status", "Enter signs in again", NULL}, {NULL, NULL, NULL}},
-    {"done.json", "done", 0, {"ovh IS READY", "Sign in to claude", "hydra fleet tui", NULL}, {NULL, NULL, NULL}},
-    {"fresh.json", "steps", 0, {"SET UP ovh", "> Continue setup", "Trust the host key", "not started"}, {NULL, NULL, NULL}},
-    {"remove-approval.json", "remove-plan", 3, {"REMOVE THE SETUP RECORD OF ovh", "Left on remote", "Hydra does not connect", "y remove the record"}, {"Type yes", NULL, NULL}},
+    {"done.json", "done", 0, {"ovh is ready", "Sign in to claude", "hydra fleet tui", NULL}, {NULL, NULL, NULL}},
+    {"fresh.json", "steps", 0, {"Setting up ovh", "\xe2\x96\x8c Continue setup", "Trust the host key", "not started"}, {NULL, NULL, NULL}},
+    {"remove-approval.json", "remove-plan", 3, {"Remove the setup record of ovh?", "Left on remote", "Only this machine's record of the setup is deleted", "y remove the record"}, {"Type yes", NULL, NULL}},
 };
 
 static bool contains_all(const char *text, const char *const *must, size_t count) {
@@ -306,8 +306,9 @@ static void screen_case(struct app *app, const struct screen_case *c, int cols, 
     app->cols = cols; app->rows = rows;
     check(load(c->file, s->current, c->exit_status), c->file);
     copy_text(s->name, sizeof(s->name), "ovh");
-    s->open = true; s->notice[0] = '\0'; s->paused = false;
+    s->open = true; s->notice[0] = '\0'; s->paused = false; s->selected = 0;
     s->screen = setup_screen_for(s->current);
+    hosts_focus_detail(app, true);
     if (s->screen == SETUP_SCREEN_HANDOFF) {
         size_t i;
         s->handoff_argc = 0;
@@ -318,7 +319,8 @@ static void screen_case(struct app *app, const struct screen_case *c, int cols, 
     (void)render_capture(app, first, sizeof(first));
     keep(c->label, cols, rows, first);
     snprintf(name, sizeof(name), "%s screen at %dx%d shows what it must and nothing it must not", c->label, cols, rows);
-    /* Drawn inside Hosts: the view is Hosts and the top bar shows its tab. */
+    /* Drawn inside Hosts: the view is Hosts and the top bar shows its tab;
+     * the steps and their screen are in the detail, approvals in a modal. */
     check(contains_all(all, c->must, 4) && contains_none(all, c->never, 3) && app->view == 6 && top_bar_has(first, " Hosts "), name);
 }
 
@@ -331,33 +333,32 @@ static void hub_case(struct app *app, int cols, int rows) {
     copy_text(s->records[0].summary, sizeof(s->records[0].summary), "Install Hydra: needs your approval");
     check(render_capture(app, frame, sizeof(frame)), "hosts tab renders");
     keep("hosts-local", cols, rows, frame);
-    snprintf(name, sizeof(name), "local Hosts tab offers Add a host and Continue setup at %dx%d", cols, rows);
-    check(strstr(frame, "> + Add a host") && strstr(frame, "Install Hydra: needs your approval") && strstr(frame, "A add a host"), name);
+    snprintf(name, sizeof(name), "local Hosts lists This machine, the unfinished setup and Add a host at %dx%d", cols, rows);
+    check(strstr(frame, "\xe2\x96\x8c\xe2\x97\x86 This machine") && strstr(frame, "Setting up 1") && strstr(frame, "Install Hydra: needs") &&
+          strstr(frame, "+ Add a host") && strstr(frame, "A add host"), name);
+    s->record_count = 0;
 }
 
-/* The host-key screen explains itself in full without scrolling, and the
- * typed answer sits on the row directly above its notice. */
+/* The host-key modal explains itself in full without scrolling: the
+ * fingerprint, what trusting writes, and the field that takes yes. */
 static void trust_fit_case(struct app *app, int cols, int rows) {
     char frame[65536], name[128];
-    const char *prompt, *next;
     struct native_setup *s = app->setup;
     app->cols = cols; app->rows = rows;
     check(load("host-key-approval.json", s->current, 3), "host-key fixture loads");
     s->open = true; s->notice[0] = '\0'; s->scroll = 0; s->typed[0] = '\0';
-    s->screen = SETUP_SCREEN_TRUST_KEY;
+    s->screen = SETUP_SCREEN_TRUST_KEY; s->modal.screen = SETUP_SCREEN_NONE;
     check(render_capture(app, frame, sizeof(frame)), "host-key screen renders");
-    prompt = strstr(frame, "Type yes to trust this key: _");
-    next = prompt ? strchr(prompt, '\n') : NULL;
-    snprintf(name, sizeof(name), "host-key screen at %dx%d fits its explanation above an adjacent prompt", cols, rows);
-    check(!s->more && !strstr(frame, "more below") && strstr(frame, "machine itself") &&
-          strstr(frame, "appends exactly one line") && strstr(frame, "refuses to connect rather than replace it.") &&
-          next && strstr(next + 1, "Anything but yes") && strchr(next + 1, '\n') > strstr(next + 1, "Anything but yes"), name);
+    snprintf(name, sizeof(name), "host-key modal at %dx%d fits its explanation above the field that takes yes", cols, rows);
+    check(!s->more && !strstr(frame, "more below") && strstr(frame, "machine itself") && strstr(frame, "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8") &&
+          strstr(frame, "appends exactly one line") && strstr(frame, "refuses to connect rather than") &&
+          strstr(frame, "Type yes to trust this key") && strstr(frame, "Anything but yes leaves the key untrusted"), name);
 }
 
 /* A guided run paused because tmux is missing: the first frame explains why
  * and shows the tmux row with its suggested fix, above other warnings. */
 static void paused_case(struct app *app, int cols, int rows) {
-    static const char *const must[] = {"HEADS CANNOT RUN ON ovh YET", "cannot run heads there", "install tmux yourself",
+    static const char *const must[] = {"Heads cannot run on ovh yet", "cannot run heads there", "install tmux yourself",
                                        "fix: sudo apt-get install tmux", "Enter continues setup anyway"};
     char frame[65536], name[128];
     const char *tmux, *umask;
@@ -366,12 +367,13 @@ static void paused_case(struct app *app, int cols, int rows) {
     check(load("preflight-tmux.json", s->current, 0), "tmux preflight fixture loads");
     s->open = true; s->notice[0] = '\0'; s->scroll = 0;
     s->screen = SETUP_SCREEN_PREFLIGHT; s->paused = true;
+    hosts_focus_detail(app, true);
     check(render_capture(app, frame, sizeof(frame)), "paused requirements render");
     keep("preflight-paused", cols, rows, frame);
     tmux = strstr(frame, "warning  tmux"); umask = strstr(frame, "warning  umask");
     snprintf(name, sizeof(name), "paused requirements at %dx%d explain the pause and list tmux first", cols, rows);
     check(contains_all(frame, must, 5) && !strstr(frame, "BLOCKS") && tmux && umask && tmux < umask &&
-          strstr(frame, "Enter continue anyway"), name);
+          strstr(frame, "enter continue anyway"), name);
     s->paused = false;
 }
 
@@ -399,12 +401,15 @@ static void setup_keys(struct app *app, const char *bytes) {
 static void key_cases(struct app *app) {
     struct native_setup *s = app->setup;
     app->cols = 100; app->rows = 30; s->open = true;
-    load("provision-approval.json", s->current, 3); s->screen = SETUP_SCREEN_PLAN;
+    hosts_focus_detail(app, true);
+    load("provision-approval.json", s->current, 3); s->screen = SETUP_SCREEN_PLAN; s->modal.screen = SETUP_SCREEN_NONE;
     setup_keys(app, "\r");
     check(s->screen == SETUP_SCREEN_PLAN && !s->job.active && strstr(s->notice, "Press y"), "Enter does not approve a plan");
+    setup_keys(app, "\t\r ");
+    check(s->screen == SETUP_SCREEN_PLAN && !s->job.active, "Enter and space approve nothing whichever button has the focus");
     setup_keys(app, "n");
     check(s->screen == SETUP_SCREEN_STEPS && !s->job.active && strstr(s->notice, "nothing was changed"), "n declines and runs nothing");
-    load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0'; s->typed_cursor = 0;
+    load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0'; s->modal.screen = SETUP_SCREEN_NONE;
     setup_keys(app, "y\r");
     check(s->screen == SETUP_SCREEN_TRUST_KEY && !s->job.active && strstr(s->notice, "Type yes"), "a partial yes does not trust the key");
     setup_keys(app, "\033");
@@ -415,6 +420,38 @@ static void key_cases(struct app *app) {
     load("host-key-changed.json", s->current, 1); s->screen = SETUP_SCREEN_KEY_CHANGED;
     setup_keys(app, "yes");
     check(s->screen == SETUP_SCREEN_KEY_CHANGED && !s->job.active, "no key accepts a changed host key");
+}
+
+/* The host-key field accepts only the word yes: other answers, its other
+ * spellings and a yes with more after it run nothing; yes and Enter run the
+ * CLI's own trust command. */
+static void trust_cases(struct app *app) {
+    static const char *const refused[] = {"\r", "ye\r", "Yes\r", "YES\r", "yes \r", "yes please\r", "y\r", "no\r"};
+    struct native_setup *s = app->setup;
+    struct timespec pause = {0, 20000000};
+    const char *hydra = app->hydra;
+    size_t i;
+    int waited;
+    bool none = true;
+    app->cols = 80; app->rows = 24; s->open = true;
+    for (i = 0; i < sizeof(refused) / sizeof(refused[0]); i++) {
+        load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0';
+        s->modal.screen = SETUP_SCREEN_NONE; s->notice[0] = '\0';
+        setup_keys(app, refused[i]);
+        none = none && s->screen == SETUP_SCREEN_TRUST_KEY && !s->job.active && strstr(s->notice, "Type yes (the whole word)") &&
+            strstr(s->modal.fields[0].error, "Type yes (the whole word)");
+    }
+    check(none, "the host key is not trusted by Enter alone, a partial yes, another case, trailing text or no");
+    /* The approved command is the CLI's own; here it names a program that
+     * does not exist, so nothing runs past the attempt. */
+    app->hydra = "/nonexistent/hydra";
+    load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0'; s->modal.screen = SETUP_SCREEN_NONE;
+    setup_keys(app, "yes\r");
+    check(s->job.active && s->job_kind == SETUP_JOB_APPROVED && !strcmp(s->job_step, "host_key"), "yes and Enter run the trust step the plan names");
+    for (waited = 0; waited < 250 && s->job.active; waited++) { native_setup_tick(app); nanosleep(&pause, NULL); }
+    check(!s->job.active, "the trust step's child is reaped");
+    app->hydra = hydra;
+    s->screen = SETUP_SCREEN_STEPS; s->notice[0] = '\0';
 }
 
 static void type_text(struct app *app, const char *text) {
@@ -435,6 +472,7 @@ static void edit_cases(struct app *app) {
     copy_text(r->config, sizeof(r->config), "/Users/you/.ssh/private"); copy_text(r->summary, sizeof(r->summary), "Check requirements: blocked");
     s->open = false; app->host_selected = 1;
     check(hosts_setup_selected(app, &record) && record == 0, "the Hosts row of an unfinished setup offers edit and remove");
+    hosts_focus_detail(app, false);
     native_setup_open_form(app);
     type_text(app, "deploy@ovh.example.net\r");
     check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_NAME && !s->job.active,
@@ -444,7 +482,7 @@ static void edit_cases(struct app *app) {
           "Enter in the name moves to the SSH config file and runs nothing");
     type_text(app, "\r");
     check(s->screen == SETUP_SCREEN_DUPLICATE && !s->job.active && !strcmp(s->duplicate, "ovh"), "a duplicate name is caught before anything runs");
-    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "ovh ALREADY HAS AN UNFINISHED SETUP") &&
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "ovh already has an unfinished setup") &&
           strstr(frame, "/Users/you/.ssh/private") && strstr(frame, "Enter continues that setup"), "the duplicate screen offers continue, edit and remove");
     keep("duplicate", 100, 30, frame);
     setup_keys(app, "\033");
@@ -453,7 +491,8 @@ static void edit_cases(struct app *app) {
     setup_keys(app, "e");
     check(s->screen == SETUP_SCREEN_FORM && !strcmp(s->editing, "ovh") && !strcmp(s->fields[SETUP_FIELD_CONFIG].text, "/Users/you/.ssh/private") &&
           !strcmp(s->fields[SETUP_FIELD_DESTINATION].text, "deploy@ovh.example.net") && !s->job.active, "e opens the setup prefilled");
-    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "EDIT THE SETUP OF ovh") && strstr(frame, "removes the old setup record"),
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "Edit the setup of ovh") && strstr(frame, "removes the old setup") &&
+          strstr(frame, "/Users/you/.ssh/private"),
           "the edit form says the old record is replaced");
     keep("edit-form", 100, 30, frame);
     r->remote_changed = true; app->notice[0] = '\0';
@@ -483,10 +522,17 @@ static void running_cases(struct app *app) {
     s->job_kind = SETUP_JOB_INSPECT; s->job_started = time(NULL) - 12;
     copy_text(s->job_step, sizeof(s->job_step), "host_key");
     s->open = true; s->notice[0] = '\0'; s->scroll = 0; s->screen = SETUP_SCREEN_RUNNING;
+    hosts_focus_detail(app, true);
     check(render_capture(app, frame, sizeof(frame)), "running screen renders");
     keep("running", 80, 24, frame);
-    check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "Esc or c cancel"),
-          "a running step shows its phrase, elapsed seconds and how to cancel");
+    check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "c cancels (a rerun continues safely)") &&
+          strstr(frame, "c cancel step") && strstr(frame, "b background"),
+          "a running step shows its phrase, elapsed seconds and how to cancel or leave it running");
+    setup_keys(app, "\033");
+    check(!s->job.cancelled && s->job.active && !s->open && strstr(app->notice, "keeps running"),
+          "Esc leaves a running step running and gives the list the focus");
+    native_setup_resume(app, "ovh");
+    check(s->open && s->screen == SETUP_SCREEN_RUNNING && s->job.active, "Enter on its row shows the running step again");
     setup_keys(app, "c");
     check(s->job.cancelled && s->job.active, "c cancels the running child");
     for (waited = 0; waited < 250 && s->job.active; waited++) { native_setup_tick(app); nanosleep(&pause, NULL); }
@@ -571,6 +617,7 @@ int main(int argc, char **argv) {
     screens_at(app, 80, 24);
     screens_at(app, 140, 40);
     key_cases(app);
+    trust_cases(app);
     running_cases(app);
     edit_cases(app);
     freshness_cases(app);

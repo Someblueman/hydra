@@ -91,6 +91,7 @@ uint32_t kt_confirm_scope(const struct kt_confirm *c) {
 void kt_confirm_place(struct kt_confirm *c, struct kt_rect area) {
     size_t limit;
     c->area = area;
+    if (area.width < 1 || area.height < 1) return;   /* not placed yet */
     limit = scroll_limit(c);
     if (c->scroll > limit) c->scroll = limit;
 }

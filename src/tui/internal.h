@@ -411,6 +411,8 @@ void go_back(struct app *app);
 void enter_view(struct app *app, int view);
 size_t tab_order(const struct app *app, int *views);
 void select_tab(struct app *app, int direction);
+/* Opens a screen as a jump: Esc there comes back to the one it left. */
+void screen_jump(struct app *app, int view);
 /* Opens screen index (0 Work, 1 Inbox, 2 Hosts, 3 Stats). */
 void enter_screen(struct app *app, int index);
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms);
@@ -423,31 +425,32 @@ void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
 void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t *scroll);
 void native_workspace_graph(struct app *app, struct kt_canvas *c, bool planning);
-void render_hosts(struct app *app);
 /* Remote setup (U10): setup_flow.c, setup_hosts.c, setup_render.c and
- * setup_capture.c. The flow is a layer over the Hosts tab that owns input
- * while open; every mutation is a `hydra remote ...` child. */
+ * setup_capture.c. The flow shows in the Hosts detail pane, its approvals
+ * and its form as modals; every mutation is a `hydra remote ...` child. */
 struct native_setup *native_setup_state(struct app *app);
 bool native_setup_active(const struct app *app);
-bool native_setup_running(const struct app *app);
 void native_setup_open_form(struct app *app);
 void native_setup_resume(struct app *app, const char *name);
 /* Hosts tab e / x on an unfinished setup record (index into records). */
 void native_setup_edit(struct app *app, size_t record);
 void native_setup_remove(struct app *app, size_t record);
-/* The selected Hosts row is an unfinished setup record; *record is its index. */
-bool hosts_setup_selected(const struct app *app, size_t *record);
 void native_setup_event(struct app *app, const struct kt_event *e);
 void native_setup_paste(struct app *app, const char *bytes, size_t length);
 void native_setup_tick(struct app *app);
 void native_setup_sweep_tick(struct app *app);
 void native_setup_hosts_refresh(struct app *app);
 void native_setup_render(struct app *app);
-const char *native_setup_title(const struct app *app);
-const char *native_setup_hints(const struct app *app, bool narrow);
+void native_setup_modal(struct app *app);
+/* The binding table's setup actions, as hosts_perform runs them. */
+bool native_setup_applies(const struct app *app, enum key_action action);
+void native_setup_perform(struct app *app, enum key_action action);
+const char *native_setup_label(const struct app *app, enum key_action action);
+bool native_setup_modal_open(const struct app *app);
+/* The flow closes; a step that runs keeps running. */
+void native_setup_close(struct app *app);
 void native_setup_destroy(struct app *app);
 int setup_terminal_handoff(struct app *app, char *const argv[], const char *step);
-void render_setup_hub(struct app *app);
 /* Onboarding operator view (H5): onboarding_flow.c, onboarding_render.c,
  * onboarding_model.c, onboarding_text.c and onboarding_form.c. A layer over
  * the Hosts tab like setup; every action is a `hydra fleet ...` child. */
@@ -456,19 +459,13 @@ void native_onboarding_open(struct app *app);
 bool native_onboarding_event(struct app *app, const struct kt_event *e);
 void native_onboarding_tick(struct app *app);
 void native_onboarding_render(struct app *app);
-const char *native_onboarding_title(const struct app *app);
 const char *native_onboarding_hints(const struct app *app, bool narrow);
+/* The view closes (Esc on its list, [ or ]); a child that runs keeps running. */
+void native_onboarding_close(struct app *app);
 void native_onboarding_destroy(struct app *app);
 int native_onboarding_fixture(struct app *app, const char *export_file, const char *intent_file, const char *screen);
 void native_onboarding_dump(struct app *app, FILE *out);
-/* Hosts tab rows: fleet hosts, setup records and the "Add a host" row. */
-enum host_row_kind { HOST_ROW_HOST, HOST_ROW_SETUP, HOST_ROW_ADD };
-struct host_row { enum host_row_kind kind; size_t index; };
-size_t hosts_rows(const struct app *app, struct host_row *rows, size_t capacity);
-size_t hosts_row_count(const struct app *app);
-void hosts_open_row(struct app *app);
-void hosts_retry_row(struct app *app);
-void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
+#include "hosts.h"
 struct native_terminal *native_terminal_selected(struct app *app);
 void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
 struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h);

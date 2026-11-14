@@ -33,6 +33,7 @@ static void poll_work(struct app *app, bool request) {
         app->preview_wanted = wanted;
         native_setup_tick(app);
         native_onboarding_tick(app);
+        hosts_machine_tick(app);
     }
     native_activity_tick(app);
     native_terminals_pump(app);

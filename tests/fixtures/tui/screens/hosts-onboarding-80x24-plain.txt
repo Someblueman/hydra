@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Hosts  Onboarding  ────────────────────────────────────────────────────────── 
+  ONBOARDING / candidates, qualification and enrollment                        
+  2 candidates / export qualify-two.json                                       
+    NAME / TARGET    STATE                                                     
+  > build            qualified                                                 
+    other            revoked                                                   
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  rows 1-2 of 2                                                                
+  Enter inspects; s/S/P/l filter state, source, platform, label; / searches; x 
+  ● live                                                                       
+ j/k select  Enter detail  f find  Q qualify  r review  i intent  q quit       

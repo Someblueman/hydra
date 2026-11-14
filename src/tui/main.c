@@ -130,6 +130,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     inbox_destroy(app);
     native_workspace_destroy(app);
     native_onboarding_destroy(app);
+    hosts_destroy(app);
     statistics_destroy(app);
     transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
@@ -283,6 +284,7 @@ int main(int argc, char **argv) {
     native_plan_destroy(&app);
     native_setup_destroy(&app);
     native_onboarding_destroy(&app);
+    hosts_destroy(&app);
     statistics_destroy(&app);
     transcript_free(app.transcript);
     frame_free(&app);

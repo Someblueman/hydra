@@ -212,9 +212,9 @@ static void test_remote_stale_and_disconnected(const char *tui, const char *hydr
     result(wait_for_marker(&session, "disconnected", 2000), "Hosts shows the host as disconnected");
     result(wait_for_marker(&session, "retained row", 2000), "Hosts counts the retained rows");
     (void)unlink(switch_path);
-    write_input(session.master, "r", 1U);
-    result(wait_for_marker(&session, "Reconnecting to", 2000), "r on a host row retries that host");
-    if (!result(wait_for_marker(&session, "1 heads  reachable", 12000), "a host that answers again is connected with a fresh observation")) remote_dump(&session);
+    write_input(session.master, "jr", 2U);
+    result(wait_for_marker(&session, "Reconnecting to builder", 2000), "r on a host row retries that host");
+    if (!result(wait_for_marker(&session, "Observation: fresh", 12000), "a host that answers again is connected with a fresh observation")) remote_dump(&session);
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "stale remote terminal exits and restores the terminal");
     close_session(&session);

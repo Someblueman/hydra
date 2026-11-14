@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Hosts  Onboarding  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+  ONBOARDING / candidates, qualification and enrollment                                                                                    
+  2 candidates / export qualify-two.json                                                                                                   
+    NAME / TARGET                  STATE                          SOURCE     PLATFORM         AGE                                          
+  > build                          qualified                      ssh        linux-x86_64     28d                                          
+    other                          revoked                        ssh        unknown          28d                                          
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  rows 1-2 of 2                                                                                                                            
+  Enter inspects; s/S/P/l filter state, source, platform, label; / searches; x clears; r reviews, i intent                                 
+  ● live                                                                                                                                   
+ j/k select  Enter detail  f find  Q qualify  r review  i intent  c changes  s/S/P/l filters  [/] page  Esc back  q quit                   

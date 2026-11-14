@@ -478,16 +478,9 @@ void native_onboarding_render(struct app *app) {
     }
 }
 
-const char *native_onboarding_title(const struct app *app) {
-    static const char *const titles[] = {"Hosts: onboarding", "Hosts: onboarding / candidate", "Hosts: onboarding / snapshot changes",
-                                         "Hosts: onboarding / discover", "Hosts: onboarding / review", "Hosts: onboarding / intent",
-                                         "Hosts: onboarding / running", "Hosts: onboarding / result"};
-    return titles[app->onboarding->screen];
-}
-
 const char *native_onboarding_hints(const struct app *app, bool narrow) {
     switch (app->onboarding->screen) {
-        case ONB_SCREEN_LIST: return narrow ? "Enter detail  f find  Q qualify  r review  Esc back" : "j/k select  Enter detail  f find  Q qualify  r review  i intent  c changes  s/S/P/l filters  Esc back  q quit";
+        case ONB_SCREEN_LIST: return narrow ? "Enter detail  f find  Q qualify  r review  [/] page  Esc back" : "j/k select  Enter detail  f find  Q qualify  r review  i intent  c changes  s/S/P/l filters  [/] page  Esc back  q quit";
         case ONB_SCREEN_SELECT: case ONB_SCREEN_REVIEW: return "Tab next field  Enter submit on the last field  Esc back";
         case ONB_SCREEN_INTENT: return narrow ? "a apply  s status  Esc back" : "j/k scroll  a apply after confirming the digest  s refresh status  Esc back  q quit";
         case ONB_SCREEN_RUNNING: return "Esc or c cancel  b back to Hosts";
