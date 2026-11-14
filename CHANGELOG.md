@@ -92,6 +92,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking (keys):** the control centre has one key table. Its footer and
+  `?` help are generated from it, and duplicate keys in a view are refused.
+  `I` always opens Attention: plan import moved to the `:` palette ("import
+  plan files") and refresh moved to `ctrl+r`. `--print-keys` and the keys
+  file list every action by group; keys files from earlier versions still
+  load. The letters A, B, `[` and `]` no longer move the Attention selection
+  (arrows do), and `ctrl+]` gives focus back to the navigation while keeping
+  the conversation on screen below 120 columns.
+- Every question, form and result in the control centre opens over a dimmed
+  view. Confirmations default to Cancel, `y` accepts, and nothing asks you to
+  type a word or a request ID. New task is one form (task name showing its
+  branch, agent chosen from the available agents, objective). The `:` palette
+  searches as you type over the actions that apply and Hydra's commands;
+  read-only commands open in an output viewer. Outcomes show as toasts, and
+  failed actions stay listed for the session ("Your failed actions" in the
+  palette). Help scrolls.
+- Approving a plan in the control centre is one action: `E` on a revision
+  that has not been validated validates exactly that revision and runs it
+  when validation is ready. If the draft changes first or validation finds a
+  problem, nothing runs. Approve and reject in the run monitor confirm the
+  exact request, and send nothing if the run or request changed while the
+  dialog was open.
+- Attention in a project with no workflow runs says so instead of
+  "unavailable".
+
 - The control centre's three themes are unchanged in 24-bit and 256-colour
   terminals. With `NO_COLOR` it now marks titles, muted text and the selection
   with bold, dim and reverse instead of showing plain text only; in a
