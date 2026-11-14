@@ -357,6 +357,12 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     (void)wait_for_marker(&session, "Land kill-dry-run-worker?", 1000);
     write_input(session.master, "y", 1U);
     result(inbox_argv(argv_path, "land\nkill-dry-run-worker\n", 3000), "y runs hydra land for exactly that worker");
+    /* The land's output opens in the viewer, which q closes without
+     * quitting; q then quits from the Inbox. */
+    result(wait_for_marker(&session, "esc close", 3000), "the land's output opens in the viewer");
+    write_input(session.master, "q", 1U);
+    for (i = 0; i < 40 && session_visible(&session, "esc close"); i++) { drain_output(&session); sleep_ms(50); }
+    result(!session_visible(&session, "esc close") && still_running(&session), "q closes the land output and Hydra keeps running");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "Inbox land terminal restores");
     close_session(&session);

@@ -15,7 +15,7 @@ FRAME 1 80x24
                            spawn-check   ✓ succeeded         5s                
                            verify        ✓ succeeded         3s                
                                                                                
-                          spawn-worker ──────────────────────────── evidence   
+                          spawn-worker ─────────────────────────── pgdn more   
                           Head    kill-dry-run-worker                          
                           Kind    spawn/work, attempt 1                        
                           Needs   -                                            
