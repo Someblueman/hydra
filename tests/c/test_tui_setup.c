@@ -377,10 +377,33 @@ static void paused_case(struct app *app, int cols, int rows) {
     s->paused = false;
 }
 
+/* This machine with eight agent profiles at 80x24: the agents shrink to two
+ * rows that still name each one, so the remote explanation and the next
+ * action stay above the status line; at 140x40 they keep a row each. */
+static void machine_case(struct app *app, int cols, int rows) {
+    static const char *const names[] = {"claude", "codex", "cursor", "agy", "opencode", "copilot", "aider", "gemini"};
+    struct hosts_machine *m = &hosts_state(app)->machine;
+    char frame[65536], name[160];
+    size_t i;
+    app->cols = cols; app->rows = rows; app->setup->open = false; app->host_selected = 0;
+    m->read = m->agents_read = true;
+    copy_text(m->tmux, sizeof(m->tmux), "3.4"); copy_text(m->hydra, sizeof(m->hydra), "3.0.0");
+    for (i = 0; i < 8; i++) { copy_text(m->agents[i].name, sizeof(m->agents[i].name), names[i]); m->agents[i].available = !i; }
+    m->agent_count = 8;
+    check(render_capture(app, frame, sizeof(frame)), "This machine renders");
+    keep("hosts-machine", cols, rows, frame);
+    snprintf(name, sizeof(name), "This machine at %dx%d names every agent and keeps the whole explanation in view", cols, rows);
+    check(strstr(frame, "claude") && strstr(frame, "gemini") && strstr(frame, "codex") && strstr(frame, "not found on PATH") &&
+          strstr(frame, "when a task") && strstr(frame, "Nothing changes on") && strstr(frame, "approve it.") &&
+          strstr(frame, "Press Enter or A to add a host") && strstr(frame, "filters by location."), name);
+    m->agent_count = 0; m->read = m->agents_read = false;
+}
+
 static void screens_at(struct app *app, int cols, int rows) {
     size_t i;
     for (i = 0; i < sizeof(screens) / sizeof(screens[0]); i++) screen_case(app, &screens[i], cols, rows);
     hub_case(app, cols, rows);
+    machine_case(app, cols, rows);
     trust_fit_case(app, cols, rows);
     paused_case(app, cols, rows);
 }

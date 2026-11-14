@@ -334,26 +334,73 @@ static void machine_agents(struct app *app, const struct hosts_machine *m) {
     if (!m->agent_count) linef(app, " no agent profiles");
 }
 
+/* The agents in two labelled rows, for a pane too short to list them one
+ * per row: those found, then those not found, each by name. */
+static void machine_agents_line(struct app *app, const struct hosts_machine *m) {
+    char found[TEXT] = "", missing[TEXT] = "";
+    size_t i;
+    for (i = 0; i < m->agent_count; i++) {
+        char *text = m->agents[i].available ? found : missing;
+        text_append(text, TEXT, "%s%s", text[0] ? ", " : "", m->agents[i].name);
+    }
+    if (found[0]) {
+        char line[TEXT + 32];
+        snprintf(line, sizeof(line), "%s %s on PATH", glyph(app, "\xe2\x97\x8f", "*"), found);
+        labelled(app, "Agents", line, KT_SUCCESS);
+    } else labelled(app, "Agents", "none on PATH", KT_MUTED);
+    if (missing[0]) {
+        char line[TEXT + 32];
+        snprintf(line, sizeof(line), "%s not found on PATH: %s", glyph(app, "\xe2\x97\x8b", "-"), missing);
+        labelled(app, "", line, KT_MUTED);
+    }
+}
+
 /* The words every Hosts start has said since remote setup existed (U10). */
+static const char remote_about[] =
+    "Hydra can run agents on other machines over SSH, for example a build box with more cores or a "
+    "machine that already has the right toolchain, when a task needs more than this machine offers. Adding a "
+    "host checks its SSH host key and requirements, installs a matching Hydra there and helps you install "
+    "and sign in to agents. Nothing changes on the remote until you approve it.";
+
+static const char *remote_next(size_t count) {
+    return count > 2 ? "Enter continues a host's setup or upgrades its Hydra; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
+                     : "Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.";
+}
+
 static void remote_explanation(struct app *app, size_t count) {
-    paragraph(app, "Hydra can run agents on other machines over SSH, for example a build box with more cores or a "
-              "machine that already has the right toolchain, when a task needs more than this machine offers. Adding a "
-              "host checks its SSH host key and requirements, installs a matching Hydra there and helps you install "
-              "and sign in to agents. Nothing changes on the remote until you approve it.", KT_BASE);
+    paragraph(app, remote_about, KT_BASE);
     blank(app);
-    paragraph(app, count > 2 ? "Enter continues a host's setup or upgrades its Hydra; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
-                             : "Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.", KT_MUTED);
+    paragraph(app, remote_next(count), KT_MUTED);
+}
+
+/* The rows prose takes at the content width; nothing is drawn. */
+static int prose_rows(struct app *app, const char *text) {
+    size_t start = (size_t)1 << 20, skip = start;
+    paragraph_skip(app, text, KT_BASE, &skip);
+    return (int)(start - skip);
+}
+
+/* Whether the agent list must shrink to one row so that the explanation
+ * below it stays in view: the heads, tmux and Hydra rows, the agents and the
+ * blank rows between, then the two paragraphs. */
+static bool agents_compact(struct app *app, const struct hosts_machine *m, size_t count) {
+    int listed = m->agents_read && m->agent_count ? (int)m->agent_count : 1;
+    int full = 3 + 1 + 1 + listed + 1 + prose_rows(app, remote_about) + 1 + prose_rows(app, remote_next(count));
+    return m->agents_read && m->agent_count > 1 && full > app->limit - app->line;
 }
 
 static void machine_detail(struct app *app, const struct pane *p, size_t count) {
     const struct hosts_machine *m = &app->hosts->machine;
+    bool compact;
     detail_rule(app, p, "This machine", "");
     content(app, p);
+    compact = agents_compact(app, m, count);
     machine_heads(app);
     reading(app, "tmux", m->tmux, m->read);
     reading(app, "Hydra", m->hydra, m->read);
-    blank(app);
-    machine_agents(app, m);
+    /* Two labelled agent rows sit under the version rows they continue. */
+    if (compact) machine_agents_line(app, m);
+    else { blank(app); machine_agents(app, m); }
     blank(app);
     remote_explanation(app, count);
 }
