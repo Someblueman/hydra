@@ -120,6 +120,70 @@ test_json_escape_utf8() {
     assert_equal "$expected" "$result" "UTF-8 with quotes still escapes quotes only"
 }
 
+# The byte-at-a-time encoder json_escape uses for strings that need escaping,
+# kept here as the reference every input must match byte for byte.
+json_escape_bytewise_reference() {
+    printf '%s' "$1" | LC_ALL=C od -An -v -tu1 | {
+        while IFS= read -r _jer_line || [ -n "$_jer_line" ]; do
+            # shellcheck disable=SC2086
+            for _jer_b in $_jer_line; do
+                case "$_jer_b" in
+                    34) printf '%s' '\"' ;;
+                    92) printf '%s' "\\\\" ;;
+                    8)  printf '%s' '\b' ;;
+                    9)  printf '%s' '\t' ;;
+                    10) printf '%s' '\n' ;;
+                    12) printf '%s' '\f' ;;
+                    13) printf '%s' '\r' ;;
+                    *)
+                        if [ "$_jer_b" -lt 32 ]; then
+                            printf '\\u00%02x' "$_jer_b"
+                        else
+                            printf '%b' "$(printf '\\%03o' "$_jer_b")"
+                        fi
+                        ;;
+                esac
+            done
+        done
+    }
+}
+
+test_json_escape_matches_bytewise() {
+    echo ""
+    echo "Testing json_escape output matches the byte-at-a-time encoder..."
+
+    _jem_inputs="$(test_mktemp_file)"
+    {
+        # Literal shell metacharacters are input bytes here, not expansions.
+        # shellcheck disable=SC2016,SC1003
+        printf '%s\n' '' run_0123abcd step.running 'attempt=1 class=success' 2026-11-14T01:02:03Z \
+            'abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 _.:=/@,+-' \
+            ' leading' 'trailing ' - -n -e '%s%d' '$HOME' '`x`' "it's" '!x' '~x' '#x' '*' '?' '[a-z]' '[!a]' \
+            'a\b' 'say "hi"' '\' '"' 'b-a' 'x;y' 'x|y' 'x&y' '(x)' '{x}' '<x>' '^x' 'tab	x'
+        printf 'caf\303\251\n'
+        printf '\303\n'
+        printf '\200\377\n'
+        printf 'del\177x\n'
+        printf 'a\001b\037c\n'
+        printf 'cr\rx\n'
+    } > "$_jem_inputs"
+    _jem_failed=0
+    for _jem_locale in C C.UTF-8; do
+        while IFS= read -r _jem_input || [ -n "$_jem_input" ]; do
+            _jem_new="$(LC_ALL="$_jem_locale" json_escape "$_jem_input" | od -An -v -tx1)"
+            _jem_old="$(json_escape_bytewise_reference "$_jem_input" | od -An -v -tx1)"
+            if [ "$_jem_new" != "$_jem_old" ]; then
+                _jem_failed=1
+                printf '  differs in %s for bytes: %s\n' "$_jem_locale" "$(printf '%s' "$_jem_input" | od -An -tx1)"
+            fi
+        done < "$_jem_inputs"
+    done
+    _jem_multiline="$(printf 'line one\nline two\n\n')"
+    [ "$(json_escape "$_jem_multiline" | od -An -v -tx1)" = "$(json_escape_bytewise_reference "$_jem_multiline" | od -An -v -tx1)" ] || _jem_failed=1
+    rm -f "$_jem_inputs"
+    assert_success "$_jem_failed" "json_escape is byte-identical to the byte-at-a-time encoder"
+}
+
 # =============================================================================
 # Unit Tests for JSON helper functions
 # =============================================================================
