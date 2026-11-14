@@ -27,7 +27,7 @@ python=$(command -v python3)
 "$python" -c 'import PIL' 2>/dev/null || { echo 'record.sh: Python needs Pillow (python3 -m pip install pillow)' >&2; exit 1; }
 
 echo 'Building the control centre...'
-make -s -C "$repo" BUILD_DIR="$make_build" build-core build-tui "$make_build/kettle-cells" >/dev/null
+make -s -C "$repo" BUILD_DIR="$make_build" build-core build-tui build-fleet "$make_build/kettle-cells" >/dev/null
 
 real_tmux=$(command -v tmux)
 real_git=$(command -v git)

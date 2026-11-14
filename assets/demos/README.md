@@ -70,9 +70,10 @@ sh assets/demos/record.sh
 
 It overwrites `quick-tour.gif` and `quick-tour.mp4` beside this file and takes
 about two minutes: setup, a tour of about 70 seconds in real time, then
-rendering and encoding. It needs a C99 compiler, Make, Git, tmux 3.0 or later,
-Python 3 with Pillow, ffmpeg with libx264, and fontconfig with DejaVu Sans Mono
-(`HYDRA_DEMO_FONT` names another monospace family). It needs no network, AI
+rendering and encoding. It needs a C99 compiler, Make, pkg-config and JSON-C
+development files (for `hydra-fleet`, which plans need), Git, tmux 3.0 or
+later, Python 3 with Pillow, ffmpeg with libx264, and fontconfig with DejaVu
+Sans Mono (`HYDRA_DEMO_FONT` names another monospace family). It needs no network, AI
 CLI, SSH host or terminal recorder. `HYDRA_DEMO_OUTPUT=dir` writes the two files
 elsewhere, `HYDRA_DEMO_FRAMES=dir` also keeps every distinct frame as PNG, and
 `BUILD_DIR` is honoured as by `make`.
