@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A shorter planning flow. An agent writes a one-screen plan (`hydra plan
+  schema` prints the short `simple-1` form: objective, worker instructions,
+  commands, what "done" means) and publishes it with `hydra plan propose`;
+  each publication is a numbered revision, checked at once against the
+  project's plan policy, with diagnostics the agent can act on. You then run
+  `hydra plan show` (a readable summary: the steps in words, the worker's full
+  instructions, the commands and the text of any script that will run, "changes
+  only branch X", the time limit in minutes, what done means, the policy),
+  `hydra plan approve` (compiles that revision afresh, shows it, asks once and
+  starts it; `--accept <digest>` remains for automation), `hydra plan status`
+  and `hydra plan review`. Nothing needs to be copied between commands. The
+  guided policy is the project's standing default (`hydra plan policy` shows
+  and edits it). The technical preview is behind `--technical`, and every
+  existing `hydra workflow plan ...` command still works; expert features
+  (obligations, relations, reuse, repair, staged and schema 2 plans) are
+  documented under "Advanced plans".
+- After each agent step on a worker head a plan created, Hydra commits what
+  the agent left there (without hooks or signing), so the checks, the review
+  and landing all refer to one commit. New files that look like secrets
+  (`.env` files, private keys, credentials) are left out and listed. A new
+  `command` check passes when its command exits 0 on that commit, and Hydra
+  writes the evidence itself ("make check exited 0 on commit ...").
+- `hydra land <worker>` lands a plan's verified commit: a local merge of
+  exactly the commit the checks ran on into the checkout's current branch (or
+  `--into`), never a push. It refuses a worker that moved since the checks or
+  a checkout with tracked changes, asks for confirmation on a terminal, records
+  the landing in the run, and retires the worker head (keeping its branch, and
+  keeping the head if it still has work not on the branch). The review's NEXT
+  section and the control centre now give this one command.
+- Approving, running or landing a plan, and editing the plan policy, are
+  refused from inside an agent's head (`HYDRA_HEAD_ID`/`HYDRA_INSTANCE_ID`
+  set) unless `HYDRA_PLAN_ALLOW_AGENT=1`. This guards against an agent
+  approving its own plan; it is not a security boundary.
+- `hydra-fleet workflow-plan summary [--json]`: the readable plan as text or
+  as a stable JSON projection for the control centre (`docs/CONTRACTS.md`).
+
 - kettle (the terminal library under `src/kettle/`, formerly termviz) gains an
   application runtime, `kt_program`: the application supplies `init`, `update`
   and `view` over its own model; input, resizes, timers, watched descriptors,
@@ -92,6 +128,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The control centre has a new frame: a dark theme by default (`--theme`,
+  `HYDRA_TUI_THEME` and the palette still choose the terminal or light theme),
+  a top bar with `◆ hydra`, numbered tabs and the view's title, titled rules
+  instead of boxes around panes, a status chip (`● live`, `▲ stale`, ...) and
+  a filled selection bar in the Work list and Recovery.
+- A running plan no longer compiles the plan again before every step. It is
+  compiled once when the run is admitted; before each step, at the finish and
+  on resume, Hydra checks the compiled plan against the approved digest and
+  the run's copied inputs against digests recorded at the start. An untracked
+  file or a new commit in your checkout no longer stops a running plan (a
+  moved HEAD is recorded once as a warning), while a changed compiled plan or
+  copied input still does. Steps start about a quarter of a second sooner and
+  a run uses about 20% less CPU. Plan digests use a built-in SHA-256 (same
+  values).
 - **Breaking (keys):** the control centre has one key table. Its footer and
   `?` help are generated from it, and duplicate keys in a view are refused.
   `I` always opens Attention: plan import moved to the `:` palette ("import
