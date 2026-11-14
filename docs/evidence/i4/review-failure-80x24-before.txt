@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / evidence                                                     │
+│ n/N section  L log  space/b page  f refs  i IDs  Esc back                   │
+│ RESULT  kill-dry-run  -  verdict FAILED  -  run failed                      │
+│ Objective: add hydra kill --dry-run so a removal can be previewed without   │
+│     removing anything                                                       │
+│                                                                             │
+│ WHAT WAS PRODUCED                                                           │
+│   answer - the implementation summary (step implement, available)           │
+│     388 bytes                                                               │
+│     | Added --dry-run to hydra kill; the worktree listing is printed before │
+│     | the sessions are closed.                                              │
+│                                                                             │
+│ WHAT WAS CHECKED                                                            │
+│   FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it would │
+│       remove (check: repo-check)                                            │
+│   FAIL    req-no-removal - a dry run removes nothing (check: repo-check)    │
+│                                                                             │
+│ HOW IT WAS VERIFIED                                                         │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit  

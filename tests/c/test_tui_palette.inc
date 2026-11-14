@@ -38,6 +38,16 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
             result(wait_for_marker(&session, "Remove feature-live?", 1000), "kill asks for an in-app confirmation");
             write_input(session.master, "y", 1U);
         }
+        if (strcmp(cases[index].query, "kill") == 0) {
+            /* A removal that succeeded moves focus to surviving work at once
+             * (the result is a notice, not an overlay); the fake keeps the
+             * head, so step back to it for the next cases. */
+            result(wait_for_marker(&session, cases[index].expected, 2000), cases[index].expected);
+            result(wait_for_selected(&session, "feature-stale", 1000), "a removed head hands focus to the next surviving head");
+            write_input(session.master, "k", 1U);
+            (void)wait_for_selected(&session, "feature-live", 1000);
+            continue;
+        }
         result(wait_for_marker(&session, cases[index].expected, 2000), cases[index].expected);
         if (!strcmp(cases[index].query, "diff"))
             result(!wait_for_marker(&session, "Press Enter to return", 300) && still_running(&session),

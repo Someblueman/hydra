@@ -202,7 +202,7 @@ printf '1\n' > "$run_dir/steps/spawn-worker/authoritative-attempt"
 
 # The statistics feed carries the exec receipt evidence for the agent step (U rows).
 hydra workflow statistics-data > "$fixture/statistics.tsv"
-[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}5" ]
+[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}6" ]
 grep -Fqx "U${tab}$run${tab}implement${tab}fixture-codex${tab}codex-cli 0.99.0-fixture${tab}-${tab}-${tab}3850000${tab}3740000${tab}23000${tab}-" "$fixture/statistics.tsv"
 [ "$(grep -c "^U$tab" "$fixture/statistics.tsv")" -eq 1 ]
 

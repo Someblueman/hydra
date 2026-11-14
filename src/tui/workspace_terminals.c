@@ -27,8 +27,8 @@ void native_workspace_sync_terminal(struct app *app) {
     app->terminals->selected=(size_t)(t-app->terminals->slots);
     for (head=0;head<app->model.head_count;head++)
         if (!strcmp(app->model.heads[head].head_id,t->head) && !strcmp(app->model.heads[head].instance,t->instance) &&
-            (!app->fleet || (!strcmp(app->model.heads[head].remote_host,t->remote_host) &&
-             !strcmp(app->model.heads[head].remote_project,t->remote_project)))) {
+            !strcmp(app->model.heads[head].remote_host,t->remote_host) &&
+            !strcmp(app->model.heads[head].remote_project,t->remote_project)) {
             app->selected=head; break;
         }
 }
@@ -88,5 +88,5 @@ void native_workspace_split_agents(struct app *app) {
     key_hint(app,app->notice,sizeof(app->notice)," / ","Two attached agents|{terminal.leave} changes focus|{workspace.split} restores one pane");
     return;
 unavailable:
-    copy_text(app->notice,sizeof(app->notice),"Attach two local heads with a before splitting agent panes");
+    copy_text(app->notice,sizeof(app->notice),"Attach two heads with a before splitting agent panes");
 }

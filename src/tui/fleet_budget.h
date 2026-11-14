@@ -13,6 +13,10 @@
 
 /* The control centre requests fresh observations this often. */
 #define HYDRA_TUI_REFRESH_SECONDS 2L
+/* The remote observation runs beside the local one at the same cadence; it
+ * waits longer when no host is registered and after a failed attempt. */
+#define HYDRA_TUI_REMOTE_IDLE_SECONDS 30L
+#define HYDRA_TUI_REMOTE_RETRY_SECONDS 5L
 
 /* Local state observation is one transaction: the shell reader, or the read
  * of the state store with the tmux and git commands it starts. Keep startup

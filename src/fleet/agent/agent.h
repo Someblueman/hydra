@@ -57,12 +57,25 @@ struct agent_stream {
     char session[129];
     char *answer;
     size_t consumed, received, line_start;
-    bool malformed, stale, failed, permission, session_seen, observation_failed;
+    bool malformed, stale, failed, permission, session_seen;
     json_object *events, *usage;
     /* A model or effort the provider itself reported in its event stream. */
     char observed_model[97], observed_effort[33];
+    /* Provider status is heuristic and only the latest matters: recorded is the
+     * last status the shell accepted for this run, pending the latest one the
+     * provider reported. A lost observation never stops the worker; it keeps
+     * the count, the last failed ingest's exit status, deadline and bounded
+     * stderr (owned excerpt), and waits retry_at before trying again. */
+    char recorded_status[16], pending_status[16];
+    long long retry_at;
+    size_t observation_failures;
+    int observation_exit;
+    bool observation_timed_out;
+    json_object *observation_error;
 };
 void agent_observe(void *context, const char *text, size_t size);
+/* One last attempt to record a pending status after the provider exits. */
+void agent_observe_final(struct agent_stream *stream);
 bool agent_stop(void *context);
 /* Caller-owned provider configuration record, or NULL; see agent_config.c. */
 json_object *agent_configuration(json_object *profile, json_object *args);
@@ -71,6 +84,7 @@ json_object *agent_view_cli(int argc, char **argv);
 int agent_retain(const char *head, const char *run, const struct f_capture *capture);
 /* Bounded UTF-8-safe excerpt {text,bytes,truncated} of size bytes, or NULL when empty. */
 json_object *agent_excerpt(const char *text, size_t size);
-/* Adds "diagnostic" to a failed receipt only: undecoded stdout and stderr excerpts. */
+/* Adds "diagnostic" to a failed receipt (undecoded stdout and stderr excerpts)
+ * and to any receipt whose status observations could not all be recorded. */
 void agent_diagnose(json_object *record, const struct agent_stream *stream, const struct f_capture *cap, int status);
 #endif

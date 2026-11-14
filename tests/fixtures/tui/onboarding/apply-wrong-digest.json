@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"command":"fleet-enrollment","error":{"code":"invalid_intent","message":"review or confirmation changed; create and confirm a fresh review","recovery":"inspect remote state and the reported error before retrying; mutations are never replayed automatically"}}

@@ -20,6 +20,11 @@ struct head {
     char notification_source[SOURCE_TEXT];
     /* interactive, headless, or empty when an older row did not say. */
     char terminal[16];
+    /* Remote heads: the host observation's freshness and age, and whether
+     * the row was retained from an earlier observation of a host that no
+     * longer answers (never fresh, never an authority for actions). */
+    char freshness[32], age[40];
+    bool retained;
     unsigned notifications;
     unsigned events, signals, messages, claims, scopes, queue, resources, diff, gates, approved;
 };
@@ -32,6 +37,8 @@ struct host_observation {
     char name[128], state[40], error[128], connection[40], freshness[32];
     char last_confirmed[40], age[40];
     unsigned heads, tasks;
+    /* Heads or tasks shown for this host come from an earlier observation. */
+    bool retained;
 };
 
 struct task_observation {
@@ -42,9 +49,15 @@ struct task_observation {
     char result_state[32], verification_state[32];
     char spec_sha256[65], cancellation[32], cancellation_scope[64], cancel_requested_at[40], request_id[128];
     unsigned pending;
+    bool retained;
 };
 
+/* Which adapter a model came from: the local HYDRA_TUI stream or the fleet
+ * HYDRA_FLEET_TUI stream. A composed model (local plus remote) is MODEL_UNION. */
+enum model_protocol { MODEL_LOCAL, MODEL_FLEET, MODEL_UNION };
+
 struct model {
+    enum model_protocol protocol;
     struct head heads[MAX_HEADS];
     struct recovery recovery[MAX_RECOVERY];
     size_t head_count, recovery_count;

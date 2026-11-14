@@ -3,15 +3,15 @@ FRAME 1 140x40
                                                                               Local / 3 heads / 1 running / 3 need attention / 4 to repair 
 SCOPE -----------------  RUNS ---------------------  RUNNING ------------------  NEED ATTENTION -----------  RETRIES --------------------- 
                            8                           1                           3                           3                           
-  all recorded                                                                                                                             
-  T changes the range      in this scope               steps right now             failed, blocked or unkn     repeated attempts           
+  all recorded                                                                     failed, blocked or                                      
+  T changes the range      in this scope               steps right now             unknown                     repeated attempts           
                                                                                                                                            
   Workflow: all           Latest attempts average 95.0s over 6 timed steps, longest 120s                                                   
   [ ] chooses one        RUN OUTCOMES / recorded -------------------------------  RUN CREATION / 7 x 24h --------------------------------- 
-                                                                                                                                           
-  1 undated                Succeeded    3   #############.....................      -6d   0   ..........................................   
-  0 outside range          Failed       1   #####.............................      -5d   0   ..........................................   
-                           Running      1   #####.............................      -4d   0   ..........................................   
+  Location: all                                                                                                                            
+  L cycles / C cohorts     Succeeded    3   #############.....................      -6d   0   ..........................................   
+  1 undated                Failed       1   #####.............................      -5d   0   ..........................................   
+  0 outside range          Running      1   #####.............................      -4d   0   ..........................................   
   Timing 6/11              Queued       0   ..................................      -3d   0   ..........................................   
   Attempts 8/11            Blocked      1   #####.............................      -2d   1   ###########...............................   
                            Cancelled    1   #####.............................      -1d   1   ###########...............................   
@@ -19,13 +19,13 @@ SCOPE -----------------  RUNS ---------------------  RUNNING ------------------ 
   no agent steps                                                                                                                           
                          RUNS / newest creation first ------------------------------------------------------------------------------------ 
   CPU and memory: not                                                                                                                      
-  measured. Hydra does     > visualization-proof                       running             09-07 13:30 UTC                                 
-  not sample processes       release-check                             succeeded           09-07 13:00 UTC                                 
-  yet (roadmap item          recovery-check                            failed              09-07 12:00 UTC                                 
-  10).                       recovery-check                            recovery-required   09-07 08:00 UTC                                 
-                             release-check                             succeeded           09-06 13:00 UTC                                 
-  0 resets filters           release-check                             succeeded           09-05 14:00 UTC                                 
-                             release-check                             cancelled           08-28 04:00 UTC                                 
+  measured for local       > visualization-proof                       running             09-07 13:30 UTC                                 
+  steps (no task             release-check                             succeeded           09-07 13:00 UTC                                 
+  receipt); remote task      recovery-check                            failed              09-07 12:00 UTC                                 
+  receipts report them       recovery-check                            recovery-required   09-07 08:00 UTC                                 
+  (C cohorts).               release-check                             succeeded           09-06 13:00 UTC                                 
+                             release-check                             succeeded           09-05 14:00 UTC                                 
+  0 resets filters           release-check                             cancelled           08-28 04:00 UTC                                 
                              imported-work                             -                   unknown date                                    
                                                                                                                                            
                                                                                                                                            
@@ -38,4 +38,4 @@ SCOPE -----------------  RUNS ---------------------  RUNNING ------------------ 
                            1/8 / Enter evidence / g graph                                                                                  
                                                                                                                                            
  Recorded workflow runs / all recorded / all work                                                                                          
- ^/v select | enter evidence | g graph | T range | ! needs you only | 0 reset filters | M metric | / find | ? help | q quit                
+ ^/v select | enter evidence | g graph | T range | ! needs you only | M metric | C remote cohorts | L location | ? help | q quit           

@@ -13,9 +13,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static int private_directory(char path[F_PATH]) {
+int hd_private_directory(char path[F_PATH], const char *child) {
     char home[F_PATH]; struct stat st;
-    int home_fd = -1, fleet_fd = -1, directory_fd = -1, status = -1;
+    int home_fd = -1, fleet_fd = -1, directory_fd = -1, child_fd = -1, status = -1;
     if (f_mkdirs(f_home) || !realpath(f_home, home)) goto done;
     home_fd = open(home, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (home_fd < 0 || fstat(home_fd, &st) || st.st_uid != geteuid() || (st.st_mode & 0022)) goto done;
@@ -23,8 +23,14 @@ static int private_directory(char path[F_PATH]) {
     if (fleet_fd < 0) goto done;
     directory_fd = task_owned_directory(fleet_fd, "discovery", true);
     if (directory_fd < 0 || f_path(path, F_PATH, home, "fleet/discovery")) goto done;
+    if (child) {
+        char relative[F_PATH];
+        child_fd = task_owned_directory(directory_fd, child, true);
+        if (child_fd < 0 || f_path(relative, sizeof(relative), "fleet/discovery", child) || f_path(path, F_PATH, home, relative)) goto done;
+    }
     status = 0;
 done:
+    if (child_fd >= 0) close(child_fd);
     if (directory_fd >= 0) close(directory_fd);
     if (fleet_fd >= 0) close(fleet_fd);
     if (home_fd >= 0) close(home_fd);
@@ -35,7 +41,7 @@ static int progress_lock(struct hd_progress *progress, const char *export) {
     json_object *label = json_object_new_object();
     f_string_add(label, "export", export);
     int status = enrollment_hash(label, id); json_object_put(label);
-    if (status || private_directory(directory) || snprintf(filename, sizeof(filename), "%s.json", id) >= (int)sizeof(filename) ||
+    if (status || hd_private_directory(directory, NULL) || snprintf(filename, sizeof(filename), "%s.json", id) >= (int)sizeof(filename) ||
         f_path(progress->path, sizeof(progress->path), directory, filename) ||
         snprintf(lock_path, sizeof(lock_path), "%s.lock", progress->path) >= (int)sizeof(lock_path)) return -1;
     progress->lock = open(lock_path, O_CREAT | O_RDWR | O_NOFOLLOW | O_NONBLOCK, 0600);
@@ -64,9 +70,20 @@ static json_object *binding(const struct hd_options *options, json_object *rows)
         if (f_hash(options->config, digest)) goto bad;
         f_string_add(out, "ssh_config_sha256", digest);
     }
+    /* Live sources bind their acquired membership; a changed acquisition is a
+     * changed selection and needs renewed qualification, never silent reuse. */
+    for (size_t i = 0; options->live && i < json_object_array_length(options->live); i++) {
+        json_object *report = json_object_array_get_idx(options->live, i), *item = json_object_new_object();
+        f_string_add(item, "kind", f_string(report, "kind")); f_string_add(item, "locator", f_string(report, "locator"));
+        if (enrollment_hash(f_field(report, "records"), digest)) { json_object_put(item); goto bad; }
+        f_string_add(item, "records_sha256", digest);
+        if (!f_field(out, "sources")) json_object_object_add(out, "sources", json_object_new_array());
+        json_object_array_add(f_field(out, "sources"), item);
+    }
     for (size_t i = 0; i < json_object_array_length(rows); i++) {
         json_object *row = json_object_array_get_idx(rows, i), *item = json_object_new_object();
-        const char *policy = f_string(f_field(f_field(row, "resolution"), "data"), "policy_sha256");
+        const char *status = f_string(row, "status");
+        const char *policy = status && !strcmp(status, "revoked") ? "revoked" : f_string(f_field(f_field(row, "resolution"), "data"), "policy_sha256");
         if (!policy) { json_object_put(item); goto bad; }
         f_string_add(item, "candidate_id", f_string(row, "candidate_id"));
         f_string_add(item, "target", f_string(row, "target")); f_string_add(item, "policy_sha256", policy);
@@ -79,23 +96,43 @@ bad:
 }
 static bool restore_row(json_object *row, json_object *prior) {
     static const char *fields[] = {"status", "qualification", "qualified_at", "qualification_attempts", "qualification_history", "qualification_history_truncated", NULL};
-    const char *status = f_string(prior, "status");
+    const char *status = f_string(prior, "status"), *current = f_string(row, "status");
+    /* Read before the loop below replaces the row's status, which frees current. */
+    bool revoked_now = current && !strcmp(current, "revoked");
     json_object *count = f_field(prior, "qualification_attempts"), *history = f_field(prior, "qualification_history");
     if (count && (!json_object_is_type(count, json_type_int) || json_object_get_int64(count) < 0 || json_object_get_int64(count) >= 1000000)) return false;
     if (history && (!json_object_is_type(history, json_type_array) || json_object_array_length(history) > 4)) return false;
     if (!json_object_equal(f_field(row, "candidate_id"), f_field(prior, "candidate_id")) ||
         !json_object_equal(f_field(row, "target"), f_field(prior, "target")) || !status ||
-        (strcmp(status, "not_qualified") && strcmp(status, "compatible") && strcmp(status, "qualification_failed"))) return false;
-    if (!strcmp(status, "compatible") && (!json_object_get_boolean(f_field(f_field(prior, "qualification"), "ok")) ||
+        (strcmp(status, "not_qualified") && strcmp(status, "compatible") && strcmp(status, "qualification_failed") && strcmp(status, "revoked"))) return false;
+    if (strcmp(status, "revoked") && !strcmp(status, "compatible") && (!json_object_get_boolean(f_field(f_field(prior, "qualification"), "ok")) ||
         !f_handshake_compatible(f_field(f_field(prior, "qualification"), "data")))) return false;
     for (size_t i = 0; fields[i]; i++)
         if (f_field(prior, fields[i])) json_object_object_add(row, fields[i], json_object_get(f_field(prior, fields[i])));
     f_string_add(row, "qualification_freshness", "retained; reauthentication required before enrollment");
+    /* A revocation wins over any retained result and is never undone by a
+     * saved record; the prior evidence stays inspectable under it. */
+    if (revoked_now || !strcmp(status, "revoked")) {
+        f_string_add(row, "status", "revoked"); f_string_add(row, "qualification_freshness", "retained; identity revoked");
+    }
     return true;
+}
+/* A row revoked since the record was written keeps its stored policy digest
+ * in the binding: revocation changes no selection, only the row's status. */
+static bool binding_matches(json_object *expected, json_object *stored) {
+    json_object *a = f_field(expected, "selected"), *b = f_field(stored, "selected"), *copy = NULL; bool same;
+    if (!json_object_is_type(a, json_type_array) || !json_object_is_type(b, json_type_array) ||
+        json_object_array_length(a) != json_object_array_length(b) || json_object_deep_copy(expected, &copy, NULL)) return false;
+    for (size_t i = 0; i < json_object_array_length(a); i++) {
+        json_object *item = json_object_array_get_idx(f_field(copy, "selected"), i), *prior = json_object_array_get_idx(b, i);
+        const char *policy = f_string(item, "policy_sha256"), *before = f_string(prior, "policy_sha256");
+        if (policy && before && !strcmp(policy, "revoked")) f_string_add(item, "policy_sha256", before);
+    }
+    same = json_object_equal(copy, stored); json_object_put(copy); return same;
 }
 static bool restore(json_object *rows, json_object *record, json_object *expected) {
     json_object *prior = f_field(record, "candidates");
-    if (!f_number_is(record, "schema_version", 1) || !json_object_equal(f_field(record, "binding"), expected) ||
+    if (!f_number_is(record, "schema_version", 1) || !binding_matches(expected, f_field(record, "binding")) ||
         !json_object_is_type(prior, json_type_array) || json_object_array_length(prior) != json_object_array_length(rows)) return false;
     for (size_t i = 0; i < json_object_array_length(rows); i++)
         if (!restore_row(json_object_array_get_idx(rows, i), json_object_array_get_idx(prior, i))) return false;

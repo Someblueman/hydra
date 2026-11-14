@@ -13,16 +13,6 @@ static const char *evidence_state(const struct hs_metric_summary *s) {
     return "known";
 }
 
-static void write_json_string(FILE *out, const char *value) {
-    const unsigned char *p;
-    fputc('"', out);
-    for (p = (const unsigned char *)value; *p; p++) {
-        if (*p == '"' || *p == '\\') fputc('\\', out);
-        if (*p < 0x20) fputc(' ', out); else fputc(*p, out);
-    }
-    fputc('"', out);
-}
-
 static void write_summary(FILE *out, const struct hs_metric_summary *s) {
     fprintf(out, "{\"state\":\"%s\",\"eligible\":%zu,\"known\":%zu",
             evidence_state(s), s->eligible, s->known);
@@ -125,10 +115,11 @@ static void write_recorded_text(FILE *out, const char *label, const struct hs_mo
     }
 }
 
-/* JSON export schema: 3 adds head sessions (feed schema 5), 2 added the
- * recorded metrics (feed schema 3). */
+/* JSON export schema: 4 adds head sessions (feed schema 6), 3 added the
+ * location filter, remote block, cohorts and telemetry (feed schema 5), 2
+ * added the recorded metrics (feed schema 3). */
 static unsigned export_version(unsigned feed) {
-    return feed >= 5 ? 3U : feed >= 3 ? 2U : 1U;
+    return feed >= 6 ? 4U : feed >= 5 ? 3U : feed >= 3 ? 2U : 1U;
 }
 
 static const char *sum_state(size_t eligible, size_t known) {
@@ -182,8 +173,9 @@ static bool write_one(FILE *out, const struct hs_model *m,
     fprintf(out, "{\"schema_version\":%u,\"availability\":\"known\",\"observed\":%llu,\"filter\":{\"days\":%u,\"attention\":%s,\"query\":",
             export_version(m->schema_version),
             (unsigned long long)m->observed, filter->days, filter->attention ? "true" : "false");
-    write_json_string(out, filter->query);
-    fputs(",\"workflow\":", out); write_json_string(out, filter->workflow);
+    hs_json_string(out, filter->query);
+    fputs(",\"workflow\":", out); hs_json_string(out, filter->workflow);
+    if (m->schema_version >= 5) { fputs(",\"location\":", out); hs_json_string(out, filter->location); }
     fputs("},\"cohort\":{\"runs\":", out);
     fprintf(out, "%zu,\"steps\":%zu},\"metrics\":{", cohort.runs, cohort.steps);
     for (metric = HS_QUEUE; metric < HS_METRICS; metric++) {
@@ -195,7 +187,7 @@ static bool write_one(FILE *out, const struct hs_model *m,
     }
     fputc('}', out);
     write_recovery_outcomes(out, m, filter);
-    if (m->schema_version >= 5) write_sessions(out, m, filter);
+    if (m->schema_version >= 6) write_sessions(out, m, filter);
     if (m->schema_version >= 3) {
         fputs(",\"recorded\":{\"unknown_receiver_outcomes\":", out);
         write_recorded_metric(out, m, filter, 0);
@@ -205,8 +197,13 @@ static bool write_one(FILE *out, const struct hs_model *m,
     } else fputs(",\"unmeasured\":{\"unknown_receiver_outcomes\":null,\"manual_interventions\":null,\"network_transfer_bytes\":null}", out);
     fprintf(out, ",\"coverage\":{\"partial\":%s,\"partial_runs\":%zu,\"warnings\":%zu,\"last_warning\":",
             (m->warnings || cohort.partial_runs) ? "true" : "false", cohort.partial_runs, m->warnings);
-    write_json_string(out, m->warning);
-    fputs("},\"remote\":{\"state\":\"unavailable\",\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}}", out);
+    hs_json_string(out, m->warning);
+    fputs("},", out);
+    if (m->schema_version >= 5) {
+        hs_write_remote_json(out, &cohort); fputc(',', out);
+        hs_write_cohorts_json(out, m, filter); fputc(',', out);
+        hs_write_telemetry_json(out, &cohort); fputc('}', out);
+    } else fputs("\"remote\":{\"state\":\"unavailable\",\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}}", out);
     return !ferror(out);
 }
 
@@ -275,7 +272,7 @@ static void write_text_cohort(FILE *out, const char *label, const struct hs_mode
             label, recovered.eligible, recovered.successes + recovered.failures,
             recovered.successes, recovered.failures, recovered.unknown, recovered.missing_history);
     if (model->schema_version >= 3) write_recorded_text(out, label, model, filter);
-    if (model->schema_version >= 5) write_sessions_text(out, label, model, filter);
+    if (model->schema_version >= 6) write_sessions_text(out, label, model, filter);
     for (enum hs_metric metric = HS_QUEUE; metric < HS_METRICS; metric++) {
         struct hs_metric_summary value;
         hs_metric_summarize(model, filter, metric, &value);

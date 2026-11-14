@@ -4,8 +4,9 @@ FRAME 1 140x40
  Coordination ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
   COORDINATION  feature-live                                                                                                               
                                                                                                                                            
-  This head is a single agent session. Coordination between heads uses claims (files a head intends to change), scopes (areas it stays     
-  within), a shared work queue and allocated resources. A workflow adds steps, dependencies and handoffs on top.                           
+  This head is a single agent session. Coordination between heads matters when several heads work in the same project: claims (files a     
+  head intends to change), scopes (areas it stays within), a shared work queue and allocated resources let Hydra flag overlap early. For   
+  example, two heads that both claim lib/ are reported before they conflict. A workflow adds steps, dependencies and handoffs on top.      
                                                                                                                                            
   THIS HEAD                                                                                                                                
   Claims      1 recorded             : claims                                                                                              
@@ -16,7 +17,6 @@ FRAME 1 140x40
                                                                                                                                            
   WORKFLOW                                                                                                                                 
   2 recorded workflow run(s) in this project; Workflows shows steps and dependencies.                                                      
-                                                                                                                                           
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            

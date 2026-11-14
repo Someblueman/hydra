@@ -38,4 +38,4 @@ PROJECT ----------- |SELECTED WORK ---------------------------------------------
                     |                                                                        |                                             
                     |                                                                        |                                             
   * live                                                                                                                                   
- ^/v select | enter open | tab/shift+tab pane | a talk to agent | P review proposal | n new task | x remove | ? help | q quit              
+ ^/v select | enter details | tab/shift+tab pane | a talk to agent | P review proposal | n new task | x remove | ? help | q quit           

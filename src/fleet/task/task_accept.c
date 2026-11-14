@@ -13,7 +13,8 @@
 #include <unistd.h>
 
 static bool task_id(const char *id) { return id && !strncmp(id, "task_", 5) && task_hex(id + 5, 64); }
-static json_object *receipt(const char *directory, const char *id, const char *digest) {
+/* generation 0 skips the assignment-generation comparison (reads). */
+static json_object *receipt(const char *directory, const char *id, const char *digest, int generation) {
     json_object *accepted = task_read_record(directory, "acceptance.json"), *state = task_read_record(directory, "state.json"), *result = NULL;
     const char *stored_id = f_string(accepted, "task_id"), *stored_digest = f_string(accepted, "spec_sha256");
     const char *current = f_string(state, "state");
@@ -23,6 +24,13 @@ static json_object *receipt(const char *directory, const char *id, const char *d
     if (digest && strcmp(stored_digest, digest)) {
         result = f_error("fleet-task-submit", "submission_conflict", "this receiving-host submission key already binds a different task specification");
         goto done;
+    }
+    if (generation > 0) {
+        int stored = json_object_is_type(f_field(accepted, "assignment_generation"), json_type_int) ? json_object_get_int(f_field(accepted, "assignment_generation")) : 1;
+        if (stored != generation) {
+            result = f_error("fleet-task-submit", "stale_generation", "this receiver already holds the task under a different assignment generation; a task ID never returns to a receiver that recorded it");
+            goto done;
+        }
     }
     if ((!strcmp(current, "starting") || !strcmp(current, "running")) && !task_owner_active(directory)) {
         f_string_add(state, "recorded_state", current); f_string_add(state, "state", "outcome_unknown");
@@ -48,7 +56,7 @@ json_object *task_status(const char *id) {
     if (!task_id(id)) return f_error("fleet-task-status", "invalid_input", "use the task ID returned by submission");
     if (task_store_root(root) || f_path(directory, sizeof(directory), root, id)) return f_error("fleet-task-status", "io_failed", "cannot open private task storage");
     if (lstat(directory, &st)) return f_error("fleet-task-status", errno == ENOENT ? "task_not_found" : "io_failed", "task storage is unavailable for this ID");
-    return receipt(directory, id, NULL);
+    return receipt(directory, id, NULL, 0);
 }
 /* Placement is an existing host-local mapping, never a client-created directory. */
 static bool project_identity(const char *project, const char *identity) {
@@ -75,12 +83,22 @@ static int mapped_project(const char *requested, char canonical[F_PATH], char id
     json_object_put(handshake);
     return status == 0 && project_identity(canonical, identity) ? 0 : -1;
 }
+/* platform.OS-ARCH must name this receiver's own platform; role.* names are
+ * placement classes the receiver records but does not act on. */
+static bool platform_matches(const char *required) {
+    json_object *handshake = f_handshake(), *platform = f_field(f_field(handshake, "data"), "platform"); char own[160];
+    bool matches = f_string(platform, "os") && f_string(platform, "arch") &&
+        snprintf(own, sizeof(own), "%s-%s", f_string(platform, "os"), f_string(platform, "arch")) < (int)sizeof(own) && !strcmp(own, required);
+    json_object_put(handshake); return matches;
+}
 static bool dependencies(json_object *spec) {
     json_object *caps = f_field(spec, "capabilities"); size_t i;
     const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", "execution-headless", NULL};
     for (i = 0; i < json_object_array_length(caps); i++) {
         const char *name = f_text(json_object_array_get_idx(caps, i)); size_t j;
         if (!strncmp(name, "label.", 6) && f_name(name + 6)) continue;
+        if (!strncmp(name, "role.", 5) && f_name(name + 5)) continue;
+        if (!strncmp(name, "platform.", 9)) { if (platform_matches(name + 9)) continue; return false; }
         for (j = 0; supported[j] && strcmp(name, supported[j]); j++) {}
         if (!supported[j] || (!strcmp(name, "tmux") && !f_terminal_available())) return false;
     }
@@ -91,7 +109,7 @@ static bool executable(const char *program, const char *option) {
     bool ok = !f_run(argv, NULL, 0, 5, &cap) && !cap.status;
     f_capture_free(&cap); return ok;
 }
-json_object *task_accept(json_object *package, const char *key) {
+json_object *task_accept(json_object *package, const char *key, int generation) {
     char root[F_PATH], stage[F_PATH] = "", destination[F_PATH], canonical[F_PATH], project_id[128], hash[65], id[70];
     json_object *inspected = NULL, *spec, *binding = NULL, *accepted = NULL, *state = NULL, *result = NULL;
     const char *digest; bool staged = false; struct stat st;
@@ -107,7 +125,7 @@ json_object *task_accept(json_object *package, const char *key) {
     if (f_path(destination, sizeof(destination), root, id)) goto io;
     if (!lstat(destination, &st)) {
         if (task_sync_dir(root)) goto unknown;
-        result = receipt(destination, id, digest); goto done;
+        result = receipt(destination, id, digest, generation); goto done;
     }
     if (errno != ENOENT) goto io;
     if (mapped_project(f_string(spec, "project"), canonical, project_id)) {
@@ -124,6 +142,7 @@ json_object *task_accept(json_object *package, const char *key) {
     f_string_add(accepted, "task_id", id); f_string_add(accepted, "project", canonical); f_string_add(accepted, "project_id", project_id);
     f_string_add(accepted, "submission_key", key); f_string_add(accepted, "spec_sha256", digest);
     json_object_object_add(accepted, "accepted_at", json_object_new_int64((int64_t)time(NULL)));
+    json_object_object_add(accepted, "assignment_generation", json_object_new_int(generation > 0 ? generation : 1));
     state = json_object_new_object(); json_object_object_add(state, "schema_version", json_object_new_int(1));
     f_string_add(state, "state", "accepted"); f_string_add(state, "launch_intent", "pending");
     if (task_write_json(stage, "package.json", package, false) || task_write_json(stage, "acceptance.json", accepted, false) ||
@@ -133,7 +152,7 @@ json_object *task_accept(json_object *package, const char *key) {
         if (errno != EEXIST && errno != ENOTEMPTY) goto io;
     } else staged = false;
     if (task_sync_dir(root)) goto unknown;
-    result = receipt(destination, id, digest); goto done;
+    result = receipt(destination, id, digest, generation); goto done;
 unknown:
     result = f_error("fleet-task-submit", "outcome_unknown", "acceptance may be present but directory durability could not be confirmed; reconcile this key"); goto done;
 io:
@@ -155,10 +174,15 @@ static json_object *task_read_operation(json_object *request, const char *operat
         return task_cancel(f_string(request, "task_id"));
     if (!strcmp(operation, "observe") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
         return task_observation(f_string(request, "task_id"), request);
+    if (!strcmp(operation, "withdraw") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_withdraw(f_string(request, "task_id"));
     return NULL;
 }
 
 static json_object *task_validate_option_groups(json_object *request, const char *operation) {
+    json_object *generation = f_field(request, "assignment_generation");
+    if (generation && (strcmp(operation, "submit") && strcmp(operation, "start") && strcmp(operation, "resume"))) return f_error("fleet-task", "invalid_input", "assignment_generation requires submit, start or resume");
+    if (generation && (!json_object_is_type(generation, json_type_int) || json_object_get_int64(generation) < 1 || json_object_get_int64(generation) > 1000000)) return f_error("fleet-task", "invalid_input", "assignment_generation must be 1-1000000");
     if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
     if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
     if (strcmp(operation, "observe") && (f_field(request, "cursor") || f_field(request, "event_limit"))) return f_error("fleet-task", "invalid_input", "event options require the observe operation");
@@ -176,16 +200,19 @@ static json_object *task_validate_observe(json_object *request, const char *oper
 }
 
 json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "cursor", "event_limit", "byte_offset", "stream_id", "request_id", "decision", "by", NULL};
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "cursor", "event_limit", "byte_offset", "stream_id", "request_id", "decision", "by", "assignment_generation", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
     { json_object *invalid = task_validate_option_groups(request, operation); if (invalid) return invalid; }
     { json_object *invalid = task_validate_observe(request, operation); if (invalid) return invalid; }
+    if ((!strcmp(operation, "start") || !strcmp(operation, "resume")) && f_string(request, "task_id") && !f_field(request, "package")) {
+        json_object *fenced = task_generation_fence(f_string(request, "task_id"), request); if (fenced) return fenced;
+    }
     { json_object *read = task_read_operation(request, operation); if (read) return read; }
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
         if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");
-        accepted = task_accept(f_field(request, "package"), f_string(request, "submission_key"));
+        accepted = task_accept(f_field(request, "package"), f_string(request, "submission_key"), f_field(request, "assignment_generation") ? json_object_get_int(f_field(request, "assignment_generation")) : 1);
         if (trust && json_object_get_boolean(f_field(accepted, "ok"))) {
             json_object *started = task_start(f_string(f_field(accepted, "data"), "task_id"), trust);
             json_object_put(accepted); return started;

@@ -175,7 +175,7 @@ static bool session_kind(struct hs_session *s, const char *mode, const char *sta
     return false;
 }
 
-/* H rows (schema 5): one head session. An open session has no end, and an
+/* H rows (schema 6): one head session. An open session has no end, and an
  * end before the start is not an end. */
 static bool parse_session(struct hs_model *m, char **f) {
     struct hs_session *s;
@@ -195,17 +195,40 @@ static bool parse_session(struct hs_model *m, char **f) {
     return true;
 }
 
+/* T rows (schema 5) attach one dispatched attempt's remote evidence to an
+ * existing step. Text fields keep "-" as unknown; counts keep "-" unknown. */
+static bool parse_remote(struct hs_model *m, char **f) {
+    size_t i, run = find_run(m, f[1]);
+    struct hs_remote *r = NULL;
+    uint64_t value;
+    for (i = 0; run < m->run_count && i < m->step_count; i++)
+        if (m->steps[i].run == run && !strcmp(m->steps[i].id, f[2])) r = &m->steps[i].remote;
+    if (!r || r->recorded || !usage_text(r->host, sizeof(r->host), f[3]) ||
+        !usage_text(r->transport, sizeof(r->transport), f[4]) || !usage_text(r->placement, sizeof(r->placement), f[5]) ||
+        !usage_text(r->state, sizeof(r->state), f[7]) || !usage_text(r->reason, sizeof(r->reason), f[13])) return false;
+    if (r->placement[0] && strcmp(r->placement, "auto") && strcmp(r->placement, "pinned")) return false;
+    r->generation_known = number(f[6], 999999, &value);
+    if (r->generation_known) r->generation = (unsigned)value;
+    else if (strcmp(f[6], "-")) return false;
+    for (i = 0; i < HS_REMOTE_COUNTS; i++) {
+        r->known[i] = number(f[8 + i], UINT64_MAX / 4, &r->counts[i]);
+        if (!r->known[i] && strcmp(f[8 + i], "-")) return false;
+    }
+    r->recorded = true;
+    return true;
+}
+
 static bool parse_header(struct hs_model *m, char **f, size_t count) {
-    if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strlen(f[1]) != 1 || f[1][0] < '2' || f[1][0] > '5' ||
+    if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strlen(f[1]) != 1 || f[1][0] < '2' || f[1][0] > '6' ||
         !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
     m->schema_version = (unsigned)(f[1][0] - '0');
     return true;
 }
 
-/* Z closes the feed with the row counts; schema 5 adds the session count. */
+/* Z closes the feed with the row counts; schema 6 adds the session count. */
 static bool parse_end(const struct hs_model *m, char **f, size_t count) {
     uint64_t value;
-    if (count != (m->schema_version >= 5 ? 4U : 3U)) return false;
+    if (count != (m->schema_version >= 6 ? 4U : 3U)) return false;
     if (!number(f[1], HS_RUNS, &value) || value != m->run_count ||
         !number(f[2], HS_STEPS, &value) || value != m->step_count) return false;
     return count == 3 || (number(f[3], HS_SESSIONS, &value) && value == m->session_count);
@@ -219,7 +242,8 @@ static bool parse_row(struct hs_model *m, char **f, size_t count, bool *ended) {
     if (run_row(f, count, m->schema_version)) return parse_run(m, f);
     if (count == 10 && !strcmp(f[0], "S")) return parse_step(m, f);
     if (count == 11 && m->schema_version >= 4 && !strcmp(f[0], "U")) return parse_usage(m, f);
-    if (count == 14 && m->schema_version >= 5 && !strcmp(f[0], "H")) return parse_session(m, f);
+    if (count == 14 && m->schema_version >= 5 && !strcmp(f[0], "T")) return parse_remote(m, f);
+    if (count == 14 && m->schema_version >= 6 && !strcmp(f[0], "H")) return parse_session(m, f);
     if (strcmp(f[0], "Z")) return false;
     *ended = parse_end(m, f, count);
     return *ended;
@@ -274,6 +298,10 @@ bool hs_matches(const struct hs_model *m, size_t run, const struct hs_filter *f)
     if (f->days && (!r->created || m->observed - r->created > (uint64_t)f->days * 86400)) return false;
     if (f->workflow[0] && strcmp(f->workflow, r->name)) return false;
     if (f->attention && state != HS_FAILED && state != HS_BLOCKED && state != HS_UNKNOWN) return false;
+    if (f->location[0]) {
+        if (!strcmp(f->location, "local")) { if (hs_run_remote(m, run, NULL)) return false; }
+        else if (!hs_run_remote(m, run, strcmp(f->location, "remote") ? f->location : NULL)) return false;
+    }
     return contains(r->name, f->query) || contains(r->id, f->query) || contains(r->project, f->query);
 }
 
@@ -281,6 +309,8 @@ bool hs_session_matches(const struct hs_model *m, size_t session, const struct h
     const struct hs_session *s = &m->sessions[session];
     if (f->days && (!s->started_known || m->observed - s->started > (uint64_t)f->days * 86400)) return false;
     if (f->attention && strcmp(s->outcome, "failed") && strcmp(s->outcome, "blocked")) return false;
+    /* Head sessions are local work: a remote or host filter leaves none. */
+    if (f->location[0] && strcmp(f->location, "local")) return false;
     return contains(s->branch, f->query) || contains(s->profile, f->query) ||
            contains(s->head, f->query) || contains(s->instance, f->query);
 }
@@ -291,6 +321,35 @@ bool hs_session_length(const struct hs_model *m, const struct hs_session *s, uin
     if (!s->ended_known) return false;
     *seconds = s->ended - s->started;
     return true;
+}
+
+/* A run is remote when any recorded step ran as a remote task; with a host,
+ * when any such step ran on that alias. */
+bool hs_run_remote(const struct hs_model *m, size_t run, const char *host) {
+    size_t i;
+    for (i = 0; i < m->step_count; i++) {
+        const struct hs_remote *r = &m->steps[i].remote;
+        if (m->steps[i].run == run && r->recorded && (!host || !strcmp(r->host, host))) return true;
+    }
+    return false;
+}
+
+/* The receipt carried a telemetry block unless the reason says it did not. */
+bool hs_remote_telemetry(const struct hs_remote *r) {
+    return r->recorded && strcmp(r->reason, "no_telemetry_block") && strcmp(r->reason, "receipt_unverified");
+}
+
+void hs_remote_add(struct hs_summary *out, const struct hs_step *s) {
+    size_t i;
+    const struct hs_remote *r = &s->remote;
+    if (!r->recorded) return;
+    out->remote_steps++;
+    if (hs_remote_telemetry(r)) out->remote_telemetry++;
+    for (i = 0; i < HS_REMOTE_COUNTS; i++) if (r->known[i]) {
+        out->remote_known[i]++;
+        if (i == HS_PEAK_RSS_BYTES) { if (r->counts[i] > out->remote[i]) out->remote[i] = r->counts[i]; }
+        else out->remote[i] += r->counts[i];
+    }
 }
 
 bool hs_duration(const struct hs_model *m, const struct hs_step *s, uint64_t *seconds) {
@@ -329,6 +388,7 @@ void hs_summarize(const struct hs_model *m, const struct hs_filter *f, struct hs
             if (duration > out->duration_max) out->duration_max = duration;
         }
         hs_usage_add(out, s);
+        hs_remote_add(out, s);
     }
 }
 

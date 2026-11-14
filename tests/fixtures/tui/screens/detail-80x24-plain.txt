@@ -3,8 +3,10 @@ FRAME 1 80x24
                   Local · 3 heads · 1 running · 3 need attention · 4 to repair 
  Details: feature-live ─────────────────────────────────────────────────────── 
   feature-live                                                                 
+  1 approval request is waiting for your decision; press : and choose          
+  approvals.                                                                   
   Agent       codex                                                            
-  Session     running                                                          
+  Session     running (the live terminal)                                      
   Reported    done                                                             
   Group       alpha · PR 42                                                    
                                                                                
@@ -18,8 +20,6 @@ FRAME 1 80x24
                                                                                
   NEXT                                                                         
   a  talk to the agent in the workspace     p  show recent terminal output     
-  c  coordination with other heads          x  remove this head                
-  :  more actions (diff, switch, approvals)  d  technical details              
                                                                                
   ● live                                                                       
  ↑/↓ select • a talk to agent • n new task • x remove • ? help • q quit        

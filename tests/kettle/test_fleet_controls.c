@@ -49,7 +49,8 @@ static void launch(struct kt_session *s) {
     const char *argv[] = {tui, "--fleet", "--view", "overview", NULL};
     kt_open_terminal(s, argv, 120, 40, base);
     kt_until(s, "task_2", 8);
-    kt_send(s, "j");
+    /* The one Work list: the remote head, then task_1, then task_2. */
+    kt_send(s, "jj");
     kt_until(s, "req-2", 3);
 }
 /* The control's confirmation names the task; y accepts it. */

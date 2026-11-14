@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                                                                                        │
+│ Check failed · kill-dry-run · repo-check — req-dry-run-flag, req-no-removal; review the log and send the plan back or retry             │
+│ Step repo-check (attempt 1) failed its check. Press r to see the failed requirement and the log summary. Marking it seen keeps it       │
+│ listed until the step succeeds or a later run of this plan succeeds.                                                                    │
+│ Status: New: not marked seen yet.                                                                                                       │
+│ Next: r reviews the failed requirement and its log. To send the plan back or retry, open its planning conversation from Work: F         │
+│ requests changes; once the agent revises the plan, V validates it and E runs it.                                                        │
+│ r review  s mark seen  Enter/Esc back                                                                                                   │
+│                                                                                                                                         │
+│ Technical identity  8888888888888888888888888888888888888888888888888888888888888888                                                    │
+│ failure  check_failed  Source: workflow records  Freshness: fresh                                                                       │
+│ Project: project_7f3a  Host: -                                                                                                          │
+│ Task: -                                                                                                                                 │
+│ Run: run_2cdf8bbe1a4e                                                                                                                   │
+│ Step: repo-check                                                                                                                        │
+│ Attempt: attempt-1                                                                                                                      │
+│ Head: head_b2c4d6e8  Instance: instance_b2c4d6e8                                                                                        │
+│ Request: -  Binding: -                                                                                                                  │
+│ Route: workflow-evidence  navigable=1                                                                                                   │
+│ Revision SHA256: 7777777777777777777777777777777777777777777777777777777777777777                                                       │
+│ Identity SHA256: 8888888888888888888888888888888888888888888888888888888888888888                                                       │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit                                                     

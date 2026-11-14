@@ -1260,7 +1260,25 @@ def main() -> int:
     parser.add_argument(
         "--window", type=float, default=6, help="quiet/interactive window seconds"
     )
+    parser.add_argument(
+        "--local-corpus",
+        action="store_true",
+        help="score the annotated local workflow attention cases (item 10) instead of the receiver fixture",
+    )
     args = parser.parse_args()
+    if args.local_corpus:
+        from perf_matrix_attention import run as local_corpus
+
+        root = args.root.resolve()
+        report = local_corpus(
+            root,
+            args.fleet.resolve().parent,
+            args.out.resolve(),
+            root / "tests/fixtures/perf/attention-cases.json",
+        )
+        print(json.dumps({key: report[key] for key in ("complete", "false_positives_total", "missed_signals_total")}))
+        print(f"report={args.out.resolve() / 'report.json'}")
+        return 0 if report["complete"] else 1
     if args.repetitions < 3 or args.interval < 1 or args.window < 3:
         parser.error("require >=3 repetitions, interval >=1s, window >=3s")
     for path in (args.tui, args.fleet):

@@ -4,7 +4,7 @@
  * Guided remote setup (U10): shared contract for every setup workstream.
  *
  * Files and owners: setup.h, setup_cli.c, setup_state.c, setup_plan.c,
- * finish.c (verify/alias), hostkey.c and preflight.c belong to the setup core;
+ * finish.c (verify/alias), upgrade.c, hostkey.c and preflight.c belong to the setup core;
  * provision.c (and assets.c) to provisioning; agents.c, signin.c and recipes.c
  * to agent inventory, installers and sign-in. A workstream edits only its own
  * files; anything else it needs from the core is requested as a contract change.
@@ -119,6 +119,29 @@ int setup_state_set(struct setup_ctx *ctx, const char *key, json_object *value);
  * step then updates only the alias's hydra (and a newly recorded
  * accepted_host_key) after approval. */
 json_object *setup_upgrade(struct setup_ctx *ctx);
+/* Opens that upgrade-mode record for the enrolled alias (upgrade.c); dest and
+ * config are the given DEST and --ssh-config, which must match the alias. */
+json_object *setup_open_enrolled(struct setup_ctx *ctx, const char *dest, const char *config, const struct f_remote *alias);
+/*
+ * Runtime upgrade (upgrade.c, since 3.0.0): the provision step recorded a Hydra
+ * version other than F_VERSION (its detail.hydra_version, else the record's
+ * top-level hydra_version), or an approved upgrade has not finished (the
+ * progress detail carries "upgrade"). Caller-owned view {from_version,
+ * to_version, relation older|newer|different, previous_hydra,
+ * previous_prefix|null, summary}, or NULL. Read-only: never contacts the remote.
+ * While a finished provision step offers one, setup_step_view_status reports
+ * it as "upgrade_available" (a view status, never persisted), so the step is
+ * open and data.next names `hydra remote provision NAME`. Provisioning then
+ * plans the new pinned install beside the previous one with a plan member
+ * "upgrade" ({from_version, to_version, previous_hydra, previous_prefix,
+ * previous_install, alias?{name, old_hydra, new_hydra, when}}), copied into the
+ * provision detail. Once the new install confirms its exact version, verify
+ * and alias are reopened when they had finished; provision then re-verifies
+ * and the alias step switches only the alias's hydra from alias.old_hydra to
+ * alias.new_hydra without a second approval (the provision plan named it).
+ */
+json_object *setup_runtime_upgrade(struct setup_ctx *ctx);
+const char *setup_step_view_status(struct setup_ctx *ctx, const char *step);
 bool setup_step_id(const char *step);
 bool setup_status_valid(const char *status);
 /* NAME rules: f_name, shorter than 128 bytes, not "status", "list" or "remove". */
@@ -202,6 +225,9 @@ json_object *setup_step_alias_approved(struct setup_ctx *ctx, const char *approv
 /* Copies the first step that is neither done nor skipped into step (80
  * bytes) and returns true, or returns false when setup is complete. */
 bool setup_first_open(struct setup_ctx *ctx, char step[80]);
+/* True when every step's recorded status is done or skipped, ignoring an
+ * offered runtime upgrade (setup_remove keeps refusing such a setup). */
+bool setup_recorded_complete(struct setup_ctx *ctx);
 /* data.next for an open context: {step, argv, approval_sha256:null}, or NULL
  * when setup is complete. Caller-owned. */
 json_object *setup_next_json(struct setup_ctx *ctx);

@@ -126,7 +126,8 @@ int main(void) {
     kt_until(&s, task[0], 15);
     kt_until(&s, task[1], 15);
     CHECK(kt_contains(&s, "host-a"), "first receiver visible");
-    kt_send(&s, "j");
+    /* The one Work list: host-a's head, then each receiver's task. */
+    kt_send(&s, "jj");
     kt_pump(&s, .3);
     CHECK(kt_contains(&s, "host-b"), "second receiver selectable");
     wait_for_payload();

@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                            │
+│ Result ready for review · kill-dry-run · implement                          │
+│ Step implement (attempt 1) finished and sealed its output. Press r to see   │
+│ what it produced and how it was checked.                                    │
+│ Status: New: not marked seen yet.                                           │
+│ r review  s mark seen  Enter/Esc back                                       │
+│                                                                             │
+│ Technical identity  6666666666666666666666666666666666666666666666666666666 │
+│ result  result_ready  Source: workflow records  Freshness: fresh            │
+│ Project: project_7f3a  Host: -                                              │
+│ Task: -                                                                     │
+│ Run: run_2cdf8bbe1a4e                                                       │
+│ Step: implement                                                             │
+│ Attempt: attempt-1                                                          │
+│ Head: head_b2c4d6e8  Instance: instance_b2c4d6e8                            │
+│ Request: -  Binding: -                                                      │
+│ Route: workflow-evidence  navigable=1                                       │
+│ Revision SHA256: 5555555555555555555555555555555555555555555555555555555555 │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help 

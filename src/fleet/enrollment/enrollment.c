@@ -59,11 +59,15 @@ static bool option_value(struct enrollment_options *options, const char *key, co
 }
 json_object *enrollment_cli(int argc, char **argv) {
     struct enrollment_options options = {.seconds = 30}; int i;
-    if (!argc) return f_error("fleet-enrollment", "invalid_input", "use enroll review|apply");
-    for (i = 1; i < argc; i += 2)
+    if (!argc) return f_error("fleet-enrollment", "invalid_input", "use enroll review|apply|status");
+    for (i = 1; i < argc; i += 2) {
+        /* Output is always the JSON envelope; --json is accepted as on discover. */
+        if (!strcmp(argv[i], "--json")) { i--; continue; }
         if (i + 1 >= argc || !option_value(&options, argv[i], argv[i + 1]))
             return f_error("fleet-enrollment", "invalid_input", "invalid, repeated, or missing option; select at most 16 candidates");
+    }
     if (!strcmp(argv[0], "review")) return enrollment_review(&options);
     if (!strcmp(argv[0], "apply")) return enrollment_apply(&options);
-    return f_error("fleet-enrollment", "invalid_input", "use enroll review|apply");
+    if (!strcmp(argv[0], "status")) return enrollment_status(&options);
+    return f_error("fleet-enrollment", "invalid_input", "use enroll review|apply|status");
 }

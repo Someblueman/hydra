@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+                  Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Attention ─────────────────────────────────────────────────────────────────── 
+  EXACT REVIEW / full log                                                      
+  kill-dry-run · implement                                                     
+  Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                        
+                                                                               
+  FULL LOG  2,663 bytes                                                        
+  /tmp/hydra-i4-capture.3rIGZH/output.log                                      
+                                                                               
+  [PASS] check number 0 of the fixture suite                                   
+  [PASS] check number 1 of the fixture suite                                   
+  [PASS] check number 2 of the fixture suite                                   
+  [PASS] check number 3 of the fixture suite                                   
+  [PASS] check number 4 of the fixture suite                                   
+  [PASS] check number 5 of the fixture suite                                   
+  [PASS] check number 6 of the fixture suite                                   
+  [PASS] check number 7 of the fixture suite                                   
+  [PASS] check number 8 of the fixture suite                                   
+  [PASS] check number 9 of the fixture suite                                   
+  [PASS] check number 10 of the fixture suite                                  
+                                                                               
+  ● live                                                                       
+ ↑/↓ scroll • f references • i IDs • L full log • ? help • q quit              

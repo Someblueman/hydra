@@ -20,6 +20,10 @@ json_object *wt_destination(const char *alias) {
     out = json_object_new_object(); f_string_add(out, "kind", "ssh");
     f_string_add(out, "alias", alias); f_string_add(out, "target", remote.target);
     f_string_add(out, "home", remote.home); f_string_add(out, "hydra", remote.hydra);
+    /* Client configuration and principal are part of the recorded destination
+     * only when the alias binds them; older records without them stay equal. */
+    if (remote.ssh_config[0]) f_string_add(out, "ssh_config", remote.ssh_config);
+    if (remote.principal[0]) f_string_add(out, "principal", remote.principal);
     json_object_object_add(out, "multiplex", json_object_new_boolean(remote.multiplex)); return out;
 }
 static bool output_selected(json_object *outputs, const char *path) {

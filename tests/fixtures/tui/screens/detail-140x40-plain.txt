@@ -3,7 +3,8 @@ FRAME 1 140x40
                                                                               Local · 3 heads · 1 running · 3 need attention · 4 to repair 
  Details: feature-live ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
   feature-live                                                                                                                             
-  Agent       codex                                                  Session     running                                                   
+  1 approval request is waiting for your decision; press : and choose approvals.                                                           
+  Agent       codex                                                  Session     running (the live terminal)                               
   Reported    done                                                   Group       alpha · PR 42                                             
                                                                                                                                            
   CHANGES                                                                                                                                  
@@ -16,8 +17,7 @@ FRAME 1 140x40
                                                                                                                                            
   NEXT                                                                                                                                     
   a  talk to the agent in the workspace     p  show recent terminal output                                                                 
-  c  coordination with other heads          x  remove this head                                                                            
-  :  more actions (diff, switch, approvals)  d  technical details                                                                          
+  c  coordination  x  remove this head  :  more actions  d  technical details                                                              
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            

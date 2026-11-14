@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work  2 Details   3 Overview   4 Attention  5 Recovery  6 Workflows  7 Statistics  8 Workspace  9 Hosts               OVERVIEW 
+                                                                                                                 Local · no agent work yet 
+ Overview ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                                           
+   No agent work in this project yet.                                                                                                      
+                                                                                                                                           
+   Overview summarises what is running, what needs a decision, what changed and each run's progress.                                       
+   Press n to start a task; it appears here as soon as its terminal opens.                                                                 
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live                                                                                                                                   
+ ↑/↓ select • n new task • L location • / search • tab/shift+tab views • : more actions • esc back • ? help • q quit                       

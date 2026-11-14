@@ -261,7 +261,7 @@ rm -f "$HYDRA_HOME/cache"
 # The command: schema 5, session rows before the closing counts, and the
 # native reader and exporter accept it.
 feed="$("$hydra" workflow statistics-data 2>/dev/null)"
-assert_equal "HYDRA_STATISTICS${tab}5" "$(printf '%s\n' "$feed" | sed -n '1p' | cut -f 1-2)" "the feed is schema 5"
+assert_equal "HYDRA_STATISTICS${tab}6" "$(printf '%s\n' "$feed" | sed -n '1p' | cut -f 1-2)" "the feed is schema 6"
 assert_equal "Z${tab}0${tab}0${tab}7" "$(printf '%s\n' "$feed" | tail -n 1)" "the closing row counts the sessions"
 assert_equal 7 "$(printf '%s\n' "$feed" | grep -c "^H$tab")" "the feed lists the sessions"
 if [ -x "${HYDRA_CORE:-}" ]; then

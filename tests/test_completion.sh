@@ -212,7 +212,7 @@ test_completion_includes_shipped_commands() {
     zsh_out=$(generate_completion zsh)
     fish_out=$(generate_completion fish)
 
-    for cmd in spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue; do
+    for cmd in spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue pool schedule; do
         case "$bash_out" in
             *"$cmd"*)
                 echo "[PASS] bash completion includes $cmd"

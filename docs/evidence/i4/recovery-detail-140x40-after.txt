@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work  2 Details  3 Overview  4 Attention   5 Recovery   6 Workflows  7 Statistics  8 Workspace  9 Hosts               RECOVERY 
+                                                                              Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Recovery ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+  RECOVERY  4 findings                                                                                                                     
+  RECOVERY FINDING                                                                                                                         
+  Terminal stopped: feature-stale                                                                                                          
+  The terminal session for feature-stale is no longer running. Its worktree and files are kept; nothing was removed from the repository.   
+  Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is finished.              
+                                                                                                                                           
+  DIAGNOSTICS                                                                                                                              
+  Kind        dead-session                                                                                                                 
+  Source      /tmp/hydra/map                                                                                                               
+  Confidence  exact                                                                                                                        
+  Inspect     hydra doctor                                                                                                                 
+                                                                                                                                           
+  NEXT                                                                                                                                     
+  Enter runs the check and shows its output here; d returns to the list                                                                    
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live                                                                                                                                   
+ ↑/↓ select • enter run the check • d explain • tab/shift+tab views • : more actions • esc back • ? help • q quit                          

@@ -3,13 +3,13 @@ FRAME 1 140x40
                                                                               Local · 3 heads · 1 running · 3 need attention · 4 to repair 
  Hosts ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
   REMOTE HOSTS                                                                                                                             
-  Hydra can run agents on other machines over SSH. Adding a host checks its SSH host key and requirements, installs a matching Hydra       
-  there and helps you install and sign in to agents. Nothing changes on the remote until you approve it.                                   
+  Hydra can run agents on other machines over SSH, for example a build box with more cores or a machine that already has the right         
+  toolchain, when a task needs more than this machine offers. Adding a host checks its SSH host key and requirements, installs a matching  
+  Hydra there and helps you install and sign in to agents. Nothing changes on the remote until you approve it.                             
                                                                                                                                            
   > + Add a host            set up a machine over SSH                                                                                      
                                                                                                                                            
-  Press Enter or A to add a host.                                                                                                          
-                                                                                                                                           
+  Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.                                 
                                                                                                                                            
                                                                                                                                            
                                                                                                                                            
@@ -38,4 +38,4 @@ FRAME 1 140x40
                                                                                                                                            
                                                                                                                                            
   ● live                                                                                                                                   
- ↑/↓ select • enter open • A add a host • tab/shift+tab views • : more actions • esc back • ? help • q quit                                
+ ↑/↓ select • enter open • A add a host • O onboarding • tab/shift+tab views • : more actions • esc back • ? help • q quit                 

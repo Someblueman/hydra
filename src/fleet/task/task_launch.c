@@ -14,10 +14,11 @@
 
 bool task_runtime_valid(json_object *state) {
     const char *name = f_string(state, "state"), *intent = f_string(state, "launch_intent");
-    const char *states[] = {"accepted", "starting", "running", "waiting_approval", "succeeded", "failed", "expired", "cancelled", "outcome_unknown", NULL}; size_t i;
+    /* withdrawn: accepted work durably returned to its submitter before launch. */
+    const char *states[] = {"accepted", "withdrawn", "starting", "running", "waiting_approval", "succeeded", "failed", "expired", "cancelled", "outcome_unknown", NULL}; size_t i;
     if (!f_number_is(state, "schema_version", 1) || !name || !intent ||
         (strcmp(intent, "pending") && strcmp(intent, "claimed") && strcmp(intent, "started"))) return false;
-    if (!strcmp(name, "accepted") || !strcmp(name, "expired") || (!strcmp(name, "cancelled") && !strcmp(intent, "pending"))) {
+    if (!strcmp(name, "accepted") || !strcmp(name, "withdrawn") || !strcmp(name, "expired") || (!strcmp(name, "cancelled") && !strcmp(intent, "pending"))) {
         if (strcmp(intent, "pending") || f_field(state, "owner_pid") || f_field(state, "run_id")) return false;
     } else if (!strcmp(intent, "pending")) return false;
     if (!strcmp(name, "succeeded") && (!f_name(f_string(state, "run_id")) || !f_number_is(state, "exit_status", 0))) return false;

@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "internal.h"
+#include "statistics_cohorts.h"
 /* Statistics are a view over recorded evidence, never a telemetry collector. */
 static const char *statistics_range(const struct statistics_view *v) {
     return v->filter.days == 1 ? "24 hours" : v->filter.days == 7 ? "7 days" : "all recorded";
@@ -235,7 +235,7 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
     struct hs_summary summary;
     int width, height;
     int left, body, cards, chart_height;
-    char updated[40]="unavailable", duration[40]="--", maximum[40]="--", retries[32]="--", scope[256], status[512];
+    char updated[40]="unavailable", duration[40]="--", maximum[40]="--", retries[32]="--", scope[384], status[512];
     const char *sep=dot(app);
     if (!native_workspace_init(app) || !statistics_init(app) || !frame_begin(app,headless)) return false;
     c=app->frame; width=c.width; height=c.height;
@@ -247,9 +247,10 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
     if (summary.attempts_known || !summary.steps) snprintf(retries,sizeof(retries),"%llu",(unsigned long long)summary.retries);
     if (summary.duration_known) snprintf(maximum,sizeof(maximum),"%llus",(unsigned long long)summary.duration_max);
     chrome_header(app,&c,(v->stale || app->snapshot_stale) ? "STATISTICS (STALE)" : "STATISTICS");
-    snprintf(scope,sizeof(scope),"%s%s%s%s%.60s%s%s%.60s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
+    snprintf(scope,sizeof(scope),"%s%s%s%s%.60s%s%s%.60s%s%.60s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
         v->filter.query[0] ? v->filter.query : "all work", v->filter.attention ? " / attention only" : "",
-        v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
+        v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow,
+        v->filter.location[0] && !app->fleet ? " / location: " : "",v->filter.location[0] && !app->fleet ? v->filter.location : "");
     if (app->fleet) statistics_fleet(app,&c,(struct kt_rect){0,2,width,height-4});
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
         dashboard_text(&c,2,3,width-4,KT_STRONG,"%s",!v->model && native_observations_loading(app,OBSERVE_STATISTICS) ? "Loading statistics..." : "No statistics yet");
@@ -259,6 +260,8 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
             dashboard_text(&c,2,7,width-4,KT_BASE,"workflow runs Hydra recorded: steps, timing, outcomes, retries and tokens.");
             dashboard_text(&c,2,9,width-4,KT_MUTED,"r retries the sample   s switches between sessions and runs");
         }
+    } else if (v->metric_page==STATISTICS_COHORT_PAGE) {
+        statistics_cohorts_render(app,&c,(struct kt_rect){0,2,width,height-4});
     } else if (v->metric_page) {
         statistics_metrics_render(app,&c,(struct kt_rect){0,2,width,height-4});
     } else if (height<18 || width<65) {
@@ -271,8 +274,10 @@ bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
             dashboard_text(&c,2,5,left-5,KT_MUTED,"T changes the range");
             dashboard_text(&c,2,7,left-5,KT_BASE,"Workflow: %s",v->filter.workflow[0] ? v->filter.workflow : "all");
             dashboard_text(&c,2,8,left-5,KT_MUTED,"[ ] chooses one");
-            dashboard_text(&c,2,10,left-5,KT_BASE,"%zu undated",summary.undated);
-            dashboard_text(&c,2,11,left-5,KT_BASE,"%zu outside range",summary.excluded_undated);
+            dashboard_text(&c,2,9,left-5,KT_BASE,"Location: %s",v->filter.location[0] ? v->filter.location : "all");
+            dashboard_text(&c,2,10,left-5,KT_MUTED,"L cycles / C cohorts");
+            dashboard_text(&c,2,11,left-5,KT_BASE,"%zu undated",summary.undated);
+            dashboard_text(&c,2,12,left-5,KT_BASE,"%zu outside range",summary.excluded_undated);
             dashboard_text(&c,2,13,left-5,KT_BASE,"Timing %zu/%zu",summary.duration_known,summary.steps);
             dashboard_text(&c,2,14,left-5,KT_BASE,"Attempts %zu/%zu",summary.attempts_known,summary.steps);
             if (height>23) statistics_scope_notes(&c,2,16,left-4,height-22,&summary);

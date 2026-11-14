@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work 2 Details  3 Overview  4 Attention 5 Recovery …      OVERVIEW 
+     Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Overview ──────────────────────────────────────────────────────────────────── 
+   2 running / 1 need attention / 1 active run / 1 to repair / 0 remote        
+                                                                               
+  WORK / what you started, local and remote ────────────────────────────────   
+                                                                               
+    > add-kill                                             running             
+        ▸ plan run kill-dry-run                            running             
+      notes-cleanup                                        terminal gone       
+    2 heads you started / Enter opens or expands                               
+                                                                               
+  RUN / plan run kill-dry-run · running · 2 heads · from add-kill ──────────   
+    STEP            STATE         TIME          HEAD                           
+    spawn-worker    succeeded     5s            kill-dry-run-worker            
+    implement       running       1172h49m      kill-dry-run-worker            
+    spawn-check     ready         -             kill-dry-run-check (pendin…    
+    verify          queued        -             kill-dry-run-check (pendin…    
+    Next  Running step implement on kill-dry-run-worker (codex); p on that     
+          head shows its output                                                
+                                                                               
+                                                                               
+  ● live                                                                       
+ ↑/↓ select • enter details • a talk to agent • n new task • ? help • q quit   

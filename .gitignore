@@ -25,7 +25,11 @@ dist/
 
 # Qualification captures and exploratory reports stay outside the maintained docs.
 docs/acceptance/
-docs/evidence/
+docs/evidence/*
+# Performance baselines are maintained evidence cited by the roadmap.
+!docs/evidence/performance/
+# The I4 visual pass keeps its bounded before/after screen captures in the tree.
+!docs/evidence/i4/
 docs/research/
 
 # Python test bytecode

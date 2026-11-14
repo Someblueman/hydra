@@ -1,0 +1,4 @@
+HYDRA_ATTENTION	3
+ITEM	workflow records	result	result_ready	project_1	-	-	run_1	implement	attempt-1	head_1	instance_1	-	-	5555555555555555555555555555555555555555555555555555555555555555	6666666666666666666666666666666666666666666666666666666666666666	fresh	workflow-evidence	1	add-kill-dry-run	-
+ITEM	workflow records	failure	check_failed	project_1	-	-	run_1	repo-check	attempt-1	head_1	instance_1	-	-	7777777777777777777777777777777777777777777777777777777777777777	8888888888888888888888888888888888888888888888888888888888888888	fresh	workflow-evidence	1	add-kill-dry-run	dry-run-flag, help-text
+END	2	0	0

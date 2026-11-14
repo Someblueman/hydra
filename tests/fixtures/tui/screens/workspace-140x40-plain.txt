@@ -3,15 +3,15 @@ FRAME 1 140x40
                                                                               Local · 3 heads · 1 running · 3 need attention · 4 to repair 
 PROJECT ─────────── │SELECTED WORK ───────────────────────────────────────────────────────── │DEPENDENCIES ─────────────────────────────── 
   - This project    │ feature-live                                                           │ visualization-proof / running               
- >  └ feature-live  │ Session   running                                                      │ +────────────────────+     +─────────────── 
-    └ feature-stale │ Agent     codex                                                        │ │ prepare            │──+─>│ build          
+ >  └ feature-live  │ Session   running                                                      │ ╭────────────────────╮     ╭─────────────── 
+    └ feature-stale │ Agent     codex                                                        │ │ prepare            │──┬─>│ build          
     └ feature-unava │ Where     this machine · this project                                  │ │ succeeded          │  │  │ running        
-    └ run visualiza │ Changes   4 files not yet committed · 0 queued                         │ +────────────────────+  │  +─────────────── 
+    └ run visualiza │ Changes   4 files not yet committed · 0 queued                         │ ╰────────────────────╯  │  ╰─────────────── 
     └ run second-ru │ Reported  done · 1 of 2 approval requests approved                     │                         │                   
-                    │ Group     alpha · PR 42                                                │                         │  +─────────────── 
-                    │                                                                        │                         +─>│ tests          
+                    │ Group     alpha · PR 42                                                │                         │  ╭─────────────── 
+                    │                                                                        │                         └─>│ tests          
                     │                                                                        │                            │ failed         
-                    │                                                                        │                            +─────────────── 
+                    │                                                                        │                            ╰─────────────── 
                     │ a  talk to the agent here      Enter  full details                     │                                             
                     │ :  more actions                d  technical details                    │─────────────────────────────────────────────
                     │                                                                        │ACTIVITY ─────────────────────────────────── 
@@ -38,4 +38,4 @@ PROJECT ─────────── │SELECTED WORK ───────
                     │                                                                        │                                             
                     │                                                                        │                                             
   ● live                                                                                                                                   
- ↑/↓ select • enter open • tab/shift+tab pane • a talk to agent • P review proposal • n new task • x remove • ? help • q quit              
+ ↑/↓ select • enter details • tab/shift+tab pane • a talk to agent • P review proposal • n new task • x remove • ? help • q quit           

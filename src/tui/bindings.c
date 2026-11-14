@@ -74,6 +74,20 @@ static bool head_selected(const struct app *app) {
     return !app->run_row && selected_head((struct app *)app) != NULL;
 }
 
+static bool remote_head_selected(const struct app *app) {
+    const struct head *h = app->run_row ? NULL : selected_head((struct app *)app);
+    return h && head_remote(h);
+}
+
+/* Y/N/R/X on a remote task row in Work, Details or Overview; r observes the
+ * selected remote work's host again, or every host when remote work is
+ * shown at all. */
+static bool remote_applies(const struct app *app, enum key_action action) {
+    bool task = (app->view == 0 || app->view == 1 || app->view == 4) && selected_task((struct app *)app);
+    if (action != KEY_HEADS_RETRY) return task;
+    return task || remote_head_selected(app) || app->model.host_count || app->remote_stale;
+}
+
 static bool plan_applies(const struct app *app, enum key_action action) {
     const struct native_plan *p = app->plan;
     if (action == KEY_PLAN_PROPOSAL) return !p || p->state != PLAN_VALIDATING;
@@ -94,7 +108,9 @@ static bool workspace_applies(const struct app *app, enum key_action action) {
     const struct native_workspace *w = app->workspace;
     bool navigation = w && w->layout.focus == 1;
     switch (action) {
-    case KEY_WS_COLLAPSE: case KEY_WS_EXPAND: case KEY_WS_OPEN: return navigation;
+    case KEY_WS_COLLAPSE: case KEY_WS_EXPAND: return navigation;
+    /* Enter opens the selected head's details from any pane. */
+    case KEY_WS_OPEN: return navigation || head_selected(app);
     case KEY_WS_TALK: case KEY_WS_ATTACH: return head_selected(app) || (w && !w->run_selected && selected_head((struct app *)app));
     case KEY_RUN_RESUME: case KEY_RUN_CANCEL: return !run_ended(app);
     default: return true;
@@ -114,34 +130,45 @@ static bool heads_applies(const struct app *app, enum key_action action) {
     bool list = app->view == 0 || app->view == 4;
     switch (action) {
     case KEY_HEADS_COLLAPSE: case KEY_HEADS_EXPAND: return list && app->run_row;
-    case KEY_HEADS_OPEN: return list && (app->run_row || selected_head((struct app *)app));
-    case KEY_HEADS_COORDINATION: return app->view == 1 && head_selected(app);
+    case KEY_HEADS_OPEN: return list && (app->run_row || selected_head((struct app *)app) || selected_task((struct app *)app));
     case KEY_HEADS_PAGE_UP: case KEY_HEADS_PAGE_DOWN: return app->view == 1 && app->preview;
     case KEY_HEAD_GROUP: return app->marked_count > 0;
     case KEY_HEAD_REMOVE: return app->marked_count > 0 || head_selected(app);
+    case KEY_HEADS_COORDINATION: return app->view == 1 && head_selected(app);
     case KEY_HEAD_MARK: case KEY_HEAD_MARK_ALL: return app->model.head_count > 0;
     default: return head_selected(app);
     }
 }
 
+/* r on Hosts observes the hosts again; L filters the Work and Overview lists. */
+static bool location_applies(const struct app *app, enum key_action action) {
+    if (action == KEY_HOSTS_RETRY) return app->model.host_count || app->remote_stale;
+    return app->view == 0 || app->view == 4;
+}
+
 bool key_applies(const struct app *app, enum key_action action) {
     size_t record;
-    if (action >= KEY_WS_UP && action <= KEY_REMOTE_CANCEL) {
+    if (action >= KEY_WS_UP && action <= KEY_RUN_CANCEL) {
         if (action >= KEY_PLAN_PROPOSAL && action <= KEY_PLAN_EXECUTE) return plan_applies(app, action);
         return workspace_applies(app, action);
     }
     if ((action >= KEY_HEADS_COLLAPSE && action <= KEY_HEAD_TECHNICAL) && action != KEY_TASK_NEW)
         return heads_applies(app, action);
+    if ((action >= KEY_REMOTE_APPROVE && action <= KEY_REMOTE_CANCEL) || action == KEY_HEADS_RETRY)
+        return remote_applies(app, action);
     switch (action) {
     case KEY_RECOVERY_REMOVE: return recovery_removable(app);
+    case KEY_ATTENTION_PAGE_DOWN: case KEY_ATTENTION_PAGE_UP: return native_attention_detail_open(app);
     case KEY_RECOVERY_CHECK: case KEY_RECOVERY_EXPLAIN: return app->model.recovery_count > 0;
     case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return hosts_setup_selected(app, &record);
     case KEY_STATS_GRAPH: case KEY_STATS_METRIC: case KEY_STATS_WORKFLOW_PREVIOUS: case KEY_STATS_WORKFLOW_NEXT:
+    case KEY_STATS_COHORTS: case KEY_STATS_LOCATION:
         return runs_page(app);
+    case KEY_HOSTS_RETRY: case KEY_HEADS_LOCATION: return location_applies(app, action);
     case KEY_STATS_PAGE:
         return !app->fleet && app->statistics && app->statistics->model &&
             (app->statistics->model->session_count || statistics_sessions_shown(app));
-    case KEY_BACK: return app->view != 0 || app->search[0] || app->preview || app->diagnostics;
+    case KEY_BACK: return app->view != 0 || app->search[0] || app->location[0] || app->preview || app->diagnostics;
     default: return true;
     }
 }
@@ -164,13 +191,13 @@ static uint32_t action_key(enum key_action action) {
         [KEY_REVIEW_SUPPLY_TRANSCRIPT] = 't', [KEY_REVIEW_SUPPLY_PR] = 'p', [KEY_REVIEW_PREVIOUS_ITEM] = '[',
         [KEY_REVIEW_NEXT_ITEM] = ']', [KEY_REVIEW_RELOAD] = 'r',
         [KEY_ATTENTION_UP] = 'k', [KEY_ATTENTION_DOWN] = 'j', [KEY_ATTENTION_OPEN] = '\r',
-        [KEY_ATTENTION_REVIEW] = 'r', [KEY_ATTENTION_SEEN] = 's',
+        [KEY_ATTENTION_REVIEW] = 'r', [KEY_ATTENTION_SEEN] = 's', [KEY_ATTENTION_PAGE_DOWN] = ' ', [KEY_ATTENTION_PAGE_UP] = 'b',
         [KEY_STATS_UP] = 'k', [KEY_STATS_DOWN] = 'j', [KEY_STATS_OPEN] = '\r', [KEY_STATS_PAGE] = 's',
         [KEY_STATS_GRAPH] = 'g', [KEY_STATS_RANGE] = 'T', [KEY_STATS_ATTENTION] = '!', [KEY_STATS_RESET] = '0',
         [KEY_STATS_METRIC] = 'M', [KEY_STATS_WORKFLOW_PREVIOUS] = '[', [KEY_STATS_WORKFLOW_NEXT] = ']',
-        [KEY_STATS_FIND] = '/', [KEY_STATS_REFRESH] = 'r',
+        [KEY_STATS_FIND] = '/', [KEY_STATS_COHORTS] = 'C', [KEY_STATS_LOCATION] = 'L', [KEY_STATS_REFRESH] = 'r',
         [KEY_HOSTS_UP] = 'k', [KEY_HOSTS_DOWN] = 'j', [KEY_HOSTS_OPEN] = '\r', [KEY_HOSTS_ADD] = 'A',
-        [KEY_HOSTS_EDIT] = 'e', [KEY_HOSTS_REMOVE] = 'x',
+        [KEY_HOSTS_EDIT] = 'e', [KEY_HOSTS_REMOVE] = 'x', [KEY_HOSTS_RETRY] = 'r', [KEY_HOSTS_ONBOARDING] = 'O',
         [KEY_RECOVERY_UP] = 'k', [KEY_RECOVERY_DOWN] = 'j', [KEY_RECOVERY_CHECK] = '\r',
         [KEY_RECOVERY_REMOVE] = 'x', [KEY_RECOVERY_EXPLAIN] = 'd',
         [KEY_FLOW_UP] = 'k', [KEY_FLOW_DOWN] = 'j', [KEY_FLOW_PREVIOUS_RUN] = '[', [KEY_FLOW_NEXT_RUN] = ']',
@@ -189,6 +216,7 @@ static uint32_t action_key(enum key_action action) {
         [KEY_HEADS_COORDINATION] = 'c', [KEY_HEADS_PAGE_UP] = KT_KEY_PAGE_UP, [KEY_HEADS_PAGE_DOWN] = KT_KEY_PAGE_DOWN,
         [KEY_TASK_NEW] = 'n', [KEY_HEAD_REMOVE] = 'x', [KEY_HEAD_MARK] = ' ', [KEY_HEAD_MARK_ALL] = 'A',
         [KEY_HEAD_GROUP] = 'G', [KEY_HEAD_OUTPUT] = 'p', [KEY_HEAD_TECHNICAL] = 'd', [KEY_HEADS_SEARCH] = '/',
+        [KEY_HEADS_LOCATION] = 'L', [KEY_HEADS_RETRY] = 'r',
         [KEY_VIEWS_NEXT] = '\t', [KEY_VIEWS_PREVIOUS] = SHIFT_TAB, [KEY_VIEWS_LEFT] = KT_KEY_LEFT,
         [KEY_VIEWS_RIGHT] = KT_KEY_RIGHT,
         [KEY_VIEW_1] = '1', [KEY_VIEW_2] = '2', [KEY_VIEW_3] = '3', [KEY_VIEW_4] = '4', [KEY_VIEW_5] = '5',
@@ -248,6 +276,8 @@ static void applying(const struct app *app, struct kt_binding *rows) {
     memcpy(rows, native_keys((struct app *)app)->bindings, sizeof(struct kt_binding) * KEY_ACTIONS);
     for (i = KEY_VIEW_ACTIONS; i < KEY_ACTIONS; i++)
         if (!key_applies(app, (enum key_action)i)) rows[i].scope = 0;
+    /* x interrupts a selected remote head's agent instead of removing it. */
+    if (remote_head_selected(app) && !app->marked_count) rows[KEY_HEAD_REMOVE].label = "interrupt";
 }
 
 uint32_t key_applying(const struct app *app, struct kt_binding rows[KEY_ACTIONS]) {

@@ -117,6 +117,7 @@ static const char *first_line(const char *text, char *out, size_t size) {
 
 struct removal {
     size_t count, removed, skipped, failed, dirty;
+    bool gone[MAX_HEADS];
     char output[8192], transcript[8192];
 };
 
@@ -128,6 +129,10 @@ static bool removal_targets(struct app *app, char targets[][TEXT], size_t *count
     if (app->marked_count) {
         for (index = 0U; index < app->marked_count && *count < MAX_HEADS; index++) copy_text(targets[(*count)++], TEXT, app->marked[index]);
         return true;
+    }
+    if (selected && head_remote(selected)) {
+        copy_text(app->notice, sizeof(app->notice), "Remote heads are removed on their host; x interrupts the agent instead");
+        return false;
     }
     if (selected) { copy_text(targets[(*count)++], TEXT, selected->branch); return true; }
     copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space");
@@ -168,7 +173,7 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
     snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
     status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
     text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
-    if (status == 0) { r->removed++; return; }
+    if (status == 0) { r->removed++; r->gone[index] = true; return; }
     r->failed++;
     if (strstr(r->output, "uncommitted") || strstr(r->output, "Refusing")) r->dirty++;
 }
@@ -206,6 +211,25 @@ static void removal_report(struct app *app, char targets[][TEXT], const struct r
     if (!r->failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
 }
 
+/* When the selected head was removed, focus lands on the nearest head that
+ * survives (after it, else before it) at once; the next snapshot drops the
+ * removed rows. A refused or skipped head keeps its selection. */
+static bool removed_target(const char *branch, char targets[][TEXT], const struct removal *r) {
+    size_t i;
+    for (i = 0U; i < r->count; i++) if (r->gone[i] && !strcmp(targets[i], branch)) return true;
+    return false;
+}
+
+static void select_survivor(struct app *app, char targets[][TEXT], const struct removal *r) {
+    size_t i, from = app->selected;
+    if (app->run_row || app->task_row || from >= app->model.head_count ||
+        !removed_target(app->model.heads[from].branch, targets, r)) return;
+    for (i = from; i < app->model.head_count; i++)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+    for (i = from; i-- > 0U;)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+}
+
 /* Remove marked heads, or the selected head, after an in-app confirmation.
  * The shell CLI keeps its dirty-worktree refusal; the UI never adds --force. */
 void remove_heads_action(struct app *app) {
@@ -221,6 +245,7 @@ void remove_heads_action(struct app *app) {
     app->marked_count = 0U;
     removal_report(app, targets, &r);
     native_observations_tick(app, true);
+    select_survivor(app, targets, &r);
     retarget_selection(app);
 }
 
@@ -298,7 +323,7 @@ void remove_key_action(struct app *app) {
  * palette). Read-only commands run captured and open in the output viewer;
  * only switch and dashboard need the terminal, and their labels say so. */
 enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_IMPORT,
-                     ACTION_FAILED, ACTION_THEME, ACTION_LEAVE, ACTION_LEAVE_HEAD };
+                     ACTION_FAILED, ACTION_THEME, ACTION_LEAVE, ACTION_LEAVE_HEAD, ACTION_INTERRUPT };
 struct palette_command {
     const char *name, *label, *command, *subcommand;
     enum palette_scope scope;
@@ -321,7 +346,8 @@ static const struct palette_command palette_commands[] = {
     {"failed", "Your failed actions", NULL, NULL, ACTION_FAILED},
     {"theme", "Theme: terminal, dark, light", NULL, NULL, ACTION_THEME},
     {"switch", "Switch to the selected head (leaves Hydra)", "switch", NULL, ACTION_LEAVE_HEAD},
-    {"dashboard", "Dashboard (leaves Hydra)", "dashboard", NULL, ACTION_LEAVE}
+    {"dashboard", "Dashboard (leaves Hydra)", "dashboard", NULL, ACTION_LEAVE},
+    {"interrupt", "Interrupt remote head", NULL, NULL, ACTION_INTERRUPT}
 };
 #define PALETTE_COMMANDS (sizeof(palette_commands) / sizeof(palette_commands[0]))
 #define PALETTE_DIALOG 3U
@@ -356,13 +382,27 @@ static bool palette_local(struct app *app, const struct palette_command *chosen)
     }
 }
 
+/* A remote head's own commands run on its host: removing it interrupts its
+ * agent there, and head commands are refused here. True when handled. */
+static bool palette_remote(struct app *app, const struct palette_command *chosen, const struct head *head, bool head_needed) {
+    bool remote = head && head_remote(head);
+    if (chosen->scope == ACTION_INTERRUPT || (chosen->scope == ACTION_REMOVE && remote)) {
+        if (remote) fleet_action(app);
+        else copy_text(app->notice, sizeof(app->notice), "Select a remote head to interrupt");
+        return true;
+    }
+    if (!head_needed || !remote) return false;
+    copy_text(app->notice, sizeof(app->notice), "That command runs on the head's host; a attaches, x interrupts");
+    return true;
+}
+
 static void palette_command(struct app *app, const struct palette_command *chosen) {
     struct head *head = selected_head(app);
     char other[TEXT] = "";
     char *argv[6]; /* executable, command, subcommand, head, comparison, NULL */
     size_t count = 0U;
     bool head_needed = chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE || chosen->scope == ACTION_LEAVE_HEAD;
-    if (palette_local(app, chosen)) return;
+    if (palette_remote(app, chosen, head, head_needed) || palette_local(app, chosen)) return;
     if (head_needed && head == NULL) { copy_text(app->notice, sizeof(app->notice), "Select a head for that command"); return; }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
@@ -404,15 +444,20 @@ void palette_open(struct app *app) {
     else palette_command(app, &palette_commands[chosen->action - KEY_ACTIONS]);
 }
 
-/* Fleet cancellation carries host, project and observed instance to the public CLI. */
+/* Fleet interruption carries host, project and observed instance to the
+ * public CLI; only a fresh observation of an answering host authorizes it. */
 void fleet_action(struct app *app) {
     struct head *head = selected_head(app);
-    char body[512];
+    char body[512], refusal[TEXT];
     char *argv[12];
     if (head == NULL || head->remote_host[0] == '\0') return;
-    snprintf(body, sizeof(body), "Interrupt %.120s on %.80s?\n\nThe remote head's terminal is interrupted; its "
-             "worktree and work are kept.", head->remote_branch, head->remote_host);
-    if (!dialog_confirm(app, "Interrupt remote head", body, "Interrupt", true)) return;
+    if (remote_action_refusal(app, head, refusal, sizeof(refusal))) { copy_text(app->notice, sizeof(app->notice), refusal); return; }
+    snprintf(body, sizeof(body), "Interrupt %.100s on %.60s?\n\nThis sends Ctrl-C to its agent; the worktree and its "
+             "files stay on the host.", head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host);
+    if (!dialog_confirm(app, "Interrupt remote head", body, "Interrupt", true)) {
+        copy_text(app->notice, sizeof(app->notice), "Interrupt cancelled; nothing was sent");
+        return;
+    }
     argv[0] = (char *)app->hydra; argv[1] = (char *)"fleet";
     argv[2] = (char *)"cancel"; argv[3] = head->remote_host;
     argv[4] = (char *)"--project"; argv[5] = head->remote_project;

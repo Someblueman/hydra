@@ -16,7 +16,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", "agent-inventory", "agent-locate-record", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "task-withdraw", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", "agent-inventory", "agent-locate-record", NULL};
 /* Additive handshake member: lower-case uname -s and a normalized uname -m
  * (arm64 -> aarch64, amd64 -> x86_64), matching release asset names. */
 static json_object *host_platform(void) {

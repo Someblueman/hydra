@@ -1,0 +1,25 @@
+rule	capture	message	reason
+# Open layout findings of the native TUI as captured on 17 October 2026 by make visual-review.
+# A row makes a matching finding "known" (reported on the contact sheet, not failing make
+# test-visual-lint). Columns: rule, capture glob (fnmatch over the capture id), a substring of
+# the finding's message, and why it is open. Remove the row when the screen is fixed; add one
+# only for a finding that needs a design decision by the owners of src/tui, never for a regression.
+contrast	*	#5f8787 on #1c1c1c	dark border tone for section headings, captions and secondary text reads at 4.30:1, just under 4.5; palette decision for the I4 pass
+contrast	*	#5f87af on #eeeeee	light border tone for section headings and captions reads at 3.25:1; palette decision for the I4 pass
+contrast	*	#008700 on #eeeeee	light success tone (status words, graph edges) reads at 4.05:1; palette decision for the I4 pass
+contrast	*	#af5f00 on #eeeeee	light warning tone reads at 4.06:1; palette decision for the I4 pass
+contrast	*	#8a8a8a on #eeeeee	light muted tone (title bar, inactive tabs, footers) reads at 2.98:1 against the 3.0 secondary-text floor; palette decision for the I4 pass
+hint-repeat	work--work-list--*	'Enter details'	the selected head's card repeats the footer hints; hint consolidation (U8)
+hint-repeat	work--work-list--*	'x remove'	the selected head's card repeats the footer hints; hint consolidation (U8)
+hint-repeat	work--work-run-expanded--*	'C monitor'	the run card repeats the footer hints; hint consolidation (U8)
+hint-repeat	work--work-run-expanded--*	'w workflows'	the run card repeats the footer hints; hint consolidation (U8)
+hint-repeat	hosts--hosts-entry--*	'? help'	the empty Workspace's key line (n new task  H hosts  : more actions  ? help) repeats the footer; hint consolidation (U8)
+hint-repeat	hosts--hosts-*	'Esc back'	setup screens print their key line above a footer that repeats it; hint consolidation (U8)
+hint-repeat	hosts--hosts-*	'Esc later'	setup screens print their key line above a footer that repeats it; hint consolidation (U8)
+hint-repeat	hosts-unfinished--hosts-duplicate--*	'e edit'	the duplicate-name screen's options repeat the footer; hint consolidation (U8)
+hint-repeat	hosts-unfinished--hosts-duplicate--*	'x remove'	the duplicate-name screen's options repeat the footer; hint consolidation (U8)
+clip-area	work--overview-*	on kill-dry-run-check; p on tha	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--overview-*	tput. Worker branch kill-dry-ru	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--overview-*	ent on kill-dry-run-worker (cod	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--coordination--*-80x24	Workflows shows steps and depen	the coordination summary line is cut instead of wrapped at 80 columns; U9
+clip-area	hosts--hosts-done--*	hydra/fleet/	the done screen cuts the install prefix path at both sizes; U10 screens

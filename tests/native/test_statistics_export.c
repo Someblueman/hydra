@@ -96,6 +96,30 @@ int main(int argc, char **argv) {
   assert(!f_field(f_field(v, "unmeasured"), "manual_interventions"));
   nt_equal(f_field(f_field(v, "coverage"), "partial"), "false");
   json_object_put(v);
+  /* Schema 5 feeds export schema 3: remote cohorts and telemetry, unknown
+   * where the receipts carry nothing, with the recorded reason. */
+  v = load("tests/fixtures/tui/statistics-v5.tsv");
+  nt_equal(f_field(v, "schema_version"), "3");
+  nt_equal(f_field(v, "remote"),
+           "{\"state\":\"partial\",\"remote_steps\":4,\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}");
+  nt_equal(f_field(f_field(f_field(v, "telemetry"), "measurements"), "cpu_microseconds"),
+           "{\"state\":\"partial\",\"eligible\":4,\"known\":2,\"sum\":null}");
+  nt_equal(f_field(f_field(f_field(v, "telemetry"), "measurements"), "transport_calls"),
+           "{\"state\":\"partial\",\"eligible\":4,\"known\":3,\"sum\":null}");
+  {
+    json_object *hosts = f_field(f_field(f_field(v, "cohorts"), "host"), "cohorts");
+    assert(json_object_array_length(hosts) == 2);
+    nt_equal(f_field(json_object_array_get_idx(hosts, 0), "key"), "\"alpha\"");
+    nt_equal(f_field(f_field(f_field(json_object_array_get_idx(hosts, 0), "telemetry"), "cpu_microseconds"), "sum"), "5500000");
+    nt_equal(f_field(json_object_array_get_idx(hosts, 1), "unmeasured_reason"),
+             "\"receiver recorded no telemetry block (protocol without telemetry 1)\"");
+    assert(!f_field(f_field(f_field(json_object_array_get_idx(hosts, 1), "telemetry"), "wall_seconds"), "sum"));
+  }
+  json_object_put(v);
+  v = compare("tests/fixtures/tui/statistics-v5.tsv");
+  nt_equal(f_field(v, "schema_version"), "3");
+  nt_equal(f_field(f_field(v, "right"), "schema_version"), "3");
+  json_object_put(v);
   assert(mkdtemp(folder));
   nt_path(recorded, folder, "recorded-v3.tsv");
   nt_path(mixed, folder, "mixed.tsv");

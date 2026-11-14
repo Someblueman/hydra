@@ -22,21 +22,26 @@ bool head_matches(const struct head *head, const char *search) {
            contains_folded(head->remote_host, search) || contains_folded(head->remote_project, search);
 }
 struct head *selected_head(struct app *app) {
-    /* A selected run row in Work or Overview is not a head. */
-    if (app->run_row || app->selected >= app->model.head_count) return NULL;
-    if (!head_matches(&app->model.heads[app->selected], app->search)) return NULL;
+    /* A selected run or remote task row in Work or Overview is not a head. */
+    if (app->run_row || app->task_row || app->selected >= app->model.head_count) return NULL;
+    if (!head_visible(app, &app->model.heads[app->selected])) return NULL;
     return &app->model.heads[app->selected];
 }
 void retarget_selection(struct app *app) {
     size_t index;
-    if (selected_head(app) != NULL) return;
+    if (selected_head(app) != NULL || app->run_row || selected_task(app)) return;
+    app->task_row = false;
     for (index = 0U; index < app->model.head_count; index++) {
-        if (head_matches(&app->model.heads[index], app->search)) {
+        if (head_visible(app, &app->model.heads[index])) {
             app->selected = index;
             return;
         }
     }
     app->selected = app->model.head_count;
+    /* No head here: a remote task row can be the selection. */
+    for (index = 0U; index < app->model.task_count; index++) {
+        if (task_visible(app, &app->model.tasks[index])) { app->task_row = true; app->task_selected = index; return; }
+    }
 }
 static void bounded_selection(size_t *index, size_t count, int direction) {
     if (*index >= count) { *index = 0; return; }
@@ -49,9 +54,6 @@ static bool move_workspace_selection(struct app *app, int direction) {
         case 7: native_workspace_move(app, direction); return true;
         case 5: workflow_move(app, direction); return true;
         case 6: bounded_selection(&app->host_selected, hosts_row_count(app), direction); return true;
-        case 4:
-            if (!app->fleet || !app->model.task_count) return false;
-            bounded_selection(&app->task_selected, app->model.task_count, direction); return true;
         default: return false;
     }
 }
@@ -60,12 +62,12 @@ void move_selection(struct app *app, int direction) {
     size_t index;
     if (move_workspace_selection(app, direction)) return;
     if (app->view == 3) { bounded_selection(&app->recovery_selected, app->model.recovery_count, direction); return; }
-    if (!app->fleet && app->view <= 4 && app->view != 3) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
+    if (app->view <= 4) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
     retarget_selection(app);
     if (selected_head(app) == NULL) return;
     if (direction > 0) {
         for (index = app->selected + 1U; index < app->model.head_count; index++) {
-            if (head_matches(&app->model.heads[index], app->search)) {
+            if (head_visible(app, &app->model.heads[index])) {
                 app->selected = index;
                 return;
             }
@@ -75,7 +77,7 @@ void move_selection(struct app *app, int direction) {
     index = app->selected;
     while (index > 0U) {
         index--;
-        if (head_matches(&app->model.heads[index], app->search)) {
+        if (head_visible(app, &app->model.heads[index])) {
             app->selected = index;
             return;
         }
@@ -92,6 +94,7 @@ void toggle_mark(struct app *app) {
     struct head *head = selected_head(app);
     size_t index;
     if (head == NULL) return;
+    if (head_remote(head)) { copy_text(app->notice, sizeof(app->notice), "Remote heads are not marked: removal and grouping run on their host"); return; }
     index = marked_index(app, head->branch);
     if (index < app->marked_count) {
         app->marked_count--;
@@ -107,7 +110,7 @@ void select_all_visible(struct app *app) {
     size_t index;
     app->marked_count = 0U;
     for (index = 0U; index < app->model.head_count; index++) {
-        if (head_matches(&app->model.heads[index], app->search)) {
+        if (head_visible(app, &app->model.heads[index]) && !head_remote(&app->model.heads[index])) {
             copy_text(app->marked[app->marked_count++], TEXT, app->model.heads[index].branch);
         }
     }

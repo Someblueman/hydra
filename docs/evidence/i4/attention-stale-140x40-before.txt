@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ATTENTION  0 need you · 0 seen · 1 stale · 1 unknown                                                                                    │
+│ 1 failed check or step needs a decision                                                                                                 │
+│ STALE: last good attention snapshot. The latest refresh failed; I tries again.                                                          │
+│ Attention stream invalid; showing last good snapshot                                                                                    │
+│ > Check failed · kill-dry-run · repo-check — req-dry-run-flag, req-no-removal; review the log and send the plan back or retry  NEW      │
+│     Step repo-check (attempt 1) failed its check. Press r to see the failed requirement and the log summary. Marking it seen keeps it   │
+│     listed until the step succeeds or a later run of this plan succeeds.                                                                │
+│   Approval needed · notes-cleanup · merge-gate  NEW                                                                                     │
+│     Step merge-gate (attempt 1) is waiting for your decision. Press r to review the request; marking it seen does not approve it.       │
+│   Result ready for review · kill-dry-run · implement  NEW                                                                               │
+│     Step implement (attempt 1) finished and sealed its output. Press r to see what it produced and how it was checked.                  │
+│   Result ready for review · feature-build · verify · on builder  NEW                                                                    │
+│     Step verify (attempt 2) finished and sealed its output. Press r to see what it produced and how it was checked.                     │
+│   (stale) Approval expired · docs-refresh · release-gate                                                                                │
+│     Step release-gate (attempt 1) asked for a decision, but the request expired before anyone decided. The source could not be          │
+│     re-read; this is its last observation.                                                                                              │
+│   Result ready for review · feature/very-long-task-name-for-the-wrapping-check-of-the-attention-list-rows · implement  NEW              │
+│     Step implement (attempt 3) finished and sealed its output. Press r to see what it produced and how it was checked.                  │
+│   Needs inspection · index-rebuild · on archive                                                                                         │
+│     This item could not be classified by Hydra (provider_question). Inspect its records before acting.                                  │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit                                                     

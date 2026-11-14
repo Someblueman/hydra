@@ -150,12 +150,21 @@ done:
     return valid ? f_success("workflow task", json_object_new_object()) :
         f_error("workflow task", "result_unavailable", "task result or collection is unavailable or failed binding verification");
 }
-enum observation { OBSERVE_AGAIN, OBSERVE_COLLECT, OBSERVE_FAILED, OBSERVE_PENDING, OBSERVE_INVALID };
+enum observation { OBSERVE_AGAIN, OBSERVE_COLLECT, OBSERVE_FAILED, OBSERVE_PENDING, OBSERVE_INVALID, OBSERVE_REFUSED };
 struct execution {
     const char *run, *attempt, *source;
-    char remote[F_PATH], id[70];
+    char remote[F_PATH], id[70], refusal[64];
     json_object *record;
 };
+/* A receiver refuses a first submission before publishing anything (an
+ * unsupported capability, placement or dependency): the typed error is final
+ * for this dispatch, not a transport outcome to reconcile later. */
+static bool submission_refused(json_object *response, char refusal[64]) {
+    const char *code = f_string(f_field(response, "error"), "code");
+    const char *final[] = {"capability_unavailable", "unmapped_project", "submission_conflict", "missing_dependency", "placement_mismatch", NULL};
+    for (size_t i = 0; code && final[i]; i++) if (!strcmp(code, final[i])) return !f_copy(refusal, 64, code);
+    return false;
+}
 static enum observation classify(json_object *runtime, bool cancelling) {
     const char *state = f_string(runtime, "state");
     if (!state) return OBSERVE_INVALID;
@@ -188,6 +197,7 @@ static enum observation observe(struct execution *execution) {
     json_object *response = request(execution->record, operation, *execution->id ? execution->id : NULL, !cancelling, execution->remote);
     if (json_object_get_boolean(f_field(response, "ok")))
         next = record_observation(execution, f_field(response, "data"), cancelling);
+    else if (!*execution->id && submission_refused(response, execution->refusal)) next = OBSERVE_REFUSED;
     json_object_put(response); return next;
 }
 static json_object *drive(struct execution *execution) {
@@ -201,6 +211,8 @@ static json_object *drive(struct execution *execution) {
                 return f_error("workflow task", "waiting_remote", "reconcile this same workflow run and task; do not replace the dispatch");
             case OBSERVE_INVALID:
                 return f_error("workflow task", "binding_invalid", "task observation differs from its recorded identity");
+            case OBSERVE_REFUSED:
+                return f_error("workflow task", execution->refusal, "the receiving host refused this dispatch before accepting it; nothing was launched");
             case OBSERVE_AGAIN: break;
         }
         struct timespec delay = {1, 0}; nanosleep(&delay, NULL);

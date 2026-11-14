@@ -31,9 +31,9 @@ void native_observations_destroy(struct app *app) {
 }
 
 /* The local head snapshot comes from the state store when the CLI that
- * started the control centre said so; a fleet snapshot never does. */
+ * started the control centre said so; remote work is a source of its own. */
 static bool heads_from_store(const struct app *app) {
-    return app->store && !app->fleet;
+    return app->store;
 }
 
 static bool observations_ready(struct app *app) {
@@ -54,11 +54,32 @@ static void complete_snapshot(struct app *app, FILE *input, bool timed_out) {
     if (!strcmp(app->notice,"Loading snapshot...")) app->notice[0]='\0';
     if (result && (timed_out || !complete)) snprintf(app->snapshot_error,sizeof(app->snapshot_error),"%s %s; showing last good snapshot",
         heads_from_store(app) ? "state read" : "shell data adapter",timed_out ? "timed out" : "failed");
-    if (app->fleet && app->statistics) statistics_visible(app);
+}
+
+/* The remote observation: the fleet stream, read beside the local one. A
+ * failure keeps the rows already shown as the last observation and says so. */
+static void complete_remote(struct app *app, FILE *input, bool timed_out) {
+    bool complete=input!=NULL;
+    char error[TEXT], saved[TEXT];
+    copy_text(saved,sizeof(saved),app->snapshot_error);
+    if (!accept_model_data(app,input)) {
+        copy_text(app->snapshot_error,sizeof(app->snapshot_error),saved);
+        if (app->fleet && app->statistics) statistics_visible(app);
+        if (app->view==6) native_setup_hosts_refresh(app);
+        new_task_attach(app);
+        /* Nothing to follow remotely: look again later rather than every cycle. */
+        app->remote_next=time(NULL)+(app->model.host_count ? 0 : HYDRA_TUI_REMOTE_IDLE_SECONDS);
+        return;
+    }
+    copy_text(error,sizeof(error),app->snapshot_error);
+    copy_text(app->snapshot_error,sizeof(app->snapshot_error),saved);
+    remote_failed(app,timed_out ? "remote observation timed out" : !complete ? "remote observation failed" : error);
+    app->remote_next=time(NULL)+HYDRA_TUI_REMOTE_RETRY_SECONDS;
 }
 
 static long observation_budget(const struct app *app, size_t source) {
-    if (app->fleet) return HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS;
+    (void)app;
+    if (source==OBSERVE_REMOTE) return HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS;
     return source==OBSERVE_HEADS ? HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS : 3500L;
 }
 
@@ -67,9 +88,9 @@ static long observation_budget(const struct app *app, size_t source) {
  * good head snapshot. */
 static bool observation_shown(const struct app *app, size_t source) {
     if (source==OBSERVE_HEADS) return true;
-    if (app->fleet) return false;
     if (source==OBSERVE_WORKFLOWS) return app->view==5 || app->view==7 || app->snapshot_at;
-    if (source==OBSERVE_STATISTICS) return app->view==8;
+    /* The fleet entry's statistics are the hosts' own (D), from the remote stream. */
+    if (source==OBSERVE_STATISTICS) return app->view==8 && !app->fleet;
     return source==OBSERVE_LINKS && app->view==7;
 }
 
@@ -145,7 +166,6 @@ static bool location_pending(const struct app *app, size_t source) {
 static void observation_start(struct app *app, size_t source) {
     static const char *const commands[][2]={{"tui","--data"},{"workflow","tui-data"},{"workflow","statistics-data"},{"workflow","--workspace-links"}};
     char *argv[]={(char *)app->hydra,(char *)commands[source][0],(char *)commands[source][1],NULL};
-    if (source==OBSERVE_HEADS && app->fleet) { argv[1]=(char *)"fleet"; argv[2]=(char *)"tui-visual-data"; }
     app->observations->again[source]=false;
     if (native_capture_start(&app->observations->jobs[source],argv,observation_budget(app,source))) return;
     if (source!=OBSERVE_HEADS) { observation_accept(app,source,NULL,false); return; }
@@ -169,7 +189,7 @@ static bool observation_running(const struct app *app, size_t source) {
 }
 
 void native_observations_request(struct app *app, size_t source) {
-    if (source>=OBSERVE_ATTENTION || (app->fleet && source!=OBSERVE_HEADS) || !observations_ready(app)) return;
+    if (source>=OBSERVE_ATTENTION || (app->fleet && source==OBSERVE_STATISTICS) || !observations_ready(app)) return;
     if (observation_running(app,source) || location_pending(app,source)) app->observations->again[source]=true;
     else if (source==OBSERVE_HEADS && heads_from_store(app)) store_start(app);
     else if (!workflow_shortcut(app,source,true)) observation_start(app,source);
@@ -206,6 +226,24 @@ static void observation_tick(struct app *app, size_t source, bool request) {
     app->observations->again[source]=false;
 }
 
+/* `hydra fleet tui` (the compatibility entry) reads the fleet helper's own
+ * stream; `hydra tui` reads it through the shell, which answers with an empty
+ * stream when no host is registered or the helper is not built. */
+static void remote_source_tick(struct app *app, bool request) {
+    struct native_capture *p=&app->observations->jobs[OBSERVE_REMOTE];
+    char *argv[]={(char *)app->hydra,app->fleet ? "fleet" : "tui",app->fleet ? "tui-visual-data" : "--remote-data",NULL};
+    if (p->pid && native_capture_step(p)) {
+        bool timed_out=p->timed_out;
+        FILE *input=native_capture_take(p);
+        complete_remote(app,input,timed_out);
+    }
+    if (!request || p->pid || time(NULL)<app->remote_next) return;
+    if (!native_capture_start(p,argv,observation_budget(app,OBSERVE_REMOTE))) {
+        remote_failed(app,"unable to start the remote observation");
+        app->remote_next=time(NULL)+HYDRA_TUI_REMOTE_RETRY_SECONDS;
+    }
+}
+
 void native_observations_tick(struct app *app, bool request) {
     size_t source;
     native_plan_tick(app,request);
@@ -214,6 +252,7 @@ void native_observations_tick(struct app *app, bool request) {
     if (!app->observations && (!request || !observations_ready(app))) return;
     if (heads_from_store(app)) store_tick(app,request);
     for (source=heads_from_store(app) ? OBSERVE_WORKFLOWS : OBSERVE_HEADS;source<OBSERVE_ATTENTION;source++) observation_tick(app,source,request);
+    remote_source_tick(app,request);
     preview_tick(app);
     native_evidence_tick(app,request);
     native_attention_tick(app,request);

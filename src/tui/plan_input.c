@@ -6,7 +6,7 @@
  * policy loaded into the workspace's plan review. */
 void native_plan_import(struct app *app) {
     char path[4096], policy[4096];
-    if (app->fleet || !native_workspace_init(app)) return;
+    if (!native_workspace_init(app)) return;
     if (app->view != 7) enter_view(app, 7);
     if (prompt_text(app, "Draft JSON path: ", path, sizeof(path)) || !path[0]) return;
     if (prompt_text(app, "Policy JSON path: ", policy, sizeof(policy)) || !policy[0]) return;
@@ -29,7 +29,7 @@ void native_plan_proposal(struct app *app) {
     struct head *head = selected_head(app);
     char output[12288], branch[TEXT], prompt[512];
     char *fields[3], *line, *end;
-    if (app->fleet || !head) {
+    if (!head || head_remote(head)) {
         copy_text(app->notice, sizeof(app->notice), "Select a local agent conversation first; n starts one");
         return;
     }

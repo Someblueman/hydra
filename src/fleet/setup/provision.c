@@ -16,6 +16,9 @@
  * the remote changes before approval; in_progress is persisted before
  * f_bootstrap; a resumed in_progress/outcome_unknown step only reconciles.
  * Existing installs and pins are never modified, and PATH is never changed.
+ * A runtime upgrade (setup_runtime_upgrade) takes the same path: the plan adds
+ * the old and new version and install, the previous install stays, and once
+ * the new one confirms its exact version verify and the alias switch follow.
  */
 #define PROVISION_SECONDS 120U
 #define PROVISION_CHANGES "installs only into prefix; no PATH changes; other installs and pins untouched"
@@ -152,6 +155,66 @@ static json_object *reuse_pin(struct setup_ctx *ctx, const struct provision *p) 
     return finished(ctx, reused_detail(summary, ctx->remote.hydra, "pin"));
 }
 
+/* ---- Runtime upgrade ---- */
+static bool upgrading(struct setup_ctx *ctx) {
+    json_object *view = setup_runtime_upgrade(ctx);
+    bool found = view != NULL;
+    json_object_put(view);
+    return found;
+}
+/* The plan's "upgrade" member, or NULL for a first install. The alias switch
+ * is planned only while the alias still uses the previous install. */
+static json_object *upgrade_json(struct setup_ctx *ctx, const struct provision *p) {
+    json_object *view = setup_runtime_upgrade(ctx), *upgrade, *change; struct f_remote alias; char hydra[F_PATH];
+    const char *previous = f_string(view, "previous_hydra");
+    if (!view) return NULL;
+    upgrade = json_object_new_object();
+    f_string_add(upgrade, "from_version", f_string(view, "from_version")); f_string_add(upgrade, "to_version", F_VERSION);
+    f_string_add(upgrade, "previous_hydra", previous);
+    json_object_object_add(upgrade, "previous_prefix", json_object_get(f_field(view, "previous_prefix")));
+    f_string_add(upgrade, "previous_install", "stays installed and is not removed; delete it yourself once no alias uses it");
+    if (!f_remote_load(ctx->name, &alias) && !strcmp(alias.hydra, previous) && !strcmp(alias.target, ctx->remote.target) &&
+        !strcmp(alias.ssh_config, ctx->remote.ssh_config) && !f_path(hydra, sizeof(hydra), p->prefix, "bin/hydra")) {
+        change = json_object_new_object();
+        f_string_add(change, "name", ctx->name); f_string_add(change, "old_hydra", previous); f_string_add(change, "new_hydra", hydra);
+        f_string_add(change, "when", "after the new install answers the fleet handshake with exactly " F_VERSION "; no other alias field changes");
+        json_object_object_add(upgrade, "alias", change);
+    }
+    json_object_put(view);
+    return upgrade;
+}
+/* Before the upgraded install is recorded done: verify and alias of a setup
+ * that had finished them run again (an interruption leaves provision in
+ * progress, and its reconciliation reopens them again). */
+static int reopen(struct setup_ctx *ctx) {
+    static const char *const steps[][2] = {
+        {"verify", "re-verify the upgraded Hydra " F_VERSION}, {"alias", "switch the alias to the upgraded Hydra " F_VERSION}
+    };
+    size_t i;
+    for (i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
+        const char *status = setup_state_status(ctx, steps[i][0]);
+        json_object *detail;
+        if (strcmp(status, "done") && strcmp(status, "skipped")) continue;
+        detail = json_object_new_object();
+        f_string_add(detail, "summary", steps[i][1]);
+        if (setup_state_step(ctx, steps[i][0], "pending", detail)) return -1;
+    }
+    return 0;
+}
+/* After an upgraded install (and on a rerun after an interruption): re-verify
+ * and switch the alias when those are the next steps. */
+static json_object *finish_upgrade(struct setup_ctx *ctx, json_object *result) {
+    char step[80]; int round; json_object *next;
+    if (!json_object_get_boolean(f_field(result, "ok")) || strcmp(setup_state_status(ctx, "provision"), "done") ||
+        !f_field(setup_state_detail(ctx, "provision"), "upgrade")) return result;
+    for (round = 0; round < 2 && setup_first_open(ctx, step) && (!strcmp(step, "verify") || !strcmp(step, "alias")); round++) {
+        next = !strcmp(step, "verify") ? setup_step_verify(ctx) : setup_step_alias(ctx);
+        if (!json_object_get_boolean(f_field(next, "ok"))) { json_object_put(result); return next; }
+        json_object_put(next);
+    }
+    return result;
+}
+
 /* ---- Plan, approval and installation ---- */
 static json_object *binary_json(const struct setup_binary *binary) {
     json_object *value = json_object_new_object();
@@ -160,8 +223,8 @@ static json_object *binary_json(const struct setup_binary *binary) {
     f_string_add(value, "trust", binary->pinned ? "pinned" : "unpinned");
     return value;
 }
-static json_object *plan_json(const struct setup_ctx *ctx, const struct provision *p) {
-    json_object *plan = json_object_new_object();
+static json_object *plan_json(struct setup_ctx *ctx, const struct provision *p) {
+    json_object *plan = json_object_new_object(), *upgrade = upgrade_json(ctx, p);
     f_string_add(plan, "host", ctx->remote.target);
     f_string_add(plan, "platform", p->platform_text);
     f_string_add(plan, "hydra_version", F_VERSION);
@@ -169,6 +232,7 @@ static json_object *plan_json(const struct setup_ctx *ctx, const struct provisio
     f_string_add(plan, "package_sha256", p->digest);
     f_string_add(plan, "prefix", p->prefix);
     f_string_add(plan, "changes", PROVISION_CHANGES);
+    if (upgrade) json_object_object_add(plan, "upgrade", upgrade);
     return plan;
 }
 static json_object *gate(struct setup_ctx *ctx, json_object *plan, const char *binary, const char *approve) {
@@ -176,19 +240,20 @@ static json_object *gate(struct setup_ctx *ctx, json_object *plan, const char *b
     return setup_plan_gate(ctx, "provision", plan, approve, binary ? with_binary : plain);
 }
 static json_object *progress_detail(const struct provision *p, json_object *plan) {
-    json_object *detail = json_object_new_object(); char summary[F_PATH + 64];
+    json_object *detail = json_object_new_object(), *upgrade = NULL; char summary[F_PATH + 64];
     snprintf(summary, sizeof(summary), "installing Hydra %s into %s", F_VERSION, p->prefix);
     f_string_add(detail, "summary", summary);
     f_string_add(detail, "package", p->package); f_string_add(detail, "package_sha256", p->digest);
     f_string_add(detail, "prefix", p->prefix); f_string_add(detail, "platform", p->platform_text);
     f_string_add(detail, "plan_sha256", p->plan_sha256);
     json_object_object_add(detail, "binary", binary_json(&p->binary));
+    if (f_field(plan, "upgrade") && !json_object_deep_copy(f_field(plan, "upgrade"), &upgrade, NULL)) json_object_object_add(detail, "upgrade", upgrade);
     json_object_object_add(detail, "plan", plan);
     return detail;
 }
 /* Confirms the exact version of a confirmed install and records done. */
 static json_object *complete(struct setup_ctx *ctx) {
-    json_object *detail; char summary[F_PATH + 64];
+    json_object *detail, *upgrade; char summary[F_PATH * 2 + 96]; const char *previous; int used;
     if (!exact_version(ctx)) {
         if (setup_state_step(ctx, "provision", "outcome_unknown", NULL)) return state_error(ctx);
         return setup_error(ctx, "outcome_unknown", "the installed Hydra did not confirm the exact local version",
@@ -196,7 +261,12 @@ static json_object *complete(struct setup_ctx *ctx) {
     }
     detail = copy_detail(ctx);
     json_object_object_del(detail, "plan");
-    snprintf(summary, sizeof(summary), "Hydra %s installed at %s", F_VERSION, f_string(detail, "prefix") ? f_string(detail, "prefix") : ctx->remote.hydra);
+    upgrade = f_field(detail, "upgrade");
+    if (upgrade && reopen(ctx)) { json_object_put(detail); return state_error(ctx); }
+    previous = f_string(upgrade, "previous_prefix") ? f_string(upgrade, "previous_prefix") : f_string(upgrade, "previous_hydra");
+    used = snprintf(summary, sizeof(summary), "Hydra %s installed at %s", F_VERSION, f_string(detail, "prefix") ? f_string(detail, "prefix") : ctx->remote.hydra);
+    if (upgrade && used > 0 && (size_t)used < sizeof(summary))
+        snprintf(summary + used, sizeof(summary) - (size_t)used, "; Hydra %s stays at %s", f_string(upgrade, "from_version"), previous ? previous : "its path");
     f_string_add(detail, "summary", summary); f_string_add(detail, "hydra", ctx->remote.hydra);
     f_string_add(detail, "hydra_version", F_VERSION);
     return finished(ctx, detail);
@@ -227,11 +297,14 @@ static json_object *install(struct setup_ctx *ctx, struct provision *p, json_obj
 }
 static json_object *plan_and_install(struct setup_ctx *ctx, const char *binary, const char *approve) {
     struct provision p; json_object *result, *plan;
+    /* An upgrade always installs (an existing identical prefix is verified,
+     * never overwritten), so its alias switch and re-verification follow. */
+    bool reuse = !binary && !upgrading(ctx);
     memset(&p, 0, sizeof(p));
     if ((result = read_preflight(ctx, &p))) return result;
-    if (!binary && (result = reuse_existing(ctx))) return result;
+    if (reuse && (result = reuse_existing(ctx))) return result;
     if ((result = setup_asset_resolve(ctx, binary, &p.platform, &p.binary)) || (result = build_package(ctx, &p))) return result;
-    if (!binary && (result = reuse_pin(ctx, &p))) return result;
+    if (reuse && (result = reuse_pin(ctx, &p))) return result;
     plan = plan_json(ctx, &p);
     if ((result = gate(ctx, plan, binary, approve))) { json_object_put(plan); return result; }
     return install(ctx, &p, plan);
@@ -300,7 +373,9 @@ static json_object *reconcile(struct setup_ctx *ctx, const char *binary) {
 
 json_object *setup_step_provision(struct setup_ctx *ctx, const char *binary, const char *approve) {
     const char *status = setup_state_status(ctx, "provision");
-    if (!strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) return reconcile(ctx, binary);
-    if (!strcmp(status, "done")) return f_success(ctx->command, copy_detail(ctx));
-    return plan_and_install(ctx, binary, approve);
+    json_object *result;
+    if (!strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) result = reconcile(ctx, binary);
+    else if (!strcmp(status, "done") && !upgrading(ctx)) result = f_success(ctx->command, copy_detail(ctx));
+    else result = plan_and_install(ctx, binary, approve);
+    return finish_upgrade(ctx, result);
 }

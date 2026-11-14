@@ -15,8 +15,9 @@ bool native_terminal_focused(struct app *app) {
     return app->view==7 && t && t->screen && !t->client.finished && !t->client.eof;
 }
 static bool terminal_head_matches(const struct app *app, const struct head *h, const struct native_terminal *t) {
+    (void)app;
     return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
-        (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+        !strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project);
 }
 
 static size_t terminal_head_index(const struct app *app, const struct native_terminal *t) {
@@ -150,7 +151,7 @@ bool native_terminal_paste(struct app *app, const char *bytes, size_t length) {
     return true;
 }
 
-/* Keys while a fleet client's own history is shown. */
+/* Keys while a client's own model history is shown (no tmux history to use). */
 static void scroll_key(struct native_terminal *t, const struct kt_event *e) {
     size_t delta=(e->key==KT_KEY_PAGE_UP || e->key==KT_KEY_PAGE_DOWN) ? 10 : 1;
     if (kt_event_is(e,'k',0) || e->key==KT_KEY_UP || e->key==KT_KEY_PAGE_UP)
@@ -185,8 +186,10 @@ static void terminal_key(struct app *app, const struct kt_event *e) {
     if (match==KT_KEY_ABANDONED) { unbound_notice(app,k); return; }
     if (match==KT_KEY_PENDING || !native_terminal_focused(app)) return;
     t=native_terminal_selected(app);
-    if (t->scrolling) scroll_key(t,e);
-    else native_terminal_send(app,t,e->bytes,e->length);
+    if (t->scrolling) { scroll_key(t,e); return; }
+    /* The user left the host's copy mode by hand: terminal.live must not type q. */
+    if (t->remote_history && (kt_event_is(e,'q',0) || e->key==KT_KEY_ESCAPE || e->key==KT_KEY_ENTER)) t->remote_history=false;
+    native_terminal_send(app,t,e->bytes,e->length);
 }
 
 void native_terminal_event(struct app *app, const struct kt_event *e) {

@@ -166,12 +166,18 @@ static bool old_keys_file_loads(void) {
 
 /* Fleet mode leaves local-only actions live nowhere, so they reach neither
  * its footer nor its help. */
+/* The fleet entry opens the one control centre filtered to remote work: it
+ * keeps every key of local work (a talks to or attaches, x removes or
+ * interrupts), leaves out only the local statistics pages, and the rows that
+ * a and x took over are live in neither mode. */
 static bool fleet_drops_local(void) {
-    struct app *app = app_new(true);
-    const struct native_keys *k = native_keys(app);
-    bool ok = !k->bindings[KEY_TASK_NEW].scope && !k->bindings[KEY_HEAD_REMOVE].scope &&
-        k->bindings[KEY_HEADS_ATTACH].scope && k->bindings[KEY_HEADS_INTERRUPT].scope;
-    free(app);
+    struct app *app = app_new(true), *local = app_new(false);
+    const struct native_keys *k = native_keys(app), *l = native_keys(local);
+    bool ok = k->bindings[KEY_TASK_NEW].scope && k->bindings[KEY_HEAD_REMOVE].scope && k->bindings[KEY_HEADS_TALK].scope &&
+        !k->bindings[KEY_STATS_PAGE].scope && !k->bindings[KEY_STATS_COHORTS].scope && l->bindings[KEY_STATS_COHORTS].scope &&
+        !k->bindings[KEY_HEADS_ATTACH].scope && !k->bindings[KEY_HEADS_INTERRUPT].scope &&
+        !l->bindings[KEY_HEADS_ATTACH].scope && !l->bindings[KEY_HEADS_INTERRUPT].scope;
+    free(app); free(local);
     return ok;
 }
 
@@ -183,7 +189,7 @@ int main(void) {
     result(footers_fit(), "every footer fits 40 to 140 columns and keeps help and quit");
     result(help_lists_chain(), "help lists every binding of its chain and the agent-layer chords");
     result(old_keys_file_loads(), "a keys file with the first version's names still loads");
-    result(fleet_drops_local(), "fleet mode leaves local-only actions out");
+    result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics; retired rows are live nowhere");
     printf("Passed: %d checks, Failed: %d\n", 8 - failures, failures);
     return failures ? 1 : 0;
 }

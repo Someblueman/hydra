@@ -27,8 +27,9 @@ struct setup_agent { char name[64], status[24], path[240], version[64]; };
 struct setup_choice { char agent[64], status[24]; bool install; };
 /* One row of `remote setup list`: status is the first open step's status
  * ("done" when complete, "unreadable" with error set); remote_changed: a step
- * may have changed the remote, so the setup is no longer edited in place. */
-struct setup_listed { char name[128], destination[256], ssh_config[1024], status[24], next_step[80], error[48]; bool complete, remote_changed; };
+ * may have changed the remote, so the setup is no longer edited in place;
+ * upgrade: upgrade.summary of a finished setup whose host runs another Hydra. */
+struct setup_listed { char name[128], destination[256], ssh_config[1024], status[24], next_step[80], error[48], upgrade[160]; bool complete, remote_changed; };
 
 struct setup_envelope {
     bool parsed, ok, complete;

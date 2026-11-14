@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / OVERVIEW                                                             Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  [Overview]  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Overview ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ╭─ RUNNING ────────────────────╮ ╭─ NEED ATTENTION ─────────────╮ ╭─ RUNS ACTIVE ────────────────╮ ╭─ CHANGED FILES ──────────────────╮ │
+│ │ 1                            │ │ 1                            │ │ 0                            │ │ 3                                │ │
+│ │                              │ │                              │ │                              │ │                                  │ │
+│ │ local heads and runs working │ │ failures, decisions, stopped │ │ 0 recorded in this project   │ │ uncommitted, local heads         │ │
+│ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────────╯ │
+│                                                                                                                                         │
+│ ╭─ WORK / what you started, local and remote ──────────────────────────────────╮ ╭─ SELECTED / what it needs ─────────────────────────╮ │
+│ │                                                                              │ │                                                    │ │
+│ │ > add-kill                                                  running          │ │ add-kill                                           │ │
+│ │   kill-dry-run-worker                                       headless         │ │                                                    │ │
+│ │   notes-cleanup                                             terminal gone    │ │ Agent: codex · local                               │ │
+│ │                                                                              │ │ Session: running                                   │ │
+│ │                                                                              │ │ Changed files 0   Reported: nothing yet            │ │
+│ │                                                                              │ │ No approval requests                               │ │
+│ │ 3 heads you started / Enter opens or expands                                 │ │                                                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────────────╯ │
+│                                                                                                                                         │
+│ ╭─ RUN / no run yet ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │                                                                                                                                     │ │
+│ │ No workflow run yet.                                                                                                                │ │
+│ │ A run appears here when you execute an approved plan (E in the plan review) or start one with hydra workflow run. It shows each     │ │
+│ │ step, the head it ran on, and what needs you next.                                                                                  │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit                                                              

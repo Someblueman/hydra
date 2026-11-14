@@ -1,0 +1,1 @@
+attention fixture rejected: /home/user/hydra/.claude/worktrees/agent-a49ae6c168010b352/build/i4-scratch/attention-broken.tsv

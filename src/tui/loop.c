@@ -30,6 +30,7 @@ static void poll_work(struct app *app, bool request) {
         native_observations_tick(app, request);
         if (request && app->preview && !native_terminal_focused(app)) capture_preview(app);
         native_setup_tick(app);
+        native_onboarding_tick(app);
     }
     native_activity_tick(app);
     native_terminals_pump(app);

@@ -1,0 +1,67 @@
+HYDRA_REVIEW	1	workflow records	project_7f3a	-	-	run_2cdf8bbe1a4e	implement	attempt-1	head_b2c4d6e8	instance_b2c4d6e8	-	-	5555555555555555555555555555555555555555555555555555555555555555	6666666666666666666666666666666666666666666666666666666666666666
+TEXT	RESULT  kill-dry-run  -  verdict PASS  -  run succeeded
+TEXT	Objective: add hydra kill --dry-run so a removal can be previewed without removing anything
+TEXT	
+TEXT	WHAT WAS PRODUCED
+TEXT	  answer - the implementation summary (step implement, available)
+TEXT	    412 bytes
+TEXT	    | Added --dry-run to hydra kill. It lists the heads, worktrees and tmux
+TEXT	    | sessions a removal would touch and exits 0 without changing anything.
+TEXT	
+TEXT	WHAT WAS CHECKED
+TEXT	  PASS    req-dry-run-flag - kill accepts --dry-run and lists what it would remove (check: dry-run-lists)
+TEXT	  PASS    req-no-removal - a dry run removes nothing (check: nothing-removed)
+TEXT	
+TEXT	HOW IT WAS VERIFIED
+TEXT	  Check dry-run-lists (command): the kill dry-run test suite
+TEXT	    Ran: sh tests/test_kill_dry_run.sh
+TEXT	    On head kill-dry-run-check in step verify, exit code 0
+TEXT	    Report: pass (verified) - 12 cases passed, 0 failed
+TEXT	    Summary lines from the output:
+TEXT	      Tests: 12, Passed: 12, Failed: 0
+TEXT	    Full log (18230 bytes): press L - /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/output.log
+TEXT	  Check nothing-removed (command): the worktree list is unchanged after a dry run
+TEXT	    Ran: sh tests/test_kill_dry_run.sh --unchanged
+TEXT	    On head kill-dry-run-check in step verify, exit code 0
+TEXT	    Report: pass (verified) - 1 case passed
+TEXT	
+TEXT	STEPS  (state, duration, attempts)
+TEXT	  spawn-worker       spawn  succeeded  5s           attempts 1, head kill-dry-run-worker
+TEXT	  implement          exec   succeeded  1m06s        attempts 1, head kill-dry-run-worker
+TEXT	      agent codex, version codex-cli 0.46.0, model gpt-6-sol, effort xhigh
+TEXT	      tokens in 24.8k, cached 24.4k, out 1.1k; cost not reported
+TEXT	  spawn-check        spawn  succeeded  5s           attempts 1, head kill-dry-run-check
+TEXT	  verify             exec   succeeded  3s           attempts 1, head kill-dry-run-check
+TEXT	
+TEXT	CHANGES ON kill-dry-run-worker  (1 commit, 3 files, +84 -6; the branch as it is now)
+TEXT	  Base 3f9c1e2a7b40 -> tip def3c77a1b2c
+TEXT	  commit def3c77  feat(kill): add --dry-run preview  (Usability fixture)
+TEXT	  file  +61    -2     lib/cmd_kill.sh
+TEXT	  file  +19    -0     tests/test_kill_dry_run.sh
+TEXT	  file  +4     -4     docs/USAGE.md
+TEXT	
+TEXT	DIFF  (complete)
+TEXT	    diff --git a/lib/cmd_kill.sh b/lib/cmd_kill.sh
+TEXT	    --- a/lib/cmd_kill.sh
+TEXT	    +++ b/lib/cmd_kill.sh
+TEXT	    @@ -12,6 +12,14 @@ cmd_kill() {
+TEXT	         while [ $# -gt 0 ]; do
+TEXT	             case "$1" in
+TEXT	    +            --dry-run) dry_run=1 ;;
+TEXT	    +            --) shift; break ;;
+TEXT	    -            *) break ;;
+TEXT	    +            -*) die "unknown option: $1" ;;
+TEXT	             esac
+TEXT	
+TEXT	NEXT
+TEXT	  Land the worker branch yourself; Hydra never merges for you:
+TEXT	    hydra land kill-dry-run-worker
+TEXT	  After landing, remove the plan's heads:
+TEXT	    hydra kill kill-dry-run-worker
+TEXT	  Dismiss: Esc returns to the attention list, where s marks the item seen.
+REF	log	available	/tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/output.log
+REF	transcript	inaccessible	/tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/implement/attempt-1/transcript.log
+REF	pr	supplied-unopened	https://github.com/example/hydra/pull/84
+PREVIEW	0	Tests: 12, Passed: 12, Failed: 0
+PREVIEW	0	LOG END
+END	60	3	2

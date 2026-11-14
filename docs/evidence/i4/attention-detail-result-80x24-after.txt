@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+                  Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Attention ─────────────────────────────────────────────────────────────────── 
+  ATTENTION DETAIL                                                             
+  Result ready for review · kill-dry-run · implement                           
+  Status      New: not marked seen yet.                                        
+  Why         Step implement (attempt 1) finished and sealed its output; its   
+              result, checks and changes are ready to review.                  
+  Next        r reviews what was produced, how it was checked and the changes  
+              on the worker branch; s marks the item seen once you have.       
+                                                                               
+  IDENTITY                                                                     
+  Kind        result · result_ready    Source      workflow records            
+  Project     project_7f3a             Host        -                           
+  Task        -                        Run         run_2cdf8bbe1a4e            
+  Step        implement                Attempt     attempt-1                   
+  Head        head_b2c4d6e8            Instance    instance_b2c4d6e8           
+  Request     -                        Binding     -                           
+  Freshness   fresh                                                            
+  Route       workflow-evidence · navigable                                    
+  Revision   5555555555555555555555555555555555555555555555555555555555555555  
+                                                                               
+  ● live                                                                       
+ ↑/↓ select • enter details • r review • s mark seen • ? help • q quit         

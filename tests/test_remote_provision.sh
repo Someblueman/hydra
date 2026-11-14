@@ -50,6 +50,15 @@ case "$1" in
             exit 255
         fi
         ;;
+    *"fleet serve"*)
+        # PROVISION_SERVE_FAIL holds how many fleet requests still succeed
+        # before one fails like a dropped connection.
+        if [ -f "$PROVISION_SERVE_FAIL" ]; then
+            left="$(cat "$PROVISION_SERVE_FAIL")"
+            if [ "$left" -le 0 ]; then rm -f "$PROVISION_SERVE_FAIL"; exit 255; fi
+            printf '%s' "$((left - 1))" > "$PROVISION_SERVE_FAIL"
+        fi
+        ;;
 esac
 exec /bin/sh -c "$1"
 SSH
@@ -67,9 +76,9 @@ printf 'version\tplatform\tsha256\tfilename\n%s\t%s\t%064d\t%s\n' "$version" "$p
 printf 'version\tplatform\tsha256\tfilename\n' > "$fixture/empty-assets.tsv"
 PROVISION_REAL_SSH="$(command -v ssh || echo /usr/bin/ssh)"
 PATH="$fixture/bin:$PATH"
-PROVISION_SSH_LOG="$fixture/ssh.log" PROVISION_DROP="$fixture/drop"
+PROVISION_SSH_LOG="$fixture/ssh.log" PROVISION_DROP="$fixture/drop" PROVISION_SERVE_FAIL="$fixture/serve-fail"
 HYDRA_FLEET_BIN="$fleet" HYDRA_FLEET_ASSET_BASE="file://$fixture/assets" HYDRA_FLEET_ASSETS_FILE="$fixture/assets.tsv"
-export PATH PROVISION_REAL_SSH PROVISION_SSH_LOG PROVISION_DROP HYDRA_FLEET_BIN HYDRA_FLEET_ASSET_BASE HYDRA_FLEET_ASSETS_FILE
+export PATH PROVISION_REAL_SSH PROVISION_SSH_LOG PROVISION_DROP PROVISION_SERVE_FAIL HYDRA_FLEET_BIN HYDRA_FLEET_ASSET_BASE HYDRA_FLEET_ASSETS_FILE
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 # run EXPECTED_STATUS OUTPUT_FILE ARGS...: hydra remote ARGS through bin/hydra.
@@ -261,11 +270,109 @@ cases() {
     fi
 }
 
+# seed_finished NAME REMOTE_HOME OLD_VERSION: a setup that finished under an
+# older Hydra: its provision, verify and alias steps are done with that
+# version, and OLD (printed) is a fake install of it that answers --version
+# and the fleet handshake.
+seed_finished() {
+    name=$1 home=$2 old_version=$3
+    old="$(pins_dir "$home")/$(printf '%064d' 29)"
+    mkdir -p "$old/bin" "$home"
+    cat > "$old/bin/hydra" <<HYDRA
+#!/bin/sh
+if [ "\${1:-}" = --version ]; then echo 'Hydra version $old_version'; exit 0; fi
+cat >/dev/null
+printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"$old_version","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}\n'
+HYDRA
+    chmod +x "$old/bin/hydra"
+    private_dirs
+    printf '{"schema_version":1,"kind":"remote-setup","name":"%s","destination":"%s-host","ssh_config":"","hydra_version":"%s","steps":{"host_key":{"status":"done"},"preflight":{"status":"done","detail":{"os":"%s","arch":"%s","home":"%s","path":"/usr/bin:/bin","umask":"0022","tools":{},"hydra":{"path":null,"version":null,"reusable":false},"pins":["%s"],"agents":[]}},"provision":{"status":"done","detail":{"summary":"Hydra %s installed at %s","prefix":"%s","hydra":"%s/bin/hydra","hydra_version":"%s"}},"agents":{"status":"done"},"verify":{"status":"done","detail":{"hydra_version":"%s","summary":"Hydra %s answers the fleet handshake"}},"alias":{"status":"done","detail":{"alias":"%s","summary":"alias published"}}},"remote":{"target":"%s-host","ssh_config":"","hydra":"%s/bin/hydra","home":"","principal":"","project":"","accepted_host_key":"SHA256:fixture","multiplex":false}}' \
+        "$name" "$name" "$old_version" "$local_os" "$local_arch" "$home" "$old" "$old_version" "$old" "$old" "$old" "$old_version" \
+        "$old_version" "$old_version" "$name" "$name" "$old" > "$(state "$name")"
+    chmod 600 "$(state "$name")"
+    run 0 "$out" add "$name" "$name-host" --hydra "$old/bin/hydra"
+    : > "$PROVISION_SSH_LOG"
+    PROVISION_REMOTE_HOME="$home"; export PROVISION_REMOTE_HOME
+}
+alias_file() { printf '%s/fleet/remotes/%s.json' "$HYDRA_HOME" "$1"; }
+
+# Upgrading a host that an older Hydra set up: offered read-only, planned and
+# approved like first provisioning, installed beside the old prefix, verified
+# by handshake, then the alias switches; interruptions reconcile.
+upgrade_cases() {
+    out="$fixture/out"
+    seed_finished u1 "$fixture/remote-$mask-u" 2.9.0
+    cp "$old/bin/hydra" "$fixture/old-hydra-$mask"; cp "$(alias_file u1)" "$fixture/u1-alias-$mask"
+    run 0 "$out" setup status u1 --json
+    has "$out" '"id":"provision","status":"upgrade_available","detail":"older Hydra (2.9.0) on this host; upgrade to '"$version"'"'
+    has "$out" '"upgrade":{"from_version":"2.9.0","to_version":"'"$version"'","relation":"older","previous_hydra":"[^"]*0029\\/bin\\/hydra","previous_prefix":"[^"]*0029"'
+    has "$out" '"next":{"step":"provision","argv":\["hydra","remote","provision","u1","--json"\]'
+    has "$out" '"id":"verify","status":"done"'
+    run 0 "$out" setup list --json
+    has "$out" '"name":"u1","destination":"u1-host","ssh_config":"","status":"upgrade_available","remote_changed":true,"complete":false,"next":{"step":"provision"'
+    has "$out" '"upgrade":{"from_version":"2.9.0"'
+    run 0 "$out" setup status u1; has "$out.err" 'older Hydra (2.9.0) on this host'; has "$out.err" 'next: hydra remote provision u1'
+    [ ! -s "$PROVISION_SSH_LOG" ] || fail "reporting an upgrade contacted the remote"
+    # A finished setup's record is still not removable; the refusal names the upgrade.
+    run 1 "$out" setup remove u1 --json; has "$out" '"code":"setup_complete"'; has "$out" 'hydra remote provision u1'
+
+    # The plan names both versions and installs, keeps the old prefix and
+    # plans the alias switch; nothing changes before approval.
+    run 3 "$out" provision u1 --json
+    has "$out" '"code":"approval_required"'; has "$out" '"trust":"pinned"'; has "$out" "\"hydra_version\":\"$version\""
+    has "$out" '"from_version":"2.9.0"'; has "$out" "\"to_version\":\"$version\""
+    has "$out" '"previous_prefix":"[^"]*0029"'; has "$out" '"previous_install":"stays installed'
+    has "$out" '"alias":{"name":"u1","new_hydra":"[^"]*fleet\\/[0-9a-f]\{64\}\\/bin\\/hydra","old_hydra":"[^"]*0029\\/bin\\/hydra"'
+    has "$out" '"argv":\["hydra","remote","provision","u1","--approve","[0-9a-f]\{64\}","--json"\]'
+    hash="$(plan_hash "$out")"
+    run 3 "$out" setup u1 --json; has "$out" '"step":"provision"'
+    [ "$(plan_hash "$out")" = "$hash" ] || fail "guided setup planned a different upgrade"
+    [ ! -s "$PROVISION_SSH_LOG" ] || fail "the upgrade plan contacted the remote before approval"
+    cmp -s "$(alias_file u1)" "$fixture/u1-alias-$mask" || fail "the alias changed before approval"
+
+    # The install response is lost: outcome_unknown, nothing switched.
+    : > "$PROVISION_DROP"
+    run 4 "$out" provision u1 --approve "$hash" --json; has "$out" '"code":"outcome_unknown"'
+    [ "$(installs)" -eq 1 ] || fail "the upgrade did not install exactly once"
+    cmp -s "$(alias_file u1)" "$fixture/u1-alias-$mask" || fail "the alias switched before the install was confirmed"
+    # The rerun reconciles the install; the re-verification's connection then drops.
+    printf 1 > "$PROVISION_SERVE_FAIL"
+    run 1 "$out" provision u1 --json
+    has "$out" '"id":"provision","status":"done"'; has "$out" '"id":"verify","status":"failed"'; has "$out" '"id":"alias","status":"pending"'
+    cmp -s "$(alias_file u1)" "$fixture/u1-alias-$mask" || fail "the alias switched before re-verification"
+    # The next rerun re-verifies and switches only the alias's hydra.
+    run 0 "$out" provision u1 --json
+    has "$out" '"id":"verify","status":"done","detail":"Hydra '"$version"' answers the fleet handshake"'
+    has "$out" '"id":"alias","status":"done","detail":"alias updated: [^"]*0029\\/bin\\/hydra -> [^"]*\\/bin\\/hydra"'
+    has "$out" '"previous_prefix":"[^"]*0029"'; has "$out" "stays at [^\"]*0029"; lacks "$out" '"relation"'
+    [ "$(installs)" -eq 1 ] || fail "reconciling the upgrade installed again"
+    new_hydra="$(sed -n 's/.*"hydra":"\([^"]*\)".*/\1/p' "$(alias_file u1)" | sed 's#\\/#/#g')"
+    case "$new_hydra" in "$(pins_dir "$fixture/remote-$mask-u")"/*/bin/hydra) ;; *) fail "alias hydra is $new_hydra" ;; esac
+    [ "$new_hydra" != "$old/bin/hydra" ] || fail "the alias kept the old install"
+    [ "$(HOME="$fixture/remote-$mask-u" "$new_hydra" --version)" = "Hydra version $version" ] || fail "new install version differs"
+    has "$(alias_file u1)" '"target":"u1-host"'
+    cmp -s "$old/bin/hydra" "$fixture/old-hydra-$mask" || fail "the old install changed"
+    [ "$("$old/bin/hydra" --version)" = 'Hydra version 2.9.0' ] || fail "the old install stopped answering"
+    # Done: reruns are no-ops that never contact the host.
+    : > "$PROVISION_SSH_LOG"
+    run 0 "$out" provision u1 --json; has "$out" '"id":"alias","status":"done"'
+    run 0 "$out" setup u1 --json; has "$out" '"complete":true'
+    run 0 "$out" setup status u1 --json; has "$out" '"next":null'; lacks "$out" '"upgrade_available"'
+    run 0 "$out" setup list --json; has "$out" '"name":"u1","destination":"u1-host","ssh_config":"","status":"done"'
+    [ ! -s "$PROVISION_SSH_LOG" ] || fail "a finished upgrade contacted the remote again"
+
+    # A host recorded with a newer Hydra is offered this version beside it.
+    seed_finished u2 "$fixture/remote-$mask-v" 9.0.0
+    run 0 "$out" setup status u2 --json
+    has "$out" '"relation":"newer"'; has "$out" "newer Hydra (9.0.0) on this host; install $version beside it"
+}
+
 for mask in 022 002; do
     (
         umask "$mask"
         HYDRA_HOME="$fixture/home-$mask"; export HYDRA_HOME
         cases
+        upgrade_cases
     )
 done
 printf 'Remote provisioning acceptance passed\n'

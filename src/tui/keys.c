@@ -61,7 +61,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_REVIEW_REFERENCES, KEY_SCOPE_REVIEW, "review.references", "references", "Review", 6),
     ROW(KEY_REVIEW_IDENTITY, KEY_SCOPE_REVIEW, "review.identity", "IDs", "Review", 7),
     ROW(KEY_REVIEW_OPEN, KEY_SCOPE_REVIEW, "review.open", "open reference", "Review", 4),
-    ROW(KEY_REVIEW_LOG, KEY_SCOPE_REVIEW, "review.log", "open check log", "Review", -1),
+    ROW(KEY_REVIEW_LOG, KEY_SCOPE_REVIEW, "review.log", "full log", "Review", 5),
     ROW(KEY_REVIEW_SUPPLY_LOG, KEY_SCOPE_REVIEW, "review.supply-log", "add log/transcript/PR", "Review", 5),
     ROW(KEY_REVIEW_SUPPLY_TRANSCRIPT, KEY_SCOPE_REVIEW, "review.supply-transcript", "add log/transcript/PR", "Review", 5),
     ROW(KEY_REVIEW_SUPPLY_PR, KEY_SCOPE_REVIEW, "review.supply-pr", "add log/transcript/PR", "Review", 5),
@@ -74,6 +74,8 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_ATTENTION_OPEN, KEY_SCOPE_ATTENTION, "attention.open", "details", "Attention", 8),
     ROW(KEY_ATTENTION_REVIEW, KEY_SCOPE_ATTENTION, "attention.review", "review", "Attention", 7),
     ROW(KEY_ATTENTION_SEEN, KEY_SCOPE_ATTENTION, "attention.seen", "mark seen", "Attention", 6),
+    ROW(KEY_ATTENTION_PAGE_DOWN, KEY_SCOPE_ATTENTION, "attention.page-down", "scroll", "Attention", 4),
+    ROW(KEY_ATTENTION_PAGE_UP, KEY_SCOPE_ATTENTION, "attention.page-up", "scroll", "Attention", 4),
 
     ROW(KEY_STATS_UP, KEY_SCOPE_STATISTICS, "statistics.up", "select", "Statistics", 9),
     ROW(KEY_STATS_DOWN, KEY_SCOPE_STATISTICS, "statistics.down", "select", "Statistics", 9),
@@ -87,6 +89,8 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_STATS_WORKFLOW_PREVIOUS, KEY_SCOPE_STATISTICS, "statistics.workflow-previous", "workflow", "Statistics", 2),
     ROW(KEY_STATS_WORKFLOW_NEXT, KEY_SCOPE_STATISTICS, "statistics.workflow-next", "workflow", "Statistics", 2),
     ROW(KEY_STATS_FIND, KEY_SCOPE_STATISTICS, "statistics.find", "find", "Statistics", 3),
+    ROW(KEY_STATS_COHORTS, KEY_SCOPE_STATISTICS, "statistics.cohorts", "remote cohorts", "Statistics", 5),
+    ROW(KEY_STATS_LOCATION, KEY_SCOPE_STATISTICS, "statistics.location", "location", "Statistics", 4),
     ROW(KEY_STATS_REFRESH, KEY_SCOPE_STATISTICS, "statistics.refresh", "refresh", "Statistics", -1),
 
     ROW(KEY_HOSTS_UP, KEY_SCOPE_HOSTS, "hosts.up", "select", "Hosts", 9),
@@ -95,6 +99,8 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_HOSTS_ADD, KEY_SCOPE_HOSTS, "hosts.add", "add a host", "Hosts", 7),
     ROW(KEY_HOSTS_EDIT, KEY_SCOPE_HOSTS, "hosts.edit", "edit", "Hosts", 6),
     ROW(KEY_HOSTS_REMOVE, KEY_SCOPE_HOSTS, "hosts.remove", "remove", "Hosts", 6),
+    ROW(KEY_HOSTS_RETRY, KEY_SCOPE_HOSTS, "hosts.retry", "observe again", "Hosts", 5),
+    ROW(KEY_HOSTS_ONBOARDING, KEY_SCOPE_HOSTS, "hosts.onboarding", "onboarding", "Hosts", 5),
 
     ROW(KEY_RECOVERY_UP, KEY_SCOPE_RECOVERY, "recovery.up", "select", "Recovery", 9),
     ROW(KEY_RECOVERY_DOWN, KEY_SCOPE_RECOVERY, "recovery.down", "select", "Recovery", 9),
@@ -116,7 +122,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_WS_DOWN, KEY_SCOPE_WORKSPACE, "workspace.down", "select", G_WORKSPACE, 9),
     ROW(KEY_WS_COLLAPSE, KEY_SCOPE_WORKSPACE, "workspace.collapse", "collapse/expand", G_WORKSPACE, -1),
     ROW(KEY_WS_EXPAND, KEY_SCOPE_WORKSPACE, "workspace.expand", "collapse/expand", G_WORKSPACE, -1),
-    ROW(KEY_WS_OPEN, KEY_SCOPE_WORKSPACE, "workspace.open", "open", G_WORKSPACE, 6),
+    ROW(KEY_WS_OPEN, KEY_SCOPE_WORKSPACE, "workspace.open", "details", G_WORKSPACE, 9),
     ROW(KEY_WS_PANE_NEXT, KEY_SCOPE_WORKSPACE, "workspace.pane-next", "pane", G_WORKSPACE, 10),
     ROW(KEY_WS_PANE_PREVIOUS, KEY_SCOPE_WORKSPACE, "workspace.pane-previous", "pane", G_WORKSPACE, 10),
     ROW(KEY_WS_TALK, KEY_SCOPE_WORKSPACE, "workspace.talk", "talk to agent", G_WORKSPACE, 9),
@@ -136,10 +142,6 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_RUN_REJECT, KEY_SCOPE_MONITOR, "run.reject", "reject", G_RUNS, 8),
     ROW(KEY_RUN_RESUME, KEY_SCOPE_MONITOR, "run.resume", "resume", G_RUNS, 7),
     ROW(KEY_RUN_CANCEL, KEY_SCOPE_MONITOR, "run.cancel", "cancel", G_RUNS, 7),
-    ROW(KEY_REMOTE_APPROVE, KEY_SCOPE_OVERVIEW | KEY_SCOPE_WORKSPACE, "remote.approve", "approve", G_RUNS, 5),
-    ROW(KEY_REMOTE_REJECT, KEY_SCOPE_OVERVIEW | KEY_SCOPE_WORKSPACE, "remote.reject", "reject", G_RUNS, 5),
-    ROW(KEY_REMOTE_RESUME, KEY_SCOPE_OVERVIEW | KEY_SCOPE_WORKSPACE, "remote.resume", "resume", G_RUNS, 4),
-    ROW(KEY_REMOTE_CANCEL, KEY_SCOPE_OVERVIEW | KEY_SCOPE_WORKSPACE, "remote.cancel", "cancel", G_RUNS, 4),
 
     ROW(KEY_HEADS_UP, HEADVIEWS, "heads.up", "select", G_HEADS, 9),
     ROW(KEY_HEADS_DOWN, HEADVIEWS, "heads.down", "select", G_HEADS, 9),
@@ -159,6 +161,12 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_HEAD_GROUP, WORKVIEWS, "head.group", "group marked", G_HEADS, 5),
     ROW(KEY_HEAD_OUTPUT, WORKVIEWS, "head.output", "output", G_HEADS, 5),
     ROW(KEY_HEAD_TECHNICAL, WORKVIEWS, "head.technical", "technical", G_HEADS, 3),
+    ROW(KEY_REMOTE_APPROVE, HEADVIEWS, "remote.approve", "approve task", G_HEADS, 8),
+    ROW(KEY_REMOTE_REJECT, HEADVIEWS, "remote.reject", "reject task", G_HEADS, 8),
+    ROW(KEY_REMOTE_RESUME, HEADVIEWS, "remote.resume", "resume task", G_HEADS, 7),
+    ROW(KEY_REMOTE_CANCEL, HEADVIEWS, "remote.cancel", "cancel task", G_HEADS, 7),
+    ROW(KEY_HEADS_LOCATION, KEY_SCOPE_HEADS | KEY_SCOPE_OVERVIEW, "heads.location", "location", G_HEADS, 5),
+    ROW(KEY_HEADS_RETRY, HEADVIEWS, "heads.retry", "observe host again", G_HEADS, 4),
     ROW(KEY_HEADS_SEARCH, WORKVIEWS, "heads.search", "search", G_HEADS, 4),
 
     ROW(KEY_VIEWS_NEXT, KEY_SCOPE_VIEWS, "views.next", "views", G_ALL, 2),
@@ -191,26 +199,19 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
 };
 #undef T
 
-/* Which mode a row belongs to: both, the local control centre only, or the
- * fleet's only. A row of the other mode is not live (scope 0) but keeps its
- * name, so one keys file serves both. */
-enum { MODE_BOTH, MODE_LOCAL, MODE_FLEET };
+/* Which mode a row belongs to: both, the local control centre only (the
+ * fleet entry's statistics are the hosts' own), or neither. Local and remote
+ * work share every other key, so a retired row is one whose job another row
+ * now does: a (heads.talk) attaches to remote heads too, x (head.remove)
+ * interrupts a selected remote head. A row that is not live (scope 0) keeps
+ * its name, so keys files of earlier versions still load. */
+enum { MODE_BOTH, MODE_LOCAL, MODE_RETIRED };
 static const unsigned char key_modes[KEY_ACTIONS] = {
     [KEY_REVIEW_SUPPLY_LOG] = MODE_BOTH,
     [KEY_STATS_PAGE] = MODE_LOCAL, [KEY_STATS_GRAPH] = MODE_LOCAL, [KEY_STATS_RANGE] = MODE_LOCAL,
     [KEY_STATS_METRIC] = MODE_LOCAL, [KEY_STATS_WORKFLOW_PREVIOUS] = MODE_LOCAL, [KEY_STATS_WORKFLOW_NEXT] = MODE_LOCAL,
-    [KEY_RECOVERY_REMOVE] = MODE_LOCAL,
-    [KEY_WS_TALK] = MODE_LOCAL, [KEY_WS_ATTACH] = MODE_FLEET, [KEY_WS_SPLIT] = MODE_LOCAL,
-    [KEY_PLAN_PROPOSAL] = MODE_LOCAL, [KEY_PLAN_VALIDATE] = MODE_LOCAL, [KEY_PLAN_RETURN] = MODE_LOCAL,
-    [KEY_PLAN_EXECUTE] = MODE_LOCAL, [KEY_MONITOR_PREVIOUS_RUN] = MODE_LOCAL, [KEY_MONITOR_NEXT_RUN] = MODE_LOCAL,
-    [KEY_RUN_APPROVE] = MODE_LOCAL, [KEY_RUN_REJECT] = MODE_LOCAL, [KEY_RUN_RESUME] = MODE_LOCAL, [KEY_RUN_CANCEL] = MODE_LOCAL,
-    [KEY_REMOTE_APPROVE] = MODE_FLEET, [KEY_REMOTE_REJECT] = MODE_FLEET, [KEY_REMOTE_RESUME] = MODE_FLEET,
-    [KEY_REMOTE_CANCEL] = MODE_FLEET,
-    [KEY_HEADS_COLLAPSE] = MODE_LOCAL, [KEY_HEADS_EXPAND] = MODE_LOCAL, [KEY_HEADS_OPEN] = MODE_BOTH,
-    [KEY_HEADS_TALK] = MODE_LOCAL, [KEY_HEADS_ATTACH] = MODE_FLEET, [KEY_HEADS_INTERRUPT] = MODE_FLEET,
-    [KEY_HEADS_COORDINATION] = MODE_LOCAL, [KEY_TASK_NEW] = MODE_LOCAL, [KEY_HEAD_REMOVE] = MODE_LOCAL,
-    [KEY_HEAD_MARK] = MODE_LOCAL, [KEY_HEAD_MARK_ALL] = MODE_LOCAL, [KEY_HEAD_GROUP] = MODE_LOCAL,
-    [KEY_HEAD_OUTPUT] = MODE_LOCAL,
+    [KEY_STATS_COHORTS] = MODE_LOCAL, [KEY_STATS_LOCATION] = MODE_LOCAL,
+    [KEY_WS_ATTACH] = MODE_RETIRED, [KEY_HEADS_ATTACH] = MODE_RETIRED, [KEY_HEADS_INTERRUPT] = MODE_RETIRED,
 };
 
 /* Ctrl-] alone leaves agent input; every other agent-layer command follows
@@ -233,18 +234,20 @@ static const char default_keys[] =
     "terminal.literal = ctrl+\\ ctrl+\\, ctrl+\\ ctrl+]\n"
     "output.up = up, k\noutput.down = down, j\noutput.page-up = pgup\noutput.page-down = pgdn\n"
     "output.close = enter, esc\noutput.quit = q\n"
-    "help.up = up, k\nhelp.down = down, j\nhelp.page-up = pgup\nhelp.page-down = pgdn\nhelp.close = ?, esc\n"
+    "help.up = up, k\nhelp.down = down, j\nhelp.page-up = pgup, b\nhelp.page-down = pgdn, space\nhelp.close = ?, esc\n"
     "review.up = up, k\nreview.down = down, j\nreview.page-down = space, pgdn\nreview.page-up = b, pgup\n"
     "review.top = g\nreview.end = G\nreview.next-section = n\nreview.previous-section = N\n"
     "review.references = f\nreview.identity = i\nreview.open = enter, o\nreview.log = L\n"
     "review.supply-log = l\nreview.supply-transcript = t\nreview.supply-pr = p\n"
     "review.previous-item = [\nreview.next-item = ]\nreview.reload = r\n"
     "attention.up = up, k\nattention.down = down, j\nattention.open = enter\nattention.review = r\nattention.seen = s\n"
+    "attention.page-down = space, pgdn\nattention.page-up = b, pgup\n"
     "statistics.up = up, k\nstatistics.down = down, j\nstatistics.open = enter\nstatistics.page = s\n"
     "statistics.graph = g\nstatistics.range = T\nstatistics.attention = !\nstatistics.reset = 0\n"
     "statistics.metric = M\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
-    "statistics.find = /\nstatistics.refresh = r\n"
+    "statistics.find = /\nstatistics.cohorts = C\nstatistics.location = L\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
+    "hosts.retry = r\nhosts.onboarding = O\n"
     "recovery.up = up, k\nrecovery.down = down, j\nrecovery.check = enter\nrecovery.remove = x\nrecovery.explain = d\n"
     "workflows.up = up, k\nworkflows.down = down, j\nworkflows.previous-run = [\nworkflows.next-run = ]\n"
     "workflows.pan-left = left, h\nworkflows.pan-right = right, l\nworkflows.pan-up = K\nworkflows.pan-down = J\n"
@@ -257,6 +260,7 @@ static const char default_keys[] =
     "monitor.previous-run = [\nmonitor.next-run = ]\n"
     "run.approve = Y\nrun.reject = N\nrun.resume = R\nrun.cancel = X\n"
     "remote.approve = Y\nremote.reject = N\nremote.resume = R\nremote.cancel = X\n"
+    "heads.location = L\nheads.retry = r\n"
     "heads.up = up, k\nheads.down = down, j\nheads.collapse = h\nheads.expand = l\n"
     "heads.open = enter\nheads.talk = a\nheads.attach = a\nheads.interrupt = c\nheads.coordination = c\n"
     "heads.page-up = pgup\nheads.page-down = pgdn\n"
@@ -282,8 +286,15 @@ static void default_bindings(struct kt_binding rows[KEY_ACTIONS]) {
 static void keys_mode(struct native_keys *k) {
     size_t i;
     for (i = 0; i < KEY_ACTIONS; i++)
-        if ((key_modes[i] == MODE_LOCAL && k->fleet) || (key_modes[i] == MODE_FLEET && !k->fleet)) k->bindings[i].scope = 0;
+        if ((key_modes[i] == MODE_LOCAL && k->fleet) || key_modes[i] == MODE_RETIRED) k->bindings[i].scope = 0;
         else k->bindings[i].scope = key_rows[i].scope;
+}
+
+/* What --print-keys says about a row that is not live in this mode. */
+static const char *mode_note(const struct native_keys *k, size_t row) {
+    if (k->bindings[row].scope) return "";
+    if (key_modes[row] == MODE_RETIRED) return " (no longer used)";
+    return k->fleet ? " (local only)" : "";
 }
 
 static void keys_defaults(struct native_keys *k) {
@@ -394,8 +405,7 @@ void native_keys_print(struct app *app, FILE *out) {
         char line[256];
         if (!group || strcmp(group, key_rows[i].group)) { group = key_rows[i].group; fprintf(out, "# %s\n", group); }
         (void)kt_binding_config(&k->bindings[i], line, sizeof(line));
-        fprintf(out, "%-46s # %s%s\n", line, k->bindings[i].label, k->bindings[i].scope ? "" :
-                k->fleet ? " (local only)" : " (fleet only)");
+        fprintf(out, "%-46s # %s%s\n", line, k->bindings[i].label, mode_note(k, i));
     }
 }
 

@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work 2 Details 3 Overview  4 Attention  5 Recovery …     ATTENTION 
+                  Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Attention ─────────────────────────────────────────────────────────────────── 
+  ATTENTION  0 need you · 0 seen · 0 stale · 0 unknown                         
+                                                                               
+  Nothing needs your attention.                                                
+                                                                               
+  Attention lists what needs a decision or a look from you: an approval        
+  request a step is waiting on, a failed check, a result ready for review, or  
+  a terminal that stopped. For example, a plan step asks you to approve        
+  before it merges.                                                            
+                                                                               
+  Items stay listed until the request is resolved; Enter shows what an item    
+  asks and r reviews a result.                                                 
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live                                                                       
+ ↑/↓ select • enter details • r review • s mark seen • ? help • q quit         

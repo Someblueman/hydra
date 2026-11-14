@@ -26,7 +26,8 @@ def owned_heads_visible(
     tables = [
         (index, match)
         for index, line in enumerate(lines)
-        if (match := re.fullmatch(r"\|\s+(HEAD)\s+(STATUS)\s+AGENT\s+REPORTED\s+\|\s*", line))
+        # 3.0 adds a WHERE (location) column to the one local/remote Work list.
+        if (match := re.fullmatch(r"\|\s+(HEAD)\s+(STATUS)\s+AGENT\s+(?:WHERE\s+)?REPORTED\s+\|\s*", line))
     ]
     summaries = [
         (index, match)

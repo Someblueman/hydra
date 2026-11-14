@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "evaluation_id": "9e-heldout-20261017-v3-additions",
+  "freeze": {
+    "status": "specified_after_candidate_generation",
+    "case_count": 8,
+    "revision_policy": "immutable_after_candidate_observation",
+    "ground_truth_rule": "Each expected result is determined from the case inputs and the frozen visible contract (9e-visible-contracts-20260910-v1), independently of any candidate. The six frozen candidates were generated before these cases existed and never observed them."
+  },
+  "relation_to_archive": "Extends the archived nine-case pilot (commit b0fb5b1d9220189ad2498a244274ae498a3c7d0c) without changing it. Every case stays inside the visible contracts the candidates were given; a case that would need a contract clarification is not admitted.",
+  "cases": [
+    {
+      "id": "fc-04-normalize-non-ascii",
+      "class": "feature_correctness",
+      "contract_id": "feature.normalize_records.v1",
+      "objective": "Normalize records that contain non-ASCII code points: trim only the named ASCII whitespace and map only ASCII A-Z.",
+      "inputs": {"records": ["  Ärger\t", "ÉCOLE\r\n", "mixed Case"]},
+      "acceptance": {"artifact_path": "report.txt", "exact_bytes": "Ärger\nÉcole\nmixed case\n", "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "locale-lowercase", "bytes": "ärger\nécole\nmixed case\n", "expected_verdict": "fail", "reason": "Non-ASCII code points were case-mapped; the contract maps ASCII A-Z only."},
+        {"id": "missing-final-newline", "bytes": "Ärger\nÉcole\nmixed case", "expected_verdict": "fail", "reason": "The final LF is required."}
+      ]
+    },
+    {
+      "id": "fc-05-accept-unique-config",
+      "class": "feature_correctness",
+      "contract_id": "feature.reject_duplicate_config.v1",
+      "objective": "Accept a configuration without duplicate keys and preserve first-seen key order and string-typed values.",
+      "inputs": {"config_bytes": "retries=3\ncolor=blue\nmode=fast\n"},
+      "acceptance": {"artifact_path": "config-result.json", "exact_json": {"config": {"retries": "3", "color": "blue", "mode": "fast"}, "verdict": "pass"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "typed-value", "json": {"config": {"retries": 3, "color": "blue", "mode": "fast"}, "verdict": "pass"}, "expected_verdict": "fail", "reason": "Values are strings; an integer-typed value changes the sealed artifact."},
+        {"id": "spurious-duplicate", "json": {"error": "duplicate key: mode", "verdict": "fail"}, "expected_verdict": "fail", "reason": "No key repeats; a rejection is wrong."}
+      ]
+    },
+    {
+      "id": "fr-04-schedule-four-jobs",
+      "class": "finite_research_claim",
+      "contract_id": "research.schedule_metrics.v1",
+      "objective": "Recompute FCFS and SJF waiting-time metrics for four jobs with one tied duration.",
+      "inputs": {"jobs_csv": "job,duration\nP,5\nQ,1\nR,5\nS,3\n"},
+      "acceptance": {"artifact_path": "research.json", "exact_json": {"fcfs": {"mean_wait": 5.5, "max_wait": 11}, "sjf": {"mean_wait": 3.5, "max_wait": 9}}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "sjf-max-copied", "json": {"fcfs": {"mean_wait": 5.5, "max_wait": 11}, "sjf": {"mean_wait": 3.5, "max_wait": 11}}, "expected_verdict": "fail", "reason": "SJF maximum wait was copied from FCFS instead of recomputed."},
+        {"id": "integer-mean", "json": {"fcfs": {"mean_wait": 5, "max_wait": 11}, "sjf": {"mean_wait": 3, "max_wait": 9}}, "expected_verdict": "fail", "reason": "Means were truncated to integers."}
+      ]
+    },
+    {
+      "id": "fr-05-threshold-p95-only",
+      "class": "finite_research_claim",
+      "contract_id": "research.threshold_claim.v1",
+      "objective": "Classify policies that fail only the p95 turnaround threshold while meeting the maximum-wait threshold.",
+      "inputs": {"metrics": {"fcfs": {"p95_turnaround": 30, "max_wait": 10}, "sjf": {"p95_turnaround": 25, "max_wait": 12}}, "thresholds": {"p95_turnaround_max": 20, "max_wait_max": 15}},
+      "acceptance": {"artifact_path": "claim.json", "exact_json": {"claim": "no_policy_satisfies_both_thresholds", "fcfs": "fail_p95_turnaround", "sjf": "fail_p95_turnaround"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "max-wait-misreported", "json": {"claim": "no_policy_satisfies_both_thresholds", "fcfs": "fail_both", "sjf": "fail_p95_turnaround"}, "expected_verdict": "fail", "reason": "FCFS max wait 10 is within threshold 15."},
+        {"id": "sjf-false-pass", "json": {"claim": "sjf_satisfies_both_thresholds", "fcfs": "fail_p95_turnaround", "sjf": "pass"}, "expected_verdict": "fail", "reason": "SJF p95 turnaround 25 exceeds threshold 20."}
+      ]
+    },
+    {
+      "id": "fr-06-preserve-known-values",
+      "class": "finite_research_claim",
+      "contract_id": "research.preserve_unknowns.v1",
+      "objective": "Copy fully known observations exactly, with no unknown substitution and the fixed claim.",
+      "inputs": {"observations": ["completed=7", "rework_probability=0.25", "transfer_bytes=512"]},
+      "acceptance": {"artifact_path": "limits.json", "exact_json": {"completed": 7, "rework_probability": 0.25, "transfer_bytes": 512, "claim": "finite_observation_only"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "known-dropped", "json": {"completed": 7, "rework_probability": null, "transfer_bytes": 512, "claim": "finite_observation_only"}, "expected_verdict": "fail", "reason": "A measured probability was reported as unknown."},
+        {"id": "claim-changed", "json": {"completed": 7, "rework_probability": 0.25, "transfer_bytes": 512, "claim": "calibrated_estimate"}, "expected_verdict": "fail", "reason": "The claim must remain finite_observation_only."}
+      ]
+    },
+    {
+      "id": "mm-04-duplicate-manifest-id",
+      "class": "manifest_membership",
+      "contract_id": "manifest.exact_members.v1",
+      "objective": "Reject a manifest that repeats a declared member while reporting the member arrays exactly.",
+      "inputs": {"declared_members": ["alpha", "beta"], "manifest_members": ["alpha", "alpha", "beta"]},
+      "acceptance": {"artifact_path": "manifest-result.json", "exact_json": {"members": ["alpha", "beta"], "missing": [], "extra": [], "verdict": "fail"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "duplicate-accepted", "json": {"members": ["alpha", "beta"], "missing": [], "extra": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "A duplicate manifest ID makes the verdict fail."},
+        {"id": "duplicate-as-extra", "json": {"members": ["alpha", "alpha", "beta"], "missing": [], "extra": ["alpha"], "verdict": "fail"}, "expected_verdict": "fail", "reason": "A declared member is not extra, and members lists declared order once."}
+      ]
+    },
+    {
+      "id": "mm-05-changed-member",
+      "class": "manifest_membership",
+      "contract_id": "manifest.hash_bound_members.v1",
+      "objective": "Report the member whose bytes changed and refuse the manifest.",
+      "inputs": {"manifest": {"alpha": "71f49e4f25b46d85934e84dc2cd7263fc3e886196e66fb4dae5da8d290c29e1c", "beta": "895530c53db52ae4d83617feecea2e53e76b819051f9e3c677c887c76b001504"}, "files": {"alpha": "alpha evidence\n", "beta": "beta evidence changed\n"}},
+      "acceptance": {"artifact_path": "manifest-result.json", "exact_json": {"checked": ["alpha", "beta"], "mismatches": ["beta"], "verdict": "fail"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "changed-accepted", "json": {"checked": ["alpha", "beta"], "mismatches": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "Changed bytes must be a mismatch."},
+        {"id": "beta-unchecked", "json": {"checked": ["alpha"], "mismatches": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "Every declared member must be checked."}
+      ]
+    },
+    {
+      "id": "mm-06-all-skipped",
+      "class": "manifest_membership",
+      "contract_id": "manifest.selected_skipped.v1",
+      "objective": "Emit an explicit skipped record for every member when nothing is selected.",
+      "inputs": {"declared_members": ["x", "y", "z"], "selection": {"x": false, "y": false, "z": false}},
+      "acceptance": {"artifact_path": "selection.json", "exact_json": {"selected": [], "skipped": [{"id": "x", "reason": "selection=false"}, {"id": "y", "reason": "selection=false"}, {"id": "z", "reason": "selection=false"}], "missing_records": [], "verdict": "pass"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "all-silently-omitted", "json": {"selected": [], "skipped": [], "missing_records": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "Skipped members need explicit records."},
+        {"id": "missing-with-pass", "json": {"selected": [], "skipped": [{"id": "x", "reason": "selection=false"}, {"id": "y", "reason": "selection=false"}], "missing_records": ["z"], "verdict": "pass"}, "expected_verdict": "fail", "reason": "A missing record cannot pass."}
+      ]
+    }
+  ]
+}
