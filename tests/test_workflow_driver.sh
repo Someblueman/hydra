@@ -7,7 +7,11 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+HYDRA_BIN="$REPO/bin/hydra"
+export HYDRA_TEST_ROOT="$REPO"
+# shellcheck source=/dev/null
+. "$REPO/tests/fixture-tools.sh"
 test_root="$(test_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")" && cd "$test_dir" && pwd -P)"
 repo="$test_root/repo"
 export HYDRA_HOME="$test_root/home"
@@ -19,6 +23,8 @@ export HYDRA_NO_SWITCH=1
 
 cleanup() {
     test_stop_processes_naming "$test_root"
+    (cd "$test_root/plan/repo" 2>/dev/null && "$HYDRA_BIN" kill plan-smoke --force >/dev/null 2>&1) || true
+    (cd "$repo" 2>/dev/null && "$HYDRA_BIN" kill driver-head --force >/dev/null 2>&1) || true
     if [ -d "$repo/.git" ]; then
         git -C "$repo" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | while IFS= read -r _twd_worktree; do
             [ "$_twd_worktree" = "$repo" ] || git -C "$repo" worktree remove --force "$_twd_worktree" 2>/dev/null || true
@@ -169,6 +175,58 @@ assert_equal "{\"schema_version\":1,\"ok\":true,\"command\":\"workflow status\",
 assert_failure $? "a failed root fails the fan-out run"
 assert_equal failed "$(sed -n '1p' "$(run_dir_for "$(sed -n '1p' "$test_root/fanout.out")")/state")" "the fan-out run records a terminal failure"
 assert_equal "" "$(cat "$test_root/fanout.err")" "a failed run reports no state-reader errors"
+
+# A plan run drives in a subshell of the CLI process. The run's recorded owner
+# is that driver, so the run stays owned when the CLI process itself is gone:
+# status does not call it stale and resume does not start a second driver.
+plan_root="$test_root/plan"
+mkdir -p "$plan_root/repo"
+cp "$REPO/tests/fixtures/plan/repo/"* "$plan_root/repo/"
+cp "$REPO/tests/fixtures/plan/policy.json" "$plan_root/policy.json"
+cp "$REPO/tests/fixtures/plan/plan.json" "$plan_root/plan.json"
+fixture_json headless-plan "$plan_root/plan.json"
+{
+    printf '#!/bin/sh\nset -eu\n: > "%s/compose-started"\ncount=0\n' "$plan_root"
+    # shellcheck disable=SC2016 # The loop is written into the step script.
+    printf 'while [ ! -f "%s/compose-release" ] && [ "$count" -lt 200 ]; do sleep 0.1; count=$((count + 1)); done\n' "$plan_root"
+    tail -n +3 "$REPO/tests/fixtures/plan/repo/compose.sh"
+} > "$plan_root/repo/compose.sh"
+cd "$plan_root/repo" || exit 1
+git init -q && git config user.name Test && git config user.email test@example.com
+git add . && git commit -qm fixture
+"$HYDRA_BIN" init --no-agent --trust >/dev/null
+"$HYDRA_BIN" workflow plan compile "$plan_root/plan.json" "$plan_root/policy.json" "$plan_root/compiled.json" > "$plan_root/compile.json"
+assert_success $? "the plan fixture compiles"
+plan_digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$plan_root/compile.json")"
+"$HYDRA_BIN" workflow plan run "$plan_root/compiled.json" --accept "$plan_digest" > "$plan_root/run.out" 2> "$plan_root/run.err" &
+plan_cli=$!
+WAIT_FOR_TIMEOUT=60 wait_for "the compose step to start" test -f "$plan_root/compose-started"
+plan_run="$(sed -n '1p' "$plan_root/run.out")"
+plan_dir="$(run_dir_for "$plan_run")"
+plan_owner="$(sed -n '1p' "$plan_dir/owner-pid")"
+kill -TERM "$plan_cli" 2>/dev/null
+wait "$plan_cli" 2>/dev/null
+if [ -n "$plan_owner" ] && kill -0 "$plan_owner" 2>/dev/null; then owner_status=0; else owner_status=1; fi
+assert_success "$owner_status" "the recorded owner is the live driver, not the CLI process that started it"
+plan_state_line="$("$HYDRA_BIN" workflow status "$plan_run" | sed -n '1p')"
+assert_equal "Workflow $plan_run: running (source: recorded)" "$plan_state_line" "status reports a live driver's run as running"
+"$HYDRA_BIN" workflow resume "$plan_run" > "$plan_root/resume.out" 2>&1 &
+plan_resume=$!
+resume_polls=0
+while kill -0 "$plan_resume" 2>/dev/null && [ "$resume_polls" -lt 100 ]; do sleep 0.1; resume_polls=$((resume_polls + 1)); done
+if kill -0 "$plan_resume" 2>/dev/null; then resume_status=0; else wait "$plan_resume"; resume_status=$?; fi
+assert_failure "$resume_status" "resume refuses a run whose driver is alive"
+grep -q 'workflow owner is still active' "$plan_root/resume.out"
+assert_success $? "resume names the live owner as the reason"
+: > "$plan_root/compose-release"
+plan_succeeded() { [ "$(sed -n '1p' "$plan_dir/state")" = succeeded ]; }
+WAIT_FOR_TIMEOUT=120 wait_for "the plan run to finish" plan_succeeded
+assert_success $? "the original driver completes the run"
+wait "$plan_resume" 2>/dev/null || true
+assert_equal 1 "$(grep -c '"type":"run.running"' "$plan_dir/events.jsonl")" "one driver ran the plan"
+assert_equal 0 "$(grep -c '"type":"run.recovered"' "$plan_dir/events.jsonl")" "the live run was never recovered by another driver"
+assert_equal 1 "$(grep -c '"type":"run.succeeded"' "$plan_dir/events.jsonl")" "the run records one terminal event"
+cd "$repo" || exit 1
 
 echo "============================================"
 echo "Test Results:"

@@ -473,7 +473,12 @@ workflow_drive() {
     fi
     _load_lib workflow_statistics
     workflow_statistics_begin "$_wd_dir" || true
-    workflow_atomic_scalar "$_wd_dir/owner-pid" "$$" || return 1
+    # Record this driver's own PID. Inside a subshell, such as the one a plan
+    # run drives in, $$ names the top-level process instead, which can exit
+    # while the driver keeps running; the run would then look stale and a
+    # resume could start a second driver.
+    _wd_driver_pid="$(exec sh -c 'printf %s "$PPID"')"
+    workflow_atomic_scalar "$_wd_dir/owner-pid" "$_wd_driver_pid" || return 1
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1
     workflow_event "$_wd_dir" "" run.running
