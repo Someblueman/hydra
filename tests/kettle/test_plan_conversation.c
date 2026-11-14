@@ -198,17 +198,34 @@ static void returned_is_blocked(struct kt_session *s) {
     REFUSE("workflow", "plan", "proposal", "planner");
 }
 
-/* Approval is one action: E on a revision that is not validated yet asks
- * once, validates exactly that revision and runs it when it is ready. */
-static void approve_revision(struct kt_session *s) {
+/* The agent publishes again while the approval dialog for revision 2 is
+ * open: the page behind it moves to revision 3, and confirming the dialog
+ * approves nothing, because it named revision 2. */
+static void approval_outlived(struct kt_session *s) {
     char pattern[4096];
     write_draft("Revised after requested changes");
     U(STATE("DRAFT", 2), 10);
     S("E");
-    U("Approve plan", 3);
     U("Approve and run planner revision 2?", 3);
+    write_draft("Revised again while the dialog was open");
+    U(STATE("DRAFT", 3), 10);
+    CHECK(kt_contains(s, "Approve and run planner revision 2?"), "the dialog still names revision 2");
     S("y");
-    U("Approved revision 2; validating it, then it runs", 5);
+    U("Plan not approved: the revision changed", 5);
+    kt_pump(s, 2);
+    kt_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/*", f.home);
+    CHECK(!hf_glob_count(pattern), "confirming a dialog for an older revision launches nothing");
+}
+
+/* Approval is one action: E on a revision that is not validated yet asks
+ * once, validates exactly that revision and runs it when it is ready. */
+static void approve_revision(struct kt_session *s) {
+    char pattern[4096];
+    S("E");
+    U("Approve plan", 3);
+    U("Approve and run planner revision 3?", 3);
+    S("y");
+    U("Approved revision 3; validating it, then it runs", 5);
     kt_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/*/run-id", f.home);
     {
         double deadline = kt_now() + 30;
@@ -222,7 +239,7 @@ static void approve_revision(struct kt_session *s) {
 
 static void run_reaches_planner(struct kt_session *s) {
     char needle[512], text[65536];
-    kt_format(needle, sizeof(needle), "Hydra: the user approved revision 2 (digest ");
+    kt_format(needle, sizeof(needle), "Hydra: the user approved revision 3 (digest ");
     agent_until(s, needle, 15);
     kt_format(needle, sizeof(needle), "and run %s started. Follow it with hydra workflow status %s --json", run_id, run_id);
     agent_until(s, needle, 5);
@@ -258,6 +275,7 @@ int main(void) {
     request_changes(s);
     capture_layouts(s);
     returned_is_blocked(s);
+    approval_outlived(s);
     approve_revision(s);
     run_reaches_planner(s);
     kt_close(s, "q", 0, 0);

@@ -32,16 +32,21 @@ static bool approve_draft_confirmed(struct app *app, const struct native_plan *p
 
 void plan_action_approve(struct app *app) {
     struct native_plan *p = app->plan;
+    unsigned revision;
     if (!p || app->fleet || p->state == PLAN_READY || p->state == PLAN_RETURNED || p->state == PLAN_VALIDATING ||
         (p->digest[0] && !strcmp(p->digest, p->launched_digest))) {
         native_plan_execute(app);
         return;
     }
+    /* The plan reloads in place while the dialog is open, and compiling
+     * reloads a draft that changed since: the approval holds only for the
+     * revision the dialog named. */
+    revision = p->revision;
     if (!approve_draft_confirmed(app, p)) {
         copy_text(app->notice, sizeof(app->notice), "Plan not approved; nothing was submitted.");
         return;
     }
-    if (!app->plan || app->plan->revision != p->revision || !native_plan_compile(app)) {
+    if (!app->plan || app->plan->revision != revision || !native_plan_compile(app) || app->plan->revision != revision) {
         copy_text(app->notice, sizeof(app->notice), "Plan not approved: the revision changed or cannot be validated now.");
         return;
     }
