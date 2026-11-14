@@ -43,12 +43,13 @@ head="$(state_v2_create_head "$project" watched watched-session - - "$started" -
 head_dir="$(state_v2_head_dir "$project" "$head")"
 instance="$(sed -n '1p' "$head_dir/current-instance")"
 event_file="$(event_file_for_head "$project" "$head")"
+activity_file="$(event_activity_file "$project" "$head" "$instance")"
 event_emit "$project" "$head" "$instance" lifecycle.started hydra local '{"profile":"none"}' >/dev/null || exit 1
 
 activity_json() {
     printf '{"schema_version":1,"instance_id":"%s","kind":"activity","state":"%s","since":%s}\n' "$1" "$2" "$3"
 }
-activity_events() { grep -c '"type":"activity.changed"' "$event_file"; }
+activity_events() { if [ -f "$activity_file" ]; then grep -c '"type":"activity.changed"' "$activity_file"; else echo 0; fi; }
 assert_contains() {
     case "$1" in *"$2"*) assert_success 0 "$3" ;; *) assert_success 1 "$3" ;; esac
 }
@@ -86,8 +87,11 @@ assert_success "$status" "rejected input records no state"
 output="$(activity_json "$instance" active $((now - 30)) | "$hydra" adapter activity watched 2>&1)"
 assert_success $? "an activity change is recorded"
 assert_contains "$output" "inferred from tmux" "the confirmation names the inference"
-assert_equal 1 "$(activity_events)" "one event is appended"
-last="$(tail -n 1 "$event_file")"
+assert_equal 1 "$(activity_events)" "one event is appended to the instance's activity log"
+assert_equal "$before" "$(wc -l < "$event_file" | tr -d ' ')" "the head's event log keeps only lifecycle events"
+last="$(tail -n 1 "$activity_file")"
+assert_contains "$last" "\"sequence\":1,\"head_next_sequence\":$((before + 1))," \
+    "the event is numbered in its own log and placed before the head's next event"
 assert_contains "$last" "\"payload\":{\"state\":\"active\",\"since\":$((now - 30)),\"source\":\"tmux\",\"confidence\":\"inferred\"}" \
     "the event carries state, since, source and confidence"
 assert_contains "$last" "\"instance_id\":\"$instance\"" "the event is correlated to the instance"
@@ -112,21 +116,31 @@ assert_equal quiet "$(sed -n '1p' "$head_dir/instances/$instance/activity-state"
 
 activity_json "$instance" active $((started - 100)) | "$hydra" adapter activity watched >/dev/null 2>&1
 assert_success $? "a state older than its instance is accepted"
-assert_contains "$(tail -n 1 "$event_file")" "\"since\":$started," "and begins with the instance"
+assert_contains "$(tail -n 1 "$activity_file")" "\"since\":$started," "and begins with the instance"
 
 event_verify_file "$event_file" >/dev/null 2>&1
 assert_success $? "the event log still verifies"
+event_verify_file "$activity_file" >/dev/null 2>&1
+assert_success $? "the activity log verifies"
 if [ -x "${HYDRA_CORE:-}" ]; then
     "$HYDRA_CORE" validate-events "$event_file" >/dev/null 2>&1
     assert_success $? "the native validator accepts the event log"
+    "$HYDRA_CORE" validate-events "$activity_file" >/dev/null 2>&1
+    assert_success $? "the native validator accepts the activity log"
 fi
+# Head event retention archives lifecycle events; the activity of a session
+# that is still open and recent stays in its log.
+event_emit "$project" "$head" "$instance" lifecycle.observed adapter hydra '{"status":"running","confidence":"exact","exit_code":null}' >/dev/null
 "$hydra" events retain --project "$project" --head "$head" --max-events 1 --archive-keep-seconds 60 --apply >/dev/null 2>&1
-assert_success $? "activity events archive like any other"
+assert_success $? "head events archive with activity kept apart"
+assert_equal 1 "$(wc -l < "$event_file" | tr -d ' ')" "the head log holds its tail"
+assert_equal 3 "$(activity_events)" "recent activity of an open session is kept"
 activity_json "$instance" quiet "$now" | "$hydra" adapter activity watched >/dev/null 2>&1
 assert_success $? "recording continues after archiving"
-event_verify_file "$event_file" >/dev/null 2>&1
-assert_success $? "the retained log verifies"
-assert_equal 2 "$(wc -l < "$event_file" | tr -d ' ')" "the retained log continues its sequence"
+event_verify_file "$activity_file" >/dev/null 2>&1
+assert_success $? "the activity log still verifies"
+assert_contains "$(tail -n 1 "$activity_file")" "\"sequence\":4,\"head_next_sequence\":3," \
+    "the activity log continues its sequence and follows the archived head events"
 
 # The new event type is not a notification.
 "$hydra" notify enable activity.changed --sink terminal --interval 0 >/dev/null 2>&1

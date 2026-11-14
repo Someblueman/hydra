@@ -275,6 +275,191 @@ if [ -x "${HYDRA_CORE:-}" ]; then
     assert_contains "$(cat "$test_root/compare.txt")" "left sessions count=7 " "the comparison describes the sessions"
 fi
 
+# Activity logs, session checkpoints and summaries. Two heads record the same
+# 100 hours of an observed session: a change every 100 seconds in the
+# instance's activity log, and each hour an adapter report that holds for 20
+# minutes in the head's log. Only "long" is maintained; "twin" is always read
+# from all of its events, so their rows must agree.
+# simulate <head> <instance> <from-offset> <seconds>
+simulate() {
+    _sim_dir="$(state_v2_head_dir "$project" "$1")"
+    _sim_events="$_sim_dir/events/events.jsonl"
+    _sim_log="$_sim_dir/instances/$2/activity.jsonl"
+    _sim_head="$(sed -n '1p' "$_sim_events.next-sequence" 2>/dev/null)"
+    [ -n "$_sim_head" ] || _sim_head=$(($(wc -l < "$_sim_events" | tr -d ' ') + 1))
+    _sim_own="$(sed -n '1p' "$_sim_log.next-sequence" 2>/dev/null)"
+    [ -n "$_sim_own" ] || _sim_own=1
+    awk -v from=$((base + $3)) -v span="$4" -v hseq="$_sim_head" -v aseq="$_sim_own" -v project="$project" \
+        -v head="$1" -v instance="$2" -v events="$_sim_events" -v alog="$_sim_log" '
+        function iso(t,    days, secs, z, era, doe, yoe, y, doy, mp, d, m) {
+            days = int(t / 86400); secs = t - days * 86400
+            z = days + 719468; era = int(z / 146097); doe = z - era * 146097
+            yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+            y = yoe + era * 400; doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100)); mp = int((5 * doy + 2) / 153)
+            d = doy - int((153 * mp + 2) / 5) + 1; m = (mp < 10) ? mp + 3 : mp - 9; if (m <= 2) y++
+            return sprintf("%04d-%02d-%02dT%02d:%02d:%02dZ", y, m, d, int(secs / 3600), int((secs % 3600) / 60), secs % 60)
+        }
+        function observed(t, actor) {
+            printf "{\"schema_version\":1,\"event_id\":\"evt_%020d\",\"sequence\":%d,\"occurred_at\":\"%s\",\"project_id\":\"%s\",\"head_id\":\"%s\",\"instance_id\":\"%s\",\"run_id\":null,\"type\":\"lifecycle.observed\",\"actor\":{\"kind\":\"adapter\",\"id\":\"%s\"},\"payload\":{\"status\":\"running\",\"confidence\":\"reported\",\"exit_code\":null}}\n", hseq, hseq, iso(t), project, head, instance, actor >> events
+            hseq++
+        }
+        BEGIN {
+            state = "quiet"
+            for (t = from; t < from + span; t += 100) {
+                if ((t - from) % 3600 == 0) observed(t, "adapter")
+                if ((t - from) % 3600 == 1200) observed(t, "hydra")
+                state = (state == "active") ? "quiet" : "active"
+                printf "{\"schema_version\":1,\"event_id\":\"evt_a%019d\",\"sequence\":%d,\"head_next_sequence\":%d,\"occurred_at\":\"%s\",\"project_id\":\"%s\",\"head_id\":\"%s\",\"instance_id\":\"%s\",\"run_id\":null,\"type\":\"activity.changed\",\"actor\":{\"kind\":\"observer\",\"id\":\"tmux\"},\"payload\":{\"state\":\"%s\",\"since\":%d,\"source\":\"tmux\",\"confidence\":\"inferred\"}}\n", aseq, aseq, hseq, iso(t + 3), project, head, instance, state, t >> alog
+                aseq++
+            }
+            print hseq > (events ".next-sequence"); print aseq > (alog ".next-sequence")
+        }'
+}
+# Coverage: watched for the first half of every hour of the simulation.
+watched_hours() {
+    awk -v from=$((base + $1)) -v hours="$2" 'BEGIN {
+        print "HYDRA_ACTIVITY_COVERAGE\t1\t0"
+        for (h = 0; h < hours; h++) print from + h * 3600 "\t" from + h * 3600 + 1800 }' > "$project_dir/activity/coverage"
+}
+pair() { printf '%s\n%s\n' "$(row_for long "$1" | cut -f 5-)" "$(row_for twin "$1" | cut -f 5-)"; }
+same() { [ "$(row_for long "$1" | cut -f 5-)" = "$(row_for twin "$1" | cut -f 5-)" ] && [ -n "$(row_for long "$1")" ]; }
+maintain() { session_maintain_head "$project" "$1" $((base + $2)); }
+t0=200000
+hour=3600
+rm -rf "$HYDRA_HOME/cache"
+new_head long; long=$head_id; long_i=$instance_id
+new_head twin; twin=$head_id; twin_i=$instance_id
+long_log="$(event_activity_file "$project" "$long" "$long_i")"
+event "$long" "$long_i" "$t0" lifecycle.started local '{"profile":"claude"}'
+event "$twin" "$twin_i" "$t0" lifecycle.started local '{"profile":"claude"}'
+simulate "$long" "$long_i" "$t0" $((100 * hour))
+simulate "$twin" "$twin_i" "$t0" $((100 * hour))
+watched_hours "$t0" 101
+at=$((t0 + 100 * hour))
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 rows "$at")"
+if same "$feed"; then status=0; else status=1; pair "$feed"; fi
+assert_success "$status" "two heads with the same events have the same row"
+before_bytes="$(wc -c < "$long_log" | tr -d ' ')"
+before_events="$(wc -l < "$long_log" | tr -d ' ')"
+echo "  100 simulated head-hours: activity log $before_events events, $before_bytes bytes before maintenance"
+maintain "$long" "$at"
+assert_success $? "an open session is maintained"
+after_bytes="$(wc -c < "$long_log" | tr -d ' ')"
+after_events="$(wc -l < "$long_log" | tr -d ' ')"
+echo "  after maintenance: $after_events events, $after_bytes bytes"
+if [ "$after_events" -le 40 ] && [ "$after_bytes" -le 32768 ]; then status=0; else status=1; fi
+assert_success "$status" "the live activity log holds at most the last hour"
+event_verify_file "$long_log" >/dev/null 2>&1
+assert_success $? "the trimmed activity log verifies"
+if [ -x "${HYDRA_CORE:-}" ]; then
+    "$HYDRA_CORE" validate-events "$long_log" >/dev/null 2>&1
+    assert_success $? "the native validator accepts the trimmed log"
+fi
+assert_equal "$before_events" "$(($(sed -n '1p' "$long_log.next-sequence") - 1))" "the sequence cursor still counts every event"
+assert_equal "HYDRA_SESSION_CHECKPOINT${tab}2" "$(sed -n '1p' "$(dirname "$long_log")/session-checkpoint" | cut -f 1-2)" "the removed activity is folded into a session checkpoint"
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 rows "$at")"
+if same "$feed"; then status=0; else status=1; pair "$feed"; fi
+assert_success "$status" "the row is the same after the activity log is trimmed"
+feed="$(rows "$at")"
+if same "$feed" && same "$(rows "$at")"; then status=0; else status=1; pair "$feed"; fi
+assert_success "$status" "and with the feed's own checkpoints"
+simulate "$long" "$long_i" $((t0 + 100 * hour)) "$hour"
+simulate "$twin" "$twin_i" $((t0 + 100 * hour)) "$hour"
+at=$((t0 + 101 * hour))
+maintain "$long" "$at"
+feed="$(rows "$at")"
+if same "$feed" && same "$(HYDRA_SESSIONS_NO_CACHE=1 rows "$at")"; then status=0; else status=1; pair "$feed"; fi
+assert_success "$status" "a second pass extends the checkpoint and the row still agrees"
+if [ "$(wc -l < "$long_log" | tr -d ' ')" -le 40 ]; then status=0; else status=1; fi
+assert_success "$status" "the log stays bounded"
+
+# The session ends. While the newest coverage interval reaches to within the
+# stale window of now, it may still grow over the end: no summary yet.
+end=$((t0 + 101 * hour + 10))
+event "$long" "$long_i" "$end" lifecycle.torn-down local '{}'
+event "$twin" "$twin_i" "$end" lifecycle.torn-down local '{}'
+printf '%s\t%s\n' $((base + end - 30)) $((base + end - 5)) >> "$project_dir/activity/coverage"
+maintain "$long" $((end + 10))
+if [ -f "$project_dir/sessions/$long_i" ]; then status=1; else status=0; fi
+assert_success "$status" "a session whose coverage may still grow is not summarised"
+maintain "$long" $((end + 60))
+if [ -f "$project_dir/sessions/$long_i" ]; then status=0; else status=1; fi
+assert_success "$status" "it is summarised once its coverage is final"
+if [ ! -e "$long_log" ] && [ ! -e "$(dirname "$long_log")/session-checkpoint" ]; then status=0; else status=1; fi
+assert_success "$status" "the summary replaces its checkpoint and activity log"
+feed="$(rows $((end + 60)))"
+if same "$feed" && same "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 60)))"; then status=0; else status=1; pair "$feed"; fi
+assert_success "$status" "the summarised row equals the one derived from every event"
+summarised_row="$(row_for long "$feed")"
+twin_row="$(row_for twin "$feed")"
+long_events="$(state_v2_head_dir "$project" "$long")/events/events.jsonl"
+mv "$long_events" "$test_root/long-events.jsonl"
+assert_equal "$summarised_row" "$(row_for long "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 9000)))")" "the summary is the row with no events left"
+mv "$test_root/long-events.jsonl" "$long_events"
+cp "$project_dir/activity/coverage" "$test_root/coverage-kept"
+printf 'HYDRA_ACTIVITY_COVERAGE\t1\t%s\n' $((base + end + 100)) > "$project_dir/activity/coverage"
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 200)))"
+assert_equal "-${tab}-${tab}-${tab}-" "$(row_for twin "$feed" | cut -f 11-)" "once coverage history moves past a session its events no longer say"
+assert_equal "$summarised_row" "$(row_for long "$feed")" "but its summary keeps the times"
+cp "$test_root/coverage-kept" "$project_dir/activity/coverage"
+
+# A session that ended before summaries existed (activity in the head log,
+# no summary) is derived from its events, and a pass over its head
+# summarises it with the same row. alpha's was written by events retain above.
+if [ -f "$project_dir/sessions/$alpha_i" ]; then status=0; else status=1; fi
+assert_success "$status" "event retention summarises the head's finished sessions"
+if [ -e "$project_dir/sessions/$delta_i" ]; then status=1; else status=0; fi
+assert_success "$status" "an old session has no summary"
+old_row="$(row_for delta "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 60)))")"
+assert_contains "$old_row" "${tab}ended${tab}" "and is derived from its events"
+maintain "$delta" $((end + 60))
+if [ -f "$project_dir/sessions/$delta_i" ]; then status=0; else status=1; fi
+assert_success "$status" "a pass over its head summarises it"
+assert_equal "$old_row" "$(row_for delta "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 60)))")" "with the row it had"
+
+# Summaries read are bounded, most recently written first; the rest are
+# announced and never derived again from what is left of their events.
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 HYDRA_SESSIONS_MAX_SUMMARIES=1 rows $((end + 60)))"
+assert_contains "$feed" "X${tab}More than 1 finished sessions summarised; reading the most recent" "the summary limit is announced"
+assert_equal "$delta_i" "$(printf '%s\n' "$feed" | awk -F '\t' '$1 == "H" && ($3 == a || $3 == l || $3 == d) { print $3 }' \
+    a="$alpha_i" l="$long_i" d="$delta_i")" "the most recent summary is read and the others are not re-derived"
+
+# A summary or session checkpoint that cannot be read is announced; the
+# session's times are never made up from what remains.
+cp "$project_dir/sessions/$long_i" "$test_root/long-summary"
+printf 'HYDRA_SESSION_SUMMARY\t1\nhead\tnot-a-head\n' > "$project_dir/sessions/$long_i"
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 60)))"
+assert_contains "$feed" "X${tab}Skipped an unreadable session summary" "an unreadable summary is announced"
+assert_equal "" "$(row_for long "$feed")" "and its session is not derived from what remains"
+cp "$test_root/long-summary" "$project_dir/sessions/$long_i"
+new_head open; open=$head_id; open_i=$instance_id
+event "$open" "$open_i" "$t0" lifecycle.started local '{"profile":"codex"}'
+simulate "$open" "$open_i" "$t0" $((3 * hour))
+maintain "$open" $((t0 + 3 * hour))
+open_checkpoint="$(state_v2_head_dir "$project" "$open")/instances/$open_i/session-checkpoint"
+printf 'HYDRA_SESSION_CHECKPOINT\t2\t1\nI\tgarbage\nZ\t1\n' > "$open_checkpoint"
+feed="$(HYDRA_SESSIONS_NO_CACHE=1 rows $((t0 + 3 * hour)))"
+assert_contains "$feed" "X${tab}A session checkpoint is missing or unreadable; its times are unknown" "an unreadable checkpoint is announced"
+assert_equal "-${tab}-${tab}-${tab}-" "$(row_for open "$feed" | cut -f 11-)" "and the session's times are unknown"
+rm -f "$open_checkpoint"
+assert_equal "-${tab}-${tab}-${tab}-" "$(row_for open "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((t0 + 3 * hour)))" | cut -f 11-)" \
+    "a missing checkpoint leaves them unknown too"
+
+# The recorder's pass is throttled and takes heads in turn: with room for one
+# head per pass, the two heads that keep activity logs (open and twin) are
+# each maintained once over two passes.
+stamp="$project_dir/activity/maintained"
+rm -f "$stamp"
+HYDRA_SESSIONS_MAINTAIN_HEADS=1 session_maintain_due "$project" $((base + end + 1000))
+assert_equal "$((base + end + 1000)) 1" "$(tr '\n' ' ' < "$stamp" | sed 's/ $//')" "a pass records when it ran and where the next starts"
+HYDRA_SESSIONS_MAINTAIN_HEADS=1 session_maintain_due "$project" $((base + end + 1010))
+assert_equal "$((base + end + 1000)) 1" "$(tr '\n' ' ' < "$stamp" | sed 's/ $//')" "no pass runs within the interval"
+HYDRA_SESSIONS_MAINTAIN_HEADS=1 session_maintain_due "$project" $((base + end + 1000 + HYDRA_SESSIONS_MAINTAIN_SECONDS))
+assert_equal 2 "$(sed -n '2p' "$stamp")" "the next pass takes the next head"
+if [ -f "$project_dir/sessions/$twin_i" ] && [ ! -e "$(event_activity_file "$project" "$twin" "$twin_i")" ]; then status=0; else status=1; fi
+assert_success "$status" "between them both heads are maintained"
+assert_equal "$twin_row" "$(row_for twin "$(HYDRA_SESSIONS_NO_CACHE=1 rows $((end + 60)))")" "and the summarised twin keeps its row"
+
 echo "======================================"
 echo "Test Results:"
 echo "Total:  $test_count"

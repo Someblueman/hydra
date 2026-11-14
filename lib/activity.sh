@@ -3,7 +3,8 @@
 #
 # An observer (the control centre) infers from tmux window output whether an
 # interactive head is producing output ("active") or silent ("quiet") and
-# records each change as an activity.changed event in the head's event log.
+# records each change as an activity.changed event in the instance's activity
+# log (see event_emit_activity).
 # While it watches it also keeps a per-project coverage file current, so time
 # nobody watched stays distinguishable from quiet time. Neither state is a
 # statement about what the agent is waiting for.
@@ -85,8 +86,9 @@ activity_observer_beat() {
 }
 
 # Records one inferred activity change of an interactive head's current
-# instance. A change equal to the last recorded state is dropped under the
-# head's activity lock, so several observers never record it twice.
+# instance in that instance's activity log. A change equal to the last
+# recorded state is dropped under the head's activity lock, so several
+# observers never record it twice.
 # Usage: activity_record <branch> <instance-id> <active|quiet> <since-epoch>
 # Prints: recorded | unchanged
 activity_record() {
@@ -127,14 +129,19 @@ activity_record() {
         echo "Error: stale activity for non-current instance" >&2
         return 1
     fi
+    # Teardown summarises the session under this lock once the head is
+    # stopped, so nothing is appended to a session after its summary.
+    case "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/desired-state" 2>/dev/null || true)" in
+        running|stopping) ;;
+        *) release_lock "$_arc_lock"; echo "Error: head '$_arc_branch' is not running" >&2; return 1 ;;
+    esac
     if [ "$(lifecycle_read activity-state)" = "$_arc_state" ]; then
         release_lock "$_arc_lock"
         activity_observer_beat "$LIFECYCLE_PROJECT_ID" "$_arc_now" || true
         printf 'unchanged\n'
         return 0
     fi
-    if ! event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
-            activity.changed observer tmux \
+    if ! event_emit_activity "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
             "{\"state\":\"$_arc_state\",\"since\":$_arc_since,\"source\":\"tmux\",\"confidence\":\"inferred\"}" >/dev/null ||
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/activity-state" "$_arc_state" ||
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/activity-since" "$_arc_since"; then

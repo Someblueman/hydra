@@ -343,13 +343,17 @@ static void workflow_reads(void) {
     puts("PASS workflow reads: ended runs once, again when a record changes; unended runs every refresh");
 }
 
-/* The activity.changed events in one head's log that carry text. */
+/* The activity.changed events in one head instance's activity log that
+ * carry text. */
 static int recorded_events(const char *project, int head, const char *text) {
     static char log[1 << 16];
     char path[8192];
     const char *at;
     int count = 0;
-    kt_format(path, sizeof(path), "%s/home/state/v2/projects/project_00000000000000c0/heads/head_%016x/events/events.jsonl", project, (unsigned)head);
+    kt_format(path, sizeof(path),
+              "%s/home/state/v2/projects/project_00000000000000c0/heads/head_%016x/instances/instance_%016x/activity.jsonl",
+              project, (unsigned)head, (unsigned)head);
+    if (!kt_exists(path)) return 0;
     kt_read(path, log, sizeof(log));
     for (at = strstr(log, "\"type\":\"activity.changed\""); at; at = strstr(at + 1, "\"type\":\"activity.changed\"")) {
         const char *end = strchr(at, '\n'), *found = strstr(at, text);
@@ -399,7 +403,7 @@ static void activity_change(struct kt_session *s, const char *project, long long
 static void activity_changed_once(const char *project) {
     CHECK(logged("hydra ", "adapter activity") == 1, "a change starts exactly one recorder");
     CHECK(logged("hydra ", "adapter activity work-1") == 1, "the recorder is for the head that changed");
-    CHECK(recorded_events(project, 1, "\"state\":\"active\"") == 1, "the change is in the head's event log");
+    CHECK(recorded_events(project, 1, "\"state\":\"active\"") == 1, "the change is in the instance's activity log");
     CHECK(recorded_events(project, 2, "\"state\":\"active\"") == 0, "the other heads record nothing");
 }
 
