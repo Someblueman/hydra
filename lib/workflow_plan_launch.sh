@@ -30,6 +30,56 @@ workflow_plan_launch_planning() {
         workflow_atomic_scalar "$1/planning-branch" "$(sed -n '1p' "$_wplp_head_dir/branch")"
 }
 
+# Usage: workflow_plan_launch_failure <launch-dir>
+# Records in <launch-dir>/failure why a launch ended without a run receipt, as
+# code<TAB>message<TAB>recovery ("-" when absent), from the owner's log: its last
+# JSON error envelope, else its last "Error:"/"Next:" pair, else its last line.
+workflow_plan_launch_failure() {
+    [ ! -f "$1/run-id" ] || return 0
+    awk '
+        function value(line, key,   i, c, out) {
+            i = index(line, "\"" key "\":\"")
+            if (!i) return "-"
+            out = ""
+            for (i += length(key) + 4; i <= length(line); i++) {
+                c = substr(line, i, 1)
+                if (c == "\"") break
+                if (c == "\\") { i++; c = substr(line, i, 1); if (c == "n" || c == "t") c = " " }
+                out = out c
+            }
+            return out == "" ? "-" : out
+        }
+        function clean(text) { gsub(/[\t\r]/, " ", text); return substr(text, 1, 400) }
+        /^\{"schema_version":1,"ok":false,/ { code = value($0, "code"); message = value($0, "message"); recovery = value($0, "recovery"); next }
+        /^Error: / { error = substr($0, 8); next_step = "-"; next }
+        /^Next: / { next_step = substr($0, 7); next }
+        NF { last = $0 }
+        END {
+            if (message == "" && error != "") { code = "-"; message = error; recovery = next_step }
+            if (message == "" && last != "") { code = "-"; message = last; recovery = "-" }
+            if (message != "") printf "%s\t%s\t%s\n", clean(code), clean(message), clean(recovery)
+        }
+    ' "$1/owner.log" > "$1/failure.tmp" 2>/dev/null && mv "$1/failure.tmp" "$1/failure"
+}
+
+# Usage: workflow_plan_launch_retire <launch-dir>
+# The user may launch the same revision again only after its launch ended
+# without a run receipt: refused (failed), or finished with a non-zero exit
+# before a run was created. The old record moves aside to <dir>.failed-*/.
+# A launch that is starting, crashed before recording its exit, or has a run
+# receipt is kept, so nothing is retried automatically or run twice; admission
+# also refuses the spawn branches an earlier run of the revision created.
+workflow_plan_launch_retire() {
+    [ ! -e "$1/run-id" ] || return 1
+    case "$(sed -n '1p' "$1/state" 2>/dev/null)" in
+        failed) ;;
+        finished) [ "$(sed -n '1p' "$1/exit-code" 2>/dev/null)" != 0 ] || return 1 ;;
+        *) return 1 ;;
+    esac
+    _wplr_dir="$(mktemp -d "$1.failed-XXXXXX")" || return 1
+    mv "$1" "$_wplr_dir/launch"
+}
+
 # stdin is an already-open compiled snapshot. The caller starts this owner in
 # an independent process group with SIGHUP ignored and no terminal descriptors.
 # A reservation is never retried automatically, even after an uncertain crash.
@@ -41,14 +91,20 @@ workflow_plan_launch_owner() (
     _wpl_user_umask="$(umask)"
     umask 077
     mkdir -p "$(dirname "$_workflow_plan_launch")" || exit 1
-    mkdir "$_workflow_plan_launch" 2>/dev/null || exit 1
+    if ! mkdir "$_workflow_plan_launch" 2>/dev/null; then
+        workflow_plan_launch_retire "$_workflow_plan_launch" || exit 1
+        mkdir "$_workflow_plan_launch" 2>/dev/null || exit 1
+    fi
     exec > "$_workflow_plan_launch/owner.log" 2>&1
     workflow_atomic_scalar "$_workflow_plan_launch/state" starting || exit 1
     if [ "$#" -eq 3 ] && ! workflow_plan_launch_planning "$_workflow_plan_launch" "$2" "$3"; then
+        workflow_plan_launch_failure "$_workflow_plan_launch"
         workflow_atomic_scalar "$_workflow_plan_launch/state" failed
         exit 1
     fi
     if ! cat > "$_workflow_plan_launch/compiled.json"; then
+        echo 'Launch refused: the compiled plan could not be read.'
+        workflow_plan_launch_failure "$_workflow_plan_launch"
         workflow_atomic_scalar "$_workflow_plan_launch/state" failed
         exit 1
     fi
@@ -61,6 +117,7 @@ workflow_plan_launch_owner() (
     else
         _wpl_result=$?
     fi
+    [ "$_wpl_result" -eq 0 ] || workflow_plan_launch_failure "$_workflow_plan_launch"
     workflow_atomic_scalar "$_workflow_plan_launch/exit-code" "$_wpl_result"
     workflow_atomic_scalar "$_workflow_plan_launch/state" finished
     exit "$_wpl_result"
@@ -77,4 +134,8 @@ workflow_plan_launch_status() (
         [ ! -f "$_wpls_dir/exit-code" ] || _wpls_exit="$(sed -n '1p' "$_wpls_dir/exit-code")"
     fi
     printf 'HYDRA_PLAN_LAUNCH\t1\nL\t%s\t%s\t%s\t%s\n' "$1" "$_wpls_state" "$_wpls_run" "$_wpls_exit"
+    # A launch that ended without a run receipt also says why.
+    if [ "$_wpls_run" = - ] && [ -f "$_wpls_dir/failure" ]; then
+        printf 'F\t%s\n' "$(sed -n '1p' "$_wpls_dir/failure")"
+    fi
 )

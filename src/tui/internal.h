@@ -89,6 +89,8 @@ struct native_plan {
     struct native_capture launch_job;
     pid_t owner_pid;
     char launched_digest[65], launched_run[65], launch_state[32];
+    /* Why a launch ended without a run, as the launch owner reported it. */
+    char launch_failure[512];
     /* The planning conversation bound at launch, and run notices typed into it. */
     char planning_head[TEXT], planning_instance[TEXT], notified[NATIVE_PLAN_NOTICES][112];
     size_t notified_count;
@@ -372,6 +374,8 @@ bool native_fleet_control_key(struct app *app, char key, const char *action);
 void native_evidence_destroy(struct app *app);
 void native_evidence_tick(struct app *app, bool watch);
 bool native_plan_launch(struct app *app, const char *digest);
+/* The launched revision ended without a run receipt, so it may be launched again. */
+bool native_plan_launch_failed(const struct native_plan *p);
 void native_plan_launch_tick(struct app *app, bool watch);
 struct head *native_plan_head(struct app *app, const char *branch);
 bool native_plan_converse(struct app *app, const struct head *h, const char *text, bool submit, bool focus);

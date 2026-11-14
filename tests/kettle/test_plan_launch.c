@@ -170,6 +170,20 @@ int main(void) {
     hf_glob_one(pattern, compiled, sizeof(compiled));
     kt_read(compiled, snapshot, sizeof(snapshot));
     projection_digest(H("workflow", "plan", "tui-data", compiled), digest, sizeof(digest));
+    /* A launch that ends before creating a run shows the owner's reason and
+     * leaves the same revision launchable once the cause is removed. */
+    RUN("git", "-C", f.repo, "branch", "plan-smoke");
+    S("E");
+    U("INPUT TO HYDRA / execution approval", 3);
+    U("revision 3", 3);
+    S("y");
+    U("Launch of revision 3 failed; nothing ran, E launches it again", 30);
+    U("the spawn branch plan-smoke already exists", 3);
+    U("LAUNCH FAILED", 3);
+    kt_format(path, sizeof(path), "%s/state/v2/projects/*/workflows/runs/*", f.home);
+    CHECK(!hf_glob_count(path), "a launch refused by admission creates no run");
+    CHECK(!kt_contains(&s, "already submitted"), "a failed launch is not reported as submitted");
+    RUN("git", "-C", f.repo, "branch", "-D", "plan-smoke");
     S("E");
     U("INPUT TO HYDRA / execution approval", 3);
     U("revision 3", 3);

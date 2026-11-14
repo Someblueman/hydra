@@ -61,7 +61,8 @@ void native_workspace_plan_text(struct app *app, struct kt_canvas *c, size_t *sc
         return;
     }
     state=p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
-        (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state];
+        (p->launched_run[0] ? "RUN RECORDED / C monitor" : native_plan_launch_failed(p) ? "LAUNCH FAILED / nothing ran; E launches again" :
+         "LAUNCH REQUESTED / awaiting run receipt") : states[p->state];
     owner=p->proposal_head[0] ? p->proposal_head : "Imported plan";
     /* A narrow review keeps the revision and state; the head names the agent pane. */
     if ((int)(strlen(owner)+strlen(state)+18)>c->width) dashboard_text(c,0,0,c->width,KT_STRONG,"Revision %u / %s",p->revision,state);

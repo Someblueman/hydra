@@ -87,6 +87,14 @@ assert_equal failed "$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workf
     'the refused launch is recorded as failed'
 assert_equal 0 "$(find "$HYDRA_HOME/state/v2/projects/$project/workflows" -path '*/runs/run_*' -prune -type d 2>/dev/null | wc -l | tr -d ' ')" \
     'a returned proposal creates no run'
+assert_equal "$(printf 'HYDRA_PLAN_LAUNCH\t1\nL\t%s\tfailed\t-\t-\nF\t-\tLaunch refused: this proposal was returned for changes.\t-' "$returned_digest")" \
+    "$("$HYDRA_BIN" workflow plan --workspace-status "$returned_digest")" 'a launch that ended without a run reports why'
+"$HYDRA_BIN" workflow plan --workspace-owner "$returned_digest" "$head_id" "$instance" < "$root/returned-compiled.json"
+assert_failure $? 'the user can launch a revision again after a launch without a run, and it is checked again'
+assert_equal 1 "$(find "$HYDRA_HOME/state/v2/projects/$project/workflows/launches" -path "*/$returned_digest.failed-*/launch/owner.log" | wc -l | tr -d ' ')" \
+    'the earlier launch record is kept beside the new one'
+assert_equal failed "$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workflows/launches/$returned_digest/state")" \
+    'the new launch records its own refusal'
 
 plan_variant plan-ok expected.txt 'Revised objective' "$root/revised.json"
 "$HYDRA_BIN" workflow plan propose "$root/revised.json" --branch planner >/dev/null
@@ -99,6 +107,10 @@ ok_digest="$(compile_digest "$root/ok-compiled.json")"
 "$HYDRA_BIN" workflow plan --workspace-owner "$ok_digest" "$head_id" "$instance" < "$root/ok-compiled.json" >/dev/null 2>&1
 assert_success $? 'the launch owner runs an associated plan'
 ok_run="$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workflows/launches/$ok_digest/run-id")"
+"$HYDRA_BIN" workflow plan --workspace-owner "$ok_digest" "$head_id" "$instance" < "$root/ok-compiled.json" >/dev/null 2>&1
+assert_failure $? 'a launch that recorded a run is never started again'
+assert_equal "$ok_run" "$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workflows/launches/$ok_digest/run-id")" \
+    'the recorded run receipt is kept'
 assert_equal "$head_id" "$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workflows/runs/$ok_run/planning-head")" \
     'the run records its exact planning head'
 assert_equal "$instance" "$(sed -n '1p' "$HYDRA_HOME/state/v2/projects/$project/workflows/runs/$ok_run/planning-instance")" \

@@ -688,6 +688,14 @@ one inbox note each (keyed by event and step under `planning-notices/`, at most 
 per run) for that branch only while it still names the same head and instance. A
 queued note is not evidence that the agent read it. While open, the TUI also
 submits the run receipt and those state changes into the attached planning pane.
+One launch record exists per digest under `workflows/launches/<sha256>/`, and a
+digest is launched at most once while its record shows a run receipt or an
+uncertain outcome. A record that ended without a run receipt (state `failed`, or
+`finished` with a non-zero exit) also holds `failure`, and `--workspace-status`
+adds `F<TAB>code<TAB>message<TAB>recovery` after its `L` record (`-` for an absent
+field), taken from the owner's last error. Launching that digest again, which only
+the user's approval does, moves the old record to `<sha256>.failed-*/launch` and
+starts afresh; nothing is retried automatically.
 
 The private attachment helper accepts an optional absolute tmux socket after the
 head and instance IDs. Nested native clients carry their observed server selection
