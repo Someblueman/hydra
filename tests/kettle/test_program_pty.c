@@ -10,7 +10,7 @@
  * it writes, how it reacts to signals and a new size, and that every way of
  * leaving puts the terminal back exactly. */
 
-static char root[4096], build[4096], fixture[4096];
+static char root[4096], build[4096], fixture[4096], components_demo[4096];
 
 static void expect_at(bool passed, const char *file, int line, const char *message) {
     if (!passed)
@@ -271,10 +271,51 @@ static void lent(void) {
          "a quit signal while lent exits 128+signal with the terminal as found");
 }
 
+/* The components example on a real terminal: its first screen, a dialog
+ * typed into with a paste, a click on a tab, a theme change, a job whose
+ * timers stop when it ends, and the terminal as found afterwards. */
+static void components(void) {
+    const char *argv[] = {components_demo, NULL};
+    struct kt_session s;
+    size_t mark;
+    kt_open_terminal(&s, argv, 100, 30, NULL);
+    kt_until(&s, "feature-live", 5);
+    EXPECT(kt_contains(&s, "Heads") && kt_contains(&s, "Settings") && kt_contains(&s, "commands"), "first screen");
+    EXPECT(strstr(s.raw, "\033[?1000h\033[?1006h\033[?2004h") != NULL, "mouse buttons and bracketed paste");
+    kt_pump(&s, .1);
+    EXPECT(kt_pump(&s, .3) == 0, "idle demo wrote nothing");
+    kt_send(&s, "j");
+    kt_until(&s, "terminal gone", 3);
+    kt_send(&s, "n");
+    kt_until(&s, "Task name", 3);
+    kt_send(&s, "\033[200~fix-pty\033[201~");
+    kt_until(&s, "fix-pty", 3);
+    kt_send(&s, "\r");
+    kt_until(&s, "Created fix-pty", 3);
+    kt_send(&s, "\033[<0;37;1M\033[<0;37;1m");
+    kt_until(&s, "Project name", 3);
+    kt_send(&s, "\t");
+    kt_send(&s, "t");
+    kt_until(&s, "light theme", 3);
+    EXPECT(count(s.raw, "\033[2J") == 1, "a theme change repaints without erasing");
+    kt_send(&s, "w");
+    kt_until(&s, "Job finished", 10);
+    kt_pump(&s, .2);
+    EXPECT(kt_pump(&s, .3) == 0 && !kt_contains(&s, "building"), "nothing moves once the job is over");
+    EXPECT(frames_whole(s.raw), "all output is whole synchronized updates");
+    mark = s.raw_size;
+    kt_send(&s, "q");
+    await_raw(&s, "\033[?1049l", mark);
+    await_exit(&s);
+    kt_close(&s, "", 0, 0);
+    puts("PASS components demo: screen, dialog with paste, tab click, theme change, job, idle silence, restore");
+}
+
 int main(void) {
     kt_init();
     kt_paths(root, sizeof(root), build, sizeof(build));
     kt_format(fixture, sizeof(fixture), "%s/kettle-program-fixture", build);
+    kt_format(components_demo, sizeof(components_demo), "%s/kettle-components", build);
     observer_repaint();
     frames();
     resizing();
@@ -283,5 +324,6 @@ int main(void) {
     lending();
     asking();
     lent();
+    components();
     return 0;
 }

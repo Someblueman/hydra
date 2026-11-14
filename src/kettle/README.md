@@ -9,7 +9,9 @@ terminal screen/parser.
 On top of it, an optional POSIX runtime turns three functions (init, update,
 view) into a terminal application: it owns the event loop, terminal modes,
 signals, child processes and output. A second optional adapter runs one child
-PTY.
+PTY. On the runtime sits a set of [components](#components): lists, tables,
+text fields, dialogs, tabs and the rest, with footers and help generated from
+the keys that drive them.
 
 This is an internal API under development, not a published stable library.
 Headers document ownership and limits. The core does not allocate, read the clock,
@@ -260,22 +262,199 @@ status line, in any of the three themes (`t` changes it) and at any profile.
 runtime, through `kt_write_row`; piped, it carries attributes and no colour.
 [style.h](style.h) is the specification.
 
+## Components
+
+[components.h](components.h) is the set of pieces most screens are made of: a
+footer of key hints and a help screen, a list, a table, a scrolling text view,
+a text field, a confirmation, a form, a stack of dialogs, tabs, a spinner, a
+progress bar, notifications and a command palette.
+[`examples/components.c`](../../examples/components.c) uses every one of them
+in one small application. They all have the same shape:
+
+```c
+struct model { struct kt_list list; /* ... */ };
+
+kt_list_init(&m->list, head_item, m, count);          /* in place, once */
+
+case KT_MSG_RESIZE: kt_list_place(&m->list, rows);    /* where its view will draw */
+
+switch (kt_list_update(&m->list, msg, cmds)) {        /* the focused one first */
+case KT_LIST_CHOSEN: open(m, kt_list_index(&m->list)); return true;
+case KT_LIST_IGNORED: break;                          /* not its key: try the next */
+default: return true;
+}
+
+kt_list_view(&m->list, canvas, m->list.area);         /* in view, never changing it */
+```
+
+* **A component is a struct in the model.** It allocates nothing. What it
+  stores is bounded and inline (a text field's 128 bytes) or the caller's (a
+  filter's match slots); what it shows is read through a callback or from the
+  caller's array, so a list of 10,000 rows costs nothing to keep. Initialise
+  it where it lives and leave it there.
+* **`update` says what happened** in the component's own enum. Every one
+  starts with `_IGNORED`, which hands the message on, and `_HANDLED`; the
+  rest are outcomes such as `KT_LIST_CHOSEN`, `KT_TEXTINPUT_SUBMITTED` or
+  `KT_CONFIRM_ACCEPTED`. The application offers a key to whatever has the
+  focus and acts on outcomes; it never decodes the key again.
+* **`place` is where the view will draw**, told from `update`: scrolling needs
+  the height and the mouse needs the position. Lay out once, in a function
+  both `update` (on `KT_MSG_RESIZE`) and `view` call.
+* **Keys are a binding table**, `keys`, in [keymap.h](keymap.h) terms:
+  `kt_list_keymap(&list)` hands it to `kt_keymap_configure` to rebind, and
+  `kt_list_scope(&list)` says which bindings are live now. A binding's `group`
+  and `priority` are for the help generated from it.
+* **Looks are tokens** in the component's `style`, so every component follows
+  the theme. Change a member after init to change one instance.
+* **Time is commands.** A spinner or a toast asks for `kt_cmd_timer` with the
+  tag it was given and cancels it when there is nothing to show, so an idle
+  program still sleeps in `poll`.
+
+**Help and footer.** One line of hints that fits its width, and a full screen
+of every key, both from the tables that drive the keys. When the line runs out
+of room the lowest-priority entries go, whole, and it ends with "? more":
+
+```c
+struct kt_help_source sources[] = {
+    {m->list.keys, KT_LIST_ACTIONS, kt_list_scope(&m->list)},
+    {m->keys, APP_ACTIONS, 1},
+    {m->help.keys, KT_HELP_ACTIONS, kt_help_scope(&m->help)}};
+kt_help_set(&m->help, sources, 3);                  /* after every update */
+kt_help_view(&m->help, canvas, footer);             /* ↑/↓ select • enter open • q quit • ? more */
+```
+
+Neighbouring bindings with one label are one entry ("↑/↓ select"); three or
+more read as a range ("1–9 jump to tab"). `kt_help_modal` puts the full form
+in a dialog.
+
+**List.** Selectable rows from a callback, with section headers, one or two
+rows per item, a bar on the selected row, a status line and filtering as you
+type with the matched characters marked:
+
+```c
+static void head_item(void *context, size_t index, struct kt_list_item *item) {
+    item->title = heads[index].name;
+    item->header = heads[index].section;             /* drawn as a rule, never selected */
+    item->icon = "●";
+    item->icon_color = KT_COLOR_SUCCESS;
+}
+kt_list_init(&m->list, head_item, m, HEADS);
+kt_list_filter_storage(&m->list, m->matches, HEADS); /* '/' now filters */
+```
+
+**Table.** Columns sized by [layout.h](layout.h) constraints, cells cut with an
+ellipsis, a sort indicator. Sorting stays the application's: the table says by
+which column and which way.
+
+```c
+static const struct kt_table_column columns[] = {
+    {"HEAD", KT_MIN(16), KT_ALIGN_LEFT}, {"STATUS", KT_FIXED(15), KT_ALIGN_LEFT}};
+kt_table_init(&m->table, columns, 2, head_cell, m, rows);
+if (kt_table_update(&m->table, msg, cmds) == KT_TABLE_SORTED) sort_rows(m);
+```
+
+**Viewport.** Read-only text that scrolls: lines of styled runs from a
+callback, clipped or wrapped, or the rows of a canvas the application drew.
+With `follow` it stays at the end as lines arrive, until the reader scrolls
+away:
+
+```c
+kt_viewport_init(&m->log, log_line, m, count);
+m->log.follow = true;
+kt_viewport_set_count(&m->log, ++count);             /* a new line, still in view */
+```
+
+**Text input.** One line: cursor, sideways scrolling, placeholder, character
+limit, validation, a paste as one edit, word motions and suggestions:
+
+```c
+kt_textinput_init(&m->name, NULL, 0);                /* inline storage */
+m->name.placeholder = "fix-login-redirect";
+m->name.validate = needs_name;                       /* false with a reason in error */
+```
+
+**Confirm.** A question in a panel with buttons; y, n, arrows, Enter, Esc and
+the mouse. A destructive one is drawn in the danger colour:
+
+```c
+kt_confirm_init(&m->confirm, "Remove head", question, "Remove", "Cancel", true);
+```
+
+**Form.** Labelled text, choice and toggle fields with focus cycling, each
+with its hint or its error; Enter checks every field and reports
+`KT_FORM_SUBMITTED` or `KT_FORM_INVALID`:
+
+```c
+struct kt_field *f = m->fields;                      /* the model's, like the inputs */
+f[0].kind = KT_FIELD_TEXT; f[0].label = "Task name"; f[0].input = &m->name;
+f[1].kind = KT_FIELD_CHOICE; f[1].label = "Agent"; f[1].options = agents; f[1].option_count = 4;
+kt_form_init(&m->form, "New task", f, 2);            /* a title draws it as a dialog */
+```
+
+**Modal stack.** Dialogs over the view: the base is drawn and restyled faint,
+so it reads as a backdrop at every colour profile, and input goes to the top
+dialog only. Esc that the dialog leaves alone closes it; outcomes come back
+with the dialog's id:
+
+```c
+struct kt_modal modal = kt_confirm_modal(&m->confirm, REMOVE, 58);
+kt_modals_push(&m->modals, &modal);
+if (kt_modals_update(&m->modals, msg, cmds) == KT_MODALS_RESULT && m->modals.result == KT_CONFIRM_ACCEPTED)
+    remove_head(m);
+kt_modals_view(&m->modals, canvas, screen);          /* last in view */
+```
+
+**Tabs.** The active tab filled with the accent, the others muted, badges; at
+narrow widths the padding goes first, then the tabs far from the active one:
+
+```c
+static const struct kt_tab pages[] = {{"Heads", NULL, 0}, {"Log", "3", KT_COLOR_WARNING}};
+kt_tabs_init(&m->tabs, pages, 2);
+```
+
+**Spinner, progress bar, toasts.** The spinner's timer runs only while it is
+started and shown; the bar draws eighths of a cell (whole `#` cells on an ASCII
+canvas); toasts stack in a corner and each expires on its own one-shot timer:
+
+```c
+kt_spinner_start(&m->spinner, cmds);
+kt_progress_set(&m->progress, 0.4);
+kt_toasts_push(&m->toasts, cmds, KT_TOAST_SUCCESS, "Created fix-login-redirect");
+```
+
+**Command palette.** The application's bindings in a dialog, filtered with
+`kt_fuzzy` as one types, best first; the chosen binding's action runs as if its
+keys had been pressed:
+
+```c
+kt_palette_set(&m->palette, sources, 1);
+if (kt_palette_update(&m->palette, msg, cmds) == KT_PALETTE_CHOSEN)
+    perform(m, kt_palette_chosen(&m->palette)->action, cmds);
+```
+
+`kt_fuzzy` is a small standalone function: the pattern's characters in order,
+case ignored, scored for adjacency, word starts and a short span, with the
+matched positions for highlighting. `kt_fuzzy_rank` orders matches without
+allocating.
+
 ## Run the standalone examples
 
 From the repository root:
 
 ```sh
-make example-kettle example-counter example-themes example-workspace
+make example-kettle example-counter example-themes example-components example-workspace
 build/kettle-example
 build/kettle-counter
 build/kettle-themes
+build/kettle-components
 build/kettle-workspace
 build/kettle-workspace --shell
 ```
 
 `kettle-example` prints one static frame with the portable core alone.
-`kettle-counter`, `kettle-themes` and `kettle-workspace` are runtime
-applications.
+`kettle-counter`, `kettle-themes`, `kettle-components` and `kettle-workspace`
+are runtime applications; `kettle-components --print` writes its first screen
+once per built-in theme without the runtime.
 
 The workspace without a shell uses explicitly synthetic content. Tab changes pane
 focus; `j/k` and arrows navigate/scroll; `h/l` collapse/expand the tree; the mouse
@@ -319,10 +498,12 @@ checks; Hydra integration is excluded from the standalone test target.
 The POSIX demo is locally qualified on macOS; other platforms require their own
 runtime qualification. Python is used only by the optional PTY test target.
 
-`make test-kettle` exercises components, the runtime under its headless driver
-and with real child processes, and the counter and themes examples' own tests.
+`make test-kettle` exercises the core, the components (their pure parts, then
+their keys, pastes, mouse and timers under the headless driver), the runtime
+under its headless driver and with real child processes, and the counter,
+themes and components examples' own tests.
 `make test-workspace-pty` (which includes `make test-program-pty`) drives a
-runtime fixture and the workspace example on actual PTYs and reconstructs their
+runtime fixture, the components example and the workspace example on actual PTYs and reconstructs their
 displayed cells independently of the C parser. `make sanitize-workspace` runs
 all of it under the supported sanitizer setup. These test tools are not library
 or demo runtime dependencies.
@@ -360,6 +541,9 @@ or demo runtime dependencies.
   buffers, queues, captured output) through the allocator in `kt_options`, the
   C library's by default. One program holds the terminal at a time.
 * `testing.h`: the headless driver for runtime applications.
+* `components.h`: the component set on top of the runtime. Components are
+  caller-owned structs that allocate nothing; their data stays the caller's
+  and is read through callbacks or borrowed arrays.
 * `pty_posix.h`: an optional adapter for one child PTY; its descriptor joins the
   loop with `kt_cmd_watch`. The application closes it: closing the demo hangs up
   the child terminal and reaps its shell; it is not a sandbox for intentionally

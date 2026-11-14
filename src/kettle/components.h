@@ -97,7 +97,8 @@ struct kt_help_source { const struct kt_binding *bindings; size_t count; uint32_
  * help's own toggle and "more" ("? more"). A negative priority keeps a
  * binding out of the short form.
  *
- * The full form lists every entry with all of its chords, under the heading
+ * The full form lists every entry with all of its chords (the first only
+ * when all of them would take more than twelve columns), under the heading
  * of its binding's group, groups in the order they first appear, each
  * group's entries in as many columns as the width holds, filled top to
  * bottom. Key columns line up across groups. */

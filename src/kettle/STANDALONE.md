@@ -11,9 +11,10 @@ their layout can affect both source and binary compatibility.
 make                    # portable C99 static library, no POSIX layer
 make runtime            # also the optional POSIX runtime, its test driver and the components
 make test               # core suites, the runtime, the components, the examples' own tests
-make examples           # chart, counter, themes and workspace examples
+make examples           # chart, counter, themes, components and workspace examples
 make test-pty           # the runtime and a real shell on actual PTYs, native C observer
 build/kettle-counter
+build/kettle-components
 build/kettle-workspace --shell
 ```
 

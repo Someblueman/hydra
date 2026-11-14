@@ -15,7 +15,7 @@ OBJECTS = $(addprefix build/,$(addsuffix .o,$(CORE)))
 RUNTIME_OBJECTS = $(addprefix build/,$(addsuffix .o,$(RUNTIME)))
 COMPONENT_OBJECTS = $(addprefix build/,$(addsuffix .o,$(COMPONENTS)))
 LIBRARIES = build/libkettle-components.a build/libkettle-program.a build/libkettle.a
-TESTS = test_kettle test_kettle_present test_kettle_style test_kettle_draw test_kettle_workspace test_kettle_unicode test_kettle_terminal test_kettle_input test_kettle_keymap test_kettle_program test_kettle_counter test_kettle_themes test_kettle_components test_kettle_widgets
+TESTS = test_kettle test_kettle_present test_kettle_style test_kettle_draw test_kettle_workspace test_kettle_unicode test_kettle_terminal test_kettle_input test_kettle_keymap test_kettle_program test_kettle_counter test_kettle_themes test_kettle_components test_kettle_widgets test_kettle_components_example
 TEST_BINS = $(addprefix build/,$(TESTS))
 HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
@@ -41,6 +41,8 @@ build/test_kettle_components: tests/c/test_kettle_components.c $(LIBRARIES) $(HE
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
 build/test_kettle_widgets: tests/c/test_kettle_widgets.c $(LIBRARIES) $(HEADERS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
+build/test_kettle_components_example: examples/components_test.c examples/components.c $(LIBRARIES) $(HEADERS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
 build/test_kettle_counter: examples/counter_test.c examples/counter.c $(LIBRARIES) $(HEADERS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
 build/test_kettle_themes: examples/themes_test.c examples/themes.c $(LIBRARIES) $(HEADERS)
@@ -51,13 +53,15 @@ build/kettle-counter: examples/counter.c $(LIBRARIES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
 build/kettle-themes: examples/themes.c $(LIBRARIES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
+build/kettle-components: examples/components.c $(LIBRARIES)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
 build/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c examples/workspace_demo.h src/kettle/pty_posix.c $(LIBRARIES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) examples/workspace.c examples/workspace_view.c examples/workspace_input.c src/kettle/pty_posix.c $(LIBRARIES) -o $@
 build/test-workspace-child: tests/c/test_workspace_child.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $< -o $@
 build/kettle-program-fixture: tests/kettle/program_fixture.c $(LIBRARIES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(INCLUDES) $< $(LIBRARIES) -o $@
-examples: build/kettle-example build/kettle-counter build/kettle-themes build/kettle-workspace
+examples: build/kettle-example build/kettle-counter build/kettle-themes build/kettle-components build/kettle-workspace
 test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
 build/test-pty: tests/kettle/test_pty.c $(PTY_SUPPORT) tests/kettle/pty_support.h | build

@@ -9,6 +9,7 @@
 #define GROUPS 16
 #define COLUMN_GAP 6
 #define KEY_GAP 3
+#define KEY_LIMIT 12
 
 /* One hint: a run of adjacent bindings with the same label. */
 struct entry {
@@ -92,18 +93,23 @@ static bool chord_set(struct text *t, const struct entry *e, unsigned c) {
     return true;
 }
 
-/* The entry's keys: the first chord of each binding, or every chord. */
+/* The entry's keys: the first chord of each binding, or every chord while
+ * that stays within KEY_LIMIT columns, so one long alternative does not
+ * widen the key column of every entry. */
 static void entry_keys(struct entry *e, bool every) {
     struct text t;
     unsigned c;
+    size_t first;
     t.out = e->keys; t.capacity = sizeof(e->keys); t.used = 0;
     e->keys[0] = '\0';
     (void)chord_set(&t, e, 0);
+    first = t.used;
     for (c = 1; every && c < KT_BINDING_CHORDS; c++) {
         size_t mark = t.used;
         append(&t, "  ");
         if (!chord_set(&t, e, c)) { t.used = mark; e->keys[mark] = '\0'; }
     }
+    if (kt_text_width(e->keys) > KEY_LIMIT) e->keys[first] = '\0';
     e->key_width = kt_text_width(e->keys);
     e->label_width = kt_text_width(e->first->label);
 }

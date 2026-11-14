@@ -34,7 +34,8 @@ sed \
     "$_package_root/src/kettle/STANDALONE.md" > "$_package_dest/README.md"
 cp "$_package_root"/examples/workspace*.c "$_package_root/examples/workspace_demo.h" "$_package_root/examples/kettle.c" \
     "$_package_root/examples/counter.c" "$_package_root/examples/counter_test.c" \
-    "$_package_root/examples/themes.c" "$_package_root/examples/themes_test.c" "$_package_dest/examples/"
+    "$_package_root/examples/themes.c" "$_package_root/examples/themes_test.c" \
+    "$_package_root/examples/components.c" "$_package_root/examples/components_test.c" "$_package_dest/examples/"
 cp "$_package_root"/tests/c/test_kettle*.c "$_package_root/tests/c/test_workspace_child.c" "$_package_dest/tests/c/"
 for _package_file in pty_support.h pty_support.c screen_support.c fixture_support.c test_pty.c \
     program_fixture.c test_program_pty.c; do

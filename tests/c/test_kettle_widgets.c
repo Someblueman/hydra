@@ -201,7 +201,8 @@ static void list_keys(void) {
     CHECK(e.list.top == 7 && kt_list_index(&e.list) == 4);
     /* Help: '?' opens the full form, Esc closes it. */
     kt_test_type(t, "?");
-    CHECK(e.help.full && has(kt_test_screen(t), "Move") && has(kt_test_screen(t), "pgup/pgdn  ctrl+b/ctrl+f   page"));
+    CHECK(e.help.full && has(kt_test_screen(t), "Move") && has(kt_test_screen(t), "pgup/pgdn"));
+    CHECK(has(kt_test_screen(t), "\xe2\x86\x91/\xe2\x86\x93  k/j"));
     kt_test_type(t, "\033");
     kt_test_advance(t, 10);
     CHECK(!e.help.full);
