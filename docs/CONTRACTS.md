@@ -108,6 +108,12 @@ Head history remains after teardown with `desired-state=stopped`.
   its own log, whose events are removed (not archived) once a session summary
   or checkpoint represents them (see the statistics feed below), while
   lifecycle events keep the retention `hydra events retain` gives them.
+- A workflow run's `events.jsonl` is appended under the directory lock
+  `runs/<run>/.events.lock`, created with `mkdir`, whose `owner-pid` is the
+  process ID of the process that writes the event (not of the shell that
+  started it). A writer that finds the lock held removes it only when that
+  process is no longer alive (an unreaped zombie counts as gone); otherwise it
+  retries once a second, giving up after 30 tries.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.

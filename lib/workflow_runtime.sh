@@ -31,7 +31,12 @@ workflow_event() {
         [ "$_we_tries" -lt 30 ] || return 1
         sleep 1
     done
-    (umask 077; printf '%s\n' "$$" > "$_we_lock/owner-pid")
+    # The lock names the process that writes, which recovery above tests for
+    # life. In a subshell $$ would name the top-level process instead: a
+    # writer whose parent exited would lose its live lock to recovery, and a
+    # dead writer's lock would be kept while that parent lived.
+    _we_pid="$(exec sh -c 'printf %s "$PPID"')"
+    (umask 077; printf '%s\n' "$_we_pid" > "$_we_lock/owner-pid")
     _we_seq="$(awk 'END { print NR + 1 }' "$_we_file" 2>/dev/null || printf 1)"
     _we_now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '{"schema_version":1,"sequence":%s,"occurred_at":"%s","run_id":"%s","step_id":%s,"type":"%s","detail":"%s"}\n' \
