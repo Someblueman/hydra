@@ -3,6 +3,11 @@
 # intentionally not retained in the repository.
 # 3.0.0: rows for functions added or grown in 3.0 and not refactored record the
 # clang-tidy 22.1.8 scores CI reported on release/3.0.0 at 55bda27.
+# glibc: with -O2 glibc's tolower/toupper are macros with branches and FD_ZERO is
+# a loop, where macOS has a function call and __builtin_bzero. The rows for
+# live_ansible.c secret_key, live_ssh.c keyword_is, plan_obligations.c
+# contains_word, server.c host_platform, test_tui_pty.c write_input and
+# pty_support.c kt_pump record the glibc score so the gate also passes on Linux.
 examples/planning/feature/test_slug.c	main	26
 examples/planning/native/example_finite.c	ex_staged_check	19
 examples/planning/native/example_main.c	main	23
@@ -51,10 +56,12 @@ src/fleet/discovery/cli.c	parse_options	17
 src/fleet/discovery/live.c	hd_live_import	27
 src/fleet/discovery/live_ansible.c	hd_parse_ansible	30
 src/fleet/discovery/live_ansible.c	host_record	18
+src/fleet/discovery/live_ansible.c	secret_key	20
 src/fleet/discovery/live_dnssd.c	hd_scan_dnssd	22
 src/fleet/discovery/live_dnssd.c	service_line	16
 src/fleet/discovery/live_report.c	hd_record_add	16
 src/fleet/discovery/live_ssh.c	hd_parse_ssh_hosts	19
+src/fleet/discovery/live_ssh.c	keyword_is	19
 src/fleet/discovery/progress.c	binding	20
 src/fleet/discovery/progress.c	restore_row	18
 src/fleet/main.c	main	41
@@ -71,6 +78,7 @@ src/fleet/plan/plan_compile.c	plan_lower	22
 src/fleet/plan/plan_graph.c	coverage	30
 src/fleet/plan/plan_graph.c	plan_graph	34
 src/fleet/plan/plan_json.c	unique_members	34
+src/fleet/plan/plan_obligations.c	contains_word	44
 src/fleet/plan/plan_preview.c	plan_preview	21
 src/fleet/plan/plan_preview.c	plan_tui	17
 src/fleet/plan/plan_result.c	plan_delivery	41
@@ -125,7 +133,6 @@ src/fleet/task/task_store.c	task_read_record	16
 src/fleet/task/task_withdraw.c	task_withdraw	26
 src/fleet/transport/aggregate.c	f_aggregate	62
 src/fleet/transport/bootstrap.c	f_bootstrap	26
-src/fleet/transport/bootstrap.c	f_install	54
 src/fleet/transport/bundle.c	f_bundle_export	45
 src/fleet/transport/bundle.c	f_bundle_import	33
 src/fleet/transport/bundle.c	history_files	27
@@ -136,10 +143,10 @@ src/fleet/transport/remote.c	f_remote_enrolled	16
 src/fleet/transport/remote.c	f_request	18
 src/fleet/transport/server.c	f_handshake	22
 src/fleet/transport/server.c	f_serve	51
+src/fleet/transport/server.c	host_platform	20
 src/fleet/transport/server.c	workflow_runs	17
 src/fleet/tui.c	f_tui_data	16
 src/fleet/workflow/workflow_data.c	wd_cli	36
-src/fleet/workflow/workflow_data_files.c	producer_directory	17
 src/fleet/workflow/workflow_data_files.c	snapshot	20
 src/fleet/workflow/workflow_data_files.c	wd_file	16
 src/fleet/workflow/workflow_data_files.c	wd_prepare	18
@@ -243,7 +250,7 @@ tests/c/test_statistics.c	main	38
 tests/c/test_statistics.c	remote_rows	67
 tests/c/test_statistics_export.c	statistics_remote_cases	36
 tests/c/test_tui_measure_session.inc	measure_open	16
-tests/c/test_tui_pty.c	write_input	18
+tests/c/test_tui_pty.c	write_input	25
 tests/c/test_workflow_data.c	fingerprints	19
 tests/c/test_workflow_data.c	typed_files	20
 tests/fixture/events.c	fx_events	19
@@ -259,7 +266,7 @@ tests/kettle/pty_support.c	kt_abort	17
 tests/kettle/pty_support.c	kt_close	23
 tests/kettle/pty_support.c	kt_match	17
 tests/kettle/pty_support.c	kt_open	39
-tests/kettle/pty_support.c	kt_pump	49
+tests/kettle/pty_support.c	kt_pump	54
 tests/kettle/pty_support.c	kt_send_n	17
 tests/kettle/screen_support.c	character	41
 tests/kettle/screen_support.c	escape_end	32
