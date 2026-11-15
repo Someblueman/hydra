@@ -191,6 +191,8 @@ int main(void) {
     kt_write(path, "loop\n");
     hf_commit_init(&f);
     H("spawn", "one", "--no-agent");
+    /* The latency lines are typed after the prompt and must not wrap. */
+    hf_short_prompt(&f);
     hf_open(&f, &s);
     U("Heads \xe2\x94\x80", 5);
     U("Session     running", 10);

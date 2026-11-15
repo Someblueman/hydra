@@ -183,6 +183,23 @@ void hf_commit_init(struct hf_fixture *f) {
     hf_run(f, NULL, 0, commit);
     hf_run(f, NULL, 0, hydra);
 }
+/* The default prompt names the user, host and worktree. On CI runners that
+ * is long enough to wrap in a pane, which moves what a check types or reads
+ * (output scrolls out of view, a typed line wraps). */
+void hf_short_prompt(struct hf_fixture *f) {
+    const char *list[] = {"tmux", "list-sessions", "-F", "#{session_name}", NULL};
+    char sessions[4096], *line, *next;
+    kt_format(sessions, sizeof(sessions), "%s", hf_run(f, NULL, 0, list));
+    for (line = sessions; *line; line = next) {
+        char target[300];
+        next = line + strcspn(line, "\n");
+        if (*next) *next++ = 0;
+        if (!*line) continue;
+        kt_format(target, sizeof(target), "=%s:", line);
+        hf_run(f, NULL, 0, (const char *[]){"tmux", "send-keys", "-t", target, "-l", "PS1='$ '", NULL});
+        hf_run(f, NULL, 0, (const char *[]){"tmux", "send-keys", "-t", target, "Enter", NULL});
+    }
+}
 /* Started as `hydra tui` starts it: the helper reads the state store itself. */
 void hf_open(struct hf_fixture *f, struct kt_session *s) {
     const char *argv[] = {f->tui, "--hydra", f->hydra, "--store", NULL};

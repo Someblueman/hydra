@@ -196,11 +196,8 @@ static void fixture(void) {
     kt_format(evidence, sizeof(evidence), "%s/output-fidelity-evidence", f.build);
     kt_mkdir(evidence);
     /* The attached pane at 140x40 has room for the fixture's rows and a short
-     * prompt only: the default prompt names the user, host and worktree, and
-     * where those are long (CI runners) it wraps over three rows and scrolls
-     * the rows the checks read out of view. */
-    RUN("tmux", "send-keys", "-t", target, "-l", "PS1='$ '");
-    RUN("tmux", "send-keys", "-t", target, "Enter");
+     * prompt only. */
+    hf_short_prompt(&f);
 }
 
 int main(void) {

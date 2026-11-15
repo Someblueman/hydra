@@ -12,6 +12,8 @@ struct hf_fixture {
 void hf_init(struct hf_fixture *f, const char *name, const char *repo_name, bool copied_plan,
              bool tmux);
 void hf_commit_init(struct hf_fixture *f);
+/* Every head's shell prompts with "$ " from now on. */
+void hf_short_prompt(struct hf_fixture *f);
 const char *hf_run(struct hf_fixture *f, const char *input, int expected, const char *const argv[]);
 void hf_open(struct hf_fixture *f, struct kt_session *s);
 void hf_cleanup(void);
