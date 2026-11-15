@@ -170,11 +170,14 @@ def onboard() -> int:
     j.see("agents", "Agents on u10", "Install codex", timeout=300)
     # The selected choice is barred: "▌ " in a UTF-8 locale, "> " otherwise.
     selected = ("\u258c Install codex", "> Install codex")
+    # With no agent usable on the host yet the screen starts on the
+    # recommended one, which may already be codex: look before moving.
+    j.check("(recommended)" in j.driver.text(), "with no agent on the host yet one agent is recommended")
     for _ in range(12):
-        j.keys("j")
         j.driver.settle(quiet=0.2)
         if any(text in j.driver.text() for text in selected):
             break
+        j.keys("j")
     screen = j.see("agents-codex-selected", "Install codex")
     j.check(any(text in screen for text in selected), "Install codex is the selected choice")
     j.keys("\r")

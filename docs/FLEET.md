@@ -306,7 +306,10 @@ anyway. Other warnings (curl, a group-writable umask, ...) do not stop setup and
 stay visible in the step list. After provisioning
 the agent inventory is shown: choose "Install A" to review that agent's installer
 plan, "Sign in to A" for one already there, or Continue setup without agents
-(Enter on the done "Find agents" step shows the inventory again later). Agent
+(Enter on the done "Find agents" step shows the inventory again later). While no
+agent can run on the host the screen starts on the recommended one, the agent
+this machine runs or else the first with an installer; Enter there shows its plan,
+which still needs `y`. Agent
 installers and provider sign-in take over the terminal and return to Hydra when
 they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter

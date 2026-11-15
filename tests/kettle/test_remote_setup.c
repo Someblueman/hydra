@@ -243,6 +243,36 @@ static void known_key(int cols, int rows) {
     kt_close(&s, "q", 0, 0);
 }
 
+/* No agent can run on the host yet: the agents screen starts on the
+ * recommended one (the agent this machine runs, codex in the fixture), says
+ * once that installers are reviewed, and Enter there only asks for the
+ * installer's plan; Enter on that plan approves nothing. */
+static void no_agent(int cols, int rows) {
+    struct kt_session s;
+    const char *flags[] = {"known_key", "no_agent", NULL};
+    reset(flags);
+    launch(&s, cols, rows);
+    add_host(&s);
+    kt_until(&s, "Install Hydra on ovh", 6);
+    kt_send(&s, "y");
+    kt_until(&s, "Agents on ovh", 8);
+    kt_until(&s, "\xe2\x96\x8c Install codex (recommended)", 3);
+    see(&s, "Continue setup without an agent");
+    see(&s, "No agent can run on ovh yet");
+    CHECK(!kt_contains(&s, "you review the installer first"), "the review rule is said once, not on every row");
+    capture(&s, "30-agents-none");
+    kt_send(&s, "\r");
+    kt_until(&s, "esc decline", 8);
+    CHECK(called("install-agent ovh --agent codex --json"), "Enter on the recommended agent asks for its installer plan");
+    kt_send(&s, "\r");
+    kt_pump(&s, 1);
+    CHECK(calls("install-agent ") == 1 && !flagged("tty-install"), "Enter on the installer plan approves nothing");
+    kt_send(&s, "n");
+    kt_until(&s, "Not approved: nothing was changed", 3);
+    CHECK(!flagged("tty-install"), "a declined installer never runs");
+    kt_close(&s, "q", 0, 0);
+}
+
 /* A changed key is refused: no accept action exists, typing yes does nothing
  * and only the read-only check reruns. */
 static void changed_key(int cols, int rows) {
@@ -429,6 +459,8 @@ int main(void) {
     changed_key(140, 40);
     changed_key(80, 24);
     known_key(80, 24);
+    no_agent(80, 24);
+    no_agent(140, 40);
     cancel_running(80, 24, false);
     cancel_running(140, 40, true);
     edit_setup(80, 24);
@@ -439,7 +471,7 @@ int main(void) {
         kt_command_ok(NULL, remove);
     }
     puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, a missing-tmux pause, declined and "
-         "approved provision, agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed "
+         "approved provision, agent choice (the recommended agent first when none can run), installer and sign-in terminal hand-off (with a failed attempt), done; changed "
          "key refused; known key checked; a hanging step shown with its time, left running by Esc and cancelled by c; an unfinished setup edited, removed (and kept), and a duplicate name caught; 140x40 and 80x24");
     return 0;
 }

@@ -167,9 +167,23 @@ static void no_result(struct native_setup *s, int exit_status) {
     else snprintf(e->message, sizeof(e->message), "The setup command ended with exit status %d and no readable result.", exit_status);
 }
 
-static void show(struct native_setup *s) {
+/* The agents screen starts on its recommended row while no agent on the
+ * host is usable: getting one is the step that matters. Enter there only
+ * asks for the installer's plan or hands over the sign-in; installing still
+ * needs y on the plan. This machine's agents rank first. */
+static size_t recommended_row(const struct app *app, const struct native_setup *s) {
+    const struct hosts_machine *m = app->hosts ? &app->hosts->machine : NULL;
+    const char *local[HOSTS_AGENTS];
+    size_t i, count = 0;
+    for (i = 0; m && i < m->agent_count; i++) if (m->agents[i].available) local[count++] = m->agents[i].name;
+    return setup_recommended_row(s->current, local, count);
+}
+
+static void show(const struct app *app, struct native_setup *s) {
     s->screen = setup_screen_for(s->current);
-    s->scroll = 0; s->selected = 0; s->typed[0] = '\0'; s->paused = false;
+    s->scroll = 0; s->typed[0] = '\0'; s->paused = false;
+    s->recommended = s->screen == SETUP_SCREEN_AGENTS ? recommended_row(app, s) : 0;
+    s->selected = s->recommended;
     s->modal.screen = SETUP_SCREEN_NONE;
     if (s->screen == SETUP_SCREEN_HANDOFF && !handoff_prepare(s)) refuse(s);
 }
@@ -186,7 +200,7 @@ static bool automatic_continue(struct app *app, struct native_setup *s) {
         } else guided_start(app, s, false);
         if (s->job.active) return true;
     } else setup_notice(s, "Setup paused; Continue setup resumes it");
-    show(s);
+    show(app, s);
     return false;
 }
 
@@ -219,17 +233,17 @@ static void returned_failure(struct native_setup *s, const struct setup_step *st
 
 static void returned_result(struct app *app, struct native_setup *s) {
     const struct setup_step *step = find_step(s->current, s->handoff_step);
-    if (!s->current->ok) { show(s); return; }
+    if (!s->current->ok) { show(app, s); return; }
     if (step && setup_status_finished(step->status) && automatic_continue(app, s)) return;
     if (step && setup_status_finished(step->status)) return;
     returned_failure(s, step);
 }
 
 /* Shows the guided result kept while its preflight was checked. */
-static void show_held(struct native_setup *s) {
+static void show_held(const struct app *app, struct native_setup *s) {
     struct setup_envelope *swap = s->current;
     s->current = s->held; s->held = swap; s->held_valid = false;
-    show(s);
+    show(app, s);
 }
 
 /* The guided preflight: continue unless heads could not run on the host.
@@ -238,11 +252,11 @@ static void preflight_result(struct app *app, struct native_setup *s) {
     bool held = s->held_valid;
     s->held_valid = false;
     if (s->current->ok && !setup_heads_requirement(s->current)) {
-        if (held) show_held(s);
+        if (held) show_held(app, s);
         else guided_run(app, s, false);
         return;
     }
-    show(s);
+    show(app, s);
     s->paused = s->current->ok;
     s->held_valid = held && s->paused;
 }
@@ -259,7 +273,7 @@ static bool preflight_passed(const struct native_setup *s) {
 static void removed_result(struct app *app, struct native_setup *s) {
     bool replacing = s->replacing;
     s->replacing = false; s->editing[0] = '\0';
-    if (!s->current->ok) { show(s); return; }
+    if (!s->current->ok) { show(app, s); return; }
     if (replacing) {
         memset(s->current, 0, sizeof(*s->current));
         s->agents_offered = false;
@@ -280,7 +294,7 @@ static void job_result(struct app *app, struct native_setup *s, enum setup_job k
         if (s->job.active) return;
     }
     if (kind == SETUP_JOB_APPROVED && s->current->ok && automatic_continue(app, s)) return;
-    show(s);
+    show(app, s);
     if (kind == SETUP_JOB_APPROVED && s->screen == SETUP_SCREEN_STEPS) setup_notice(s, "Approved step finished");
 }
 
@@ -304,7 +318,7 @@ static void cancelled_finish(struct app *app, struct native_setup *s, enum setup
         copy_text(app->notice, sizeof(app->notice), notice);
         return;
     }
-    show(s);
+    show(app, s);
     setup_notice(s, notice);
 }
 
@@ -561,7 +575,7 @@ static void error_enter(struct app *app, struct native_setup *s) {
 /* Enter on requirements: after a pause, continue anyway (showing the kept
  * result when there is one); otherwise check again or continue. */
 static void preflight_enter(struct app *app, struct native_setup *s) {
-    if (s->paused && s->held_valid) { show_held(s); return; }
+    if (s->paused && s->held_valid) { show_held(app, s); return; }
     guided_start(app, s, false);
 }
 

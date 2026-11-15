@@ -379,6 +379,21 @@ const struct setup_requirement *setup_heads_requirement(const struct setup_envel
     return NULL;
 }
 
+bool setup_agent_usable(const struct setup_envelope *e) {
+    size_t i;
+    for (i = 0; i < e->agent_count; i++)
+        if (!strcmp(e->agents[i].status, "on_path") || !strcmp(e->agents[i].status, "recorded")) return true;
+    return false;
+}
+
+size_t setup_recommended_row(const struct setup_envelope *e, const char *const local[], size_t count) {
+    size_t i, k;
+    if (!e->choice_count || setup_agent_usable(e)) return 0;
+    for (i = 0; i < e->choice_count; i++)
+        for (k = 0; k < count; k++) if (local[k] && !strcmp(local[k], e->choices[i].agent)) return i + 1;
+    return 1;
+}
+
 const struct setup_step *setup_open_step(const struct setup_envelope *e) {
     size_t i;
     for (i = 0; i < e->step_count; i++) if (!setup_status_finished(e->steps[i].status)) return &e->steps[i];

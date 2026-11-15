@@ -296,12 +296,28 @@ static const char *agent_status(const char *status) {
     return status;
 }
 
-/* Fixed action rows: Continue setup, then one row per installer choice. */
-static void choice_text(const struct app *app, const struct setup_choice *c, bool selected, char *out, size_t size) {
-    const char *mark = selected ? (app->ascii ? ">" : "\xe2\x96\x8c") : " ";
-    if (!c) snprintf(out, size, "%s Continue setup", mark);
-    else if (c->install) snprintf(out, size, "%s Install %.60s (you review the installer first)", mark, c->agent);
-    else snprintf(out, size, "%s Sign in to %.60s", mark, c->agent);
+/* Fixed action rows: Continue setup, then one row per installer choice;
+ * the recommended one says so. */
+static void choice_text(const struct app *app, const struct native_setup *s, size_t row, char *out, size_t size) {
+    const struct setup_choice *c = row ? &s->current->choices[row - 1] : NULL;
+    const char *mark = s->selected == row ? (app->ascii ? ">" : "\xe2\x96\x8c") : " ";
+    const char *note = row && row == s->recommended ? " (recommended)" : "";
+    if (!c) snprintf(out, size, "%s Continue setup%s", mark, s->recommended ? " without an agent" : "");
+    else if (c->install) snprintf(out, size, "%s Install %.60s%s", mark, c->agent, note);
+    else snprintf(out, size, "%s Sign in to %.60s%s", mark, c->agent, note);
+}
+
+/* What the screen asks: getting an agent while none can run on the host. */
+static void agents_intro(struct app *app, const struct native_setup *s) {
+    char text[400];
+    if (!s->recommended) {
+        paragraph(app, "Choose an agent to install or sign in to, or continue setup. You review each installer's plan "
+                  "before it runs; sign-in runs in this terminal.", KT_BASE);
+        return;
+    }
+    snprintf(text, sizeof(text), "No agent can run on %.120s yet, so the recommended one is selected. You review each "
+             "installer's plan before it runs (y approves it); sign-in runs in this terminal.", s->name);
+    paragraph(app, text, KT_BASE);
 }
 
 static void agent_actions(struct app *app, const struct native_setup *s) {
@@ -310,7 +326,7 @@ static void agent_actions(struct app *app, const struct native_setup *s) {
     size_t i;
     for (i = 0; i <= e->choice_count && app->line < app->limit - 4; i++) {
         struct kt_style tone = s->selected == i ? KT_SELECTED : i ? KT_BASE : KT_STRONG;
-        choice_text(app, i ? &e->choices[i - 1] : NULL, s->selected == i, line, sizeof(line));
+        choice_text(app, s, i, line, sizeof(line));
         if (s->selected == i) column(app, 0, app->content_width, KT_SELECTED, "");
         column(app, 0, app->content_width, tone, line);
         app->line++;
@@ -324,8 +340,7 @@ static void render_agents(struct app *app, struct native_setup *s) {
     size_t i;
     snprintf(text, sizeof(text), "Agents on %.120s", s->name);
     title(app, KT_STRONG, text);
-    paragraph(app, "Choose an agent to install or sign in to, or continue setup without one. Installers ask for your approval; "
-              "sign-in runs in this terminal.", KT_BASE);
+    agents_intro(app, s);
     agent_actions(app, s);
     linef(app, "");
     pen_begin(&p, app, 2);

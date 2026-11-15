@@ -6,7 +6,8 @@
 # already known (known_key) passes the guided flow straight into preflight,
 # a remote without tmux (no_tmux) passes preflight with a warning, the guided flow selects
 # no agents without a terminal, `install-agent --json` selects one and returns
-# its plan, and installers and sign-in run only on a terminal. Progress is
+# its plan, no_agent reports an inventory with nothing usable, and installers
+# and sign-in run only on a terminal. Progress is
 # kept as marker files in $HYDRA_SETUP_FAKE. Every other command goes to the
 # ordinary TUI fixture.
 here="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
@@ -97,6 +98,9 @@ case "${1:-}:${2:-}" in
         if has needs_git && ! has git_fixed; then emit preflight-blocked.json 1; fi
         if has no_tmux; then emit preflight-tmux.json 0; fi
         emit preflight-ok.json 0 ;;
-    agents:ovh) emit agents.json 0 ;;
+    agents:ovh)
+        # no_agent: nothing on the remote can run yet (every agent missing).
+        if has no_agent; then emit agents-none.json 0; fi
+        emit agents.json 0 ;;
     *) exit 1 ;;
 esac

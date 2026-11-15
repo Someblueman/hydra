@@ -64,7 +64,8 @@ struct native_setup {
      * guided result while its preflight is checked (held_valid). */
     struct setup_envelope *current, *incoming, *sweep_result, *held;
     time_t job_started;
-    size_t handoff_argc, selected, scroll, record_count;
+    /* recommended: the agents screen's recommended row (0 for none). */
+    size_t handoff_argc, selected, recommended, scroll, record_count;
     struct setup_capture job, sweep;
     struct setup_field fields[SETUP_FORM_FIELDS];
     struct setup_modal modal;

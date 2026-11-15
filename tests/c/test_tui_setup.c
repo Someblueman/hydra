@@ -637,6 +637,40 @@ static void fixable_cases(struct app *app) {
     s->record_count = 0; s->open = false;
 }
 
+static size_t occurrences(const char *text, const char *needle) {
+    size_t count = 0;
+    for (; (text = strstr(text, needle)) != NULL; text += strlen(needle)) count++;
+    return count;
+}
+
+/* While no agent on the host can run, the agents screen recommends one (the
+ * agent this machine runs, else the first offered) and starts on it; once
+ * one is usable it starts on Continue setup. The review rule is said once. */
+static void agents_cases(struct app *app) {
+    static const char *const local[] = {"codex"}, *const unrelated[] = {"aider"};
+    struct native_setup *s = app->setup;
+    char frame[65536];
+    check(load("agents.json", s->current, 0) && setup_agent_usable(s->current) && setup_recommended_row(s->current, local, 1) == 0,
+          "with a usable agent nothing is recommended and Continue setup stays first");
+    check(load("agents-none.json", s->current, 0) && !setup_agent_usable(s->current) && setup_recommended_row(s->current, local, 1) == 2 &&
+          setup_recommended_row(s->current, unrelated, 1) == 1 && setup_recommended_row(s->current, NULL, 0) == 1,
+          "with no usable agent the recommended one is this machine's agent, else the first offered");
+    app->cols = 120; app->rows = 32; app->view = 6;
+    copy_text(s->name, sizeof(s->name), "ovh");
+    s->open = true; s->screen = SETUP_SCREEN_AGENTS; s->modal.screen = SETUP_SCREEN_NONE; s->notice[0] = '\0';
+    s->recommended = s->selected = 2;
+    hosts_focus_detail(app, true);
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "\xe2\x96\x8c Install codex (recommended)") &&
+          strstr(frame, "Continue setup without an agent") && strstr(frame, "No agent can run on ovh yet") &&
+          occurrences(frame, "installer's plan") == 1 && !strstr(frame, "you review the installer first"),
+          "the agents screen starts on the recommended agent and says once that installers are reviewed");
+    check(!strcmp(native_setup_label(app, KEY_SETUP_CONTINUE), "run"), "Enter on the recommended agent runs its row, never an approval");
+    keep("agents-none", 120, 32, frame);
+    s->recommended = s->selected = 0;
+    native_setup_close(app);
+    s->open = false;
+}
+
 /* An observed host that answers with no work: its confirmation is an age,
  * not epoch seconds, and the detail names the command that starts a head. */
 static void observed_cases(struct app *app) {
@@ -806,6 +840,7 @@ int main(int argc, char **argv) {
     edit_cases(app);
     default_name_cases(app);
     done_cases(app);
+    agents_cases(app);
     fixable_cases(app);
     observed_cases(app);
     freshness_cases(app);
