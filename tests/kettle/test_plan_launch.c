@@ -344,8 +344,21 @@ int main(void) {
     U(expected, 10);
     CHECK(!state_is(run_dir, "succeeded") && !state_is(run_dir, "failed"),
           "receipt observed during execution");
-    S("E");
-    U("This revision was already submitted", 3);
+    {
+        /* The refusal is looked for after every read, for longer than a
+         * key normally takes: on the macOS runner the answer once took more
+         * than 3 s. If it never comes, say whether it was ever drawn. */
+        size_t mark = s.raw_size;
+        double end;
+        S("E");
+        end = kt_now() + 6;
+        while (!kt_contains(&s, "This revision was already submitted") && kt_now() < end)
+            kt_pump(&s, .001);
+        if (!kt_contains(&s, "This revision was already submitted"))
+            fprintf(stderr, "the refusal was %sin the output since E\n",
+                    strstr(s.raw + mark, "already submitted") ? "" : "never ");
+        U("This revision was already submitted", 0);
+    }
     CHECK(!kt_contains(&s, "Execute plan"), "duplicate launch form refused");
     kt_close(&s, "q", 0, 0);
     CHECK(!kt_exists(compiled), "UI temp snapshot cleaned");
