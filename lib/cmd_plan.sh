@@ -298,6 +298,7 @@ cmd_plan_review() {
         shift
     done
     _cpr_dir="$(cmd_plan_run_dir "$_cpr_run")" || return 1
+    git_isolate_config
     _cpr_project="$(state_v2_project_dir "$(sed -n '1p' "$_cpr_dir/project-id")")" || return 1
     workflow_plan_tool review-text "$_cpr_dir" "$_cpr_project" $_cpr_json
 }

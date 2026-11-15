@@ -81,6 +81,7 @@ cmd_workflow() {
         review)
             shift
             _load_lib workflow_review
+            git_isolate_config
             workflow_review "$@"
             ;;
         --review-parse)
@@ -91,6 +92,7 @@ cmd_workflow() {
         review-data)
             shift
             [ "$#" -eq 13 ] || [ "$#" -eq 14 ] || return 2
+            git_isolate_config
             cmd_fleet_dispatch workflow-review-data "$@"
             ;;
         -h|--help|'')

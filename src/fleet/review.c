@@ -405,7 +405,7 @@ static json_object *candidate(const char *project, const char *run, const char *
     if (!review_paths(&ctx, project, run, step, attempt, revision))
         return f_error("workflow-review", "candidate_unavailable",
                        "the selected immutable workflow attempt is unavailable");
-    if (!review_git_environment_clean())
+    if (!review_git_hermetic())
         return f_error("workflow-review", "git_environment_redirect",
                        "review requires Git repository redirects to be unset");
     ctx.attention = wd_attention(project);

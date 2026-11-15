@@ -32,10 +32,10 @@ export TMPDIR TMUX_TMPDIR
 # and one started from an agent's head must not run as that agent.
 unset TMUX TMUX_PANE HYDRA_HEAD_ID HYDRA_INSTANCE_ID
 # Git configuration injected through the environment (some CI and cloud
-# containers export GIT_CONFIG_COUNT/KEY_n/VALUE_n) reaches every fixture
-# repository, and review routes refuse it as a repository redirect by design
-# (git_environment_redirect). Cases build their own repositories and assert
-# that refusal explicitly, so they start without it.
+# containers export GIT_CONFIG_COUNT/KEY_n/VALUE_n) would reach every fixture
+# repository. Review and landing drop it themselves; cases build their own
+# repositories and set it explicitly where they test that, so they start
+# without it.
 for case_git_variable in $(env | sed -n 's/^\(GIT_CONFIG_[A-Z0-9_]*\)=.*/\1/p'); do
     case "$case_git_variable" in
         GIT_CONFIG_COUNT|GIT_CONFIG_KEY_*|GIT_CONFIG_VALUE_*|GIT_CONFIG_PARAMETERS) unset "$case_git_variable" ;;

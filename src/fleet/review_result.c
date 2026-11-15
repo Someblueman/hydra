@@ -460,7 +460,7 @@ static char *git_text(const char *repo, char *const args[], size_t limit)
     while (*args && n < 15)
         argv[n++] = *args++;
     argv[n] = NULL;
-    if (review_git_environment_clean() && !f_run(argv, NULL, 0, 30, &capture) && !capture.status && capture.out) {
+    if (review_git_hermetic() && !f_run(argv, NULL, 0, 30, &capture) && !capture.status && capture.out) {
         if (capture.out_bytes > limit)
             capture.out[limit] = 0;
         text = capture.out;

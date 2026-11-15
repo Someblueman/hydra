@@ -1120,6 +1120,23 @@ special, or changed configuration invalidates the approval. Submitted workflows 
 the restricted YAML subset, explicit argv, declared inputs/outputs, and exact
 digests. Shell strings require both `allow_shell: true` and a current trust decision.
 
+Review and landing run Git without configuration injected through the
+environment: `hydra review`, `hydra diff`, `hydra plan review`, `hydra
+workflow review`, `hydra workflow review-data`, `hydra land` and the native
+review commands (`workflow-review`, `workflow-review-data`, `fleet review`,
+`fleet review-data`, the plan result review) remove `GIT_CONFIG_COUNT` with
+its `GIT_CONFIG_KEY_<n>`/`GIT_CONFIG_VALUE_<n>` pairs and
+`GIT_CONFIG_PARAMETERS` from their own environment first, so the repository's,
+the user's and the system's Git configuration apply and the injected values
+neither change their output nor make them refuse. Earlier releases refused
+review with `git_environment_redirect` when either variable was set. Repository
+and configuration-file redirects (`GIT_DIR`, `GIT_WORK_TREE`,
+`GIT_COMMON_DIR`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`,
+`GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_SHALLOW_FILE`, `GIT_GRAFT_FILE`,
+`GIT_CONFIG`, `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_GLOBAL`, `GIT_EXEC_PATH`) are
+still refused with `git_environment_redirect`. Commands that run user or agent
+work (exec, gates, workflow steps) keep the caller's environment.
+
 Headless agent profiles are literal, schema-versioned declarations. Prompt and resume
 slots are bounded and cannot contain shell templates; an exact recorded session,
 head, instance, worktree, and profile are required for resume. Provider completion

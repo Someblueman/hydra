@@ -79,6 +79,8 @@ cmd_land() {
     esac
     _cl_branch="${1:-}"
     [ -n "$_cl_branch" ] || { cli_error land invalid_input "head is required" "run hydra land <worker> [--into <branch>] [--dry-run] [--keep-head]"; return 1; }
+    # Landing reads and merges with the repository's own Git configuration.
+    git_isolate_config
     shift
     _cl_into="" _cl_gate="" _cl_dry=0 _cl_keep=0
     while [ $# -gt 0 ]; do

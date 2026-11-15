@@ -167,3 +167,26 @@ char *f_quote(const char *value) {
     }
     result[at++] = '\''; result[at] = '\0'; return result;
 }
+/* Git reads configuration from GIT_CONFIG_COUNT with GIT_CONFIG_KEY_<n> and
+ * GIT_CONFIG_VALUE_<n>, and from GIT_CONFIG_PARAMETERS (what git -c passes to
+ * its children). Removing them from this process makes later Git children
+ * read only the repository's, the user's and the system's configuration. */
+#define GIT_CONFIG_PAIRS_MAX 4096UL
+void f_git_isolate_config(void) {
+    const char *count = getenv("GIT_CONFIG_COUNT");
+    unsigned long pairs = 0, i;
+    char name[48];
+    if (count) {
+        char *end = NULL;
+        pairs = strtoul(count, &end, 10);
+        if (!end || *end || pairs > GIT_CONFIG_PAIRS_MAX) pairs = GIT_CONFIG_PAIRS_MAX;
+    }
+    for (i = 0; i < pairs; i++) {
+        (void)snprintf(name, sizeof(name), "GIT_CONFIG_KEY_%lu", i);
+        (void)unsetenv(name);
+        (void)snprintf(name, sizeof(name), "GIT_CONFIG_VALUE_%lu", i);
+        (void)unsetenv(name);
+    }
+    (void)unsetenv("GIT_CONFIG_COUNT");
+    (void)unsetenv("GIT_CONFIG_PARAMETERS");
+}

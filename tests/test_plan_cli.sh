@@ -7,8 +7,6 @@ REPO="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO/bin/hydra"
 root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$root/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
-# Result reviews query Git; container-wide configuration does not belong here.
-unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 # shellcheck source=/dev/null
 . "$REPO/tests/helpers.sh"
 test_count=0 pass_count=0 fail_count=0
@@ -155,6 +153,15 @@ grep -q "Result ready: hydra plan review $run" "$root/status.out"
 assert_success $? 'status finds the latest plan run and says the result is ready'
 hydra plan review > "$root/review.out"
 assert_success $? 'the review needs no identifiers'
+# Git configuration injected through the environment (as some containers do)
+# neither stops the review nor changes what it shows.
+GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=diff.noprefix GIT_CONFIG_VALUE_0=true \
+    GIT_CONFIG_KEY_1=diff.mnemonicPrefix GIT_CONFIG_VALUE_1=true hydra plan review > "$root/review-injected.out" 2>&1
+assert_success $? 'the review works with Git configuration injected through the environment'
+cmp -s "$root/review.out" "$root/review-injected.out"
+assert_success $? 'injected Git configuration does not change the review'
+grep -q '^ *diff --git a/greeting.txt b/greeting.txt$' "$root/review.out"
+assert_success $? 'the review shows the diff with its usual prefixes'
 grep -q 'verdict PASS (verified)' "$root/review.out" && grep -q 'make check exited 0 on commit' "$root/review.out"
 assert_success $? 'the review shows the verified check bound to the worker commit'
 on_terminal y "$HYDRA_BIN" plan approve > "$root/again.out" 2>&1
@@ -189,10 +196,12 @@ printf 'scratch\n' > "$worker/notes.txt"
 on_terminal n "$HYDRA_BIN" land greeting-work > "$root/land-no.out" 2>&1
 grep -q 'Not landed; nothing was changed.' "$root/land-no.out"
 assert_success $? 'declining the confirmation lands nothing'
-on_terminal y "$HYDRA_BIN" land greeting-work > "$root/land.out" 2>&1
+on_terminal y env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0=Injected \
+    "$HYDRA_BIN" land greeting-work > "$root/land.out" 2>&1
 grep -q 'Landed greeting-work into master' "$root/land.out" || grep -q 'Landed greeting-work into main' "$root/land.out"
 assert_success $? 'landing merges into the current branch'
 assert_equal "$verified" "$(git rev-parse HEAD^2)" 'the merge takes exactly the verified commit'
+assert_equal Test "$(git log -1 --format=%an HEAD)" 'landing ignores Git configuration injected through the environment'
 if [ -s greeting.txt ] && [ -f tests/greeting.sh ]; then check=0; else check=1; fi
 assert_success "$check" 'the checkout has the verified change'
 grep -q 'is kept: its worktree has changes that are not on the branch' "$root/land.out" && [ "$(cat "$worker/notes.txt")" = scratch ]

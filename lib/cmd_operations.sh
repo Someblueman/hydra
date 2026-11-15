@@ -190,6 +190,7 @@ cmd_diff() {
         shift
     done
     lifecycle_load_head "$_cd_branch" || { cli_error diff not_found "Head '$_cd_branch' is unavailable" "inspect with hydra list"; return 1; }
+    git_isolate_config
     _cd_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree")"
     _cd_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref")"
     [ -d "$_cd_worktree" ] || { cli_error diff worktree_unavailable "worktree is unavailable" "run hydra lifecycle $_cd_branch"; return 1; }
@@ -220,6 +221,7 @@ cmd_review() {
         return 1
     fi
     lifecycle_load_head "$_crv_branch" || { cli_error review not_found "Head '$_crv_branch' is unavailable" "inspect with hydra list"; return 1; }
+    git_isolate_config
     _crv_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree")"
     _crv_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref")"
     [ -d "$_crv_worktree" ] || return 1
