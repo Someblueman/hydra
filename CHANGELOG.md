@@ -458,6 +458,9 @@ reports a failing check in its exit status. The entries marked
   not landable as is, lists the paths and how to commit them; the review,
   the Work panel and the docs give one land command, and the suggested
   cleanup uses `--protect-untracked` so it cannot delete the verified work.
+- On macOS, spawns and fleet tasks are admitted again once a host has
+  finished work. Pruning finished admission records stopped `/bin/sh`
+  (bash 3.2) with a syntax error, so every later admission failed.
 
 ## [3.0.0] - 2026-10-17
 

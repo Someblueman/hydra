@@ -149,6 +149,19 @@ admission_scan() {
     admission_prune
 }
 
+# Removes each listed record that is finished and not the newest, printing
+# an x for each. Its own function: bash 3.2 (macOS /bin/sh) ends a command
+# substitution at the closing parenthesis of a case pattern inside it.
+admission_prune_expired() {
+    while IFS= read -r _ad_old; do
+        _ad_old="${_ad_old#./}"
+        [ "$_ad_old" != "$_ad_top" ] || continue
+        case "$_ad_finished" in *"
+$_ad_old
+"*) rm -f "$_ad_old" && printf 'x' ;; esac
+    done
+}
+
 # Removes finished records past the retention rules above. Runs under the
 # admission lock after a scan; record names are restricted tokens.
 admission_prune() {
@@ -160,13 +173,7 @@ $_ad_top
     (
         cd "$_ad_root" || exit 1
         _ad_removed="$(find . ! -name . -prune -type f -name '*.request' -mtime +$((ADMISSION_KEEP_DAYS - 1)) -print |
-            while IFS= read -r _ad_old; do
-                _ad_old="${_ad_old#./}"
-                [ "$_ad_old" != "$_ad_top" ] || continue
-                case "$_ad_finished" in *"
-$_ad_old
-"*) rm -f "$_ad_old" && printf 'x' ;; esac
-            done)"
+            admission_prune_expired)"
         [ "$((_ad_finished_count - ${#_ad_removed}))" -gt "$ADMISSION_KEEP_FINISHED" ] || exit 0
         _ad_names="$(printf '%s' "$_ad_finished" | grep -vxF -e "$_ad_top" -e '')"
         [ -n "$_ad_names" ] || exit 0
