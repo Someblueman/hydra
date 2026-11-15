@@ -92,6 +92,7 @@ static void json_utf8(void) {
 #include "test_fleet_attention.inc"
 #include "test_fleet_discovery.inc"
 #include "test_fleet_sha256.inc"
+#include "test_fleet_capture.inc"
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -100,6 +101,7 @@ int main(void) {
     assert(mkdtemp(dir)); f_home = dir; f_hydra = "hydra";
     capture_streams();
     sha256_vectors(dir);
+    capture_growth();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
     json_utf8();
