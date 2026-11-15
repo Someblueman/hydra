@@ -138,6 +138,9 @@ assert_success $? "static DAG executes successfully"
 parallel_run="$(sed -n '1p' "$test_root/parallel.out")"
 parallel_dir="$(run_dir_for "$parallel_run")"
 assert_equal succeeded "$(sed -n '1p' "$parallel_dir/state")" "run records a terminal success"
+# A reaped command's pid can be reused at once, so no step keeps naming it
+# for a later cancel to signal.
+assert_equal "" "$(find "$parallel_dir/steps" -name command-pid)" "finished steps name no command pid"
 parallel_json="$("$HYDRA_BIN" workflow status "$parallel_run" --json)"
 case "$parallel_json" in
     *'"schema_version":1'*'"ok":true'*'"command":"workflow status"'*'"data":{'*)

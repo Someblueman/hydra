@@ -80,6 +80,8 @@ workflow_task_worker() {
     workflow_atomic_scalar "$_wts_sd/command-pid" "$_wts_pid"
     if wait "$_wts_pid"; then _wts_code=0; else _wts_code=$?; fi
     trap - HUP INT TERM
+    # Reaped: its pid may be reused before the step records its result.
+    rm -f "$_wts_sd/command-pid"
     if [ "$_wts_code" -eq 0 ]; then
         if [ -f "$_wts_attempt/outputs.json" ]; then
             workflow_data_tool verify-output "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76

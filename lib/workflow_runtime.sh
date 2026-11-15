@@ -462,6 +462,10 @@ EOF
     workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
     if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
     trap - HUP INT TERM
+    # The command is reaped, so its pid is free for the system to reuse while
+    # the step is still running (committing, sealing). A cancel must not
+    # signal whatever process gets it next.
+    rm -f "$_wss_sd/command-pid"
     [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
     if [ "$_ws_code" -eq 0 ] && [ -n "$_ws_tree" ]; then
         if [ "$_ws_hook_kind" = agent ]; then
