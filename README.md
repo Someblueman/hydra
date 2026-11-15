@@ -27,14 +27,14 @@ throwaway repository: real heads, plan and workflow runs, a scripted stand-in fo
 the agent and a recorded remote-host observation.
 [What it shows and how to re-record it](assets/demos/README.md)
 
-**v3.0.0** makes the control centre one workspace for local and remote work:
-`hydra tui` shows the heads and tasks of your registered hosts beside local work,
-with their host and how fresh each observation is, and attaches, interrupts and
-answers remote work with the same keys. Remote tasks can be placed automatically
-on an eligible host, task pools and host-timer schedules run work through the
-same commands, and onboarding many hosts gains live inventory sources, revocation
-and an operator view. This is a major release: see the changelog's compatibility
-notes before upgrading scripts or fleet hosts.
+**v4.0.0** rebuilds the control centre on kettle, Hydra's own terminal runtime:
+`hydra tui` is four screens instead of ten tabs. Work shows each head beside its
+live conversation, with its plan and run a page away. Inbox gathers everything
+that needs you and acts on it in place. Hosts sets up remote machines and leads
+straight into work on them, and Stats measures sessions and runs. Planning is
+shorter and plan checks are faster. This is a major release: keys, the removed
+shell TUI and `hydra plan propose`'s exit status changed, so see the changelog's
+compatibility notes before upgrading scripts or keys files.
 Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in

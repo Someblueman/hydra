@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-15
+
+Hydra 4.0.0 rebuilds the control centre on kettle, a C runtime for terminal
+applications in the Elm style (formerly the termviz drawing library). `hydra
+tui` becomes four screens:
+- **Work:** heads beside the selected head's live conversation, with Details,
+  Plan and Run pages.
+- **Inbox:** everything that needs a human, acted on in place behind a
+  confirmation.
+- **Hosts:** this machine, remote hosts and their setup.
+- **Stats:** sessions and runs.
+
+It draws each frame in one write and does not wake when idle. Every key comes
+from one configurable table that also generates the footer and help, and the
+agent pane's chords no longer collide with tmux. Planning is a shorter
+propose, approve, review and land flow, and plan checks run about three times
+faster. An experimental native run driver is available behind
+`HYDRA_NATIVE_DRIVER=1`. Remote setup leads straight into work on the new
+host, and `hydra tui` observes registered hosts again. This is a major
+release: the shell TUI is removed, keys moved, and `hydra plan propose`
+reports a failing check in its exit status. The entries marked
+**Breaking** below, and "What moved" in `docs/USAGE.md`, say what to change.
+
 ### Added
 
 - An experimental native workflow run driver, selected with
@@ -2599,7 +2622,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/Someblueman/hydra/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Someblueman/hydra/compare/v2.9.0...v3.0.0
 [2.9.0]: https://github.com/Someblueman/hydra/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/Someblueman/hydra/compare/v2.7.0...v2.8.0
