@@ -167,23 +167,26 @@ static json_object *plan_member(json_object *plan, const char *path) {
     memcpy(head, path, (size_t)(dot - path)); head[dot - path] = '\0';
     return plan_member(f_field(plan, head), dot + 1);
 }
+static void print_scalar(json_object *value) {
+    print_safe(json_object_is_type(value, json_type_string) ? json_object_get_string(value) : json_object_to_json_string(value));
+}
+static void print_list(json_object *value) {
+    size_t i;
+    for (i = 0; i < json_object_array_length(value); i++) {
+        if (i) fputs(", ", stderr);
+        print_scalar(json_object_array_get_idx(value, i));
+    }
+}
 static void print_value(const char *key, json_object *value) {
     size_t i;
-    if (json_object_is_type(value, json_type_array)) {
-        for (i = 0; i < json_object_array_length(value); i++) {
-            json_object *item = json_object_array_get_idx(value, i);
-            if (i) fputs(", ", stderr);
-            print_safe(json_object_is_type(item, json_type_string) ? json_object_get_string(item) : json_object_to_json_string(item));
-        }
-        return;
-    }
+    if (json_object_is_type(value, json_type_array)) { print_list(value); return; }
     if (json_object_is_type(value, json_type_boolean)) { fputs(json_object_get_boolean(value) ? "yes" : "no", stderr); return; }
     for (i = 0; i < sizeof(plan_values) / sizeof(plan_values[0]); i++)
         if (!strcmp(key, plan_values[i][0]) && json_object_is_type(value, json_type_string) && !strcmp(json_object_get_string(value), plan_values[i][1])) {
             fputs(plan_values[i][2], stderr);
             return;
         }
-    print_safe(json_object_is_type(value, json_type_string) ? json_object_get_string(value) : json_object_to_json_string(value));
+    print_scalar(value);
 }
 static void print_row(const char *label, const char *path, json_object *value) {
     fprintf(stderr, "  %-18s", label);

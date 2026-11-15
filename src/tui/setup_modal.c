@@ -167,7 +167,7 @@ static void key_command(const struct setup_envelope *e, char *out, size_t size) 
     char type[32];
     size_t i;
     copy_text(type, sizeof(type), plan_value(e, "key_type"));
-    for (i = 0; type[i]; i++) type[i] = (char)tolower((unsigned char)type[i]);
+    for (i = 0; type[i]; i++) if (type[i] >= 'A' && type[i] <= 'Z') type[i] = (char)(type[i] - 'A' + 'a');
     if (!type[0] || strspn(type, "abcdefghijklmnopqrstuvwxyz0123456789") != strlen(type)) copy_text(type, sizeof(type), "ed25519");
     snprintf(out, size, "ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub", type);
 }
