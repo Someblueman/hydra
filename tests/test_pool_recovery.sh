@@ -225,6 +225,10 @@ out="$("$HYDRA_BIN" pool cancel slow --json)"
 assert_equal 1 "$(json_field "$out" signalled)" "pool cancellation signals the claimed workflow task"
 wait "$patient" 2>/dev/null || true
 assert_equal cancelled "$(sed -n '1p' "$slow_dir/tasks/linger/state")" "the workflow task ends cancelled"
+# hydra workflow cancel asks the run's driver to stop; the driver records
+# the cancelled state when it has stopped the step, which can follow the
+# task's own end.
+WAIT_FOR_TIMEOUT=30 wait_for "the workflow run to end cancelled" state_is "$slow_run_dir/state" cancelled
 assert_equal cancelled "$(sed -n '1p' "$slow_run_dir/state")" "cancellation reached the workflow run through hydra workflow cancel"
 "$HYDRA_BIN" state verify >/dev/null 2>&1
 assert_success $? "state verifies after pool execution"
