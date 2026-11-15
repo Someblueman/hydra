@@ -1389,6 +1389,14 @@ static bool actions_same(const struct sigaction before[HANDLED]) {
     return true;
 }
 
+/* The file status flags a program can change with F_SETFL. F_GETFL may
+ * report more: macOS adds a flag of its own once the descriptor has been
+ * written to, which no program sets or clears. */
+static int settable_flags(int fd) {
+    int flags = fcntl(fd, F_GETFL);
+    return flags < 0 ? flags : flags & (O_ACCMODE | O_APPEND | O_NONBLOCK);
+}
+
 /* The same program object runs twice; each run leaves the terminal, the
  * descriptor flags and the signal dispositions exactly as it found them. */
 static void test_real_restoration(void) {
@@ -1405,7 +1413,8 @@ static void test_real_restoration(void) {
     probe.quit_ms = 30;
     options.input_fd = options.output_fd = terminal.slave;
     CHECK(tcgetattr(terminal.slave, &saved) == 0);
-    flags = fcntl(terminal.slave, F_GETFL);
+    flags = settable_flags(terminal.slave);
+    CHECK(flags >= 0);
     actions_read(before);
     program = kt_program_new(&probe_app, &probe, &options);
     CHECK(program != NULL);
@@ -1414,7 +1423,10 @@ static void test_real_restoration(void) {
         CHECK(kt_program_run(program) == 5);
         CHECK(tcgetattr(terminal.slave, &after) == 0);
         CHECK(same_terminal(&saved, &after));
-        CHECK(fcntl(terminal.slave, F_GETFL) == flags);
+        if (settable_flags(terminal.slave) != flags)
+            fprintf(stderr, "file status flags %#x before, %#x after (F_GETFL %#x)\n", (unsigned)flags,
+                    (unsigned)settable_flags(terminal.slave), (unsigned)fcntl(terminal.slave, F_GETFL));
+        CHECK(settable_flags(terminal.slave) == flags);
         CHECK(actions_same(before));
         CHECK(!kt_program_post(program, &msg));
     }
