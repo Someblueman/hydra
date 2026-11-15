@@ -1160,6 +1160,18 @@ workflow steps through them) waits for a busy admission lock up to its queue dea
 request, claims, and release; other callers, such as `hydra admission status`, give
 up after about 2 seconds with `state_unavailable`.
 
+Admission records are `$HYDRA_HOME/admission/<id>.request`. Every admission
+command that scans them (status, request, inspect, claim, cancel, unknown,
+release) also prunes finished records, those `released`, `cancelled`, `expired`
+or `refused`, under the admission lock and with the retention shape of head
+event archives: a finished record unchanged for 30 days is removed, and of the
+rest at most the 256 most recently changed are kept. Records that are
+`queued`, `reserved` or `unknown` are never removed, however old, nor is the
+record the running command names or the one holding the highest sequence
+number, so sequence numbers keep increasing. Once its record is pruned an ID
+is unknown to the authority (`not_found`); execution owners use a fresh ID for
+every execution, and a pruned ID is never one an owner still holds.
+
 ## Compatibility and release policy
 
 The public surface includes CLI syntax, machine-readable JSON, durable state and

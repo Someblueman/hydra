@@ -109,8 +109,18 @@ admission_write() {
     fi
 }
 
+# Finished records (released, cancelled, expired, refused) are kept as head
+# event archives are: none unchanged for 30 days, and at most the 256 most
+# recently changed. Queued, reserved and unknown records are never removed,
+# nor is the record the current command names or the one holding the highest
+# sequence number, so sequence numbers never repeat.
+ADMISSION_KEEP_DAYS=30
+ADMISSION_KEEP_FINISHED=256
+
 admission_scan() {
     _ad_reserved=0 _ad_queued=0 _ad_project_reserved=0 _ad_first=0 _ad_next=1
+    _ad_finished='
+' _ad_finished_count=0 _ad_top=''
     for _ad_file in "$_ad_root"/*.request; do
         [ -e "$_ad_file" ] || [ -L "$_ad_file" ] || continue
         admission_read "$_ad_file" || return 1
@@ -118,7 +128,7 @@ admission_scan() {
             _ad_state=expired _ad_reason=queue_deadline
             admission_write "$_ad_file" || return 1
         fi
-        [ "$_ad_sequence" -lt "$_ad_next" ] || _ad_next=$((_ad_sequence + 1))
+        [ "$_ad_sequence" -lt "$_ad_next" ] || { _ad_next=$((_ad_sequence + 1)); _ad_top="${_ad_file##*/}"; }
         case "$_ad_state" in
             reserved|unknown)
                 _ad_reserved=$((_ad_reserved + 1))
@@ -128,8 +138,44 @@ admission_scan() {
                 _ad_queued=$((_ad_queued + 1))
                 if [ "$_ad_first" -eq 0 ] || [ "$_ad_sequence" -lt "$_ad_first" ]; then _ad_first="$_ad_sequence"; fi
                 ;;
+            *)
+                [ "$_ad_file" = "${_ad_path:-}" ] && continue
+                _ad_finished="$_ad_finished${_ad_file##*/}
+"
+                _ad_finished_count=$((_ad_finished_count + 1))
+                ;;
         esac
     done
+    admission_prune
+}
+
+# Removes finished records past the retention rules above. Runs under the
+# admission lock after a scan; record names are restricted tokens.
+admission_prune() {
+    [ "$_ad_finished_count" -gt 0 ] || return 0
+    case "$_ad_finished" in *"
+$_ad_top
+"*) _ad_finished_count=$((_ad_finished_count - 1)) ;; esac
+    [ "$_ad_finished_count" -gt 0 ] || return 0
+    (
+        cd "$_ad_root" || exit 1
+        _ad_removed="$(find . ! -name . -prune -type f -name '*.request' -mtime +$((ADMISSION_KEEP_DAYS - 1)) -print |
+            while IFS= read -r _ad_old; do
+                _ad_old="${_ad_old#./}"
+                [ "$_ad_old" != "$_ad_top" ] || continue
+                case "$_ad_finished" in *"
+$_ad_old
+"*) rm -f "$_ad_old" && printf 'x' ;; esac
+            done)"
+        [ "$((_ad_finished_count - ${#_ad_removed}))" -gt "$ADMISSION_KEEP_FINISHED" ] || exit 0
+        _ad_names="$(printf '%s' "$_ad_finished" | grep -vxF -e "$_ad_top" -e '')"
+        [ -n "$_ad_names" ] || exit 0
+        # Newest first; whatever follows the first ADMISSION_KEEP_FINISHED goes.
+        # shellcheck disable=SC2012,SC2086 # Restricted tokens; ls -t orders by change time.
+        _ad_extra="$(ls -1t $_ad_names 2>/dev/null | tail -n "+$((ADMISSION_KEEP_FINISHED + 1))")"
+        # shellcheck disable=SC2086
+        [ -z "$_ad_extra" ] || rm -f $_ad_extra
+    )
 }
 
 admission_compatible() (
