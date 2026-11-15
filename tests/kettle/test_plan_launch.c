@@ -109,12 +109,10 @@ static void refuse_changed(struct kt_session *s, const char *changed, const char
 /* The confirmation names the revision, short digest, policy and consequences
  * at every size; only an explicit y approves: other keys and paste leave it
  * open, and Enter (its default button is Cancel) declines without a run. */
-static void review_approval(struct kt_session *s, const char *digest) {
+/* The approval at each size keeps the digest whole and fits the screen. */
+static void approval_sizes(struct kt_session *s, const char *digest) {
     int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
     size_t i;
-    kt_send(s, "E");
-    kt_until(s, "Execute plan", 3);
-    kt_until(s, "Execute imported plan revision 1", 3);
     for (i = 0; i < 3; i++) {
         kt_resize(s, sizes[i][0], sizes[i][1]);
         kt_pump(s, .3);
@@ -122,6 +120,13 @@ static void review_approval(struct kt_session *s, const char *digest) {
         CHECK(!s->screen.overflow, "approval resize");
         save(s, "approval", sizes[i][0], sizes[i][1]);
     }
+}
+
+static void review_approval(struct kt_session *s, const char *digest) {
+    kt_send(s, "E");
+    kt_until(s, "Execute plan", 3);
+    kt_until(s, "Execute imported plan revision 1", 3);
+    approval_sizes(s, digest);
     CHECK(dialog_says(s, "Runs 3 steps, spawns 1 head, up to 3 minutes; declares no repository writes."),
           "approval states the consequences");
     CHECK(dialog_says(s, "Policy: tools sh; parallelism 1; at most 1 head; 3 min wall time"),

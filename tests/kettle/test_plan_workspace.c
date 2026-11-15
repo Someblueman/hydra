@@ -22,11 +22,30 @@ static void zoom_and_pages(struct kt_session *s) {
     kt_until(s, STATE("READY", 1), 3);
     CHECK(kt_contains(s, STATE("READY", 1)), "pages retain revision");
 }
+/* The Plan page fits at each size; a frame that overflows is kept in
+ * build/plan-resize-failure.ansi. */
+static void resize_plan(struct kt_session *s) {
+    int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
+    char path[4096];
+    size_t i;
+    for (i = 0; i < 3; i++) {
+        if (sizes[i][0] == 40) {
+            kt_send(s, "j");
+            kt_sleep(.1);
+        }
+        kt_resize(s, sizes[i][0], sizes[i][1]);
+        kt_pump(s, .3);
+        if (s->screen.overflow) {
+            kt_format(path, sizeof(path), "%s/build/plan-resize-failure.ansi", f.root);
+            kt_write(path, s->raw ? s->raw : "");
+            fprintf(stderr, "%s\n", kt_text(s));
+        }
+        CHECK(!s->screen.overflow, "plan resize overflow");
+    }
+}
 int main(void) {
     struct kt_session s;
     char draft[4096], policy[4096], path[4096], text[8192];
-    int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
-    size_t i;
     json_object *changed;
     kt_init();
     hf_init(&f, "hydra-plan-workspace", "repo", true, false);
@@ -69,20 +88,7 @@ int main(void) {
     U(STATE("READY", 2), 30);
     kt_send(&s, "kkkk");
     U("Revised workspace acceptance objective", 3);
-    for (i = 0; i < 3; i++) {
-        if (sizes[i][0] == 40) {
-            kt_send(&s, "j");
-            kt_sleep(.1);
-        }
-        kt_resize(&s, sizes[i][0], sizes[i][1]);
-        kt_pump(&s, .3);
-        if (s.screen.overflow) {
-            kt_format(path, sizeof(path), "%s/build/plan-resize-failure.ansi", f.root);
-            kt_write(path, s.raw ? s.raw : "");
-            fprintf(stderr, "%s\n", kt_text(&s));
-        }
-        CHECK(!s.screen.overflow, "plan resize overflow");
-    }
+    resize_plan(&s);
     kt_write(draft, "{\"broken\":");
     U(STATE("DRAFT", 3), 8);
     kt_send(&s, "V");

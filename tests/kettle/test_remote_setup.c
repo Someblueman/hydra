@@ -284,6 +284,16 @@ static void add_host_tilde(struct kt_session *s) {
     CHECK(called(config), "a ~/ SSH config path reaches the CLI as an absolute path");
 }
 
+/* Esc during a running step leaves it running; A shows that step again. */
+static void escape_keeps_running(struct kt_session *s, long pid) {
+    kt_send(s, "\033");
+    kt_until(s, "keeps running", 4);
+    kt_pump(s, .3);
+    CHECK(kill((pid_t)pid, 0) == 0 && !called("setup status ovh --json"), "Esc leaves the running step running");
+    kt_send(s, "A");                  /* A while a step runs shows that step */
+    kt_until(s, "c cancel step", 4);
+}
+
 static void cancel_running(int cols, int rows, bool escape_first) {
     struct kt_session s;
     const char *flags[] = {"slow_host_key", NULL};
@@ -299,14 +309,7 @@ static void cancel_running(int cols, int rows, bool escape_first) {
     kt_read(path, text, sizeof(text));
     pid = strtol(text, NULL, 10);
     CHECK(pid > 0 && kill((pid_t)pid, 0) == 0, "the slow step is running");
-    if (escape_first) {
-        kt_send(&s, "\033");
-        kt_until(&s, "keeps running", 4);
-        kt_pump(&s, .3);
-        CHECK(kill((pid_t)pid, 0) == 0 && !called("setup status ovh --json"), "Esc leaves the running step running");
-        kt_send(&s, "A");                  /* A while a step runs shows that step */
-        kt_until(&s, "c cancel step", 4);
-    }
+    if (escape_first) escape_keeps_running(&s, pid);
     kt_send(&s, "c");
     kt_until(&s, "Cancelled: Checking the host key", 6);
     see(&s, "\xe2\x96\x8c Continue setup");
