@@ -121,14 +121,14 @@ static void step_row(struct app *app, struct pen *p, const struct setup_step *st
     int width = app->content_width;
     bool shown = p->row >= p->skip && app->line < p->bottom;
     setup_step_label(step->id, label, sizeof(label));
-    snprintf(line, sizeof(line), "%s %-24s %s", running ? spinner(app, app->setup) : setup_status_mark(status, app->ascii), label,
+    text_set(line, sizeof(line), "%s %-24s %s", running ? spinner(app, app->setup) : setup_status_mark(status, app->ascii), label,
              setup_status_label(status));
     if (shown && selected) { column(app, 0, width, KT_SELECTED, ""); bar(app, true, true); }
     /* A wide pane puts the note beside the step; a note too long for the
      * row wraps under it instead, as on a narrow pane. */
     if (width >= 90) {
         char detail[600];
-        snprintf(detail, sizeof(detail), "%-52.52s %s", line, step->detail);
+        text_set(detail, sizeof(detail), "%-52.52s %s", line, step->detail);
         if (kt_text_width(detail) < width) {
             pen_emit(p, 1, selected ? KT_SELECTED : step_tone(status), detail, strlen(detail));
             return;
@@ -302,9 +302,9 @@ static void choice_text(const struct app *app, const struct native_setup *s, siz
     const struct setup_choice *c = row ? &s->current->choices[row - 1] : NULL;
     const char *mark = s->selected == row ? (app->ascii ? ">" : "\xe2\x96\x8c") : " ";
     const char *note = row && row == s->recommended ? " (recommended)" : "";
-    if (!c) snprintf(out, size, "%s Continue setup%s", mark, s->recommended ? " without an agent" : "");
-    else if (c->install) snprintf(out, size, "%s Install %.60s%s", mark, c->agent, note);
-    else snprintf(out, size, "%s Sign in to %.60s%s", mark, c->agent, note);
+    if (!c) text_set(out, size, "%s Continue setup%s", mark, s->recommended ? " without an agent" : "");
+    else if (c->install) text_set(out, size, "%s Install %.60s%s", mark, c->agent, note);
+    else text_set(out, size, "%s Sign in to %.60s%s", mark, c->agent, note);
 }
 
 /* What the screen asks: getting an agent while none can run on the host. */

@@ -332,14 +332,19 @@ cleanup:
 /* A plan run that succeeded with its worker head still listed is "Ready to
  * land" in Inbox; L asks first, n lands nothing, y runs hydra land with
  * exactly that worker. */
+/* A fixture file in the fake hydra's directory. */
+static void beside_hydra(char *out, size_t size, const char *hydra, const char *name) {
+    const char *slash = strrchr(hydra, '/');
+    snprintf(out, size, "%.*s/%s", slash ? (int)(slash - hydra) : 1, slash ? hydra : ".", name);
+}
+
 static void test_inbox_land(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     char argv_path[256], heads[4096], runs[4096];
-    const char *slash = strrchr(hydra, '/');
     int i;
     snprintf(argv_path, sizeof(argv_path), "/tmp/hydra-inbox-land-%ld", (long)getpid());
-    snprintf(heads, sizeof(heads), "%.*s/native-runs.tsv", slash ? (int)(slash - hydra) : 1, slash ? hydra : ".");
-    snprintf(runs, sizeof(runs), "%.*s/workflow-runs.tsv", slash ? (int)(slash - hydra) : 1, slash ? hydra : ".");
+    beside_hydra(heads, sizeof(heads), hydra, "native-runs.tsv");
+    beside_hydra(runs, sizeof(runs), hydra, "workflow-runs.tsv");
     unlink(argv_path);
     setenv("HYDRA_TEST_LAND_ARGV", argv_path, 1);
     setenv("HYDRA_TUI_FIXTURE", heads, 1);

@@ -30,10 +30,16 @@ static bool is_directory_path(const char *path) {
     return path[0] == '/' && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+/* directory/name in out; false when it does not fit. */
+static bool child_path(char *out, size_t size, const char *directory, const char *name) {
+    int length = snprintf(out, size, "%s/%s", directory, name);
+    return length >= 0 && (size_t)length < size;
+}
+
 static bool child_file(const char *directory, const char *name, struct stat *st) {
     char path[SOURCE_TEXT + 160];
     struct stat ignored;
-    if (snprintf(path, sizeof(path), "%s/%s", directory, name) >= (int)sizeof(path)) return false;
+    if (!child_path(path, sizeof(path), directory, name)) return false;
     return stat(path, st ? st : &ignored) == 0;
 }
 
@@ -55,12 +61,12 @@ static void head_gates(struct native_inbox *in, const struct head *h) {
     DIR *stream = NULL;
     struct dirent *entry;
     size_t before = in->gate_count;
-    if (snprintf(directory, sizeof(directory), "%s/gates", h->source) < (int)sizeof(directory) && is_directory_path(directory))
+    if (child_path(directory, sizeof(directory), h->source, "gates") && is_directory_path(directory))
         stream = opendir(directory);
     if (!stream) { add_gate(in, h, ""); return; }
     while ((entry = readdir(stream)) != NULL && in->gate_count < INBOX_GATES) {
         if (!gate_name(entry->d_name)) continue;
-        if (snprintf(gate, sizeof(gate), "%s/%s", directory, entry->d_name) >= (int)sizeof(gate)) continue;
+        if (!child_path(gate, sizeof(gate), directory, entry->d_name)) continue;
         if (!is_directory_path(gate) || child_file(gate, "approved-at", NULL)) continue;
         add_gate(in, h, entry->d_name);
     }
@@ -221,16 +227,16 @@ static bool row_selectable(size_t row) { return row == INBOX_ROW_GROUP || row < 
  * rebuilds: identities for attention, branch and gate, finding, action. */
 static void entry_key(const struct app *app, const struct native_inbox *in, size_t row, char *out, size_t size) {
     const struct inbox_entry *e;
-    if (row == INBOX_ROW_GROUP) { snprintf(out, size, "seen-group"); return; }
+    if (row == INBOX_ROW_GROUP) { text_set(out, size, "seen-group"); return; }
     e = &in->entries[row];
     switch (e->kind) {
-    case INBOX_ATTENTION: snprintf(out, size, "a:%s", app->attention->items[e->index].identity); break;
-    case INBOX_GATE: snprintf(out, size, "g:%.120s/%s", in->gates[e->index].branch, in->gates[e->index].name); break;
-    case INBOX_PLAN: snprintf(out, size, "p:%.200s", in->plans[e->index].branch); break;
-    case INBOX_HEAD: snprintf(out, size, "h:%.200s", app->model.heads[e->index].branch); break;
-    case INBOX_RECOVERY: snprintf(out, size, "r:%.60s:%.200s", app->model.recovery[e->index].kind, app->model.recovery[e->index].label); break;
-    case INBOX_LAND: snprintf(out, size, "l:%.200s", app->workflows->heads[e->index].branch); break;
-    default: snprintf(out, size, "f:%lld:%.200s", (long long)app->failed[e->index].at, app->failed[e->index].title); break;
+    case INBOX_ATTENTION: text_set(out, size, "a:%s", app->attention->items[e->index].identity); break;
+    case INBOX_GATE: text_set(out, size, "g:%.120s/%s", in->gates[e->index].branch, in->gates[e->index].name); break;
+    case INBOX_PLAN: text_set(out, size, "p:%.200s", in->plans[e->index].branch); break;
+    case INBOX_HEAD: text_set(out, size, "h:%.200s", app->model.heads[e->index].branch); break;
+    case INBOX_RECOVERY: text_set(out, size, "r:%.60s:%.200s", app->model.recovery[e->index].kind, app->model.recovery[e->index].label); break;
+    case INBOX_LAND: text_set(out, size, "l:%.200s", app->workflows->heads[e->index].branch); break;
+    default: text_set(out, size, "f:%lld:%.200s", (long long)app->failed[e->index].at, app->failed[e->index].title); break;
     }
 }
 

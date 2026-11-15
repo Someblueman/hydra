@@ -51,11 +51,11 @@ static void header_local(struct app *app, const struct head *h, char *out, size_
     head_agent_text(app, h, agent, sizeof(agent));
     if (head_headless(h)) {
         const char *role = head_run_role(app, h);
-        snprintf(out, size, "%s%s%s%sheadless, no terminal", role ? role : "headless head", sep, agent, sep);
+        text_set(out, size, "%s%s%s%sheadless, no terminal", role ? role : "headless head", sep, agent, sep);
         return;
     }
     bool waiting = (h->gates > h->approved || work_head_plan_ready(app, h)) && !strcmp(display_status(h), "LIVE");
-    snprintf(out, size, "%s%s%s", waiting ? "needs you" : status_label(h), sep, agent);
+    text_set(out, size, "%s%s%s", waiting ? "needs you" : status_label(h), sep, agent);
     if (!h->head_id[0]) { text_append(out, size, "%sno head record", sep); return; }
     if (h->gates) text_append(out, size, "%s%u of %u approvals", sep, h->approved, h->gates);
     if (h->diff) text_append(out, size, "%s%u file%s changed", sep, h->diff, h->diff == 1 ? "" : "s");
@@ -103,11 +103,11 @@ void work_conversation_note(struct app *app, bool focused, char *out, size_t siz
     struct native_terminal *t = work_terminal(app);
     const struct head *h = work_output_head(app);
     if (t) { terminal_note(app, t, focused, out, size); return; }
-    if (selected_task(app)) { snprintf(out, size, "remote task%sno terminal here", dot(app)); return; }
-    if (h && head_remote(h)) { snprintf(out, size, "remote%senter attaches, no history here", dot(app)); return; }
-    if (h && app->preview_back) { snprintf(out, size, "%zu rows back%spgdn returns", app->preview_back, dot(app)); return; }
-    if (!h || head_headless(h) || app->run_row) { snprintf(out, size, "latest output%sread-only", dot(app)); return; }
-    snprintf(out, size, "latest output%senter to talk%s", dot(app), app->snapshot_stale ? " (stale)" : "");
+    if (selected_task(app)) { text_set(out, size, "remote task%sno terminal here", dot(app)); return; }
+    if (h && head_remote(h)) { text_set(out, size, "remote%senter attaches, no history here", dot(app)); return; }
+    if (h && app->preview_back) { text_set(out, size, "%zu rows back%spgdn returns", app->preview_back, dot(app)); return; }
+    if (!h || head_headless(h) || app->run_row) { text_set(out, size, "latest output%sread-only", dot(app)); return; }
+    text_set(out, size, "latest output%senter to talk%s", dot(app), app->snapshot_stale ? " (stale)" : "");
 }
 
 /* ---- the body ------------------------------------------------------------- */

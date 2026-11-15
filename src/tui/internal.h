@@ -652,7 +652,15 @@ size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
 struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
-void text_append(char *buffer, size_t size, const char *format, ...);
+/* Formatting through a function, not snprintf at each call site: with
+ * fortify on, macOS makes every snprintf a macro with a branch of its own. */
+#if defined(__GNUC__) || defined(__clang__)
+#define TEXT_FORMAT __attribute__((format(printf, 3, 4)))
+#else
+#define TEXT_FORMAT
+#endif
+void text_set(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
+void text_append(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);

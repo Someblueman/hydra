@@ -275,7 +275,7 @@ static int list_notes(struct app *app, const struct pane *p, int y) {
         kt_text_aligned(&app->frame, (struct kt_rect){p->x, y++, p->width, 1},
                         "No workflow runs are recorded in this project, so only heads are watched.", KT_ALIGN_LEFT, KT_MUTED);
     } else if ((!a || !a->have_good) && !app->fleet && !attention_no_runs(app)) {
-        snprintf(text, sizeof(text), "%s Reading what needs you%s", glyph(app, "\xe2\x97\x8c", "."), glyph(app, "\xe2\x80\xa6", "..."));
+        text_set(text, sizeof(text), "%s Reading what needs you%s", glyph(app, "\xe2\x97\x8c", "."), glyph(app, "\xe2\x80\xa6", "..."));
         kt_text(&app->frame, (struct kt_rect){p->x, y++, p->width, 1}, text, INFO);
     }
     /* A good list can still carry a problem of its own: the seen store. */
@@ -460,18 +460,18 @@ static void other_summary(struct app *app, const struct inbox_entry *e) {
     char text[1024];
     heading(app, "What is waiting");
     if (e->kind == INBOX_GATE && !in->gates[e->index].name[0])
-        snprintf(text, sizeof(text), "The head %.200s has approval gates that are not approved yet. Their records cannot "
+        text_set(text, sizeof(text), "The head %.200s has approval gates that are not approved yet. Their records cannot "
                  "be read here; : approvals lists them (hydra gate status), and hydra gate approve approves one.",
                  in->gates[e->index].branch);
     else if (e->kind == INBOX_GATE)
-        snprintf(text, sizeof(text), "The head %.200s recorded the gate %s, and its check passed. Y approves it as you "
+        text_set(text, sizeof(text), "The head %.200s recorded the gate %s, and its check passed. Y approves it as you "
                  "(hydra gate approve); Hydra refuses if the head's commit or worktree changed since the check ran.",
                  in->gates[e->index].branch, in->gates[e->index].name);
     else if (e->kind == INBOX_PLAN)
-        snprintf(text, sizeof(text), "The planning agent of %.200s published a plan. Y opens it under the guided policy and "
+        text_set(text, sizeof(text), "The planning agent of %.200s published a plan. Y opens it under the guided policy and "
                  "asks you to approve exactly this revision; F sends it back with your note; o shows it in Work. "
                  "Nothing runs until you approve.", in->plans[e->index].branch);
-    else snprintf(text, sizeof(text), "This action did not finish this session. Enter shows its whole output; s puts it "
+    else text_set(text, sizeof(text), "This action did not finish this session. Enter shows its whole output; s puts it "
                   "away under Seen.");
     paragraph(app, text, KT_BASE);
     if (e->kind == INBOX_PLAN) { if (app->line < app->limit) app->line++; label_value(app, "Draft", in->plans[e->index].draft); }

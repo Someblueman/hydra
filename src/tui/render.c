@@ -89,6 +89,15 @@ void style(struct app *app, enum tone tone) { app->tone = (int)tone; }
 const char *theme_name(int theme) { return theme_names[theme]; }
 const char *dot(const struct app *app) { return app->ascii ? " / " : " \xc2\xb7 "; }
 
+/* The buffer holds exactly the formatted text (cut to size). */
+void text_set(char *buffer, size_t size, const char *format, ...) {
+    va_list args;
+    if (!size) return;
+    va_start(args, format);
+    (void)vsnprintf(buffer, size, format, args);
+    va_end(args);
+}
+
 /* Append formatted text to a bounded buffer with the remaining size explicit. */
 void text_append(char *buffer, size_t size, const char *format, ...) {
     size_t used = strlen(buffer);
@@ -255,7 +264,7 @@ void paragraph(struct app *app, const char *text, struct kt_style tone) {
             chunk = width;
             for (cut = chunk; cut > width / 2; cut--) if (text[offset + cut] == ' ') { chunk = cut; break; }
         }
-        snprintf(line, sizeof(line), "%.*s", (int)chunk, text + offset);
+        text_set(line, sizeof(line), "%.*s", (int)chunk, text + offset);
         line_text(app, tone, line);
         offset += chunk;
         while (offset < length && text[offset] == ' ') offset++;
@@ -648,11 +657,11 @@ static long snapshot_limit(const struct app *app) {
 struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
     long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
     if (!headless && observed_at && (stale || age > limit)) clock_mark();
-    if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return KT_WARNING; }
-    if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return KT_WARNING; }
-    if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return KT_MUTED; }
-    if (age > limit) { snprintf(out, size, "Updated %lds ago", age); return KT_BASE; }
-    snprintf(out, size, "Live");
+    if (stale && observed_at) { text_set(out, size, "STALE: last good snapshot, updated %lds ago", age); return KT_WARNING; }
+    if (stale) { text_set(out, size, "STALE: no snapshot yet"); return KT_WARNING; }
+    if (!observed_at && !headless) { text_set(out, size, "Waiting for the first snapshot"); return KT_MUTED; }
+    if (age > limit) { text_set(out, size, "Updated %lds ago", age); return KT_BASE; }
+    text_set(out, size, "Live");
     return KT_MUTED;
 }
 
@@ -672,13 +681,13 @@ void screen_status(struct app *app, char *out, size_t size, struct kt_style *ton
     /* The answer to the user's last action stays visible beside a stale
      * snapshot's warning; neither hides the other. */
     if (stale && app->snapshot_error[0]) {
-        if (app->notice[0]) snprintf(out, size, "%.200s%s%s%s%.200s", app->notice, sep, fresh, sep, app->snapshot_error);
-        else snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error);
+        if (app->notice[0]) text_set(out, size, "%.200s%s%s%s%.200s", app->notice, sep, fresh, sep, app->snapshot_error);
+        else text_set(out, size, "%s%s%s", fresh, sep, app->snapshot_error);
         *tone = KT_WARNING; return;
     }
-    if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = KT_BASE; return; }
-    if (app->search[0]) { snprintf(out, size, "Filter: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
-    snprintf(out, size, "%s", fresh);
+    if (app->notice[0]) { text_set(out, size, "%s", app->notice); *tone = KT_BASE; return; }
+    if (app->search[0]) { text_set(out, size, "Filter: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
+    text_set(out, size, "%s", fresh);
     if (app->view == 9) inbox_status(app, out, size);
     *tone = fresh_tone;
     /* The remote observation has its own age; a stale one is said beside

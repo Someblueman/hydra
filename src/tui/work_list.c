@@ -259,10 +259,10 @@ static void list_empty(struct app *app, struct kt_rect r) {
         host_start_hint(app, r);
         return;
     }
-    if (app->search[0]) snprintf(text, sizeof(text), "No heads match \"%s\"%sesc clears", app->search, dot(app));
-    else if (app->location[0]) snprintf(text, sizeof(text), "No %s to show%sesc or L shows all", location_label(app, label, sizeof(label)), dot(app));
-    else if (!app->snapshot_at && !app->snapshot_stale) snprintf(text, sizeof(text), "%s Reading heads%s", work_loading_glyph(app), app->ascii ? "..." : "\xe2\x80\xa6");
-    else snprintf(text, sizeof(text), "Nothing here yet; n starts a task");
+    if (app->search[0]) text_set(text, sizeof(text), "No heads match \"%s\"%sesc clears", app->search, dot(app));
+    else if (app->location[0]) text_set(text, sizeof(text), "No %s to show%sesc or L shows all", location_label(app, label, sizeof(label)), dot(app));
+    else if (!app->snapshot_at && !app->snapshot_stale) text_set(text, sizeof(text), "%s Reading heads%s", work_loading_glyph(app), app->ascii ? "..." : "\xe2\x80\xa6");
+    else text_set(text, sizeof(text), "Nothing here yet; n starts a task");
     statistics_wrap(&app->frame, r.x + 1, r.y + 1, r.width - 2, r.height - 2, KT_MUTED, text);
 }
 
@@ -281,8 +281,8 @@ void work_list_draw(struct app *app, struct kt_rect r, bool focused) {
     size_t n, position, i, visible;
     int y;
     list_title(app, title, sizeof(title));
-    if (w->compact) snprintf(count, sizeof(count), "1/2 tab");
-    else snprintf(count, sizeof(count), "%zu", visible_heads(app));
+    if (w->compact) text_set(count, sizeof(count), "1/2 tab");
+    else text_set(count, sizeof(count), "%zu", visible_heads(app));
     work_rule(app, r, title, focused, count);
     n = outline_build(app, rows, OUTLINE_ROWS);
     position = outline_position(app, rows, n);

@@ -337,7 +337,7 @@ static bool plan_draft_account(struct app *app, const struct native_plan *p) {
     char text[1200];
     size_t i;
     if (!d || !plan_draft_parse(p->source_bytes, p->source_length, d)) { free(d); return false; }
-    snprintf(text, sizeof(text), "%zu step%s%s%u head%s", d->steps_total, d->steps_total == 1 ? "" : "s", dot(app), d->heads,
+    text_set(text, sizeof(text), "%zu step%s%s%u head%s", d->steps_total, d->steps_total == 1 ? "" : "s", dot(app), d->heads,
              d->heads == 1 ? "" : "s");
     if (d->minutes) text_append(text, sizeof(text), "%sat most %u min", dot(app), d->minutes);
     labelled_at(app, 8, "Scope", text, KT_BASE);
@@ -346,7 +346,7 @@ static bool plan_draft_account(struct app *app, const struct native_plan *p) {
     section(app, "Steps");
     for (i = 0; i < d->step_count; i++) {
         const struct plan_draft_step *step = &d->steps[i];
-        snprintf(text, sizeof(text), "%zu %-12.12s %s%s%s", i + 1, step->id, step->kind, step->role[0] ? dot(app) : "", step->role);
+        text_set(text, sizeof(text), "%zu %-12.12s %s%s%s", i + 1, step->id, step->kind, step->role[0] ? dot(app) : "", step->role);
         linef(app, "%s", text);
         if (step->what[0]) labelled_at(app, 2, "", step->what, KT_MUTED);
     }
@@ -371,7 +371,7 @@ static void plan_document(struct app *app, const struct native_plan *p) {
         size_t line = end ? (size_t)(end - text - offset) : length - offset;
         size_t skip = 0;
         char buffer[1024];
-        snprintf(buffer, sizeof(buffer), "%.*s", (int)(line < sizeof(buffer) ? line : sizeof(buffer) - 1U), text + offset);
+        text_set(buffer, sizeof(buffer), "%.*s", (int)(line < sizeof(buffer) ? line : sizeof(buffer) - 1U), text + offset);
         paragraph_skip(app, buffer[0] ? buffer : " ", KT_BASE, &skip);
         offset += line + 1;
     }

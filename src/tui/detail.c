@@ -165,15 +165,15 @@ static void detail_checks(struct app *app, const struct head *head) {
     section(app, "CHECKS");
     if (!head->head_id[0]) { labelled_at(app, label, approvals, "unknown", KT_MUTED); return; }
     pending = head->gates > head->approved ? head->gates - head->approved : 0;
-    if (!head->gates) snprintf(text, sizeof(text), "none");
-    else snprintf(text, sizeof(text), "%u of %u approved%s%s", head->approved, head->gates,
+    if (!head->gates) text_set(text, sizeof(text), "none");
+    else text_set(text, sizeof(text), "%u of %u approved%s%s", head->approved, head->gates,
                   pending ? dot(app) : "", pending ? "waiting for your decision" : "");
     labelled_at(app, label, approvals, text, pending ? KT_WARNING : KT_BASE);
-    snprintf(text, sizeof(text), "%u exchanged with other heads", head->messages);
+    text_set(text, sizeof(text), "%u exchanged with other heads", head->messages);
     labelled_at(app, label, "Messages", text, KT_BASE);
     /* Coordination between heads in one row; : claims, scopes, queue and
      * resources list each. */
-    snprintf(text, sizeof(text), "%u claims%s%u scopes%s%u queued%s%u resources", head->claims, dot(app), head->scopes,
+    text_set(text, sizeof(text), "%u claims%s%u scopes%s%u queued%s%u resources", head->claims, dot(app), head->scopes,
              dot(app), head->queue, dot(app), head->resources);
     labelled_at(app, label, "Coordinate", text, head->claims || head->scopes || head->queue || head->resources ? KT_BASE : KT_MUTED);
     paragraph(app, "Claims are files a head means to change and scopes the areas it stays within; Hydra flags overlap "
