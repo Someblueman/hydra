@@ -27,8 +27,12 @@ workflow_task_resume() {
         fi
     done < "$1/graph.tsv"
 }
+# Usage: workflow_task_start <run-dir> <step> [<attempt>]
+# Given an attempt number, as the native driver's worker, runs that attempt's
+# worker in the foreground; the driver recorded the start itself.
 workflow_task_start() {
     _wts_run="$1" _wts_id="$2" _wts_sd="$1/steps/$2"
+    if [ -n "${3:-}" ]; then workflow_task_worker "$1" "$2" "$3"; return; fi
     _wts_number="$(sed -n '1p' "$_wts_sd/attempts")"
     [ "$_wts_number" -gt 0 ] || _wts_number=1
     _wts_attempt="$_wts_sd/attempt-$_wts_number"
@@ -46,60 +50,65 @@ workflow_task_start() {
     fi
     workflow_atomic_scalar "$_wts_sd/state" running
     workflow_event "$_wts_run" "$_wts_id" step.running task_reconciliation
-    (
-        # Remote task records are Hydra evidence; no local user command runs here.
-        umask 077
-        _wts_pid=""
-        trap 'workflow_wake_driver' 0
-        trap '[ -z "$_wts_pid" ] || operations_signal_tree "$_wts_pid" TERM' HUP INT TERM
-        if ! workflow_bindings_match "$_wts_run"; then
-            workflow_atomic_scalar "$_wts_sd/state" recovery-required
+    ( workflow_task_worker "$_wts_run" "$_wts_id" "$_wts_number" ) &
+    workflow_atomic_scalar "$_wts_sd/worker-pid" "$!"
+}
+# Usage: workflow_task_worker <run-dir> <step> <attempt>
+# The worker of one task attempt, in a subshell or a process of its own.
+workflow_task_worker() {
+    _wts_run="$1" _wts_id="$2" _wts_number="$3" _wts_sd="$1/steps/$2"
+    _wts_attempt="$_wts_sd/attempt-$_wts_number"
+    # Remote task records are Hydra evidence; no local user command runs here.
+    umask 077
+    _wts_pid=""
+    trap 'workflow_wake_driver' 0
+    trap '[ -z "$_wts_pid" ] || operations_signal_tree "$_wts_pid" TERM' HUP INT TERM
+    if ! workflow_bindings_match "$_wts_run"; then
+        workflow_atomic_scalar "$_wts_sd/state" recovery-required
+        exit 1
+    fi
+    if [ ! -d "$_wts_attempt/remote" ]; then
+        # No dispatch exists: incomplete preparation can be reconstructed.
+        rm -rf "$_wts_attempt/inputs" "$_wts_attempt/outputs"
+        if ! workflow_data_tool prepare "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-preparation.json"; then
+            workflow_atomic_scalar "$_wts_sd/state" failed
             exit 1
         fi
-        if [ ! -d "$_wts_attempt/remote" ]; then
-            # No dispatch exists: incomplete preparation can be reconstructed.
-            rm -rf "$_wts_attempt/inputs" "$_wts_attempt/outputs"
-            if ! workflow_data_tool prepare "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-preparation.json"; then
-                workflow_atomic_scalar "$_wts_sd/state" failed
-                exit 1
-            fi
+    fi
+    workflow_task_tool run "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/remote-response.json" 2> "$_wts_attempt/stderr" &
+    _wts_pid=$!
+    workflow_atomic_scalar "$_wts_sd/command-pid" "$_wts_pid"
+    if wait "$_wts_pid"; then _wts_code=0; else _wts_code=$?; fi
+    trap - HUP INT TERM
+    if [ "$_wts_code" -eq 0 ]; then
+        if [ -f "$_wts_attempt/outputs.json" ]; then
+            workflow_data_tool verify-output "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76
+        else
+            rm -rf "$_wts_attempt/artifacts"
+            workflow_data_tool seal "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76
         fi
-        workflow_task_tool run "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/remote-response.json" 2> "$_wts_attempt/stderr" &
-        _wts_pid=$!
-        workflow_atomic_scalar "$_wts_sd/command-pid" "$_wts_pid"
-        if wait "$_wts_pid"; then _wts_code=0; else _wts_code=$?; fi
-        trap - HUP INT TERM
-        if [ "$_wts_code" -eq 0 ]; then
-            if [ -f "$_wts_attempt/outputs.json" ]; then
-                workflow_data_tool verify-output "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76
-            else
-                rm -rf "$_wts_attempt/artifacts"
-                workflow_data_tool seal "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76
-            fi
-        fi
-        if [ "$_wts_code" -eq 0 ] && [ -f "$_wts_run/compiled.json" ]; then
-            workflow_plan_tool step-check "$_wts_run" "$_wts_id" > "$_wts_attempt/validation-result.json" || _wts_code=1
-        fi
-        workflow_atomic_scalar "$_wts_attempt/exit-code" "$_wts_code"
-        case "$_wts_code" in
-            75|129|130|143) _wts_state=waiting-remote ;;
-            76) _wts_state=recovery-required ;;
-            0) _wts_state=succeeded ;;
-            *) _wts_state=failed ;;
-        esac
-        if [ -f "$_wts_run/cancel-requested" ]; then
-            case "$_wts_state" in succeeded|failed) _wts_state=cancelled ;; esac
-        fi
-        case "$_wts_state" in
-            succeeded|failed|cancelled)
-                workflow_atomic_scalar "$_wts_attempt/completed-at" "$(date +%s)" || exit 1
-                ;;
-        esac
-        case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" "$_wts_number" ;; esac
-        workflow_atomic_scalar "$_wts_sd/state" "$_wts_state"
-        workflow_event "$_wts_run" "$_wts_id" "step.$_wts_state" task_observation
-    ) &
-    workflow_atomic_scalar "$_wts_sd/worker-pid" "$!"
+    fi
+    if [ "$_wts_code" -eq 0 ] && [ -f "$_wts_run/compiled.json" ]; then
+        workflow_plan_tool step-check "$_wts_run" "$_wts_id" > "$_wts_attempt/validation-result.json" || _wts_code=1
+    fi
+    workflow_atomic_scalar "$_wts_attempt/exit-code" "$_wts_code"
+    case "$_wts_code" in
+        75|129|130|143) _wts_state=waiting-remote ;;
+        76) _wts_state=recovery-required ;;
+        0) _wts_state=succeeded ;;
+        *) _wts_state=failed ;;
+    esac
+    if [ -f "$_wts_run/cancel-requested" ]; then
+        case "$_wts_state" in succeeded|failed) _wts_state=cancelled ;; esac
+    fi
+    case "$_wts_state" in
+        succeeded|failed|cancelled)
+            workflow_atomic_scalar "$_wts_attempt/completed-at" "$(date +%s)" || exit 1
+            ;;
+    esac
+    case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" "$_wts_number" ;; esac
+    workflow_atomic_scalar "$_wts_sd/state" "$_wts_state"
+    workflow_event "$_wts_run" "$_wts_id" "step.$_wts_state" task_observation
 }
 workflow_waiting_state() {
     # One pass counts steps waiting for approval, waiting on remote work,

@@ -334,9 +334,14 @@ $_wrr_running
 EOF
 }
 
+# Usage: workflow_start_step <run-dir> <step> [<attempt>]
+# Starts a step's attempt and its worker in the background. Given an attempt
+# number, as the native driver's worker, it runs that attempt's worker in the
+# foreground instead; the driver recorded the start itself.
 workflow_start_step() {
     _wss_dir="$1"
     _wss_id="$2"
+    _wss_worker="${3:-}"
     _wss_line="$(awk -F '\t' -v id="$_wss_id" '$1=="step" && $2==id {print; exit}' "$_wss_dir/graph.tsv")"
     _wss_oldifs="$IFS"
     _wss_oldflags="$-"
@@ -359,8 +364,12 @@ workflow_start_step() {
         return $?
     fi
     if [ "$_wss_kind" = task ]; then
-        workflow_task_start "$_wss_dir" "$_wss_id"
+        workflow_task_start "$_wss_dir" "$_wss_id" "$_wss_worker"
         return $?
+    fi
+    if [ -n "$_wss_worker" ]; then
+        workflow_step_run "$_wss_dir" "$_wss_id" "$_wss_kind" "$_wss_retry" "$_wss_idem" "$_wss_worker" "$@"
+        return
     fi
     _wss_sd="$_wss_dir/steps/$_wss_id"
     _wss_attempt="$(sed -n '1p' "$_wss_sd/attempts")"
@@ -378,108 +387,117 @@ workflow_start_step() {
         workflow_atomic_scalar "$_wss_attempt_dir/decision-source" workflow-policy || return 1
     fi
     workflow_event "$_wss_dir" "$_wss_id" step.running "attempt=$_wss_attempt"
-    (
-        trap 'workflow_wake_driver' 0
-        _ws_command_pid=""
-        _ws_cancelled=0
-        trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
-        if ! workflow_plan_bindings_match "$_wss_dir"; then
-            workflow_atomic_scalar "$_wss_sd/state" recovery-required
-            workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_plan
+    ( workflow_step_run "$_wss_dir" "$_wss_id" "$_wss_kind" "$_wss_retry" "$_wss_idem" "$_wss_attempt" "$@" ) &
+    workflow_atomic_scalar "$_wss_sd/worker-pid" "$!"
+}
+
+# Usage: workflow_step_run <run-dir> <step> <kind> <retry> <idempotent> <attempt> <argument>...
+# The worker of one step attempt: runs the step command and records its
+# result. It runs in a subshell or a process of its own, and may exit.
+workflow_step_run() {
+    _wss_dir="$1" _wss_id="$2" _wss_kind="$3" _wss_retry="$4" _wss_idem="$5" _wss_attempt="$6"
+    shift 6
+    _wss_sd="$_wss_dir/steps/$_wss_id"
+    _wss_attempt_dir="$_wss_sd/attempt-$_wss_attempt"
+    trap 'workflow_wake_driver' 0
+    _ws_command_pid=""
+    _ws_cancelled=0
+    trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
+    if ! workflow_plan_bindings_match "$_wss_dir"; then
+        workflow_atomic_scalar "$_wss_sd/state" recovery-required
+        workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_plan
+        exit 1
+    fi
+    if ! workflow_approval_guard "$_wss_dir" "$_wss_id"; then
+        workflow_atomic_scalar "$_wss_sd/state" recovery-required
+        workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_approval
+        exit 1
+    fi
+    if [ -f "$_wss_dir/data.json" ]; then
+        hydra_private_touch "$_wss_attempt_dir/data-preparation.json" || exit 1
+        if ! workflow_data_definition_matches "$_wss_dir" ||
+            ! workflow_data_tool prepare "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-preparation.json"; then
+            workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+            workflow_atomic_scalar "$_wss_sd/state" failed
+            workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_inputs
             exit 1
         fi
-        if ! workflow_approval_guard "$_wss_dir" "$_wss_id"; then
-            workflow_atomic_scalar "$_wss_sd/state" recovery-required
-            workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_approval
+        HYDRA_WORKFLOW_INPUTS_DIR="$_wss_attempt_dir/inputs"
+        HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
+        export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
+    fi
+    if [ -f "$_wss_dir/compiled.json" ]; then
+        HYDRA_WORKFLOW_VALIDATION_FILE="$_wss_attempt_dir/validation-context.json"
+        hydra_private_touch "$HYDRA_WORKFLOW_VALIDATION_FILE" || exit 1
+        if ! workflow_plan_tool check-context "$_wss_dir/compiled.json" "$_wss_id" > "$HYDRA_WORKFLOW_VALIDATION_FILE"; then
+            workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+            workflow_atomic_scalar "$_wss_sd/state" failed
+            workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_validation_context
             exit 1
         fi
-        if [ -f "$_wss_dir/data.json" ]; then
-            hydra_private_touch "$_wss_attempt_dir/data-preparation.json" || exit 1
-            if ! workflow_data_definition_matches "$_wss_dir" ||
-                ! workflow_data_tool prepare "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-preparation.json"; then
-                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
-                workflow_atomic_scalar "$_wss_sd/state" failed
-                workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_inputs
-                exit 1
-            fi
-            HYDRA_WORKFLOW_INPUTS_DIR="$_wss_attempt_dir/inputs"
-            HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
-            export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
-        fi
-        if [ -f "$_wss_dir/compiled.json" ]; then
-            HYDRA_WORKFLOW_VALIDATION_FILE="$_wss_attempt_dir/validation-context.json"
-            hydra_private_touch "$HYDRA_WORKFLOW_VALIDATION_FILE" || exit 1
-            if ! workflow_plan_tool check-context "$_wss_dir/compiled.json" "$_wss_id" > "$HYDRA_WORKFLOW_VALIDATION_FILE"; then
-                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
-                workflow_atomic_scalar "$_wss_sd/state" failed
-                workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_validation_context
-                exit 1
-            fi
-            export HYDRA_WORKFLOW_VALIDATION_FILE
-        else
-            unset HYDRA_WORKFLOW_VALIDATION_FILE
-        fi
-        # An exec step on one of a plan's own heads: commands record the commit
-        # they start on, agent steps are committed when they finish.
-        _ws_hook_kind="" _ws_hook_head="" _ws_tree=""
-        IFS="$(printf '\t')" read -r _ws_hook_kind _ws_hook_head _ws_hook_rest <<EOF
+        export HYDRA_WORKFLOW_VALIDATION_FILE
+    else
+        unset HYDRA_WORKFLOW_VALIDATION_FILE
+    fi
+    # An exec step on one of a plan's own heads: commands record the commit
+    # they start on, agent steps are committed when they finish.
+    _ws_hook_kind="" _ws_hook_head="" _ws_tree=""
+    IFS="$(printf '\t')" read -r _ws_hook_kind _ws_hook_head _ws_hook_rest <<EOF
 $(workflow_plan_step_hook "$_wss_dir" "$_wss_id")
 EOF
-        if [ -n "$_ws_hook_kind" ]; then
-            if ! _ws_tree="$(workflow_plan_worktree "$_wss_dir" "$_ws_hook_head")" ||
-                { [ "$_ws_hook_kind" != agent ] && ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit"; }; then
-                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
-                workflow_atomic_scalar "$_wss_sd/state" failed
-                workflow_event "$_wss_dir" "$_wss_id" step.failed worker_head_unavailable
-                exit 1
-            fi
+    if [ -n "$_ws_hook_kind" ]; then
+        if ! _ws_tree="$(workflow_plan_worktree "$_wss_dir" "$_ws_hook_head")" ||
+            { [ "$_ws_hook_kind" != agent ] && ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit"; }; then
+            workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+            workflow_atomic_scalar "$_wss_sd/state" failed
+            workflow_event "$_wss_dir" "$_wss_id" step.failed worker_head_unavailable
+            exit 1
         fi
-        # Attempt evidence is private; the step command keeps the user's umask.
-        # Transcripts exist only once the command starts.
-        hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
-        workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
-        _ws_command_pid=$!
-        workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
-        if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
-        trap - HUP INT TERM
-        [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
-        if [ "$_ws_code" -eq 0 ] && [ -n "$_ws_tree" ]; then
-            if [ "$_ws_hook_kind" = agent ]; then
-                if ! workflow_plan_commit "$_wss_dir" "$_wss_id" "$_ws_tree" "$_wss_attempt_dir" \
-                    >>"$_wss_attempt_dir/stderr" 2>&1; then
-                    _ws_code=1
-                    workflow_event "$_wss_dir" "$_wss_id" step.commit_failed
-                fi
-            elif ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit-after"; then
+    fi
+    # Attempt evidence is private; the step command keeps the user's umask.
+    # Transcripts exist only once the command starts.
+    hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
+    workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
+    _ws_command_pid=$!
+    workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
+    if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
+    trap - HUP INT TERM
+    [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
+    if [ "$_ws_code" -eq 0 ] && [ -n "$_ws_tree" ]; then
+        if [ "$_ws_hook_kind" = agent ]; then
+            if ! workflow_plan_commit "$_wss_dir" "$_wss_id" "$_ws_tree" "$_wss_attempt_dir" \
+                >>"$_wss_attempt_dir/stderr" 2>&1; then
                 _ws_code=1
-            elif [ "$_ws_hook_kind" = command ] &&
-                ! workflow_plan_tool command-report "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" >/dev/null; then
-                # Hydra writes a command check's report from the exit status
-                # and the commit the command ran on.
-                _ws_code=1
-                workflow_event "$_wss_dir" "$_wss_id" step.check_unbound
+                workflow_event "$_wss_dir" "$_wss_id" step.commit_failed
             fi
+        elif ! workflow_plan_record_commit "$_ws_tree" "$_wss_attempt_dir/head-commit-after"; then
+            _ws_code=1
+        elif [ "$_ws_hook_kind" = command ] &&
+            ! workflow_plan_tool command-report "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" >/dev/null; then
+            # Hydra writes a command check's report from the exit status
+            # and the commit the command ran on.
+            _ws_code=1
+            workflow_event "$_wss_dir" "$_wss_id" step.check_unbound
         fi
-        # Outputs the step command wrote with the user's umask become run
-        # evidence; seal them privately like every other run record.
-        hydra_private_tree "$_wss_attempt_dir/outputs" || true
-        if [ "$_ws_code" -eq 0 ] && [ -f "$_wss_dir/data.json" ]; then
-            if ! hydra_private_touch "$_wss_attempt_dir/data-seal.json" ||
-                ! workflow_data_tool seal "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-seal.json"; then
-                _ws_code=1
-                workflow_event "$_wss_dir" "$_wss_id" step.invalid_outputs
-            fi
+    fi
+    # Outputs the step command wrote with the user's umask become run
+    # evidence; seal them privately like every other run record.
+    hydra_private_tree "$_wss_attempt_dir/outputs" || true
+    if [ "$_ws_code" -eq 0 ] && [ -f "$_wss_dir/data.json" ]; then
+        if ! hydra_private_touch "$_wss_attempt_dir/data-seal.json" ||
+            ! workflow_data_tool seal "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-seal.json"; then
+            _ws_code=1
+            workflow_event "$_wss_dir" "$_wss_id" step.invalid_outputs
         fi
-        workflow_atomic_scalar "$_wss_attempt_dir/exit-code" "$_ws_code"
-        workflow_atomic_scalar "$_wss_attempt_dir/completed-at" "$(date +%s)"
-        if [ -f "$_wss_dir/cancel-requested" ]; then
-            workflow_atomic_scalar "$_wss_sd/state" cancelled
-            workflow_event "$_wss_dir" "$_wss_id" step.cancelled "attempt=$_wss_attempt"
-        else
-            workflow_attempt_result "$_wss_dir" "$_wss_id" "$_wss_retry" "$_wss_idem" "$_ws_code"
-        fi
-    ) &
-    workflow_atomic_scalar "$_wss_sd/worker-pid" "$!"
+    fi
+    workflow_atomic_scalar "$_wss_attempt_dir/exit-code" "$_ws_code"
+    workflow_atomic_scalar "$_wss_attempt_dir/completed-at" "$(date +%s)"
+    if [ -f "$_wss_dir/cancel-requested" ]; then
+        workflow_atomic_scalar "$_wss_sd/state" cancelled
+        workflow_event "$_wss_dir" "$_wss_id" step.cancelled "attempt=$_wss_attempt"
+    else
+        workflow_attempt_result "$_wss_dir" "$_wss_id" "$_wss_retry" "$_wss_idem" "$_ws_code"
+    fi
 }
 
 workflow_cancel_steps() {
