@@ -296,6 +296,16 @@ static bool parse_seen(FILE *input, struct native_attention *next)
     }
     return header && ended && expected == rows && !ferror(input);
 }
+/* The store's state, said for as long as it lasts: a new attention snapshot
+ * keeps the notice while the store still fails, and a store that answers
+ * again takes it away. */
+static const char seen_unavailable[] = "Seen markers are unavailable; marks last only for this session";
+static void seen_notice(struct native_attention *view)
+{
+    bool failed = view->store && view->store->failed;
+    if (failed && !view->error[0]) copy_text(view->error, sizeof(view->error), seen_unavailable);
+    if (!failed && !strcmp(view->error, seen_unavailable)) view->error[0] = '\0';
+}
 static void complete_op(struct app *app, struct attention_store *store)
 {
     struct native_attention *view = app->attention;
@@ -310,7 +320,8 @@ static void complete_op(struct app *app, struct attention_store *store)
         memcpy(view->seen, next->seen, sizeof(view->seen)); view->seen_count = next->seen_count;
         apply_seen(view);
     }
-    if (store->failed) copy_text(view->error, sizeof(view->error), "Seen markers are unavailable; marks last only for this session");
+    if (store->failed) copy_text(view->error, sizeof(view->error), seen_unavailable);
+    else seen_notice(view);
     free(next);
 }
 static void store_tick(struct app *app)
@@ -387,6 +398,7 @@ static void accept_attention(struct app *app, FILE *input)
     next->good_at = time(NULL);
     apply_seen(next);
     next->loading = false;
+    seen_notice(next);
     free(app->attention); app->attention = next;
 }
 static void capture_failure(struct app *app)

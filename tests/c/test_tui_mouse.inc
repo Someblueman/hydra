@@ -7,7 +7,7 @@ static void mouse_input(struct session *session, const char *report) {
 /* At 80x24 Work's list starts on the second row: its rule, then one head a
  * row (feature-live on row 3, feature-stale on row 4, as the terminal
  * counts); the shared pane's page strip is on row 2 from column 27. */
-static void test_mouse(const char *tui, const char *hydra, const char *fake_bin) {
+static void mouse_cases(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     struct winsize size;
     char overlong[240];
@@ -74,4 +74,17 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     result(wait_for_marker(&session, "\033[?1002l\033[?1006l", 1000), "quit disables mouse reporting");
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "mouse session restores exact terminal state");
     close_session(&session);
+}
+
+/* Inbox rows are clicked where this layout puts them, so the seen store
+ * answers: without one Inbox says its markers are unavailable on a line of
+ * its own, which moves every row below it. */
+static void test_mouse(const char *tui, const char *hydra, const char *fake_bin) {
+    char seen[128];
+    snprintf(seen, sizeof(seen), "/tmp/hydra-mouse-seen-%ld", (long)getpid());
+    unlink(seen);
+    setenv("HYDRA_TEST_SEEN_FILE", seen, 1);
+    mouse_cases(tui, hydra, fake_bin);
+    unlink(seen);
+    unsetenv("HYDRA_TEST_SEEN_FILE");
 }

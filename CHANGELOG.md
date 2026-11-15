@@ -461,6 +461,9 @@ reports a failing check in its exit status. The entries marked
 - On macOS, spawns and fleet tasks are admitted again once a host has
   finished work. Pruning finished admission records stopped `/bin/sh`
   (bash 3.2) with a syntax error, so every later admission failed.
+- Inbox says its seen markers are unavailable for as long as the seen store
+  fails. The next refresh used to drop the notice, and the rows below it
+  moved up a line until the store was read again.
 
 ## [3.0.0] - 2026-10-17
 
