@@ -81,10 +81,13 @@ done
 alpha=$!
 "$HYDRA_BIN" pool run work --worker beta --json > "$base/beta.json" 2>&1 &
 beta=$!
-wait "$alpha"
-assert_success $? "the first worker loop exits cleanly"
-wait "$beta"
-assert_success $? "the second worker loop exits cleanly"
+wait "$alpha"; alpha_code=$?
+wait "$beta"; beta_code=$?
+# A loop that fails says why only in its own output: show it.
+[ "$alpha_code" -eq 0 ] && [ "$beta_code" -eq 0 ] ||
+    { printf -- '--- alpha (exit %s)\n' "$alpha_code"; cat "$base/alpha.json"; printf -- '--- beta (exit %s)\n' "$beta_code"; cat "$base/beta.json"; } >&2
+assert_success "$alpha_code" "the first worker loop exits cleanly"
+assert_success "$beta_code" "the second worker loop exits cleanly"
 assert_equal 4 "$(cat "$base/alpha.json" "$base/beta.json" | grep -o '"outcome":"succeeded"' | wc -l | tr -d ' ')" "two workers execute every task exactly once"
 assert_equal "t1 t2 t3 t4" "$(LC_ALL=C sort "$base/executed" | tr '\n' ' ' | sed 's/ $//')" "each command ran once"
 work_dir="$(pool_path work)"
