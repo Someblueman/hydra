@@ -898,14 +898,22 @@ From 90 columns the list and the detail sit side by side, from 70 the detail is
 below the list, and narrower Tab opens it in the list's place. Enter on a host
 (or on This machine) opens its work in Work, filtered to it; Esc comes back to
 Hosts. `r` observes the hosts again and `/` filters the list. `A` opens a form
-for the SSH destination and a name, then walks through the guided `hydra remote
-setup` steps (host key, requirements, installing Hydra, agents and sign-in) in
-the detail pane, showing each plan before anything changes: the host key is
-trusted only by typing `yes`, and a plan is approved with `y` (Enter never
-approves; `n` or Esc declines). A running step shows its elapsed time; `c`
-cancels it and `b` or Esc leaves it running. Enter continues an unfinished
-setup, `e` edits one that has not changed the remote yet and `x` removes its
-record after showing what stays. See [guided remote setup](FLEET.md#guided-remote-setup).
+for the SSH destination and a name (empty takes the destination's host; the
+field's hint names it), then walks through the guided `hydra remote setup`
+steps (host key, requirements, installing Hydra, agents and sign-in) in the
+detail pane, showing each plan before anything changes: the host key is trusted
+only by typing `yes` (the dialog names the `ssh-keygen -lf` command that prints
+the same fingerprint on the machine), and a plan is approved with `y` (Enter
+never approves; `n` or Esc declines). A running step shows its elapsed time; `c`
+cancels it and `b` or Esc leaves it running. A host SSH cannot reach or log in
+to before anything changed on it shows the `ssh` command to try, and `e` there
+changes its destination or SSH config. When setup finishes, Enter on "NAME is
+ready" opens the host's work in Work (Esc comes back), the host moves to
+Observed at its first observation, and the screen and the host's detail name
+the command that starts a head there, `hydra fleet spawn NAME --project
+/path/on/host -- BRANCH`. Enter continues an unfinished setup, `e` edits one
+that has not changed the remote yet and `x` removes its record after showing
+what stays. See [guided remote setup](FLEET.md#guided-remote-setup).
 
 The Onboarding page of Hosts (`]`, or `O`) is for hosts found through `hydra
 fleet discover`: candidates with filters for state, source, platform and label

@@ -966,7 +966,15 @@ verify step reruns and the alias's `hydra` switches to `alias.new_hydra`.
 `remote-preflight` requirements are `{name, status, blocking,
 detail}` with an optional `suggestion` (an example command; Hydra never runs it).
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
-are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.
+are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n. Since 3.0.0,
+`remote setup DEST` with one argument names a new setup after DEST's host when
+DEST is not a name, and binds a name without setup state or alias to itself
+(previously `invalid_input` and `setup_not_started`); a name with state resumes
+it unchanged. An `install_agent` step whose probed executable lies directly in
+one of the approved plan's `expected_dirs` (`~` being preflight's `home`) records
+that location itself: its detail has `recorded: true` and the envelope no
+`next` for `agents NAME --record` (previously a terminal question, or that
+`next`, for every off-PATH location).
 
 Host discovery (`fleet discover|qualify`) returns candidate schema 1:
 `data.{candidate_schema_version, observed_at, required_capability, partial_failure,

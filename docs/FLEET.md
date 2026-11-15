@@ -56,15 +56,31 @@ time and can be rerun at any point: it resumes from private state in
 command runs).
 
 ```sh
-hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
+hydra remote setup ubuntu@build-host          # named build-host
+hydra remote setup build                      # an SSH Host alias, named build
+hydra remote setup ovh ubuntu@build-host      # an explicit name
 hydra remote setup ovh --ssh-config /abs/config
 hydra remote setup status ovh
 hydra remote setup list                       # every setup: destination, status, next step
 hydra remote setup remove ovh                 # forget an unfinished setup (asks first)
 ```
 
+With one argument, a destination that is not a name (`[USER@]HOST`) names the
+setup after its host, and a word that is a name with neither setup state nor an
+alias is its own destination; a name that has setup state resumes it.
+
 Steps run in order: host key, preflight, provision, agents, then install and
-sign-in for each selected agent, verify, and alias. Each step also has its own
+sign-in for each selected agent, verify, and alias. On a terminal each step
+says what it starts (`... installing Hydra on ovh`), and a finished setup ends
+with `remote setup complete: ovh is ready` and the command that starts a head
+there with the agent it signed in to:
+
+```sh
+hydra fleet spawn ovh --project /path/on/host -- BRANCH --profile codex
+```
+
+The project must already be a Git checkout on the host; `hydra tui` then shows
+the head in Work beside local ones. Each step also has its own
 command that uses the same state: `hydra remote trust-key|preflight|provision|agents
 NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
 published last and never overwrites a different alias, so a half-configured host
@@ -94,7 +110,10 @@ exists, clone or copy the project on the host yourself and initialise it with
 configuration, then trust it explicitly (see [Operate explicitly](#operate-explicitly)).
 
 Every step that changes something first shows a plan and asks for approval.
-Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
+On a terminal the plan is titled ("Trust the host key of ovh?", "Install Hydra
+on ovh") and lists labelled rows; the host-key plan names the `ssh-keygen -lf
+/etc/ssh/ssh_host_TYPE_key.pub` command whose fingerprint to compare on the
+machine. Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
 `--json`, without a terminal, or when `CI` or `HYDRA_NONINTERACTIVE` is set, Hydra
 never prompts: it stops with `approval_required` (exit 3) and returns the plan,
 `data.plan_sha256`, and `data.next.argv`, the exact command that approves that plan
@@ -138,7 +157,12 @@ provider's official installer over `ssh -t` as your user after you approve a pla
 that shows the exact command. That command is `umask 022; ` followed by the
 recipe, so an account whose umask is 002 (the Ubuntu default) does not end up
 with a group-writable agent executable, which location records and probes
-refuse. The umask applies only to that installer session.
+refuse. The umask applies only to that installer session. When the installed
+executable lies directly in a directory the approved plan names ("Installs
+into", the recipe's `expected_dirs`, with `~` as the HOME preflight reported)
+and passes the version and help probe, that location is recorded at once
+(`recorded: true`); off PATH anywhere else, a terminal asks whether to record
+it and `--json` returns `next.argv` with `agents NAME --record EXECUTABLE=PATH`.
 
 **Upgrading an enrolled alias.** `hydra remote setup NAME` for an alias that already
 exists (and has no setup state) upgrades it. The destination and SSH config come
@@ -253,9 +277,10 @@ hydra fleet bootstrap ovh --input /tmp/hydra-3.0.0.json --sha256 HASH
 **From the control centre.** `hydra tui` (not only `hydra fleet tui`) has a Hosts
 screen (`3`): This machine, the observed hosts, the unfinished setups and "+ Add a
 host" in a list, the selected one's detail beside it. `A`, or Enter on "+ Add a
-host", opens a form for the SSH destination, a name (the host name by default)
-and an optional SSH config file, then runs the same `hydra remote setup ...
---json` commands and shows their steps in the detail pane. Unfinished setups are
+host", opens a form for the SSH destination, a name (empty takes the
+destination's host, which the field's hint names) and an optional SSH config
+file, then runs the same `hydra remote setup ... --json` commands and shows their
+steps in the detail pane. Unfinished setups are
 listed under "Setting up" (from `hydra remote setup list --json`); Enter continues one, `e`
 edits one that has not changed the remote yet (the form opens with its destination,
 name and SSH config; keeping the name removes the old record, after you approve its
@@ -269,7 +294,11 @@ before anything changes: a new host key needs `yes` typed and Enter, other plans
 `y` (Enter alone never approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
 command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the
 plan on screen. A changed or ambiguous host key shows the manual `ssh-keygen`
-recovery and has no accept action. Blocking requirements are listed with their
+recovery and has no accept action. When SSH cannot reach or log in to the host
+(`offline`, `authentication_failed`, `timeout`, `ssh_config_invalid`) before
+anything changed on it, the screen shows the `ssh` command to try (with `-F` for
+the SSH config) and `e` opens the form with the destination and SSH config to
+change them; Enter tries again as it is. Blocking requirements are listed with their
 suggested fixes; Enter checks again once they are installed. Of the warnings only a
 missing or older tmux pauses setup, because heads cannot run on the host without
 tmux 3.0: the requirements are shown with the suggested fix and Enter continues
@@ -281,7 +310,13 @@ plan, "Sign in to A" for one already there, or Continue setup without agents
 installers and provider sign-in take over the terminal and return to Hydra when
 they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
-to reconcile, which never replays the earlier attempt.
+to reconcile, which never replays the earlier attempt. When setup finishes,
+"NAME is ready" names the command that starts a head there (`hydra fleet spawn
+NAME --project /path/on/host -- BRANCH --profile AGENT`, with the agent it signed
+in to) and Enter opens the host's work in Work, filtered to it (Esc comes back to
+Hosts); finishing asks for a fresh remote observation, so the host moves from
+"Setting up" to Observed as soon as it answers. An observed host with no work
+names the same command in its detail.
 
 A development build has no pinned release helper for its version, so its
 control centre cannot provision from the Hosts screen on its own: set
