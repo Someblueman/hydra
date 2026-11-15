@@ -7,8 +7,9 @@
  * already holds rather than from its snapshot rows: the objective the head
  * was started with (the task its launch wrote beside the head's record),
  * the run step that targets it and what that step waits on (the workflow
- * snapshot), and whether its agent has left the terminal (the line Hydra's
- * own launcher prints into the terminal, lib/tmux.sh). */
+ * snapshot), and whether its agent has left the terminal (the agent-exit
+ * record Hydra's own launcher writes, lib/tmux.sh, which the snapshot rows
+ * carry, or else the line the launcher prints into the terminal). */
 
 /* ---- the objective -------------------------------------------------------- */
 
@@ -164,10 +165,14 @@ static void screen_text(const struct native_terminal *t, char *out, size_t size)
     out[used] = '\0';
 }
 
+/* The launcher's agent-exit record in the snapshot first; the line it
+ * printed, on the terminal's screen or in the latest capture, for a head
+ * whose snapshot came from a reader without the record. */
 int head_agent_exit(struct app *app, const struct head *head) {
     const struct native_terminal *t;
     static char text[16384];
     if (!head || head_remote(head) || head_headless(head)) return -1;
+    if (head->agent_exit[0]) return atoi(head->agent_exit);
     t = native_terminal_any_for_head(app, head);
     if (t && t->screen) {
         screen_text(t, text, sizeof(text));

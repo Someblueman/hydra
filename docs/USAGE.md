@@ -717,7 +717,10 @@ An interactive head receives `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`,
   plus a `hydra provenance` pointer), starts the agent by the absolute path that
   `hydra agent list` and `hydra provenance` report, and then execs your login
   shell so the pane stays usable after the agent exits. While the agent runs it
-  owns the terminal: Ctrl-C reaches only the agent, and Ctrl-Z is ignored.
+  owns the terminal: Ctrl-C reaches only the agent, and Ctrl-Z is ignored. When
+  the agent exits, the launcher records its status and the time in
+  `<state-dir>/instances/<instance>/agent-exit`, so the control centre's Details
+  keep saying the agent exited after its line has scrolled away.
 - Exact identities and paths stay out of the transcript; `hydra provenance
   <branch>` prints them, together with the launcher path. `hydra resume` uses
   the same mechanism with its resume recipe.

@@ -612,7 +612,11 @@ state, step and retirement records are unchanged (asking again every 30 seconds
 regardless); a run that has not ended is read at every refresh.
 
 Version-2 `H` rows may add a trailing terminal mode (`interactive` or
-`headless`); readers accept rows without it. `hydra tui` reads both streams and
+`headless`) and, after it, the agent exit status (one to three digits, or `-`)
+read from the current instance's `agent-exit` record (see the launcher in
+[Process, install, and platform contracts](#process-install-and-platform-contracts));
+`-` stands for no record or one not of its form. Readers accept rows without
+either field. `hydra tui` reads both streams and
 composes one model: local heads first, then remote heads, with the hosts and
 remote tasks of the latest remote observation. `hydra tui --remote-data`
 (internal) is the remote source: the fleet visual stream when the optional
@@ -878,7 +882,14 @@ An interactive head's `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`, `HYDRA_INSTANCE_ID`,
 `HYDRA_BRANCH`, `HYDRA_WORKTREE`, `HYDRA_STATE_DIR`, and `HYDRA_TASK_FILE` are
 delivered through the tmux session environment and a per-instance launcher that
 `session:0.0` runs; the launcher starts the agent by the absolute executable path
-recorded in provenance and then hands the pane to the interactive shell. Bootstrap
+recorded in provenance and then hands the pane to the interactive shell. When it
+starts the agent the launcher removes the instance's
+`heads/<head>/instances/<instance>/agent-exit`; when the agent exits it writes
+that file, one line `<status> <epoch>` (the agent's exit status and the time in
+seconds), to an adjacent temporary file and renames it into place, before
+printing its exit line in the pane. A resume starts a new instance and so a new
+record. The file is an observation for the control centre, not observed status:
+it does not change `observed-status`, completion or liveness. Bootstrap
 exports and the agent launch are never typed into the shell or its history; only
 configured startup and YAML pane commands, and an agent launch that must follow
 them, remain typed keys. `hydra provenance` exposes the exact identity, paths, and

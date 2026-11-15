@@ -310,6 +310,42 @@ EOF
     _wsl_out="$(cd "$_wsl_dir" && LC_ALL=C sh ./launcher </dev/null 2>&1 | sed -n '1p')"
     assert_equal "Hydra head feature/it's | agent fixture | repo repo-name" "$_wsl_out" "banner falls back to ASCII separators outside UTF-8 locales"
 
+    # A launcher that knows its instance records the agent's exit there: an
+    # earlier record is gone while the agent runs, and the new one holds the
+    # status and the time, written through an adjacent temporary file.
+    mkdir -p "$_wsl_dir/state/instances/instance_1"
+    printf '3 100\n' > "$_wsl_dir/state/instances/instance_1/agent-exit"
+    cat > "$_wsl_dir/exit-agent" <<'EOF'
+#!/bin/sh
+[ ! -e "$HYDRA_STATE_DIR/instances/$HYDRA_INSTANCE_ID/agent-exit" ] || echo 'record-while-running'
+exit 5
+EOF
+    chmod +x "$_wsl_dir/exit-agent"
+    write_session_launcher "$_wsl_dir/recording" "$_wsl_dir/worktree" feature/rec fixture repo-name \
+        "'$_wsl_dir/exit-agent'" "HYDRA_STATE_DIR=$_wsl_dir/state" "HYDRA_INSTANCE_ID=instance_1"
+    _wsl_before="$(date +%s)"
+    _wsl_out="$(cd "$_wsl_dir" && LC_ALL=C sh ./recording </dev/null 2>&1)"
+    _wsl_after="$(date +%s)"
+    case "$_wsl_out" in
+        *record-while-running*) assert_success 1 "starting the agent clears an earlier exit record" ;;
+        *) assert_success 0 "starting the agent clears an earlier exit record" ;;
+    esac
+    _wsl_record="$(cat "$_wsl_dir/state/instances/instance_1/agent-exit" 2>/dev/null)"
+    assert_equal 5 "${_wsl_record%% *}" "the exit record holds the agent's status"
+    _wsl_time="${_wsl_record#* }"
+    case "$_wsl_time" in ''|*[!0-9]*) _wsl_time=0 ;; esac
+    if [ "$_wsl_time" -ge "$_wsl_before" ] && [ "$_wsl_time" -le "$_wsl_after" ]; then
+        assert_success 0 "the exit record holds when the agent exited"
+    else
+        assert_success 1 "the exit record holds when the agent exited"
+    fi
+    assert_equal "agent-exit" "$(ls -A "$_wsl_dir/state/instances/instance_1")" "no temporary file is left beside the record"
+    case "$_wsl_out" in
+        *"Hydra: agent fixture exited with status 5; this pane is now a shell for head feature/rec."*)
+            assert_success 0 "a recording launcher still reports the exit in the pane" ;;
+        *) assert_success 1 "a recording launcher still reports the exit in the pane" ;;
+    esac
+
     _wsl_long="feature/a-long-branch-name-that-needs-its-own-line"
     write_session_launcher "$_wsl_dir/long" "$_wsl_dir/worktree" "$_wsl_long" none repo-name ""
     _wsl_out="$(cd "$_wsl_dir" && LC_ALL=C sh ./long </dev/null 2>&1)"

@@ -31,6 +31,8 @@ struct store_head {
     char live_key[STORE_TEXT];
     char declared[STORE_TEXT], observed[STORE_TEXT], confidence[STORE_TEXT], instance[STORE_TEXT];
     char desired[STORE_TEXT], head_id[STORE_TEXT], mode[16];
+    /* The status the current instance's agent-exit record holds, or "-". */
+    char agent_exit[8];
     char adapter[STORE_TEXT], adapter_confidence[STORE_TEXT];
     char head_dir[STORE_PATH], source[STORE_PATH], adapter_source[STORE_PATH];
     /* The head's worktree when it is a directory, otherwise empty. */

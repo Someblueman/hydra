@@ -64,9 +64,35 @@ static void test_visualization_short(const char *tui, const char *hydra, const c
     close_session(&session);
 }
 
-/* When the agent leaves its terminal, Hydra's launcher says so in it and
- * the pane becomes a shell; the head's Details then report that, not a
- * running agent in "the live terminal". */
+/* The launcher's exit record reaches Details through the head row (its last
+ * field, native-agent-exit.tsv) with no launcher line left on the screen:
+ * later output scrolled it away. */
+static void details_exit_recorded(const char *tui, const char *hydra, const char *fake_bin, const char *capture) {
+    struct session session;
+    char heads[4096];
+    const char *slash = strrchr(hydra, '/');
+    snprintf(heads, sizeof(heads), "%.*s/native-agent-exit.tsv", slash ? (int)(slash - hydra) : 1, slash ? hydra : ".");
+    unlink(capture);
+    result(write_marker_file(capture, "$ codex login\nOpening the browser to sign in.\n$ \n"),
+           "write pane text that no longer shows the launcher's line");
+    setenv("FAKE_TMUX_CAPTURE", capture, 1);
+    setenv("HYDRA_TUI_FIXTURE", heads, 1);
+    result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open the recorded-exit terminal");
+    unsetenv("FAKE_TMUX_CAPTURE");
+    unsetenv("HYDRA_TUI_FIXTURE");
+    (void)wait_for_model(&session);
+    result(wait_for_marker(&session, "Opening the browser", 6000) && wait_for_marker(&session, "agent exited (status 1);", 1000) &&
+           !session_visible(&session, "Hydra: codex exited") && !session_visible(&session, "(the live terminal)"),
+           "with no launcher line on screen the recorded exit still says the agent exited");
+    write_input(session.master, "q", 1);
+    result(wait_for_exit(&session) == 0, "the recorded-exit terminal exits normally");
+    close_session(&session);
+}
+
+/* When the agent leaves its terminal, Hydra's launcher records it beside
+ * the head and says so in the terminal, and the pane becomes a shell; the
+ * head's Details then report that, not a running agent in "the live
+ * terminal". A head row without the record falls back to the line. */
 static void test_details_agent_exited(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     char capture[] = "/tmp/hydra-exited-capture.XXXXXX";
@@ -86,6 +112,7 @@ static void test_details_agent_exited(const char *tui, const char *hydra, const 
     write_input(session.master, "q", 1);
     result(wait_for_exit(&session) == 0, "the exited-agent terminal exits normally");
     close_session(&session);
+    details_exit_recorded(tui, hydra, fake_bin, capture);
     unlink(capture);
 }
 

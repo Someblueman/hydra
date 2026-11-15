@@ -449,6 +449,28 @@ static void head_bind(const struct reader *r, struct store_head *h, const char *
     if (!strcmp(recorded, "headless")) text_copy(h->mode, sizeof(h->mode), "headless");
 }
 
+static bool all_digits(const char *text, size_t length) {
+    size_t i;
+    for (i = 0; i < length; i++) if (text[i] < '0' || text[i] > '9') return false;
+    return length > 0;
+}
+
+/* The status in an instance's agent-exit record, "<status> <epoch>" that the
+ * head launcher writes when the agent leaves; "-" for none or another form. */
+static void agent_exit(const char *directory, char *out, size_t size) {
+    char line[STORE_TEXT];
+    const char *space;
+    size_t status;
+    first_line_at(directory, "/agent-exit", line, sizeof(line));
+    space = strchr(line, ' ');
+    status = space ? (size_t)(space - line) : 0U;
+    if (!space || status > 3U || !all_digits(line, status) || !all_digits(space + 1, strlen(space + 1))) {
+        text_copy(out, size, "-");
+        return;
+    }
+    (void)snprintf(out, size, "%.*s", (int)status, line);
+}
+
 /* What the current instance declared and what Hydra observed of it. */
 static void head_instance(struct store_head *h) {
     char path[STORE_PATH], directory[STORE_PATH], value[STORE_TEXT];
@@ -464,6 +486,7 @@ static void head_instance(struct store_head *h) {
     if (!first_line(path, h->observed, sizeof(h->observed))) text_copy(h->observed, sizeof(h->observed), "unavailable");
     path_join(path, sizeof(path), directory, "/observed-confidence");
     if (!first_line(path, h->confidence, sizeof(h->confidence))) text_copy(h->confidence, sizeof(h->confidence), "unavailable");
+    agent_exit(directory, h->agent_exit, sizeof(h->agent_exit));
 }
 
 /* Queue entries naming the branch: *.queue files with a `branch=` line for it. */
@@ -601,6 +624,7 @@ static void head_read(const struct reader *r, const char *state_source, char *re
     text_copy(h->observed, sizeof(h->observed), "unavailable");
     text_copy(h->confidence, sizeof(h->confidence), "unavailable");
     text_copy(h->desired, sizeof(h->desired), "unavailable");
+    text_copy(h->agent_exit, sizeof(h->agent_exit), "-");
     text_copy(h->source, sizeof(h->source), state_source);
     head_bind(r, h, whole);
     if (h->head_id[0]) {
@@ -907,12 +931,12 @@ static void write_head(const struct store_snapshot *s, const struct store_head *
     if (!strcmp(h->mode, "headless")) { status = "active"; liveness = "unavailable"; }
     else if (!strcmp(status, "active")) liveness = "live";
     if (!h->worktree[0] || !diff || !diff(context, h->worktree, &changed)) changed = 0;
-    fprintf(out, "H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%s\t%s\t%s\t%s\t%s\t%s\t%u\t%s\t%s\n",
+    fprintf(out, "H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%u\t%s\t%s\t%s\t%s\t%s\t%s\t%u\t%s\t%s\t%s\n",
             h->branch, h->session, h->profile, h->group, h->pr, status, liveness,
             h->declared, h->observed, h->confidence, h->instance,
             h->events, h->signals, h->messages, h->claims, h->scopes, h->queue, h->resources, changed, h->gates, h->approved,
             h->desired, h->source, h->head_id, h->adapter, h->adapter_confidence, h->adapter_source,
-            s->notifications, s->notification_source, h->mode);
+            s->notifications, s->notification_source, h->mode, h->agent_exit);
     if (!strcmp(status, "dead")) fprintf(out, "R\tdead-session\t%s\t%s\texact\thydra doctor\n", h->branch, s->state_source);
     if (h->extra) fprintf(out, "R\tmalformed-state\t%s\t%s\texact\thydra state verify\n", h->branch, s->state_source);
     if (!strcmp(h->desired, "stopping") && h->head_dir[0]) {

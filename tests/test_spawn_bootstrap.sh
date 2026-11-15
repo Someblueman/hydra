@@ -211,6 +211,11 @@ assert_equal "cwd=$agent_worktree" "$(sed -n '7p' "$FAKE_AGENT_OUT")" "agent sta
 # The agent writes its record just before exec, so wait for the exec itself.
 wait_until 30 pane_runs agent:0.0 cat
 assert_equal cat "$(pane_command agent:0.0)" "the agent is the pane's foreground process"
+if [ -e "$agent_dir/instances/$agent_instance/agent-exit" ]; then
+    assert_success 1 "a running agent has no exit record"
+else
+    assert_success 0 "a running agent has no exit record"
+fi
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q fakeagent
 assert_failure $? "the agent command is not typed with send-keys"
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q 'export HYDRA_'
@@ -234,6 +239,13 @@ case "$(tmux capture-pane -p -t agent:0.0)" in
     *) assert_success 1 "the pane reports the agent exit before the prompt" ;;
 esac
 assert_equal "$agent_head" "$(pane_value agent HYDRA_HEAD_ID)" "the shell after the agent keeps the head environment"
+# The launcher records the exit beside the instance, so it outlives the line
+# on the screen: "<status> <epoch>".
+agent_exit="$(sed -n '1p' "$agent_dir/instances/$agent_instance/agent-exit" 2>/dev/null)"
+case "$agent_exit" in
+    "0 "[0-9]*) assert_success 0 "the agent's exit is recorded with its status and time" ;;
+    *) assert_success 1 "the agent's exit is recorded with its status and time (got '$agent_exit')" ;;
+esac
 
 # --- tmux without new-session -e (3.0/3.1) -----------------------------------
 : > "$BOOTSTRAP_LOG"

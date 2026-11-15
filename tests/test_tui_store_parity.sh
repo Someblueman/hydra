@@ -210,6 +210,11 @@ put "$rich/pr" 42
 put "$rich_instance/declared-outcome" "done"
 put "$rich_instance/observed-status" idle
 put "$rich_instance/observed-confidence" reported
+# The launcher's record that the agent left, and records not of its form.
+put "$rich_instance/agent-exit" "1 1788786000"
+put "$heads/head_000000000000000c/instances/instance_000000000000000c/agent-exit" "x 1788786000"
+put "$heads/head_000000000000000d/instances/instance_000000000000000d/agent-exit" "1000 1788786000"
+put "$heads/head_000000000000000e/instances/instance_000000000000000e/agent-exit" "7"
 printf '%s\n' '{"type":"lifecycle.started"}' '{"type":"signal.idle"}' '{"type":"message.sent"}' \
     '{"note":"\"type\":\"signalx"}' > "$rich/events/events.jsonl"
 printf '%s' '{"type":"signal.done"}' >> "$rich/events/events.jsonl"
@@ -268,6 +273,9 @@ assert_equal "5 2 3 3 2 2 3 3 4 2" \
     "events, signals, messages, claims, scopes, queue, resources, changed files, gates and approvals are counted"
 assert_equal "hook-v1 user-declared $home/profiles/custom 2 $repo/.git/hydra/notifications interactive" \
     "$(row_fields rich 26 27 28 29 30 31)" "a custom profile's adapter, the notification rules and the terminal mode"
+assert_equal "1" "$(row_fields rich 32)" "the status the agent exited with comes from its exit record"
+assert_equal "- - - -" "$( { row_fields dead 32; row_fields override 32; row_fields partial 32; row_fields plain-dir 32; } | tr '\n' ' ' | sed 's/ $//')" \
+    "no exit record, or one not of the form status and time, reads as -"
 assert_equal "dead stopped 0" "$(row_fields dead 7 8 20)" "a head whose session is gone is dead and its missing worktree has no changes"
 assert_equal "active unavailable headless" "$(row_fields headless 7 8 31)" "a headless head is active with unknown liveness"
 assert_equal "unavailable unavailable" "$(row_fields unknown 10 11)" "missing observation records read as unavailable"

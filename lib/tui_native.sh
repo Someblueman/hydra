@@ -91,6 +91,19 @@ tui_native_count_lines() {
     fi
 }
 
+# The status an instance's agent-exit record holds ("<status> <epoch>", the
+# head launcher's record that the agent left), or - when there is none or
+# the record is not of that form.
+tui_native_agent_exit() {
+    _tnae_line="$(sed -n '1p' "$1" 2>/dev/null || true)"
+    case "$_tnae_line" in *' '*) ;; *) printf '%s\n' -; return 0 ;; esac
+    _tnae_status="${_tnae_line%% *}"
+    _tnae_time="${_tnae_line#* }"
+    case "$_tnae_status" in ''|*[!0-9]*|????*) printf '%s\n' -; return 0 ;; esac
+    case "$_tnae_time" in ''|*[!0-9]*) printf '%s\n' -; return 0 ;; esac
+    printf '%s\n' "$_tnae_status"
+}
+
 tui_native_count_entries() {
     _tnce_root="$1"
     _tnce_pattern="$2"
@@ -243,7 +256,7 @@ tui_native_emit_data() {
         fi
 
         _tned_declared="" _tned_observed=unavailable _tned_confidence=unavailable
-        _tned_instance="" _tned_profile="${_tned_ai:--}" _tned_desired=unavailable
+        _tned_instance="" _tned_profile="${_tned_ai:--}" _tned_desired=unavailable _tned_agent_exit=-
         _tned_events=0 _tned_signals=0 _tned_messages=0 _tned_claims=0 _tned_scopes=0
         _tned_queue=0 _tned_resources=0 _tned_diff=0 _tned_gates=0 _tned_approved=0
         _tned_source="$_tned_project_dir"
@@ -257,6 +270,7 @@ tui_native_emit_data() {
                 _tned_declared="$(sed -n '1p' "$_tned_instance_dir/declared-outcome" 2>/dev/null || true)"
                 _tned_observed="$(sed -n '1p' "$_tned_instance_dir/observed-status" 2>/dev/null || echo unavailable)"
                 _tned_confidence="$(sed -n '1p' "$_tned_instance_dir/observed-confidence" 2>/dev/null || echo unavailable)"
+                _tned_agent_exit="$(tui_native_agent_exit "$_tned_instance_dir/agent-exit")"
             fi
             _tned_events="$(tui_native_count_lines "$_tned_head_dir/events/events.jsonl")"
             _tned_signals="$(awk '/"type":"signal\./ { n++ } END { print n + 0 }' "$_tned_head_dir/events/events.jsonl" 2>/dev/null || printf '0\n')"
@@ -294,7 +308,7 @@ tui_native_emit_data() {
         else
             _tned_adapter_source_safe="$(tui_native_safe_field "$_tned_adapter_source")"
         fi
-        printf 'H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf 'H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$_tned_branch" "$_tned_session" "$_tned_profile" "$_tned_group" "$_tned_pr" \
             "$_tned_status" "$_tned_liveness" \
             "$_tned_declared" "$_tned_observed" "$_tned_confidence" "$_tned_instance" \
@@ -302,7 +316,7 @@ tui_native_emit_data() {
             "$_tned_queue" "$_tned_resources" "$_tned_diff" "$_tned_gates" "$_tned_approved" \
             "$_tned_desired" "$_tned_source_safe" "$_tned_head_id" \
             "$_tned_adapter" "$_tned_adapter_confidence" "$_tned_adapter_source_safe" \
-            "$_tned_notification_count" "$_tned_notification_source_safe" "$_tned_mode"
+            "$_tned_notification_count" "$_tned_notification_source_safe" "$_tned_mode" "$_tned_agent_exit"
 
         if [ "$_tned_status" = dead ]; then
             printf 'R\tdead-session\t%s\t%s\texact\thydra doctor\n' \

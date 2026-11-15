@@ -98,8 +98,9 @@ in the product with tests of their own, were:
 
 - U3.c (`u3-missing-auth`): after the provider exited for lack of a login,
   Details said `Session running (the live terminal)`. The Session row now says
-  "agent exited (status N); the terminal is a shell" once Hydra's launcher line
-  says so in the head's terminal.
+  "agent exited (status N); the terminal is a shell" once Hydra's launcher has
+  recorded the exit beside the instance (`agent-exit`), even after later output
+  scrolled its line out of the terminal.
 - U7.a (`u7-details-recovery`): Details did not show the objective given at
   launch. The Objective row is read from the task the launch wrote beside the
   head's record.

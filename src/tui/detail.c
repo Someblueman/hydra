@@ -37,8 +37,8 @@ static void detail_reported(struct app *app, const struct head *head, const char
     else labelled_pair(app, "Reported", reported, tone, "Group", group, KT_BASE);
 }
 
-/* The terminal's state: running, unless Hydra's launcher said in it that
- * the agent left, which turns the pane into a plain shell. */
+/* The terminal's state: running, unless Hydra's launcher recorded that the
+ * agent left, which turns the pane into a plain shell. */
 static void detail_session(struct app *app, const struct head *head, const char *agent) {
     char session[96];
     int exited = !strcmp(status_label(head), "running") ? head_agent_exit(app, head) : -1;
