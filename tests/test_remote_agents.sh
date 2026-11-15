@@ -141,6 +141,7 @@ cases() {
     has "$out" '"profile":"claude","executable":"claude","on_path":null,"candidates":\[\],"recorded":null,"status":"missing"'
     has "$out" '"agent":"claude","status":"missing","install_argv":\["hydra","remote","install-agent","n1","--agent","claude","--json"\]'
     has "$out" '"selected":\[\]'
+    has "$(state n1)" '"summary":"0 usable, 0 off PATH, 0 selected"'
     [ "$(step_status n1 agents)" = "done" ] || fail "agents step not done"
 
     # No recipe for launch-only agents: manual instructions, nothing selected.
@@ -155,6 +156,8 @@ cases() {
     has "$out" '"docs_url":"https:\\/\\/code.claude.com\\/docs\\/en\\/setup"'; has "$out" '"source":"built-in"'
     has "$out" '"id":"install_agent:claude","status":"approval_required"'
     has "$(state n1)" '"selected":\["claude"\]'
+    # Choosing an agent counts it in the step's summary at once.
+    has "$(state n1)" '"summary":"0 usable, 0 off PATH, 1 selected"'
     hash="$(json_value "$out" plan_sha256)"
     [ "${#hash}" -eq 64 ] || fail "no plan hash"
     if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "an unapproved installer ran"; fi
@@ -202,6 +205,9 @@ cases() {
     lacks "$out" '"--record"'
     [ "$(cat "$AGENTS_REMOTE_HOME/.hydra/agents/locations/claude")" = "$path" ] || fail "the planned location was not recorded"
     [ "$(step_status n1 install_agent:claude)" = "done" ] || fail "install not done"
+    # The agents step counts the installed, recorded agent as usable.
+    has "$(state n1)" '"summary":"1 usable, 0 off PATH, 1 selected"'
+    lacks "$(state n1)" '"summary":"0 usable'
     before="$(lines "$fixture/tty-commands")"
     run 0 "$out" install-agent n1 --agent claude --json
     [ "$(lines "$fixture/tty-commands")" = "$before" ] || fail "a finished install ran again"
