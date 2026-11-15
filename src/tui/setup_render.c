@@ -378,21 +378,42 @@ static void render_problem(struct app *app, struct native_setup *s) {
     footer(app, &p, text, x.action ? KT_STRONG : KT_MUTED);
 }
 
+/* The agent a first head on the host can use: the first one signed in
+ * during setup, else the first one installed; NULL for none. */
+static const char *ready_agent(const struct setup_envelope *e) {
+    static const char *const kinds[] = {"sign_in:", "install_agent:"};
+    size_t k, i;
+    for (k = 0; k < 2; k++)
+        for (i = 0; i < e->step_count; i++)
+            if (!strncmp(e->steps[i].id, kinds[k], strlen(kinds[k])) && !strcmp(e->steps[i].status, "done"))
+                return e->steps[i].id + strlen(kinds[k]);
+    return NULL;
+}
+
 static void render_done(struct app *app, struct native_setup *s) {
     const struct setup_envelope *e = s->current;
+    const char *destination = e->destination[0] ? e->destination : s->destination, *agent = ready_agent(e);
     struct pen p;
     char text[600];
     size_t i;
     snprintf(text, sizeof(text), "%.120s is ready", s->name);
     title(app, KT_SUCCESS, text);
     pen_begin(&p, app, 2);
-    snprintf(text, sizeof(text), "Hydra added %.120s (%.200s) as a remote host.", s->name, e->destination[0] ? e->destination : s->destination);
+    if (strcmp(destination, s->name)) snprintf(text, sizeof(text), "Hydra can run work on %.120s (%.200s) now.", s->name, destination);
+    else snprintf(text, sizeof(text), "Hydra can run work on %.120s now.", s->name);
     pen_text(&p, 0, KT_BASE, text);
     pen_text(&p, 0, KT_BASE, "");
-    for (i = 0; i < e->step_count; i++) step_row(app, &p, &e->steps[i], false, false);
+    pen_text(&p, 0, KT_STRONG, "Next");
+    snprintf(text, sizeof(text), "Enter shows %.120s in Work, where its heads appear beside local ones. Start one from a "
+             "terminal in a Git checkout on the host:", s->name);
+    pen_text(&p, 2, KT_BASE, text);
+    snprintf(text, sizeof(text), "hydra fleet spawn %.120s --project /path/on/host -- BRANCH%s%.60s", s->name,
+             agent ? " --profile " : " --no-agent", agent ? agent : "");
+    pen_text(&p, 4, KT_STRONG, text);
     pen_text(&p, 0, KT_BASE, "");
-    pen_text(&p, 0, KT_BASE, "Follow and start work on it with hydra fleet tui.");
-    footer(app, &p, "Enter or Esc closes", KT_STRONG);
+    for (i = 0; i < e->step_count; i++) step_row(app, &p, &e->steps[i], false, false);
+    snprintf(text, sizeof(text), "Enter shows %.120s in Work   Esc stays in Hosts", s->name);
+    footer(app, &p, text, KT_STRONG);
 }
 
 /* ---- A name that already has an unfinished setup ---- */
@@ -424,7 +445,7 @@ static void render_duplicate(struct app *app, struct native_setup *s) {
 void native_setup_render(struct app *app) {
     struct native_setup *s = app->setup;
     if (s->screen != SETUP_SCREEN_STEPS && s->screen != SETUP_SCREEN_RUNNING && s->screen != SETUP_SCREEN_TRUST_KEY &&
-        s->screen != SETUP_SCREEN_PLAN && s->screen != SETUP_SCREEN_FORM)
+        s->screen != SETUP_SCREEN_PLAN && s->screen != SETUP_SCREEN_FORM && s->screen != SETUP_SCREEN_DONE)
         steps_overview(app, s);
     switch (s->screen) {
         case SETUP_SCREEN_RUNNING: render_steps(app, s, true); break;

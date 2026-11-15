@@ -75,6 +75,9 @@ void hosts_open_row(struct app *app);
 /* Up and Down on the list; a setup open in the detail closes (its step
  * keeps running). */
 void hosts_move(struct app *app, int direction);
+/* Opens Work filtered to one location ("local" or a host), as Enter on its
+ * row does; Esc there comes back to Hosts. */
+void hosts_follow(struct app *app, const char *location);
 /* Esc in Work after Enter followed a host there: back to Hosts, with the
  * location filter Work had before. */
 bool hosts_jump_return(struct app *app);

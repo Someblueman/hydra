@@ -321,6 +321,8 @@ static void job_finish(struct app *app, struct native_setup *s) {
     s->job_kind = SETUP_JOB_NONE;
     swap = s->current; s->current = s->incoming; s->incoming = swap;
     job_result(app, s, kind);
+    /* A host that just became ready is observed at once, not after the idle wait. */
+    if (s->screen == SETUP_SCREEN_DONE) app->remote_next = 0;
     if (!s->job.active) native_setup_hosts_refresh(app);
     if (!s->open && !s->job.active && kind != SETUP_JOB_REMOVE)
         snprintf(app->notice, sizeof(app->notice), s->screen == SETUP_SCREEN_DONE ? "Remote host %.100s is set up" :
@@ -563,6 +565,15 @@ static void preflight_enter(struct app *app, struct native_setup *s) {
     guided_start(app, s, false);
 }
 
+/* Enter on a ready host: its work in Work, observed afresh. */
+static void done_follow(struct app *app, struct native_setup *s) {
+    char name[sizeof(s->name)];
+    copy_text(name, sizeof(name), s->name);
+    close_flow(app, s);
+    app->remote_next = 0;
+    hosts_follow(app, name);
+}
+
 static void enter(struct app *app, struct native_setup *s) {
     switch (s->screen) {
         case SETUP_SCREEN_STEPS: step_enter(app, s); break;
@@ -570,7 +581,7 @@ static void enter(struct app *app, struct native_setup *s) {
         case SETUP_SCREEN_HANDOFF: handoff_start(app, s); break;
         case SETUP_SCREEN_PREFLIGHT: preflight_enter(app, s); break;
         case SETUP_SCREEN_ERROR: error_enter(app, s); break;
-        case SETUP_SCREEN_DONE: close_flow(app, s); break;
+        case SETUP_SCREEN_DONE: done_follow(app, s); break;
         case SETUP_SCREEN_DUPLICATE: native_setup_resume(app, s->duplicate); break;
         case SETUP_SCREEN_RUNNING: break;
         default: guided_start(app, s, false); break;
@@ -683,7 +694,7 @@ static const char *continue_label(const struct native_setup *s) {
     case SETUP_SCREEN_AGENTS: return "run";
     case SETUP_SCREEN_UNKNOWN: return "reconcile";
     case SETUP_SCREEN_HANDOFF: return "hand over";
-    case SETUP_SCREEN_DONE: return "close";
+    case SETUP_SCREEN_DONE: return "show in Work";
     case SETUP_SCREEN_DUPLICATE: return "continue that setup";
     case SETUP_SCREEN_ERROR:
         setup_explain(s->current->code, &x);

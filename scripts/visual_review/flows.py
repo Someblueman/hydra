@@ -192,7 +192,8 @@ def hosts(s: Session) -> None:
     s.keys("\r")
     s.driver.wait_for("FAKE SIGN-IN: open", timeout=10)
     s.state("hosts-done", "ovh is ready", keys="\r", timeout=15)
-    s.state("hosts-after", "+ Add a host", "set up", keys="\r")
+    s.state("hosts-done-work", "Heads \u00b7 host ovh", keys="\r")
+    s.state("hosts-after", "+ Add a host", "set up", keys="\x1b")
 
 
 def entry(s: Session) -> None:

@@ -260,7 +260,7 @@ static const struct screen_case screens[] = {
     {"outcome-unknown.json", "outcome-unknown", 4, {"cannot tell whether", "installs twice", "Enter reconciles", "exit 4"}, {NULL, NULL, NULL}},
     {"sign-in-tty.json", "sign-in-handoff", 1, {"Sign in to claude on ovh", "hydra remote sign-in ovh --agent claude", "return here at once", "after a failure"}, {"--json", NULL, NULL}},
     {"sign-in-failed.json", "sign-in-failed", 1, {"Sign-in did not finish", "sign-in exited with a nonzero status", "Enter signs in again", NULL}, {NULL, NULL, NULL}},
-    {"done.json", "done", 0, {"ovh is ready", "Sign in to claude", "hydra fleet tui", NULL}, {NULL, NULL, NULL}},
+    {"done.json", "done", 0, {"ovh is ready", "Sign in to claude", "Enter shows ovh in Work", "hydra fleet spawn ovh --project /path/on/host -- BRANCH --profile claude"}, {"hydra fleet tui", "(ovh)", NULL}},
     {"fresh.json", "steps", 0, {"Setting up ovh", "\xe2\x96\x8c Continue setup", "Trust the host key", "not started"}, {NULL, NULL, NULL}},
     {"remove-approval.json", "remove-plan", 3, {"Remove the setup record of ovh?", "Left on remote", "Only this machine's record of the setup is deleted", "y remove the record"}, {"Type yes", NULL, NULL}},
 };
@@ -594,6 +594,33 @@ static void default_name_cases(struct app *app) {
     s->screen = SETUP_SCREEN_STEPS; s->notice[0] = '\0';
 }
 
+/* A ready host: Enter follows it into Work (Esc there comes back to Hosts)
+ * and asks for a fresh observation so its row appears at once. */
+static void done_cases(struct app *app) {
+    struct native_setup *s = app->setup;
+    char frame[65536];
+    app->cols = 120; app->rows = 32; app->view = 6; app->location[0] = '\0';
+    load("done.json", s->current, 0);
+    copy_text(s->name, sizeof(s->name), "ovh");
+    s->open = true; s->screen = SETUP_SCREEN_DONE; s->modal.screen = SETUP_SCREEN_NONE;
+    hosts_focus_detail(app, true);
+    app->remote_next = time(NULL) + 600;
+    check(!strcmp(native_setup_label(app, KEY_SETUP_CONTINUE), "show in Work"), "Enter on a ready host is labelled show in Work");
+    setup_keys(app, "\r");
+    check(!s->open && app->view == 7 && !strcmp(app->location, "ovh") && app->remote_next == 0,
+          "Enter on a ready host shows its work in Work and observes it afresh");
+    check(hosts_jump_return(app) && app->view == 6 && !app->location[0], "Esc from the ready host's work returns to Hosts");
+    /* Its record, listed before the host's first observation, says it is set up. */
+    memset(&s->records[0], 0, sizeof(s->records[0]));
+    copy_text(s->records[0].name, sizeof(s->records[0].name), "ovh");
+    copy_text(s->records[0].summary, sizeof(s->records[0].summary), "set up");
+    s->records[0].complete = s->records[0].remote_changed = true;
+    s->record_count = 1; app->host_selected = 1;
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "This host is set up") && !strstr(frame, "not in the fleet yet") &&
+          !strstr(frame, "e edits it"), "a finished setup not observed yet is described as set up");
+    s->record_count = 0; app->host_selected = 0;
+}
+
 /* A running step names what it does and for how long; c stops the child
  * and returns to the screen the recorded state gives. */
 static void running_cases(struct app *app) {
@@ -714,6 +741,7 @@ int main(int argc, char **argv) {
     running_cases(app);
     edit_cases(app);
     default_name_cases(app);
+    done_cases(app);
     freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);

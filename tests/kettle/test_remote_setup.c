@@ -211,7 +211,11 @@ static void journey(int cols, int rows, bool fail_once) {
     provision(&s);
     install_agent(&s);
     sign_in(&s, fail_once);
+    /* Enter on the ready host follows it into Work; Esc comes back to Hosts. */
     kt_send(&s, "\r");
+    kt_until(&s, "Heads \xc2\xb7 host ovh", 4);
+    capture(&s, "14-done-work");
+    kt_send(&s, "\033");
     kt_until(&s, "+ Add a host", 4);
     kt_until(&s, "set up", 6);
     capture(&s, "14-hosts-after");

@@ -140,6 +140,16 @@ def trust_key(j: Journey, name: str) -> None:
     j.keys(BACKSPACE + BACKSPACE + "yes\r")
 
 
+def follow_ready_host(j: Journey, name: str) -> None:
+    """Enter on the ready screen follows the host into Work, where the
+    control centre observes it at once; Esc comes back to Hosts."""
+    j.see("done-work", f"Heads \u00b7 host {name}", timeout=30)
+    j.keys(ESC)
+    screen = j.see("hosts-after", "+ Add a host", "Observed", timeout=60)
+    j.check(re.search(rf"\b{re.escape(name)}\s+\d+ heads?\b", screen) is not None,
+            f"{name} is listed under Observed once setup finished")
+
+
 def onboard() -> int:
     j = Journey("onboard", [])
     add_host(j, "u10", "u10")
@@ -201,7 +211,7 @@ def onboard() -> int:
     j.see("done", "u10 is ready", timeout=180)
     j.check(login_log() == ["start", "start", "done", "start", "done"], f"the retry signed in: {login_log()}")
     j.keys("\r")
-    j.see("hosts-after", "+ Add a host", timeout=30)
+    follow_ready_host(j, "u10")
     return j.quit()
 
 
@@ -234,7 +244,7 @@ def again() -> int:
     j.keys("\r")
     j.see("done", "u10-again is ready", timeout=180)
     j.keys("\r")
-    j.see("hosts-after", "+ Add a host", timeout=30)
+    follow_ready_host(j, "u10-again")
     return j.quit()
 
 

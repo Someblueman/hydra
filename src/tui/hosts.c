@@ -476,6 +476,12 @@ static void setup_detail(struct app *app, const struct pane *p, const struct hos
     if (r->upgrade) { upgrade_detail(app, state); return; }
     linef(app, "%s", state);
     blank(app);
+    if (r->complete) {
+        /* Published, not observed yet: the next remote observation lists it. */
+        paragraph(app, "This host is set up. It moves to Observed when it first answers Hydra; Enter shows what setup did "
+                  "and then its work in Work.", KT_BASE);
+        return;
+    }
     paragraph(app, "This host is not in the fleet yet. Enter shows its steps and continues setup; you approve every change first.", KT_BASE);
     blank(app);
     style(app, TONE_MUTED); linef(app, "e edits it, x removes its record."); style(app, TONE_BASE);
@@ -575,7 +581,7 @@ void hosts_move(struct app *app, int direction) {
 }
 
 /* Follows work in Work, filtered to where it runs; Esc there comes back. */
-static void follow(struct app *app, const char *location) {
+void hosts_follow(struct app *app, const char *location) {
     struct native_hosts *h = hosts_state(app);
     if (!h) return;
     copy_text(h->location, sizeof(h->location), app->location);
@@ -600,8 +606,8 @@ void hosts_open_row(struct app *app) {
     struct host_row row;
     if (!hosts_selected_row(app, &row)) return;
     if (row.kind == HOST_ROW_ADD) native_setup_open_form(app);
-    else if (row.kind == HOST_ROW_MACHINE) follow(app, "local");
-    else if (row.kind == HOST_ROW_HOST) follow(app, app->model.hosts[row.index].name);
+    else if (row.kind == HOST_ROW_MACHINE) hosts_follow(app, "local");
+    else if (row.kind == HOST_ROW_HOST) hosts_follow(app, app->model.hosts[row.index].name);
     else if (flow_shown(app) && !strcmp(app->setup->name, app->setup->records[row.index].name)) hosts_focus_detail(app, true);
     else native_setup_resume(app, app->setup->records[row.index].name);
 }
