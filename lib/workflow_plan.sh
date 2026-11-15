@@ -150,6 +150,9 @@ cmd_workflow_plan() (
                 '       hydra workflow plan result <run-id>' \
                 '       hydra workflow plan check-definition <compiled.json> <check-id>' \
                 '       hydra workflow plan check-recipe <compiled.json> <check-id>' \
+                'propose exits 0 when the revision it published passes the project'"'"'s plan policy,' \
+                '3 when the revision is published but fails it, and 4 when it is published but' \
+                'could not be checked; any other failure (1, or 2 for usage) published nothing.' \
                 'Compile from the source repository. Keep compiled output outside it.' \
                 'Plans carry inline agent prompts and --asset files in the compiled artifact;' \
                 'nothing needs to be committed to the source to plan.' \

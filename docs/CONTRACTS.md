@@ -1226,9 +1226,22 @@ Each `propose` increments `planning/revision` and then checks the draft, under
 the head lock, against the project's plan policy (shape, policy, graph and
 assets; not the source checkout) with `workflow-plan check <draft> <policy>
 [--assets-dir <dir>]`. It prints whether the revision passes or each diagnostic
-as `  <path>: <message>` with its recovery, and exits 0 either way: the draft
-is saved. A tool the policy lacks is named in the diagnostic with the command
-that allows it.
+as `  <path>: <message>` with its recovery. A tool the policy lacks is named in
+the diagnostic with the command that allows it. The exit status of `propose`
+(and of `hydra plan propose`) says whether a revision was published and how it
+checked:
+
+| Status | Published | Meaning |
+|---|---|---|
+| 0 | yes, as revision N | It passes the project's plan policy. |
+| 3 | yes, as revision N | It fails the policy; the diagnostics say what to fix. It cannot be approved until a later revision passes. |
+| 4 | yes, as revision N | Hydra could not check it (unreadable policy, or the checker failed without diagnostics); review shows any problem. |
+| 1 | no | Refused (malformed draft, asset, ownership or lock); the previous draft, assets and revision are unchanged. |
+| 2 | no | Usage error. |
+
+Before this release `propose` exited 0 for statuses 3 and 4; tooling that
+treated any non-zero status as "not published" must now treat 3 and 4 as
+published.
 
 The project's plan policy is `projects/<project>/plan-policy.json`, written
 once with the guided policy above (without an agent profile) the first time a

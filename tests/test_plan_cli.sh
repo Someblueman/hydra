@@ -63,7 +63,11 @@ assert_success $? 'the short plan format fits on one screen'
 sed -e 's/"plan": "simple-1",/"plan": "simple-1", "worker": "greeting-work",/' \
     -e 's/"run": \["make", "check"\]/"run": ["npm", "test"]/' "$simple" > "$worktree/plan.json"
 publish plan.json > "$root/bad.out"
-assert_success $? 'a draft that breaks the policy is still saved'
+assert_equal 3 "$?" 'a draft that breaks the policy is saved with its own exit status'
+planning="$(dirname "$(grep -lx planner "$HYDRA_HOME/state/v2/projects/$project/heads"/*/branch)")/planning"
+assert_equal 1 "$(cat "$planning/revision")" 'the failing draft is published as revision 1'
+grep -q '"npm"' "$planning/draft.json"
+assert_success $? 'the failing draft is the published one'
 grep -q 'as revision 1, but it does not pass' "$root/bad.out" &&
     grep -q 'the tool npm is not allowed' "$root/bad.out" && grep -q 'hydra plan policy --allow-tool npm' "$root/bad.out"
 assert_success $? 'publication names the tool the policy lacks and how to allow it'
@@ -214,6 +218,27 @@ assert_success $? 'an allowed tool passes at publication'
 hydra plan policy --reset >/dev/null
 grep -q '"tools":\["sh","git","make"\]' "$HYDRA_HOME/state/v2/projects/$project/plan-policy.json"
 assert_success $? 'reset restores the guided policy'
+
+# Tooling tells "published but not checked" and "not published" apart from a
+# failing revision by the exit status alone.
+before="$(cat "$planning/revision")"
+cp "$HYDRA_HOME/state/v2/projects/$project/plan-policy.json" "$root/policy.saved"
+printf 'not json\n' > "$HYDRA_HOME/state/v2/projects/$project/plan-policy.json"
+publish plan.json > "$root/unchecked.out"
+assert_equal 4 "$?" 'a revision Hydra could not check is published with its own exit status'
+assert_equal $((before + 1)) "$(cat "$planning/revision")" 'the unchecked revision is numbered'
+grep -q 'could not check it' "$root/unchecked.out"
+assert_success $? 'publication says the revision was not checked'
+cp "$root/policy.saved" "$HYDRA_HOME/state/v2/projects/$project/plan-policy.json"
+cp "$planning/draft.json" "$root/published.json"
+printf '{"plan":' > "$worktree/broken.json"
+publish broken.json > "$root/refused.out" 2>&1
+assert_equal 1 "$?" 'a refused draft is not published'
+assert_equal $((before + 1)) "$(cat "$planning/revision")" 'a refused draft takes no revision number'
+cmp -s "$planning/draft.json" "$root/published.json"
+assert_success $? 'a refused draft keeps the published one'
+(cd "$worktree" && hydra plan propose >/dev/null 2>&1)
+assert_equal 2 "$?" 'a usage error publishes nothing'
 cd "$root" || exit 1
 printf 'Total: %s\nPassed: %s\nFailed: %s\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

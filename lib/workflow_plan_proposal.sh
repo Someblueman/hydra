@@ -82,11 +82,20 @@ workflow_plan_diagnostics() {
         }'
 }
 
+# Exit statuses of propose once the revision is published and numbered. Any
+# other non-zero status (1 refused, 2 usage) means nothing was published and
+# the previous draft, if any, is unchanged.
+WORKFLOW_PLAN_PROPOSE_FAILS_POLICY=3
+WORKFLOW_PLAN_PROPOSE_UNCHECKED=4
+
 # Usage: workflow_plan_proposal_check <planning-dir> <scratch-dir> <saved-label>
 # Tells the publishing agent whether its draft passes the project's plan policy
 # and, if not, exactly what to fix. Run under the head lock after publication;
 # PARALLEL_HEAD_DIR names the head. Nothing is validated against the source
-# checkout here: that happens when the user reviews the plan.
+# checkout here: that happens when the user reviews the plan. Returns 0 when
+# the published revision passes, WORKFLOW_PLAN_PROPOSE_FAILS_POLICY when it
+# fails the policy and WORKFLOW_PLAN_PROPOSE_UNCHECKED when it could not be
+# checked; the revision stays published in every case.
 workflow_plan_proposal_check() {
     if ! workflow_plan_head_policy "$PARALLEL_HEAD_DIR" "$2" >/dev/null 2>&1 ||
         ! workflow_plan_tool check "$1/draft.json" "$2/policy.json" --assets-dir "$1/assets" > "$2/check.json" 2>/dev/null; then
@@ -94,10 +103,10 @@ workflow_plan_proposal_check() {
             printf 'Proposal saved for %s, but it does not pass the project'"'"'s plan policy yet:\n' "$3"
             workflow_plan_diagnostics < "$2/check.json"
             printf 'Fix the plan and publish it again; it cannot be approved as it is. Nothing has run.\n'
-        else
-            printf 'Proposal saved for %s. Hydra could not check it against the project'"'"'s plan policy; the user will see any problem when reviewing it. Nothing has run.\n' "$3"
+            return "$WORKFLOW_PLAN_PROPOSE_FAILS_POLICY"
         fi
-        return 0
+        printf 'Proposal saved for %s. Hydra could not check it against the project'"'"'s plan policy; the user will see any problem when reviewing it. Nothing has run.\n' "$3"
+        return "$WORKFLOW_PLAN_PROPOSE_UNCHECKED"
     fi
     printf 'Proposal saved for %s; it passes the project'"'"'s plan policy. The user reviews it with hydra plan show and approves it with hydra plan approve, or in the control centre. Nothing has run.\n' "$3"
 }
@@ -228,7 +237,7 @@ EOF
             _wpp_saved="$_wpp_branch as revision $_wpp_revision"
             [ "$_wpp_asset_count" -eq 0 ] || _wpp_saved="$_wpp_saved with $_wpp_asset_count asset(s)"
             workflow_plan_proposal_check "$_wpp_dir" "$_wpp_tmp" "$_wpp_saved"
-            exit 0
+            exit $?
         fi
         if [ -n "$_wpp_return" ]; then
             workflow_plan_return "$_wpp_dir" "$_wpp_return" "$_wpp_branch"

@@ -57,6 +57,9 @@ cmd_plan_usage() {
         '       hydra plan propose <plan.json> [--branch <head>] [--asset NAME=FILE]...' \
         'With no <head>, the plan is the current head'"'"'s, or the only head'"'"'s with a proposal.' \
         'With no <run-id>, the run is the most recent one a plan started.' \
+        'propose exits 0 when the revision it published passes the plan policy, 3 when that' \
+        'revision is published but fails it, 4 when it is published but could not be checked;' \
+        'any other failure (1, or 2 for usage) published nothing and kept the previous draft.' \
         'Expert planning (full schema, compile, explain and compare): hydra workflow plan --help'
 }
 

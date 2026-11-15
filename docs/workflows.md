@@ -179,6 +179,9 @@ worker's worktree and are listed in the step attempt's `withheld` file, and
 The agent publishes with `hydra plan propose plan.json`. Each publication is a
 new revision, checked at once against the project's plan policy; the agent sees
 each problem and how to fix it, for example a tool the policy does not allow.
+Its exit status tells scripts apart what happened: 0 published and passing, 3
+published but failing the policy, 4 published but not checked, anything else
+not published ([CONTRACTS](CONTRACTS.md#head-associated-planning-proposals)).
 You review and decide from your own terminal or the control centre:
 
 | Command | What it does |

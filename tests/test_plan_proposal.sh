@@ -35,7 +35,9 @@ assert_failure $? 'missing proposal lookup refuses without fabricating state'
 if [ ! -e "$head/planning" ]; then check=0; else check=1; fi
 assert_success "$check" 'read-only lookup creates no planning directory'
 "$HYDRA_BIN" workflow plan propose "$REPO/tests/fixtures/plan/plan.json" --branch proposal >/dev/null
-assert_success $? 'agent draft publishes through the public CLI'
+# The fixture's free-space floor is below the guided policy's: the draft is
+# published, and propose says it fails the policy.
+assert_equal 3 "$?" 'agent draft publishes through the public CLI, failing the guided policy'
 if [ -f "$head/planning/draft.json" ] && [ ! -e "$head/planning/policy.json" ]; then check=0; else check=1; fi
 assert_success "$check" 'publication associates a draft with its head without granting policy'
 cp "$head/planning/draft.json" "$root/original.json"
@@ -99,7 +101,7 @@ bundle="$REPO/tests/fixtures/plan-bundle"
 cp "$bundle/draft.json" "$root/bundle-draft.json"
 cp "$bundle/verifier.sh" "$root/verifier.sh"
 "$HYDRA_BIN" workflow plan propose "$root/bundle-draft.json" --branch proposal --asset verifier="$root/verifier.sh" >/dev/null
-assert_success $? 'a draft publishes with its referenced asset'
+assert_equal 3 "$?" 'a draft publishes with its referenced asset (its profile:codex tool exceeds this head'"'"'s policy)'
 cmp -s "$head/planning/assets/verifier" "$root/verifier.sh"
 assert_success $? 'the asset is copied beside the draft'
 assert_equal '' "$(find "$head/planning/assets" -type f -perm -044)" 'asset copies are private'
@@ -127,7 +129,7 @@ assert_failure $? 'more than 16 assets are refused'
 cmp -s "$head/planning/assets/verifier" "$root/verifier.sh"
 assert_success $? 'refused publications keep the published asset set'
 "$HYDRA_BIN" workflow plan propose "$REPO/tests/fixtures/plan/plan.json" --branch proposal >/dev/null
-assert_success $? 'a draft without assets republishes'
+assert_equal 3 "$?" 'a draft without assets republishes, still failing the policy'
 assert_equal '' "$(find "$head/planning/assets" -type f)" 'republishing replaces the previous asset set'
 "$HYDRA_BIN" kill proposal >/dev/null
 
