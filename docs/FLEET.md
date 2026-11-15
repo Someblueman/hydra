@@ -319,7 +319,7 @@ NAME --project /path/on/host -- BRANCH --profile AGENT`, with the agent it signe
 in to) and Enter opens the host's work in Work, filtered to it (Esc comes back to
 Hosts); finishing asks for a fresh remote observation, so the host moves from
 "Setting up" to Observed as soon as it answers. An observed host with no work
-names the same command in its detail.
+names the same command in its detail, and Work filtered to it does too.
 
 A development build has no pinned release helper for its version, so its
 control centre cannot provision from the Hosts screen on its own: set

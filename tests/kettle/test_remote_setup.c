@@ -214,6 +214,9 @@ static void journey(int cols, int rows, bool fail_once) {
     /* Enter on the ready host follows it into Work; Esc comes back to Hosts. */
     kt_send(&s, "\r");
     kt_until(&s, "Heads \xc2\xb7 host ovh", 4);
+    /* No heads there yet: Work says how to start one, as Hosts does. */
+    see(&s, "Start a head"); see(&s, "hydra fleet spawn");
+    CHECK(!kt_contains(&s, "No host ovh to show"), "a ready host's empty Work says what to do");
     capture(&s, "14-done-work");
     kt_send(&s, "\033");
     kt_until(&s, "+ Add a host", 4);

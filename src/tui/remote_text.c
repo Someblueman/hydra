@@ -120,3 +120,30 @@ void remote_retry(struct app *app, const char *host) {
     else copy_text(app->notice, sizeof(app->notice), "Requesting a fresh remote observation");
     native_observations_tick(app, true);
 }
+
+void epoch_age_text(const char *value, char *out, size_t size) {
+    char *end;
+    long long at = strtoll(value, &end, 10);
+    long long age = (long long)time(NULL) - at;
+    if (!value[0] || *end || at <= 0) { copy_text(out, size, value[0] ? value : "-"); return; }
+    if (age < 0) age = 0;
+    if (age < 120) snprintf(out, size, "%llds ago", age);
+    else if (age < 7200) snprintf(out, size, "%lldm ago", age / 60);
+    else snprintf(out, size, "%lldh ago", age / 3600);
+}
+
+const char *const HOST_START_TEXT = "No work on this host yet. Start a head there from a terminal, in a Git checkout on the host:";
+
+void host_start_command(const char *name, char *out, size_t size) {
+    snprintf(out, size, "hydra fleet spawn %.100s --project /path/on/host -- BRANCH", name);
+}
+
+/* Observed and answering with no rows, or set up and not observed yet. */
+bool host_awaits_work(const struct app *app, const char *name) {
+    const struct host_observation *host = host_for_name(app, name);
+    size_t i;
+    if (host) return host_answering(host) && !host->heads && !host->tasks;
+    for (i = 0; app->setup && i < app->setup->record_count; i++)
+        if (app->setup->records[i].complete && !strcmp(app->setup->records[i].name, name)) return true;
+    return false;
+}

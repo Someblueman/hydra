@@ -21,7 +21,10 @@ static void remote_host_rows(struct app *app, const char *name) {
     host_state_text(app, host, text, sizeof(text));
     if (strcmp(host->state, "responded")) { memmove(text + 14, text, strlen(text) + 1); memcpy(text, "disconnected; ", 14); }
     remote_row(app, "Connection", text, !strcmp(host->state, "responded") && !app->remote_stale ? KT_BASE : KT_WARNING);
-    if (host->last_confirmed[0] && strcmp(host->last_confirmed, "-")) remote_row(app, "Confirmed", host->last_confirmed, KT_BASE);
+    if (host->last_confirmed[0] && strcmp(host->last_confirmed, "-")) {
+        epoch_age_text(host->last_confirmed, text, sizeof(text));
+        remote_row(app, "Confirmed", text, KT_BASE);
+    }
 }
 
 void remote_detail(struct app *app, const struct head *head) {
@@ -58,7 +61,7 @@ void remote_technical(struct app *app, const struct head *head) {
 }
 
 void task_detail(struct app *app, const struct task_observation *task) {
-    char text[2048];
+    char text[2048], observed[64], confirmed[64];
     const char *status = task_status(app, task);
     struct kt_style tone = task_tone(app, task);
     if (strcmp(status, task->state))
@@ -67,8 +70,10 @@ void task_detail(struct app *app, const struct task_observation *task) {
     remote_row(app, "Workspace", task->workspace, KT_BASE);
     snprintf(text, sizeof(text), "%s%sowner %s", status, dot(app), task->owner);
     remote_row(app, "State", text, tone);
+    epoch_age_text(task->receiver_observed, observed, sizeof(observed));
+    epoch_age_text(task->last_confirmed, confirmed, sizeof(confirmed));
     snprintf(text, sizeof(text), "%s%sreceiver observed %s%sconfirmed %s", task->retained ? "retained; host disconnected" : task->freshness,
-             dot(app), task->receiver_observed, dot(app), task->last_confirmed);
+             dot(app), observed, dot(app), confirmed);
     remote_row(app, "Observation", text, task->retained || strcmp(task->freshness, "fresh") ? KT_WARNING : KT_BASE);
     remote_host_rows(app, task->host);
     snprintf(text, sizeof(text), "%s%s%s", task->profile, task->step_id[0] && strcmp(task->step_id, "-") ? "  step " : "", task->step_id[0] && strcmp(task->step_id, "-") ? task->step_id : "");

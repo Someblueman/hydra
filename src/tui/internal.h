@@ -294,6 +294,14 @@ const char *remote_agent_name(const struct head *h);
 struct kt_style remote_head_tone(const struct app *app, const struct head *h);
 void remote_observation_text(const struct app *app, const struct head *h, char *out, size_t size);
 void host_state_text(const struct app *app, const struct host_observation *host, char *out, size_t size);
+/* A receiver time in epoch seconds (confirmed, observed) as its age, "30s ago";
+ * other text is shown as it is, "-" for none. */
+void epoch_age_text(const char *value, char *out, size_t size);
+/* A host that answers (or a finished setup not observed yet) with no work:
+ * what to do, and the one command that starts a head there. */
+extern const char *const HOST_START_TEXT;
+void host_start_command(const char *name, char *out, size_t size);
+bool host_awaits_work(const struct app *app, const char *name);
 const char *task_status(const struct app *app, const struct task_observation *t);
 struct kt_style task_tone(const struct app *app, const struct task_observation *t);
 bool remote_footer_text(const struct app *app, char *out, size_t size, struct kt_style *tone);

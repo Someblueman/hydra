@@ -150,7 +150,8 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "CPU / memory / load: unavailable", 1000), "host detail distinguishes missing telemetry");
     write_input(session.master, "j\r", 2);
     result(wait_for_marker(&session, "Showing host empty", 1000), "Enter follows an empty host's work, filtered to that host");
-    result(wait_for_marker(&session, "No host empty to show", 1000), "empty host does not borrow another host's head");
+    result(wait_for_marker(&session, "No work on this host yet", 1000) && session_visible(&session, "hydra fleet spawn empty") &&
+           !session_visible(&session, "feature-build"), "empty host does not borrow another host's head and says how to start one");
     write_input(session.master, "\033", 1);
     result(wait_for_marker(&session, "List response: responded", 2000), "Esc returns to Hosts from the host's work");
     write_input(session.master, "H", 1);

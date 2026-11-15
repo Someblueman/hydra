@@ -241,9 +241,24 @@ static void list_title(struct app *app, char *out, size_t size) {
     else snprintf(out, size, "Heads");
 }
 
+/* A host that is ready with no work yet: what Hosts says about it, then the
+ * way back to all work. */
+static void host_start_hint(struct app *app, struct kt_rect r) {
+    char command[192];
+    int x = r.x + 1, y = r.y + 1, width = r.width - 2, rows = r.height - 2, used;
+    used = statistics_wrap(&app->frame, x, y, width, rows, KT_MUTED, HOST_START_TEXT);
+    host_start_command(app->location, command, sizeof(command));
+    used += statistics_wrap(&app->frame, x + 2, y + used, width - 2, rows - used, KT_STRONG, command);
+    (void)statistics_wrap(&app->frame, x, y + used, width, rows - used, KT_MUTED, "esc or L shows all");
+}
+
 /* A filter that matches nothing says so; Esc clears it. */
 static void list_empty(struct app *app, struct kt_rect r) {
     char text[TEXT + 64], label[160];
+    if (!app->search[0] && location_remote_only(app) && strcmp(app->location, "remote") && host_awaits_work(app, app->location)) {
+        host_start_hint(app, r);
+        return;
+    }
     if (app->search[0]) snprintf(text, sizeof(text), "No heads match \"%s\"%sesc clears", app->search, dot(app));
     else if (app->location[0]) snprintf(text, sizeof(text), "No %s to show%sesc or L shows all", location_label(app, label, sizeof(label)), dot(app));
     else if (!app->snapshot_at && !app->snapshot_stale) snprintf(text, sizeof(text), "%s Reading heads%s", work_loading_glyph(app), app->ascii ? "..." : "\xe2\x80\xa6");

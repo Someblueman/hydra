@@ -671,6 +671,24 @@ static void agents_cases(struct app *app) {
     s->open = false;
 }
 
+/* A remote head's Details give its host's confirmation as an age, the way
+ * Hosts' "Last confirmed" does, never epoch seconds. */
+static void remote_details_case(struct app *app, const struct host_observation *host) {
+    struct head *head = &app->model.heads[0];
+    char frame[65536], epoch[32];
+    memset(head, 0, sizeof(*head));
+    copy_text(head->remote_host, sizeof(head->remote_host), "ovh"); copy_text(head->remote_branch, sizeof(head->remote_branch), "fix-readme");
+    copy_text(head->branch, sizeof(head->branch), "ovh/fix-readme"); copy_text(head->remote_project, sizeof(head->remote_project), "/srv/project");
+    copy_text(head->desired, sizeof(head->desired), "running"); copy_text(head->freshness, sizeof(head->freshness), "fresh");
+    copy_text(head->status, sizeof(head->status), "LIVE");
+    app->model.head_count = 1; app->selected = 0; app->view = 7; app->location[0] = '\0';
+    copy_text(epoch, sizeof(epoch), host->last_confirmed);
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "Confirmed") && (strstr(frame, "30s ago") || strstr(frame, "31s ago")) &&
+          !strstr(frame, epoch), "a remote head's Details show its host's confirmation as an age");
+    keep("details-remote", 120, 32, frame);
+    app->model.head_count = 0; app->view = 6;
+}
+
 /* An observed host that answers with no work: its confirmation is an age,
  * not epoch seconds, and the detail names the command that starts a head. */
 static void observed_cases(struct app *app) {
@@ -689,6 +707,7 @@ static void observed_cases(struct app *app) {
     keep("hosts-observed-empty", 120, 32, frame);
     h->heads = 1;
     check(render_capture(app, frame, sizeof(frame)) && !strstr(frame, "No work on this host yet"), "a host with heads does not repeat the start command");
+    remote_details_case(app, h);
     app->model.host_count = 0; app->host_selected = 0;
 }
 
@@ -716,6 +735,13 @@ static void done_cases(struct app *app) {
     s->record_count = 1; app->host_selected = 1; app->notice[0] = '\0';
     check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "This host is set up") && !strstr(frame, "not in the fleet yet") &&
           !strstr(frame, "e edits it") && !strstr(frame, "setup unfinished"), "a finished setup not observed yet is described as set up");
+    /* Work filtered to it has no heads yet: it says what Hosts says, how to start one. */
+    app->view = 7; copy_text(app->location, sizeof(app->location), "ovh");
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "No work on this host yet") &&
+          strstr(frame, "hydra fleet spawn ovh") && strstr(frame, "esc or L shows all") && !strstr(frame, "No host ovh to show"),
+          "Work filtered to a set-up host without heads names the command that starts one");
+    keep("work-host-empty", 120, 32, frame);
+    app->view = 6; app->location[0] = '\0';
     s->record_count = 0; app->host_selected = 0;
 }
 
