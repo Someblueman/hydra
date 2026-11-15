@@ -53,6 +53,11 @@ static bool stream_room(struct capture_stream *stream) {
     stream->capacity = capacity;
     return true;
 }
+static void close_stream(struct capture_stream *stream) {
+    if (stream->pipe[0] < 0) return;
+    close(stream->pipe[0]);
+    stream->pipe[0] = -1;
+}
 /* Drain one stream and report whether its capture limit was reached. */
 static bool drain_stream(struct capture_stream *stream, int index, struct f_control *control) {
     if (stream->pipe[0] < 0) return false;
@@ -67,10 +72,10 @@ static bool drain_stream(struct capture_stream *stream, int index, struct f_cont
     }
     bool full = stream->full || stream->used == F_LIMIT;
     stream->full = full;
-    if (n == 0 || full || (n < 0 && errno != EAGAIN && errno != EINTR)) {
-        close(stream->pipe[0]);
-        stream->pipe[0] = -1;
-    }
+    /* A full stream stays open until run has killed the writers: closed
+     * first, a writer that ignores SIGPIPE would see EPIPE and could report
+     * it on the other stream before the kill lands. */
+    if ((n == 0 && !full) || (n < 0 && errno != EAGAIN && errno != EINTR)) close_stream(stream);
     return full;
 }
 static bool truncated(const struct capture_stream streams[2]) { return streams[0].full || streams[1].full; }
@@ -124,7 +129,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
     if (pid < 0) goto done;
     if (!pid) {
         (void)setpgid(0, 0);
-        signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL);
+        signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL); signal(SIGPIPE, SIG_DFL);
         dup2(fileno(in), STDIN_FILENO); dup2(streams[0].pipe[1], STDOUT_FILENO); dup2(streams[1].pipe[1], STDERR_FILENO);
         close(streams[0].pipe[0]); close(streams[0].pipe[1]); close(streams[1].pipe[0]); close(streams[1].pipe[1]); fclose(in);
         execvp(argv[0], argv); _exit(127);
@@ -147,6 +152,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
         for (i = 0; i < 2; i++) {
             if (drain_stream(&streams[i], i, control)) {
                 (void)kill(-pid, SIGKILL);
+                close_stream(&streams[i]);
                 stopped = true;
                 deadline = 0;
             }

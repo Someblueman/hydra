@@ -46,5 +46,8 @@ static void capture_growth(const char *dir) {
     capture_expect(script, 125, F_LIMIT, 0);
     capture_expect("while :; do printf aaaaaaaaaaaaaaaa; done", 125, F_LIMIT, 0);
     capture_expect("while :; do printf aaaaaaaaaaaaaaaa >&2; done", 125, 0, F_LIMIT);
+    /* A writer that ignores SIGPIPE is killed before its stream is closed,
+     * so it never reports a failed write on the other stream. */
+    capture_expect("trap '' PIPE; while :; do printf aaaaaaaaaaaaaaaa; done", 125, F_LIMIT, 0);
     unlink(out); unlink(err); unlink(under); unlink(at);
 }
