@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An experimental native workflow run driver, selected with
+  `HYDRA_NATIVE_DRIVER=1` (off by default; without the native helper the
+  shell driver runs as before). It writes the same run files and events as
+  the shell driver, and the two give identical runs on every fixture
+  compared. It saves about 0.12 s and 16-20% CPU per step. See
+  `docs/workflows.md`.
 - A shorter planning flow. An agent writes a one-screen plan (`hydra plan
   schema` prints the short `simple-1` form: objective, worker instructions,
   commands, what "done" means) and publishes it with `hydra plan propose`;
