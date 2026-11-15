@@ -94,7 +94,7 @@ _load_runtime_libs() {
 _load_libs_for_cmd() {
     case "$1" in
         admission)
-            _load_libs output admission
+            _load_libs output locks admission
             ;;
         version|help|-v|--version|-h|--help)
             ;;

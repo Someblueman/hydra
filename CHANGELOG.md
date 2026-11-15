@@ -464,6 +464,13 @@ reports a failing check in its exit status. The entries marked
 - Inbox says its seen markers are unavailable for as long as the seen store
   fails. The next refresh used to drop the notice, and the rows below it
   moved up a line until the store was read again.
+- Hydra's locks hold under contention on Ubuntu 25.10 and later. A lock is
+  a directory made with `mkdir`, and the Rust coreutils these releases ship
+  report success when another process creates the same directory at the
+  same moment, so two commands could take one lock: two resource
+  allocations got the same port, two pool workers overlapped and two
+  conflicting approval decisions were recorded. A lock is now decided by a
+  claim file the shell creates exclusively.
 - Two different decisions on one approval request no longer both report
   success. When a second `hydra workflow decide` arrived while the first was
   being recorded, its record was moved inside the first and it said it had

@@ -49,7 +49,7 @@ admission_open() {
     # parallel workflow steps, take turns instead of failing.
     _ad_problem='the admission lock is held'
     _ad_tries=0 _ad_lock_until=''
-    until mkdir "$_ad_root/lock" 2>/dev/null; do
+    until hydra_exclusive_mkdir "$_ad_root/lock"; do
         _ad_tries=$((_ad_tries + 1))
         if [ "$_ad_tries" -lt 40 ]; then sleep 0.05; continue; fi
         case "${_ad_lock_seconds:-}" in ''|*[!0-9]*) return 1 ;; esac
@@ -58,7 +58,7 @@ admission_open() {
         [ "$(date +%s)" -lt "$_ad_lock_until" ] || return 1
         sleep 0.2
     done
-    trap 'rmdir "$_ad_root/lock" 2>/dev/null || true' 0
+    trap 'rm -f "$_ad_root/lock/.claim"; rmdir "$_ad_root/lock" 2>/dev/null || true' 0
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP

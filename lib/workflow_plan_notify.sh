@@ -38,7 +38,7 @@ workflow_plan_notify() (
     hydra_private_mkdir "$_wpn_dir/planning-notices" || exit 0
     # Bounded: a run records at most 64 notices.
     [ "$(find "$_wpn_dir/planning-notices" -type d | wc -l)" -le 64 ] || exit 0
-    (umask 077; mkdir "$_wpn_dir/planning-notices/$_wpn_key") 2>/dev/null || exit 0
+    (umask 077; hydra_exclusive_mkdir "$_wpn_dir/planning-notices/$_wpn_key") 2>/dev/null || exit 0
     _wpn_head="$(sed -n '1p' "$_wpn_dir/planning-head")"
     _wpn_instance="$(sed -n '1p' "$_wpn_dir/planning-instance")"
     _wpn_branch="$(sed -n '1p' "$_wpn_dir/planning-branch")"

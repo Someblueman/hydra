@@ -76,6 +76,19 @@ hydra_private_touch() (
 # Try to acquire a lock for a session name candidate
 # Usage: try_lock <candidate_name>
 # Returns: 0 if lock acquired, 1 if failed
+# Creates directory $1 for this caller alone: false when it exists or when
+# another process creates it at the same moment. mkdir's exit status cannot
+# decide that: the Rust coreutils Ubuntu ships from 25.10 (0.10.0 in 26.04)
+# report success when the directory appears between their own existence
+# check and mkdir(2), so two racing callers both "created" it. The shell's
+# noclobber creates the claim file with O_EXCL, and exactly one caller gets
+# it; a caller that does not must leave the directory to its owner, who
+# removes the claim with the rest of it.
+hydra_exclusive_mkdir() {
+    mkdir "$1" 2>/dev/null || return 1
+    (set -C; : > "$1/.claim") 2>/dev/null
+}
+
 try_lock() {
     candidate="$1"
     operation="${2:-$candidate}"
@@ -86,7 +99,7 @@ try_lock() {
     lock_dir="$HYDRA_HOME/locks"
     hydra_private_mkdir "$lock_dir" 2>/dev/null || true
     lock_path="$lock_dir/$candidate.lock"
-    if ! (umask 077; mkdir "$lock_path") 2>/dev/null; then
+    if ! (umask 077; hydra_exclusive_mkdir "$lock_path") 2>/dev/null; then
         return 1
     fi
 
@@ -100,7 +113,7 @@ try_lock() {
         printf '%s\n' "$(date +%s)" > "$lock_path/created_at" &&
         printf '%s\n' "$operation" > "$lock_path/operation"
     ); then
-        rm -f "$lock_path/pid" "$lock_path/host" "$lock_path/created_at" "$lock_path/operation"
+        rm -f "$lock_path/pid" "$lock_path/host" "$lock_path/created_at" "$lock_path/operation" "$lock_path/.claim"
         rmdir "$lock_path" 2>/dev/null || true
         return 1
     fi
@@ -119,7 +132,7 @@ release_lock() {
         if [ -z "$_rl_pid" ] || [ "$_rl_pid" = "$$" ]; then
             rm -f "$_rl_path/pid" "$_rl_path/host" \
                 "$_rl_path/created_at" "$_rl_path/operation" \
-                "$_rl_path/head_id" "$_rl_path/run_id" 2>/dev/null || true
+                "$_rl_path/head_id" "$_rl_path/run_id" "$_rl_path/.claim" 2>/dev/null || true
             rmdir "$_rl_path" 2>/dev/null || true
         fi
     fi
@@ -211,7 +224,7 @@ remove_stale_lock_dir() {
     esac
     lock_dir_is_stale "$_rsld_path" || return 1
     rm -f "$_rsld_path/pid" "$_rsld_path/host" "$_rsld_path/created_at" \
-        "$_rsld_path/operation" "$_rsld_path/head_id" "$_rsld_path/run_id" 2>/dev/null || true
+        "$_rsld_path/operation" "$_rsld_path/head_id" "$_rsld_path/run_id" "$_rsld_path/.claim" 2>/dev/null || true
     rmdir "$_rsld_path" 2>/dev/null
 }
 

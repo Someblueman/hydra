@@ -182,10 +182,23 @@ static void pause_second(void) {
     while (nanosleep(&left, &left) && errno == EINTR) {}
 }
 
+/* The lock is the directory and its claim file, as the shell's
+ * hydra_exclusive_mkdir takes it: a shell writer whose mkdir(1) reported
+ * success for a directory this process had just created holds the claim,
+ * and then the lock is that writer's. */
+static bool event_lock_claimed(const char *lock) {
+    char claim[F_PATH]; int fd;
+    if (wdr_join(claim, lock, ".claim")) return false;
+    fd = open(claim, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) return false;
+    close(fd);
+    return true;
+}
+
 static int take_event_lock(struct wdr_run *run, const char *lock) {
     char owner_file[F_PATH], owner[64], pid[32]; int tries = 0, fd;
     if (wdr_join(owner_file, lock, "owner-pid")) return -1;
-    while (mkdir(lock, 0700)) {
+    while (mkdir(lock, 0700) || !event_lock_claimed(lock)) {
         (void)wdr_first_line(owner_file, owner, sizeof(owner));
         if (owner[0] && !wdr_pid_alive(run, owner)) { (void)wdr_remove_tree(lock); continue; }
         if (++tries >= 30) return -1;

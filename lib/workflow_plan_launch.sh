@@ -91,9 +91,9 @@ workflow_plan_launch_owner() (
     _wpl_user_umask="$(umask)"
     umask 077
     mkdir -p "$(dirname "$_workflow_plan_launch")" || exit 1
-    if ! mkdir "$_workflow_plan_launch" 2>/dev/null; then
+    if ! hydra_exclusive_mkdir "$_workflow_plan_launch"; then
         workflow_plan_launch_retire "$_workflow_plan_launch" || exit 1
-        mkdir "$_workflow_plan_launch" 2>/dev/null || exit 1
+        hydra_exclusive_mkdir "$_workflow_plan_launch" || exit 1
     fi
     exec > "$_workflow_plan_launch/owner.log" 2>&1
     workflow_atomic_scalar "$_workflow_plan_launch/state" starting || exit 1

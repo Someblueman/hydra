@@ -204,6 +204,42 @@ test_private_mkdir() {
     assert_failure $? "hydra_private_mkdir refuses a path that is a file"
 }
 
+# A held lock is refused even where mkdir reports success for a directory
+# that already exists, as the Rust coreutils on Ubuntu 26.04 do when another
+# process creates it between their check and mkdir(2). The fake mkdir below
+# always behaves that way; only the claim can tell the callers apart.
+test_lock_with_lenient_mkdir() {
+    echo "Testing locks where mkdir succeeds for an existing directory..."
+    lenient_bin="$test_home/lenient-bin"
+    real_mkdir="$(command -v mkdir)"
+    hydra_private_mkdir "$lenient_bin"
+    lenient_path="$lenient_bin:$PATH"
+    cat > "$lenient_bin/mkdir" <<LENIENT
+#!/bin/sh
+"$real_mkdir" "\$@" 2>/dev/null && exit 0
+for dir do last="\$dir"; done
+[ -d "\$last" ]
+LENIENT
+    chmod +x "$lenient_bin/mkdir"
+    (
+        PATH="$lenient_path"
+        mkdir "$test_home/lenient-probe" && mkdir "$test_home/lenient-probe"
+    )
+    assert_success $? "the fake mkdir reports success for an existing directory"
+    (
+        PATH="$lenient_path"
+        try_lock lenient_lock || exit 1
+        (try_lock lenient_lock) && exit 2
+        [ "$(sed -n '1p' "$HYDRA_HOME/locks/lenient_lock.lock/pid")" = "$$" ] || exit 3
+        release_lock lenient_lock
+        [ ! -e "$HYDRA_HOME/locks/lenient_lock.lock" ] || exit 4
+        hydra_exclusive_mkdir "$test_home/claimed" || exit 5
+        hydra_exclusive_mkdir "$test_home/claimed" && exit 6
+        exit 0
+    )
+    assert_success $? "a held lock and a claimed directory are refused, and release removes the claim"
+}
+
 # Run all tests
 echo "Running locks.sh unit tests..."
 echo "================================"
@@ -216,6 +252,7 @@ test_cleanup_dead_local_lock
 test_release_session_lock
 test_lock_without_home
 test_private_mkdir
+test_lock_with_lenient_mkdir
 
 # Clean up
 cleanup_test_locks

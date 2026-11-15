@@ -21,7 +21,7 @@ workflow_event() {
     _we_lock="$_we_dir/.events.lock"
     _we_tries=0
     hydra_private_touch "$_we_file" || return 1
-    while ! (umask 077; mkdir "$_we_lock") 2>/dev/null; do
+    while ! (umask 077; hydra_exclusive_mkdir "$_we_lock") 2>/dev/null; do
         _we_lock_pid="$(sed -n '1p' "$_we_lock/owner-pid" 2>/dev/null || true)"
         if [ -n "$_we_lock_pid" ] && ! workflow_pid_alive "$_we_lock_pid"; then
             rm -rf "$_we_lock"
@@ -591,14 +591,14 @@ workflow_drive() {
     if workflow_task_needs_owner "$_wd_dir"; then workflow_task_tool drive "$_wd_dir"; return $?; fi
     _wd_native="$(workflow_native_driver)"
     _wd_drive_lock="$_wd_dir/.drive.lock"
-    if ! (umask 077; mkdir "$_wd_drive_lock") 2>/dev/null; then
+    if ! (umask 077; hydra_exclusive_mkdir "$_wd_drive_lock") 2>/dev/null; then
         _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
         workflow_run_owner_active "$_wd_dir" && {
             cli_error workflow already_running "workflow owner is still alive" "wait or cancel the run"
             return 1
         }
         rm -rf "$_wd_drive_lock"
-        (umask 077; mkdir "$_wd_drive_lock") || return 1
+        (umask 077; hydra_exclusive_mkdir "$_wd_drive_lock") || return 1
     fi
     _load_lib workflow_statistics
     workflow_statistics_begin "$_wd_dir" || true
