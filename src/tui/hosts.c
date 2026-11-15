@@ -319,16 +319,32 @@ static void machine_heads(struct app *app) {
     labelled(app, "Heads", text, KT_BASE);
 }
 
+/* The agent name column: as wide as the longest name, from 8 columns up to
+ * a third of the pane; a longer name is cut with an ellipsis. Two columns
+ * always separate it from the state. */
+static int agent_name_width(const struct app *app, const struct hosts_machine *m) {
+    int widest = 8, most = app->content_width / 3;
+    size_t i;
+    for (i = 0; i < m->agent_count; i++) {
+        int width = kt_text_width(m->agents[i].name);
+        if (width > widest) widest = width;
+    }
+    if (most < 8) most = 8;
+    return widest < most ? widest : most;
+}
+
 static void machine_agents(struct app *app, const struct hosts_machine *m) {
     size_t i;
+    int width = agent_name_width(app, m);
     style(app, TONE_STRONG); linef(app, "Agents"); style(app, TONE_BASE);
     if (!m->agents_read) { reading(app, "", "", m->read); return; }
     for (i = 0; i < m->agent_count && app->line < app->limit; i++) {
-        char state[64];
+        char state[64], name[96];
         snprintf(state, sizeof(state), "%s %s", m->agents[i].available ? glyph(app, "\xe2\x97\x8f", "*") : glyph(app, "\xe2\x97\x8b", "-"),
                  m->agents[i].available ? "on PATH" : "not found on PATH");
-        column(app, 1, 10, KT_BASE, m->agents[i].name);
-        column(app, 11, app->content_width - 11, m->agents[i].available ? KT_SUCCESS : KT_MUTED, state);
+        fit_text(app, m->agents[i].name, (size_t)width, name, sizeof(name));
+        column(app, 1, width, KT_BASE, name);
+        column(app, width + 3, app->content_width - width - 3, m->agents[i].available ? KT_SUCCESS : KT_MUTED, state);
         app->line++;
     }
     if (!m->agent_count) linef(app, " no agent profiles");

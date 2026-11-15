@@ -53,7 +53,8 @@ struct setup_modal {
     struct kt_confirm question;
     enum setup_screen screen;     /* the screen the components were made for */
     bool removal;                 /* the plan they were made for removes a record */
-    char title[200], body[8192];
+    /* name_hint: the name field's hint, naming the default the destination gives. */
+    char title[200], name_hint[200], body[8192];
 };
 
 /* Members are ordered by alignment; see the comments for their roles. */

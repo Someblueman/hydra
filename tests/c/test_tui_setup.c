@@ -381,6 +381,45 @@ static void paused_case(struct app *app, int cols, int rows) {
     s->paused = false;
 }
 
+/* The display column where the first occurrence of mark starts on the frame
+ * row that holds text, or -1. */
+static int column_on_row(const char *frame, const char *text, const char *mark) {
+    const char *at = strstr(frame, text), *row, *found, *p;
+    int column = 0;
+    if (!at) return -1;
+    for (row = at; row > frame && row[-1] != '\n'; row--) { }
+    found = strstr(row, mark);
+    if (!found || memchr(row, '\n', (size_t)(found - row))) return -1;
+    for (p = row; p < found; p++) column += ((unsigned char)*p & 0xc0) != 0x80;
+    return column;
+}
+
+/* Agent names of any length keep the state column apart and aligned: a
+ * ten-character name does not run into "on PATH", and one too long for the
+ * column is cut with an ellipsis. */
+static void machine_names_case(struct app *app, int cols, int rows) {
+    static const char *const names[] = {"claude", "demo-agent", "a-very-long-agent-profile-name1"};
+    struct hosts_machine *m = &hosts_state(app)->machine;
+    char frame[65536], name[160];
+    int claude, demo, cut;
+    size_t i;
+    m->read = m->agents_read = true;
+    for (i = 0; i < 3; i++) { copy_text(m->agents[i].name, sizeof(m->agents[i].name), names[i]); m->agents[i].available = i < 2; }
+    m->agent_count = 3;
+    /* Tall enough that the agents keep a row each (shorter panes list them by name). */
+    app->cols = cols; app->rows = rows < 40 ? 40 : rows;
+    check(render_capture(app, frame, sizeof(frame)), "This machine with long agent names renders");
+    keep("hosts-machine-names", cols, rows, frame);
+    claude = column_on_row(frame, " claude ", "\xe2\x97\x8f");
+    demo = column_on_row(frame, "demo-agent", "\xe2\x97\x8f");
+    cut = column_on_row(frame, "a-very-long", "\xe2\x97\x8b");
+    snprintf(name, sizeof(name), "agent names of any length align their state column at %dx%d", cols, rows);
+    check(claude > 0 && claude == demo && demo == cut && !strstr(frame, "demo-agent\xe2\x97\x8f") && !strstr(frame, "demo-agent \xe2\x97\x8f"), name);
+    snprintf(name, sizeof(name), "an agent name too long for its column is cut with an ellipsis at %dx%d", cols, rows);
+    check(strstr(frame, "\xe2\x80\xa6  \xe2\x97\x8b not found on PATH") && !strstr(frame, "profile-name1"), name);
+    m->agent_count = 0; m->read = m->agents_read = false; app->rows = rows;
+}
+
 /* This machine with eight agent profiles at 80x24: the agents shrink to two
  * rows that still name each one, so the remote explanation and the next
  * action stay above the status line; at 140x40 they keep a row each. */
@@ -401,6 +440,7 @@ static void machine_case(struct app *app, int cols, int rows) {
           strstr(frame, "when a task") && strstr(frame, "Nothing changes on") && strstr(frame, "approve it.") &&
           strstr(frame, "Press Enter or A to add a host") && strstr(frame, "filters by location."), name);
     m->agent_count = 0; m->read = m->agents_read = false;
+    machine_names_case(app, cols, rows);
 }
 
 static void screens_at(struct app *app, int cols, int rows) {
@@ -528,6 +568,32 @@ static void edit_cases(struct app *app) {
     s->open = false; s->editing[0] = '\0'; s->record_count = 0;
 }
 
+/* An empty name takes the destination's host, as the field's hint says while
+ * the destination is typed: setup starts under that name. */
+static void default_name_cases(struct app *app) {
+    struct native_setup *s = app->setup;
+    struct timespec pause = {0, 20000000};
+    const char *hydra = app->hydra;
+    char frame[65536];
+    int waited;
+    app->cols = 100; app->rows = 30; s->record_count = 0; s->open = false;
+    hosts_focus_detail(app, false);
+    native_setup_open_form(app);
+    type_text(app, "deploy@build-7.example.net\r\r");
+    check(s->screen == SETUP_SCREEN_FORM && render_capture(app, frame, sizeof(frame)) && strstr(frame, "empty: build-7.example.net"),
+          "the name field's hint names the default the destination gives");
+    app->hydra = "/nonexistent/hydra";
+    type_text(app, "\r");
+    check(s->job.active && s->job_kind == SETUP_JOB_GUIDED && !strcmp(s->name, "build-7.example.net") &&
+          !strcmp(s->fields[SETUP_FIELD_NAME].text, "build-7.example.net"),
+          "an empty name starts setup under the destination's host name");
+    for (waited = 0; waited < 250 && s->job.active; waited++) { native_setup_tick(app); nanosleep(&pause, NULL); }
+    check(!s->job.active, "the default-name setup child is reaped");
+    app->hydra = hydra;
+    native_setup_close(app);
+    s->screen = SETUP_SCREEN_STEPS; s->notice[0] = '\0';
+}
+
 /* A running step names what it does and for how long; c stops the child
  * and returns to the screen the recorded state gives. */
 static void running_cases(struct app *app) {
@@ -647,6 +713,7 @@ int main(int argc, char **argv) {
     trust_cases(app);
     running_cases(app);
     edit_cases(app);
+    default_name_cases(app);
     freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);

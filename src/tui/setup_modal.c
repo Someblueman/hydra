@@ -173,6 +173,14 @@ static void trust_body(struct body *b, const struct native_setup *s) {
               "Hydra refuses to connect rather than replace it.");
 }
 
+/* The name an empty name field gives, as the form's hint says while typing. */
+static void name_hint(struct native_setup *s) {
+    char name[128];
+    setup_default_name(s->fields[SETUP_FIELD_DESTINATION].text, name, sizeof(name));
+    if (name[0]) snprintf(s->modal.name_hint, sizeof(s->modal.name_hint), "empty: %.120s", name);
+    else copy_text(s->modal.name_hint, sizeof(s->modal.name_hint), "empty: the host name is used");
+}
+
 static void form_body(struct body *b, const struct native_setup *s) {
     if (s->problem[0]) { body_text(b, s->problem); body_text(b, ""); }
     if (s->editing[0]) {
@@ -199,6 +207,7 @@ static void modal_texts(const struct app *app, struct native_setup *s) {
     if (s->screen == SETUP_SCREEN_FORM) {
         if (s->editing[0]) snprintf(m->title, sizeof(m->title), "Edit the setup of %.120s", s->editing);
         else copy_text(m->title, sizeof(m->title), "Add a host");
+        name_hint(s);
         form_body(&b, s);
     } else if (s->screen == SETUP_SCREEN_TRUST_KEY) {
         snprintf(m->title, sizeof(m->title), "Trust the host key of %.120s?", s->name);
@@ -225,8 +234,7 @@ static void form_build(struct native_setup *s) {
     memset(m->fields, 0, sizeof(m->fields));
     field(m, SETUP_FIELD_DESTINATION, s->fields[SETUP_FIELD_DESTINATION].text, sizeof(s->fields[0].text), "SSH destination",
           "user@host, or a Host from ~/.ssh/config");
-    field(m, SETUP_FIELD_NAME, s->fields[SETUP_FIELD_NAME].text, sizeof(s->fields[0].text), "Name in Hydra",
-          "empty: the host name is used");
+    field(m, SETUP_FIELD_NAME, s->fields[SETUP_FIELD_NAME].text, sizeof(s->fields[0].text), "Name in Hydra", m->name_hint);
     field(m, SETUP_FIELD_CONFIG, s->fields[SETUP_FIELD_CONFIG].text, sizeof(s->fields[0].text), "SSH config file",
           "absolute path or ~/...; empty: your usual SSH config");
     kt_form_init(&m->form, m->title, m->fields, SETUP_FORM_FIELDS);

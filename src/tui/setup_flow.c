@@ -455,8 +455,10 @@ static void submit_form(struct app *app, struct native_setup *s) {
     const char *problem;
     char config[sizeof(s->config)];
     if (!f[SETUP_FIELD_NAME].text[0]) {
-        setup_default_name(f[SETUP_FIELD_DESTINATION].text, f[SETUP_FIELD_NAME].text, sizeof(f[0].text));
-        kt_textinput_set(&s->modal.inputs[SETUP_FIELD_NAME], f[SETUP_FIELD_NAME].text);
+        /* The field's input edits f[NAME].text itself, which setting it clears first. */
+        char name[sizeof(f[0].text)];
+        setup_default_name(f[SETUP_FIELD_DESTINATION].text, name, sizeof(name));
+        kt_textinput_set(&s->modal.inputs[SETUP_FIELD_NAME], name);
     }
     if ((problem = setup_destination_problem(f[SETUP_FIELD_DESTINATION].text))) s->focus = SETUP_FIELD_DESTINATION;
     else if ((problem = setup_name_problem(f[SETUP_FIELD_NAME].text))) s->focus = SETUP_FIELD_NAME;
