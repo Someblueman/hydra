@@ -13,6 +13,8 @@ fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 fixture="$(cd "$fixture" && pwd -P)"
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
 cleanup() {
     for cleanup_home in "$fixture"/host-*; do
         [ -d "$cleanup_home" ] || continue

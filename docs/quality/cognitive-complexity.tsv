@@ -130,7 +130,7 @@ src/fleet/task/task_source.c	task_inspect	25
 src/fleet/task/task_spec.c	task_path	22
 src/fleet/task/task_spec.c	task_spec	19
 src/fleet/task/task_store.c	task_read_record	16
-src/fleet/task/task_withdraw.c	task_withdraw	26
+src/fleet/task/task_withdraw.c	task_withdraw	21
 src/fleet/transport/aggregate.c	f_aggregate	62
 src/fleet/transport/bootstrap.c	f_bootstrap	26
 src/fleet/transport/bundle.c	f_bundle_export	45

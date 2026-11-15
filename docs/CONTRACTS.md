@@ -1085,9 +1085,10 @@ to task protocol 1, additively: receivers advertise `task-withdraw`; a `submit`,
 1..1000000), which acceptance records as `assignment_generation` (1 when absent)
 and which a later request must match (`stale_generation`); the `withdraw`
 operation moves an accepted task without a launch claim to the durable runtime
-state `withdrawn` (refusing anything else with `execution_owned` or
-`invalid_state`), after which start and resume fail with `withdrawn`; spec
-capabilities `role.NAME` are recorded placement classes and `platform.OS-ARCH`
+state `withdrawn` (refusing work with a launch claim, whatever its state and
+whether or not its owner still runs, with `execution_owned`, and other
+unlaunched states with `invalid_state`), after which start and resume fail
+with `withdrawn`; spec capabilities `role.NAME` are recorded placement classes and `platform.OS-ARCH`
 must equal the receiver's handshake platform. `fleet task submit --placement
 auto|HOST [--separate-from TASK_ID]` and `fleet placement explain|replay|
 withdraw TASK_ID`, `drain|undrain HOST` and `policy` are the submitter surface.

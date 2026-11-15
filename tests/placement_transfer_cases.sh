@@ -115,11 +115,16 @@ printf '{"protocol":1,"action":"task","operation":"start","task_id":"%s","trust_
 has "$fixture/stale" '"code":"stale_generation"'
 [ ! -e "$fixture/host-bravo/fleet/tasks/$move_id/launch.json" ]
 task start bravo --id "$move_id" --trust-spec "$bound" > "$fixture/started"
+# Started work never moves: the launch claim decides, so the refusal is the
+# same while the finished owner still holds its lock and after it exits.
 wait_state bravo "$move_id" succeeded
 fails placement withdraw "$move_id"
 has "$fixture/error" '"code":"execution_owned"'
 placement explain "$move_id" | grep -q '"assigned_host":"bravo"'
 wait_sealed bravo "$move_id"
+fixture_lock wait "$fixture/host-bravo"
+fails placement withdraw "$move_id"
+has "$fixture/error" '"code":"execution_owned"'
 task collect bravo --id "$move_id" --into "$fixture/source" > "$fixture/collected"
 has "$fixture/collected" '"collection_id":"collection_'
 placement replay "$move_id" | grep -q '"automatic_rounds":2'
