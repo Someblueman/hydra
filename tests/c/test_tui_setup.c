@@ -637,6 +637,27 @@ static void fixable_cases(struct app *app) {
     s->record_count = 0; s->open = false;
 }
 
+/* An observed host that answers with no work: its confirmation is an age,
+ * not epoch seconds, and the detail names the command that starts a head. */
+static void observed_cases(struct app *app) {
+    struct host_observation *h = &app->model.hosts[0];
+    char frame[65536];
+    app->cols = 120; app->rows = 32; app->setup->open = false; app->view = 6;
+    memset(h, 0, sizeof(*h));
+    copy_text(h->name, sizeof(h->name), "ovh"); copy_text(h->state, sizeof(h->state), "responded");
+    copy_text(h->connection, sizeof(h->connection), "reachable"); copy_text(h->freshness, sizeof(h->freshness), "fresh");
+    snprintf(h->last_confirmed, sizeof(h->last_confirmed), "%lld", (long long)time(NULL) - 30);
+    app->model.host_count = 1; app->host_selected = 1;
+    hosts_focus_detail(app, false);
+    check(render_capture(app, frame, sizeof(frame)) && (strstr(frame, "Last confirmed: 30s ago") || strstr(frame, "Last confirmed: 31s ago")) &&
+          strstr(frame, "No work on this host yet") && strstr(frame, "hydra fleet spawn ovh --project /path/on/host -- BRANCH"),
+          "an answering host without work shows its confirmation age and how to start a head there");
+    keep("hosts-observed-empty", 120, 32, frame);
+    h->heads = 1;
+    check(render_capture(app, frame, sizeof(frame)) && !strstr(frame, "No work on this host yet"), "a host with heads does not repeat the start command");
+    app->model.host_count = 0; app->host_selected = 0;
+}
+
 /* A ready host: Enter follows it into Work (Esc there comes back to Hosts)
  * and asks for a fresh observation so its row appears at once. */
 static void done_cases(struct app *app) {
@@ -786,6 +807,7 @@ int main(int argc, char **argv) {
     default_name_cases(app);
     done_cases(app);
     fixable_cases(app);
+    observed_cases(app);
     freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);

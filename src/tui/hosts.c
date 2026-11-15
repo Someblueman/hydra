@@ -436,9 +436,30 @@ static void host_task(struct app *app, const struct host_observation *host) {
     }
 }
 
+/* A receiver's confirmation time is epoch seconds: shown as its age. */
+static void confirmed_text(const char *value, char *out, size_t size) {
+    char *end;
+    long long at = strtoll(value, &end, 10);
+    long long age = (long long)time(NULL) - at;
+    if (!value[0] || *end || at <= 0) { copy_text(out, size, value[0] ? value : "-"); return; }
+    if (age < 0) age = 0;
+    if (age < 120) snprintf(out, size, "%llds ago", age);
+    else if (age < 7200) snprintf(out, size, "%lldm ago", age / 60);
+    else snprintf(out, size, "%lldh ago", age / 3600);
+}
+
+/* An answering host with no work yet: the one command that starts a head there. */
+static void host_start(struct app *app, const struct host_observation *host) {
+    char text[TEXT + 96];
+    blank(app);
+    paragraph(app, "No work on this host yet. Start a head there from a terminal, in a Git checkout on the host:", KT_BASE);
+    snprintf(text, sizeof(text), "hydra fleet spawn %s --project /path/on/host -- BRANCH", host->name);
+    paragraph(app, text, KT_STRONG);
+}
+
 static void host_detail(struct app *app, const struct pane *p, const struct host_observation *host) {
     bool failed = !host_answering(host);
-    char state[TEXT + 128];
+    char state[TEXT + 128], text[64];
     host_state_text(app, host, state, sizeof(state));
     detail_rule(app, p, host->name, failed ? "disconnected" : "connected");
     content(app, p);
@@ -449,13 +470,15 @@ static void host_detail(struct app *app, const struct pane *p, const struct host
     style(app, TONE_WARNING); if (host->error[0] && strcmp(host->error, "-")) linef(app, "%s", host->error);
     style(app, TONE_BASE);
     blank(app);
-    linef(app, "Last confirmed: %s", host->last_confirmed);
+    confirmed_text(host->last_confirmed, text, sizeof(text));
+    linef(app, "Last confirmed: %s", text);
     linef(app, "%u task observations", host->tasks);
     linef(app, "Process liveness: unobserved");
     linef(app, "CPU / memory / load: unavailable");
     style(app, failed ? TONE_WARNING : TONE_MUTED);
     linef(app, "%s", failed ? "Disconnected: rows are the last observation; r retries." : "Enter shows this host's work; r refreshes it.");
     style(app, TONE_BASE);
+    if (!failed && !host->heads && !host->tasks) host_start(app, host);
     host_task(app, host);
 }
 
