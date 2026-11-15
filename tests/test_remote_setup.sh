@@ -262,7 +262,8 @@ finish_cases() {
     has "$out" '"id":"verify","status":"done"'; has "$out" '"id":"alias","status":"done"'
     has "$HYDRA_HOME/fleet/remotes/n2.json" '"hydra":"[^"]*remote-hydra"'
     has "$HYDRA_HOME/fleet/remotes/n2.json" '"accepted_host_key":"SHA256:fixture"'
-    run 0 "$out" setup n2; has "$out.err" 'remote setup complete'
+    run 0 "$out" setup n2; has "$out.err" 'remote setup complete: n2 is ready'
+    has "$out.err" 'hydra fleet spawn n2 --project /path/on/host -- BRANCH --no-agent'
     run 0 "$out" list; has "$out" '"n2"'
     # An existing different alias is never overwritten.
     run 0 "$out" add n3 other-host
@@ -423,12 +424,31 @@ upgrade_cases() {
     run 1 "$out" setup remove up2 --json; has "$out" '"code":"setup_complete"'
 }
 
+# `remote setup DEST`: one argument is enough. A word that is a name with
+# no setup and no alias is its own destination; [USER@]HOST names the setup
+# after its host; a name with setup state still resumes it (never rebinds).
+one_argument_cases() {
+    run any "$out" setup solo --ssh-config "$fixture/ssh_config" --json
+    has "$out" '"name":"solo"'; has "$out" '"destination":"solo"'
+    [ -f "$(state solo)" ] || fail "remote setup NAME did not start a setup bound to NAME"
+    run any "$out" setup deploy@build-7.example.net --ssh-config "$fixture/ssh_config" --json
+    has "$out" '"name":"build-7.example.net"'; has "$out" '"destination":"deploy@build-7.example.net"'
+    has "$out" '"argv":\["hydra","remote","[a-z-]*","build-7.example.net"'
+    [ -f "$(state build-7.example.net)" ] || fail "remote setup USER@HOST did not name the setup after its host"
+    run any "$out" setup build-7.example.net --json
+    has "$out" '"destination":"deploy@build-7.example.net"'
+    lacks "$out" '"code":"setup_binding_changed"'
+    run 1 "$out" setup 'bad/dest' --json; has "$out" '"code":"invalid_input"'
+    rm -f "$(state solo)" "$(state build-7.example.net)" "$HYDRA_HOME/fleet/setup/solo.lock" "$HYDRA_HOME/fleet/setup/build-7.example.net.lock"
+}
+
 for mask in 022 002; do
     (
         umask "$mask"
         HYDRA_HOME="$fixture/home-$mask"; export HYDRA_HOME
         out="$fixture/out"
         usage_cases
+        one_argument_cases
         guided_cases
         preflight_cases
         state_cases

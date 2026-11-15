@@ -162,6 +162,12 @@ cases() {
     in_tty 'n
 ' "$out" install-agent n1 --agent claude
     has "$out" 'approval_declined'
+    # The terminal plan reads as one: a title, labelled rows, and none of the
+    # members that only identify the plan for its hash.
+    has "$out" 'Install claude on n1'
+    has "$out" 'Command  *umask 022; curl -fsSL https://claude.ai/install.sh | bash'
+    has "$out" 'Recipe  *built into this Hydra release'; has "$out" 'Installs into  *~/.local/bin'
+    lacks "$out" 'schema_version'; lacks "$out" 'kind: install_agent'
     if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "a declined installer ran"; fi
 
     # A failing installer is recorded and changes nothing else.
@@ -267,6 +273,13 @@ cases() {
     has "$out" '"id":"install_agent:claude","status":"skipped"'; has "$out" '"code":"tty_required"'
     in_tty '' "$out" setup n2 --json
     has "$out" '"id":"sign_in:claude","status":"done"'; has "$out" '"id":"alias","status":"done"'
+    # On a terminal without --json each step says what it starts, and the
+    # finished setup names the command that starts a head with that agent.
+    write_state n3 "$base"',"agents":{"status":"done","detail":{"selected":["claude"]}}'
+    in_tty '' "$out" setup n3
+    has "$out" '[.][.][.] signing in to claude on n3'; has "$out" '[.][.][.] verifying the connection to n3'
+    has "$out" 'remote setup complete: n3 is ready'
+    has "$out" 'hydra fleet spawn n3 --project /path/on/host -- BRANCH --profile claude'
 }
 
 (umask 022; cases 022)
