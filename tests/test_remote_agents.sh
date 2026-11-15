@@ -132,7 +132,8 @@ cases() {
     rm -f "$fixture/tty-commands" "$fixture/curl-calls" "$fixture/logins"
     out="$fixture/out"
     base='"host_key":{"status":"done"},"preflight":{"status":"done"},"provision":{"status":"done"}'
-    write_state n1 "$base"
+    # n1's preflight reported the remote HOME, as a real one does.
+    write_state n1 '"host_key":{"status":"done"},"preflight":{"status":"done","detail":{"home":"'"$AGENTS_REMOTE_HOME"'"}},"provision":{"status":"done"}'
 
     # Inventory through the receiver; nothing selected without a terminal.
     run 0 "$out" agents n1 --json
@@ -195,8 +196,11 @@ cases() {
     path="$AGENTS_REMOTE_HOME/.local/bin/claude"
     [ -x "$path" ] || fail "installer did not create claude"
     [ -n "$(find "$path" -prune -perm 755)" ] || fail "installer under remote umask 002 left claude group-writable"
-    has "$out" '"installed_by_hydra":true'; has "$out" '"recorded":false'
-    has "$out" "\"next\":{\"step\":\"agents\",\"argv\":\[\"hydra\",\"remote\",\"agents\",\"n1\",\"--record\",\"claude=$(printf '%s' "$path" | sed 's|/|\\\\/|g')\",\"--json\"\]"
+    # ~/.local/bin is where the approved plan said it installs: the location
+    # is recorded without a second question or a --record step.
+    has "$out" '"installed_by_hydra":true'; has "$out" '"recorded":true'
+    lacks "$out" '"--record"'
+    [ "$(cat "$AGENTS_REMOTE_HOME/.hydra/agents/locations/claude")" = "$path" ] || fail "the planned location was not recorded"
     [ "$(step_status n1 install_agent:claude)" = "done" ] || fail "install not done"
     before="$(lines "$fixture/tty-commands")"
     run 0 "$out" install-agent n1 --agent claude --json

@@ -355,9 +355,37 @@ static json_object *record_next(const struct setup_ctx *ctx, const char *executa
     json_object_object_add(next, "approval_sha256", NULL);
     return next;
 }
+/* Whether path lies directly in a directory the approved installer plan
+ * named (expected_dirs, "~" being the HOME preflight reported). */
+static bool in_planned_dir(struct setup_ctx *ctx, json_object *recipe, const char *path) {
+    const char *home = f_string(setup_state_detail(ctx, "preflight"), "home"), *slash = strrchr(path, '/');
+    json_object *dirs = f_field(recipe, "expected_dirs");
+    size_t i;
+    if (!home || home[0] != '/' || !slash || !array(dirs)) return false;
+    for (i = 0; i < json_object_array_length(dirs); i++) {
+        const char *dir = f_text(json_object_array_get_idx(dirs, i));
+        char expanded[F_PATH];
+        if (!dir || snprintf(expanded, sizeof(expanded), "%s%s", !strncmp(dir, "~/", 2) ? home : "", !strncmp(dir, "~/", 2) ? dir + 1 : dir) >= (int)sizeof(expanded))
+            continue;
+        if (strlen(expanded) == (size_t)(slash - path) && !strncmp(expanded, path, (size_t)(slash - path))) return true;
+    }
+    return false;
+}
+/* The installer put the agent where its approved plan said it would: that
+ * location is recorded without a second question. Elsewhere off PATH the
+ * user is asked (on a terminal) or given the --record command. */
+static bool record_planned(struct setup_ctx *ctx, json_object *recipe, const char *executable, const char *path) {
+    char record[F_PATH + 80]; json_object *error;
+    if (!in_planned_dir(ctx, recipe, path)) return false;
+    snprintf(record, sizeof(record), "%s=%s", executable, path);
+    if ((error = record_location(ctx, record))) { json_object_put(error); return false; }
+    if (ctx->interactive) { fputs("Recorded ", stderr); print_safe(executable); fputs(" at ", stderr); print_safe(path); fputs(", where the approved installer puts it.\n", stderr); }
+    return true;
+}
 static json_object *installed(struct setup_ctx *ctx, const char *step, json_object *recipe, json_object *row, const char *path) {
     const char *executable = f_string(recipe, "executable"), *status = f_string(row, "status");
-    bool off_path = status && !strcmp(status, "found_off_path"), recorded = off_path && offer_record(ctx, executable, path);
+    bool off_path = status && !strcmp(status, "found_off_path");
+    bool recorded = off_path && (record_planned(ctx, recipe, executable, path) || offer_record(ctx, executable, path));
     json_object *detail = json_object_new_object(), *result; char summary[F_PATH + 64];
     snprintf(summary, sizeof(summary), "installed at %s%s", path, off_path && !recorded ? " (off PATH, not recorded)" : "");
     f_string_add(detail, "summary", summary); f_string_add(detail, "agent", f_string(recipe, "agent"));

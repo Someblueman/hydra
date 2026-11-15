@@ -6,7 +6,8 @@ loopback sshd; this driver only presses keys, waits for screens and records
 them as evidence. Journeys (one per invocation):
 
   onboard    add the host, trust its key (typed yes), review and approve the
-             install, install the fixture agent and record its location, then
+             install, install the fixture agent (its planned location is
+             recorded without a second question), then
              a sign-in that is killed mid-way, resumed without re-running,
              fails verification once and succeeds on retry; ends on IS READY
   missing    add a host whose sshd hides git: the explained requirement and
@@ -145,9 +146,13 @@ def follow_ready_host(j: Journey, name: str) -> None:
     control centre observes it at once; Esc comes back to Hosts."""
     j.see("done-work", f"Heads \u00b7 host {name}", timeout=30)
     j.keys(ESC)
-    screen = j.see("hosts-after", "+ Add a host", "Observed", timeout=60)
-    j.check(re.search(rf"\b{re.escape(name)}\s+\d+ heads?\b", screen) is not None,
-            f"{name} is listed under Observed once setup finished")
+    j.see("hosts-back", "+ Add a host", timeout=30)
+    row = re.compile(rf"\b{re.escape(name)}\s+\d+ heads?\b")
+    deadline = time.monotonic() + 60
+    while row.search(j.driver.text()) is None and time.monotonic() < deadline:
+        j.driver.pump(0.5)
+    screen = j.see("hosts-after", "+ Add a host", "Observed", timeout=10)
+    j.check(row.search(screen) is not None, f"{name} is listed under Observed once setup finished")
 
 
 def onboard() -> int:
@@ -176,9 +181,10 @@ def onboard() -> int:
     screen = j.see("install-plan", "Install codex on u10", timeout=60)
     j.check("Recipe" in screen and "built into" not in screen, "the installer plan comes from the private local recipe")
     j.keys("y")
-    j.see("record-location", "Record this location so Hydra uses it?", timeout=120)
-    j.keys("y\r")
-    j.see("sign-in-handoff", "Sign in to codex on u10", timeout=120)
+    # The installer puts codex in ~/.local/bin, the directory its approved
+    # plan names, so Hydra records that location without asking again.
+    screen = j.see("sign-in-handoff", "Sign in to codex on u10", timeout=120)
+    j.check("Record this location" not in screen, "the planned install location is recorded without a second question")
     j.keys("\r")
     j.see("sign-in-terminal", "U10 FIXTURE SIGN-IN: device code", timeout=60)
     time.sleep(0.5)
