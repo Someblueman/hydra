@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -55,6 +56,14 @@ int f_hash(const char *path, char digest[65]) { return f_sha256_path(path, diges
 
 int f_copy(char *dst, size_t size, const char *value) {
     int n = snprintf(dst, size, "%s", value ? value : "");
+    return n >= 0 && (size_t)n < size ? 0 : -1;
+}
+int f_format(char *dst, size_t size, const char *format, ...) {
+    va_list args;
+    int n;
+    va_start(args, format);
+    n = vsnprintf(dst, size, format, args);
+    va_end(args);
     return n >= 0 && (size_t)n < size ? 0 : -1;
 }
 int f_path(char *dst, size_t size, const char *a, const char *b) {

@@ -9,6 +9,14 @@ int f_mkdirs(const char *path);
 char *f_read(const char *path, size_t limit);
 int f_write(const char *path, const char *data, size_t size, bool replace);
 int f_copy(char *dst, size_t size, const char *value);
+/* Formats into dst; -1 when it does not fit. A function, not snprintf at
+ * each call site: with fortify on, macOS makes every snprintf a macro with a
+ * branch of its own. */
+#if defined(__GNUC__) || defined(__clang__)
+int f_format(char *dst, size_t size, const char *format, ...) __attribute__((format(printf, 3, 4)));
+#else
+int f_format(char *dst, size_t size, const char *format, ...);
+#endif
 bool f_name(const char *value);
 /* f_sha256_path: the digest of a file, following symlinks. */
 int f_hash(const char *path, char digest[65]);

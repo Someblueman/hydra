@@ -56,7 +56,7 @@ static void objective_slug(const char *text, char out[65]) {
     }
     out[n] = '\0';
     if (!n) (void)f_copy(out, 65, "plan");
-    else if (!is_letter(out[0])) { char copy[65]; (void)f_copy(copy, sizeof(copy), out); (void)snprintf(out, 65, "plan-%.59s", copy); }
+    else if (!is_letter(out[0])) { char copy[65]; (void)f_copy(copy, sizeof(copy), out); (void)f_format(out, 65, "plan-%.59s", copy); }
 }
 
 static bool simple_header(struct simple *s) {

@@ -78,8 +78,8 @@ int wdr_attempt_result(struct wdr_run *run, size_t step, const char *code) {
     const char *class = failure_class(code), *state;
     long number = 0;
     wdr_step_line(run, step, "attempts", attempt, sizeof(attempt));
-    snprintf(attempt_dir, sizeof(attempt_dir), "attempt-%s", attempt);
-    snprintf(path, sizeof(path), "%s/failure-class", attempt_dir);
+    (void)f_format(attempt_dir, sizeof(attempt_dir), "attempt-%s", attempt);
+    (void)f_format(path, sizeof(path), "%s/failure-class", attempt_dir);
     if (wdr_step_scalar(run, step, path, class)) return 1;
     if (same(class, "success")) state = "succeeded";
     else if (retryable(run, step, class, &number, attempt)) {
@@ -88,8 +88,8 @@ int wdr_attempt_result(struct wdr_run *run, size_t step, const char *code) {
     } else state = same(class, "interrupted") ? "recovery-required" : "failed";
     if ((same(state, "succeeded") || same(state, "failed")) && wdr_step_scalar(run, step, "authoritative-attempt", attempt)) return 1;
     if (wdr_step_scalar(run, step, "state", state)) return 1;
-    snprintf(path, sizeof(path), "step.%s", state);
-    snprintf(detail, sizeof(detail), "attempt=%s class=%s", attempt, class);
+    (void)f_format(path, sizeof(path), "step.%s", state);
+    (void)f_format(detail, sizeof(detail), "attempt=%s class=%s", attempt, class);
     return wdr_event(run, run->steps[step].id, path, detail);
 }
 

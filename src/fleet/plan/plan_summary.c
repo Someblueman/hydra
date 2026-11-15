@@ -22,14 +22,20 @@ static json_object *step_kind(json_object *step, const char **kind) {
     else *kind = value ? value : "step";
     return args;
 }
+/* One argument as the summary shows it, after a space unless it is the
+ * first; the length snprintf reports. */
+static int command_arg(char *out, size_t size, const char *arg, bool first) {
+    const char *gap = first ? "" : " ";
+    if (!strncmp(arg, PLAN_INPUT_PREFIX, strlen(PLAN_INPUT_PREFIX)))
+        return snprintf(out, size, "%s<script %s>", gap, arg + strlen(PLAN_INPUT_PREFIX));
+    return snprintf(out, size, "%s%s", gap, arg);
+}
+
 static void command_line(json_object *argv, char *out, size_t size) {
     size_t used = 0;
     out[0] = '\0';
     for (size_t i = 0; i < json_object_array_length(argv) && used + 1 < size; i++) {
-        const char *arg = f_text(json_object_array_get_idx(argv, i));
-        int n = !strncmp(arg, PLAN_INPUT_PREFIX, strlen(PLAN_INPUT_PREFIX)) ?
-            snprintf(out + used, size - used, "%s<script %s>", i ? " " : "", arg + strlen(PLAN_INPUT_PREFIX)) :
-            snprintf(out + used, size - used, "%s%s", i ? " " : "", arg);
+        int n = command_arg(out + used, size - used, f_text(json_object_array_get_idx(argv, i)), !i);
         if (n < 0) break;
         used += (size_t)n;
     }
@@ -61,12 +67,12 @@ static void step_text(json_object *row, const char *kind, json_object *args, jso
     const char *head = f_string(args, "head") ? f_string(args, "head") : f_string(args, "branch");
     int64_t limit = minutes(json_object_get_int64(f_field(args, "timeout")));
     if (!strcmp(kind, "worker"))
-        (void)snprintf(text, sizeof(text), "Create the worker branch %s%s", head, headless(args) ? " (no terminal)" : "");
+        (void)f_format(text, sizeof(text), "Create the worker branch %s%s", head, headless(args) ? " (no terminal)" : "");
     else if (!strcmp(kind, "agent"))
-        (void)snprintf(text, sizeof(text), "The %s agent works on %s, for at most %lld minute%s%s", f_string(args, "profile"), head,
+        (void)f_format(text, sizeof(text), "The %s agent works on %s, for at most %lld minute%s%s", f_string(args, "profile"), head,
                        (long long)limit, limit == 1 ? "" : "s", plan_spawns(steps, head) ? "; then Hydra commits what it changed" : "");
     else if (!strcmp(kind, "command")) command_text(text, sizeof(text), args, head, limit);
-    else (void)snprintf(text, sizeof(text), "A %s step", kind);
+    else (void)f_format(text, sizeof(text), "A %s step", kind);
     f_string_add(row, "text", text);
 }
 static json_object *summary_step(json_object *compiled, json_object *step) {
