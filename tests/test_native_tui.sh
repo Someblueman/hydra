@@ -395,8 +395,16 @@ for golden_case in remote:140x40: remote:100x30: remote:80x24: remote:60x20: rem
         assert_success $? "golden Hosts frame $golden_name at $golden_size ($golden_mode)"
     done
 done
+# The list's AGE counts from now, so the recorded times move to 28.5 days
+# before this run: the golden frame shows 28d whatever the date (it once
+# turned to 29d a day after it was recorded). The copy keeps the file name,
+# which the frame shows.
+mkdir -p "$test_root/onboarding"
+onboarding_at=$(($(date +%s) - 28 * 86400 - 43200))
+sed "s/1792249259/$onboarding_at/g" "$repo_root/tests/fixtures/tui/onboarding/qualify-two.json" \
+    > "$test_root/onboarding/qualify-two.json"
 for golden_size in 140x40 80x24; do
-    "$tui" --headless-fixture "$fixture" --onboarding-fixture "$repo_root/tests/fixtures/tui/onboarding/qualify-two.json" \
+    "$tui" --headless-fixture "$fixture" --onboarding-fixture "$test_root/onboarding/qualify-two.json" \
         --size "$golden_size" --view hosts > "$test_root/golden.out"
     cmp -s "$test_root/golden.out" "$repo_root/tests/fixtures/tui/screens/hosts-onboarding-$golden_size-plain.txt"
     assert_success $? "golden Hosts frame of the Onboarding page at $golden_size"
