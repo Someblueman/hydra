@@ -161,12 +161,24 @@ static void plan_body(struct body *b, const struct setup_envelope *e) {
     body_text(b, text);
 }
 
+/* The command that prints this key's fingerprint on the machine itself:
+ * OpenSSH keeps a host key of type T in /etc/ssh/ssh_host_T_key.pub. */
+static void key_command(const struct setup_envelope *e, char *out, size_t size) {
+    char type[32];
+    size_t i;
+    copy_text(type, sizeof(type), plan_value(e, "key_type"));
+    for (i = 0; type[i]; i++) type[i] = (char)tolower((unsigned char)type[i]);
+    if (!type[0] || strspn(type, "abcdefghijklmnopqrstuvwxyz0123456789") != strlen(type)) copy_text(type, sizeof(type), "ed25519");
+    snprintf(out, size, "ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub", type);
+}
+
 /* Sized so the whole explanation fits at 80x24. */
 static void trust_body(struct body *b, const struct native_setup *s) {
     const struct setup_envelope *e = s->current;
-    char text[600];
-    snprintf(text, sizeof(text), "Hydra has not connected to %.200s before. Compare this fingerprint with one read on the "
-             "machine itself.\n", e->destination[0] ? e->destination : s->name);
+    char text[700], command[96];
+    key_command(e, command, sizeof(command));
+    snprintf(text, sizeof(text), "Hydra has not connected to %.200s before. Compare this fingerprint with what %s "
+             "prints on the machine itself.\n", e->destination[0] ? e->destination : s->name, command);
     body_text(b, text);
     plan_rows(b, e);
     body_text(b, "\nIf they match, type yes: Hydra appends exactly one line to the file above. If this key ever changes, "

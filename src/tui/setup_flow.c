@@ -505,8 +505,8 @@ static void decline_removal(struct app *app, struct native_setup *s) {
 static void decline(struct app *app, struct native_setup *s) {
     if (!strcmp(s->current->plan_kind, "remove")) { decline_removal(app, s); return; }
     s->screen = SETUP_SCREEN_STEPS; s->selected = 0; s->typed[0] = '\0';
-    snprintf(s->notice, sizeof(s->notice), "Not approved: nothing was changed on %.150s. Continue setup shows the plan again.",
-             s->current->destination[0] ? s->current->destination : s->name);
+    /* One footer row: short enough for the detail pane at 80 and 120 columns. */
+    copy_text(s->notice, sizeof(s->notice), "Not approved: nothing was changed. Enter shows the plan again.");
 }
 
 static void step_enter(struct app *app, struct native_setup *s) {

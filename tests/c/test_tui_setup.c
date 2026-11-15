@@ -355,6 +355,7 @@ static void trust_fit_case(struct app *app, int cols, int rows) {
     check(render_capture(app, frame, sizeof(frame)), "host-key screen renders");
     snprintf(name, sizeof(name), "host-key modal at %dx%d fits its explanation above the field that takes yes", cols, rows);
     check(!s->more && !strstr(frame, "more below") && strstr(frame, "machine itself") && strstr(frame, "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8") &&
+          strstr(frame, "ssh-keygen -lf") && strstr(frame, "/etc/ssh/ssh_host_ed25519_key.pub") &&
           strstr(frame, "appends exactly one line") && strstr(frame, "refuses to connect rather than") &&
           strstr(frame, "Type yes to trust this key") && strstr(frame, "Anything but yes leaves the key untrusted"), name);
 }
@@ -476,6 +477,13 @@ static void key_cases(struct app *app) {
     check(s->screen == SETUP_SCREEN_PLAN && !s->job.active, "Enter and space approve nothing whichever button has the focus");
     setup_keys(app, "n");
     check(s->screen == SETUP_SCREEN_STEPS && !s->job.active && strstr(s->notice, "nothing was changed"), "n declines and runs nothing");
+    {
+        char frame[65536];
+        app->cols = 120; app->rows = 32;
+        check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "Not approved: nothing was changed. Enter shows the plan again."),
+              "the declined notice fits its row at 120x32");
+        app->cols = 100; app->rows = 30;
+    }
     load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0'; s->modal.screen = SETUP_SCREEN_NONE;
     setup_keys(app, "y\r");
     check(s->screen == SETUP_SCREEN_TRUST_KEY && !s->job.active && strstr(s->notice, "Type yes"), "a partial yes does not trust the key");
@@ -680,7 +688,7 @@ static void running_cases(struct app *app) {
     hosts_focus_detail(app, true);
     check(render_capture(app, frame, sizeof(frame)), "running screen renders");
     keep("running", 80, 24, frame);
-    check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "c cancels (a rerun continues safely)") &&
+    check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "c cancels (a rerun continues safely); b leaves it running.") &&
           strstr(frame, "c cancel step") && strstr(frame, "b background"),
           "a running step shows its phrase, elapsed seconds and how to cancel or leave it running");
     setup_keys(app, "\033");

@@ -175,7 +175,7 @@ static void render_steps(struct app *app, struct native_setup *s, bool running) 
     if (!e->step_count) pen_text(&p, 2, KT_MUTED, running ? "Contacting the machine..." : "No steps recorded yet.");
     footer(app, &p, !running ? "Continue setup runs the next step; changes ask for approval."
                     : s->job.cancelled ? "Stopping the step; Hydra then rereads the recorded setup status."
-                    : "c cancels (a rerun continues safely); b keeps it running in the background.", KT_MUTED);
+                    : "c cancels (a rerun continues safely); b leaves it running.", KT_MUTED);
 }
 
 /* Above a step's own screen, when the pane has room: the steps, one row
