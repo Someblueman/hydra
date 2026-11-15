@@ -15,7 +15,9 @@ repo="$test_root/repo"
 export HYDRA_HOME="$test_root/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1 HYDRA_SKIP_AI=1
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 hydra="$root/bin/hydra"
-mkdir -p "$repo" "$HYDRA_HOME"
+mkdir -p "$repo"
+# Hydra refuses a group-writable home; the caller's umask may be 002.
+(umask 077; mkdir -p "$HYDRA_HOME")
 unset TMUX TMUX_PANE HYDRA_HEAD_ID HYDRA_INSTANCE_ID
 # shellcheck source=/dev/null
 . "$root/tests/helpers.sh"
