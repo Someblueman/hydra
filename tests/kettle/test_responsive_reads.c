@@ -17,7 +17,11 @@ static char root[4096], build[4096], tui[4096], base[4096];
 static char hydra[4096], slow[4096], calls[4096];
 
 #define READ_SECONDS "2.5"
-#define PANE_SECONDS "0.9"
+/* Longer than PROMPT, so a key that waited on tmux would be late, and well
+ * inside the control centre's one-second budget for a pane capture: a capture
+ * that takes 0.9 s through the two fixture scripts can exceed it on a loaded
+ * runner, and a timed-out capture says so instead of the pane. */
+#define PANE_SECONDS "0.8"
 /* A key must act within this long: far less than any delayed read. */
 #define PROMPT 0.7
 #define S(keys) kt_send(&s, (keys))
@@ -176,6 +180,7 @@ static void preview(void) {
     CHECK(!HAS("Reading the terminal output..."), "the pane's output replaces the loading line");
     /* The refresh that reads the pane again keeps the output on screen. */
     kt_pump(&s, 2.5);
+    if (!HAS("pane text") || HAS("Reading the terminal output...")) fprintf(stderr, "%s\n", kt_text(&s));
     CHECK(HAS("pane text") && !HAS("Reading the terminal output..."), "a later read keeps what is known on screen");
     kt_close(&s, "q", 0, 0);
     puts("PASS preview: the conversation says it is reading and shows the pane when read");
