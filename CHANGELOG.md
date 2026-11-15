@@ -131,6 +131,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `hydra plan propose` (and `hydra workflow plan propose`)
+  says in its exit status whether the revision it published passes the
+  project's plan policy: 0 passes, 3 fails (the diagnostics say what to
+  fix), 4 could not be checked. 1 and 2 still mean nothing was published.
+  Tooling that took any non-zero status as "not published" must treat 3 and
+  4 as published.
+- Validating and compiling a plan is about three times faster: hashing is
+  built in instead of a `shasum` process per file, output buffers grow with
+  the output, each digest is computed once, and the critical path and
+  reachability are computed in one pass.
+- Finished admission records are pruned: those unchanged for 30 days, and
+  all but the 256 most recent. `hydra admission inspect` on a pruned ID
+  answers `not_found`.
+- Repair rounds and reuse are frozen as advanced, unmaintained features of
+  schema 2 plans. A run whose plan allows no repair (every guided plan) no
+  longer starts the repair helpers at all.
 - **Breaking (control centre):** `hydra tui` has four screens instead of ten
   tabs: 1 Work, 2 Inbox, 3 Hosts and 4 Stats (the keys `1` to `4`, or the
   configurable `screen.*` chords while you type to an agent). The old
@@ -325,6 +341,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Review, `diff`, `land` and result review no longer refuse, or change
+  their output, when Git configuration is injected through the environment
+  (`GIT_CONFIG_COUNT` and its `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, or
+  `GIT_CONFIG_PARAMETERS`). They ignore it; true redirects such as `GIT_DIR`
+  are still refused.
+- A workflow's event lock records the process that writes the event, not
+  its parent shell. A step worker's lock could otherwise be broken while it
+  was writing, or a dead writer's lock could be kept for up to 30 seconds.
+- Details say an agent has exited even after later output scrolls the
+  launcher's exit line away: the launcher records the exit status beside the
+  head's instance.
 - Approving a plan in the control centre runs only the revision its dialog
   named. If the agent published a newer revision while the dialog was open,
   nothing is approved.
