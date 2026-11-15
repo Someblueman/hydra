@@ -282,11 +282,13 @@ bool hs_load(FILE *input, struct hs_model *m) {
     return header && ended && !ferror(input);
 }
 
+static int lower(char c) { return tolower((unsigned char)c); }
+
 static bool contains(const char *s, const char *query) {
     size_t i;
     if (!*query) return true;
     for (; *s; s++) {
-        for (i = 0; query[i] && s[i] && tolower((unsigned char)s[i]) == tolower((unsigned char)query[i]); i++) { }
+        for (i = 0; query[i] && s[i] && lower(s[i]) == lower(query[i]); i++) { }
         if (!query[i]) return true;
     }
     return false;

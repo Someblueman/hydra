@@ -232,6 +232,12 @@ static struct kt_style diff_tone(struct transcript *t, struct kt_style tone) {
     return tone;
 }
 
+static char lower(char c) { return (char)tolower((unsigned char)c); }
+
+static void lower_text(char *text) {
+    for (; *text; text++) *text = lower(*text);
+}
+
 /* Provider key hints ("esc to interrupt", "? for shortcuts", "ctrl+o")
  * describe live input, not this read-only view. */
 static bool hint_line(const struct transcript *t) {
@@ -240,7 +246,7 @@ static bool hint_line(const struct transcript *t) {
     char text[TRANSCRIPT_MODEL_COLUMNS];
     size_t i;
     line_text(t, 0, text, sizeof(text));
-    for (i = 0; text[i]; i++) text[i] = (char)tolower((unsigned char)text[i]);
+    lower_text(text);
     for (i = 0; i < sizeof(hints) / sizeof(*hints); i++) if (strstr(text, hints[i])) return true;
     return false;
 }

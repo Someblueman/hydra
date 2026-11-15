@@ -34,6 +34,14 @@ static void signal_session(pid_t session, int signal_number) {
     }
     closedir(directory);
 }
+
+/* Hang up the whole session, give it 200 ms to leave, then kill what is left. */
+static void stop_session(pid_t session) {
+    struct timespec pause = {0,200000000L};
+    signal_session(session, SIGHUP);
+    while (nanosleep(&pause, &pause) < 0 && errno == EINTR) { }
+    signal_session(session, SIGKILL);
+}
 #endif
 
 bool kt_pty_resize(struct kt_pty *p, int columns, int rows) {
@@ -136,10 +144,7 @@ void kt_pty_close(struct kt_pty *p) {
     int i, status;
     if (p->pid > 0 && !p->finished) {
 #ifdef __linux__
-        struct timespec pause = {0,200000000L};
-        signal_session(p->pid, SIGHUP);
-        while (nanosleep(&pause, &pause) < 0 && errno == EINTR) { }
-        signal_session(p->pid, SIGKILL);
+        stop_session(p->pid);
 #endif
         if (foreground > 0 && foreground != p->pid && getsid(foreground) == p->pid) kill(-foreground, SIGHUP);
         kill(-p->pid, SIGHUP);
