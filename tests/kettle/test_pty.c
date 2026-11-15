@@ -203,7 +203,9 @@ static void hydra_startup_open(struct kt_session *s, const char *tui, const char
     kt_open_terminal(s, argv, 140, 40, NULL);
     kt_until(s, "Loading snapshot...", 3);
     kt_until(s, "visualization-proof", 3);
-    CHECK(kt_contains(s, "0 heads"), "workflow arrives before delayed heads");
+    /* The rest of that frame may still be on its way (a macOS PTY takes a
+     * frame in pieces); the heads cannot arrive while the gate is shut. */
+    kt_until(s, "0 heads", 3);
 }
 /* The first head is selected once heads arrive; a move selects the next;
  * when every head goes and comes back, a head is selected again. */
