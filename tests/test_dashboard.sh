@@ -113,11 +113,11 @@ setup_test_repo() {
 cleanup_test_env() {
     print_status "Cleaning up test environment..."
 
-    # Remove only the unrelated sentinels created by this test.
-    tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null || true
+    # Remove only the unrelated sentinels created by this test; the session
+    # goes last, as it keeps the server running (see main).
     rmdir "$UNRELATED_TEST_DIR" 2>/dev/null || true
     
-    cd "$TEST_REPO_DIR" || return 0
+    cd "$TEST_REPO_DIR" || { tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null; return 0; }
     
     # Kill any remaining test sessions (use non-interactive mode in subshell to avoid state leak)
     for branch in $TEST_BRANCHES; do
@@ -141,6 +141,7 @@ cleanup_test_env() {
     cd "$TEST_TMP_ROOT" || return 0
     cleanup_test_directories
     rm -rf "$TEST_BASE_DIR"
+    tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null || true
     
     print_status "Test environment cleaned up"
 }
@@ -160,7 +161,11 @@ main() {
         print_warning "tmux cannot create sessions in this environment; skipping dashboard tests"
         exit 0
     fi
-    tmux kill-session -t hydra-dash-sanity 2>/dev/null || true
+    # The server always keeps a session until cleanup: a client started just
+    # as the last session closes can reach the exiting server and fail with
+    # "server exited unexpectedly" (tmux 3.6). The pre-test cleanup ends the
+    # sanity session once the unrelated one exists, and the unrelated one is
+    # kept until cleanup_test_env.
     
     if ! command -v git >/dev/null 2>&1; then
         print_error "git not found, skipping tests"
@@ -192,7 +197,6 @@ main() {
         print_error "Pre-test cleanup killed an unrelated hydra-* tmux session"
         exit 1
     fi
-    tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null || true
     rmdir "$UNRELATED_TEST_DIR" 2>/dev/null || true
     
     # Run tests
