@@ -8,7 +8,14 @@ fi
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 . "$root/tests/fixture-tools.sh"
-fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
+# HYDRA_TEST_FIXTURE_DIR names a new fixture directory, so that two runs of a
+# case record the same paths (tests/test_workflow_driver_differential.sh).
+if [ -n "${HYDRA_TEST_FIXTURE_DIR:-}" ]; then
+    fixture="$HYDRA_TEST_FIXTURE_DIR"
+    (umask 077 && mkdir "$fixture")
+else
+    fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
+fi
 HYDRA_HOME="$fixture/home"
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_HOME HYDRA_FLEET_BIN HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1

@@ -2,6 +2,7 @@
 # socket so fixed session names cannot collide across parallel workers.
 SHELL_TEST_EXCLUDES = \
 	tests/test_core.sh \
+	tests/test_workflow_driver_differential.sh \
 	tests/test_visualization.sh \
 	tests/test_native_install.sh \
 	tests/test_native_tui.sh \

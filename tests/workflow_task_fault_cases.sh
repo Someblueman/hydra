@@ -40,7 +40,13 @@ case "$HYDRA_TEST_DAG_FAULT" in
         ;;
     *) exit 1 ;;
 esac
-if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ]; then
+# The snapshot tools force a worker's waiting-remote publication between the
+# shell driver's two state scans, which are awk processes. The native driver
+# (HYDRA_NATIVE_DRIVER=1) scans in process, so there the case runs the same
+# cancellation without forcing that interleaving.
+snapshot_race=0
+[ "$HYDRA_TEST_DAG_FAULT" != cancel-offline ] || [ "${HYDRA_NATIVE_DRIVER:-}" = 1 ] || snapshot_race=1
+if [ "$snapshot_race" = 1 ]; then
     HYDRA_TEST_DAG_RUN=$run_dir
     HYDRA_TEST_DAG_REAL_AWK=$(command -v awk)
     HYDRA_TEST_DAG_REAL_MV=$(command -v mv)
@@ -70,7 +76,7 @@ if [ "$actual" != "$expected" ]; then
     cat "$fixture/fault.out" "$fixture/fault.err" >&2
     exit 1
 fi
-if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ]; then [ -f "$fixture/cancel-snapshot-raced" ]; fi
+if [ "$snapshot_race" = 1 ]; then [ -f "$fixture/cancel-snapshot-raced" ]; fi
 [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 1 ]
 [ ! -d "$run_dir/steps/consume/attempt-1" ]
 export passed=1

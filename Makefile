@@ -426,6 +426,8 @@ help:
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
+	@echo "  make test-native-driver - Workflow, plan and DAG cases with HYDRA_NATIVE_DRIVER=1, then test-driver-differential"
+	@echo "  make test-driver-differential - Run each driver fixture with both run drivers and compare the run records"
 	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
 	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"

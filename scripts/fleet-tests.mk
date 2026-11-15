@@ -310,3 +310,30 @@ fleet-case-native-placement:
 
 fleet-case-shell-placement:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_placement.sh
+
+# The experimental native run driver (HYDRA_NATIVE_DRIVER=1). The workflow
+# shell cases and the workflow, plan and remote task DAG fleet cases run again
+# with the switch on, then the differential check runs every fixture with
+# both drivers and compares their run records.
+NATIVE_DRIVER_SHELL_TESTS = workflow_runtime workflow_driver workflow_e2e workflow_statistics workflow_run_heads plan_cli plan_conversation
+NATIVE_DRIVER_FLEET_CASES = $(filter shell-workflow-% shell-headless-plan-adapter headless-1 report-v2-1 plan-source-% plan-task-verdict-% plan-repair-% dag-%,$(FLEET_CASES))
+.PHONY: test-native-driver native-driver-cases test-driver-differential
+test-native-driver: fleet-test-build
+	+@case "$(MAKEFLAGS)" in \
+		*jobserver*) $(MAKE) native-driver-cases ;; \
+		*) $(MAKE) -j$(TEST_JOBS) native-driver-cases ;; \
+	esac
+	+@$(MAKE) test-driver-differential
+
+native-driver-cases: $(addprefix native-driver-shell-,$(NATIVE_DRIVER_SHELL_TESTS)) $(addprefix native-driver-fleet-case-,$(NATIVE_DRIVER_FLEET_CASES))
+
+native-driver-shell-%:
+	@HYDRA_NATIVE_DRIVER=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" "tests/test_$*.sh"
+
+native-driver-fleet-case-%:
+	+@HYDRA_NATIVE_DRIVER=1 $(MAKE) --no-print-directory fleet-case-$*
+
+# HYDRA_TEST_DIFF_SIZES and HYDRA_TEST_DIFF_CASES narrow the fixtures.
+test-driver-differential: fleet-test-build
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_driver_differential.sh && \
+		grep -E '^(DIFFERENTIAL|Total|Passed|Failed)' "$(BUILD_DIR)/test-logs/$@.log"
