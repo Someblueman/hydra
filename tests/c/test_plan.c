@@ -128,6 +128,34 @@ static void canonical_write_cases(const char *root) {
     assert(!unlink(path));
     json_object_put(compiled);
 }
+/* Reachability and dependency order for steps listed in any order: a reversed
+ * chain, a diamond, a cycle and a name that is no step. */
+static size_t order_position(const size_t *order, size_t count, size_t step) {
+    for (size_t at = 0; at < count; at++) if (order[at] == step) return at;
+    return count;
+}
+static void reach_order_cases(void) {
+    json_object *steps = f_parse_value("[{\"id\":\"d\",\"needs\":[\"b\",\"c\"]},{\"id\":\"c\",\"needs\":[\"a\"]},"
+        "{\"id\":\"b\",\"needs\":[\"a\"]},{\"id\":\"a\",\"needs\":[]}]");
+    json_object *errors = json_object_new_array();
+    bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
+    size_t order[PLAN_STEPS], count;
+    plan_reachability(steps, reach, errors);
+    assert(!json_object_array_length(errors));
+    assert(reach[0][1] && reach[0][2] && reach[0][3] && reach[1][3] && reach[2][3]);
+    assert(!reach[1][2] && !reach[2][1] && !reach[3][0] && !reach[0][0]);
+    count = plan_order(steps, order);
+    assert(count == 4 && order[0] == 3 && order_position(order, count, 0) == 3);
+    assert(order_position(order, count, 1) < 3 && order_position(order, count, 2) < 3);
+    json_object_put(steps);
+    steps = f_parse_value("[{\"id\":\"x\",\"needs\":[\"y\"]},{\"id\":\"y\",\"needs\":[\"x\"]},"
+        "{\"id\":\"z\",\"needs\":[\"x\",\"nowhere\"]},{\"id\":\"w\",\"needs\":[]}]");
+    memset(reach, 0, sizeof(reach));
+    plan_reachability(steps, reach, errors);
+    assert(json_object_array_length(errors) == 1 && reach[0][0] && reach[1][1] && reach[2][0] && !reach[2][2]);
+    assert(plan_order(steps, order) == 1 && order[0] == 3);
+    json_object_put(steps); json_object_put(errors);
+}
 static void report_cases(void) {
     const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     char digest[65], changed[65];
@@ -408,7 +436,7 @@ int main(void) {
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
     bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases(); sha256_cases();
-    canonical_write_cases(root);
+    canonical_write_cases(root); reach_order_cases();
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));

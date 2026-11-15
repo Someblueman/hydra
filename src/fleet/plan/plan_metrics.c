@@ -54,7 +54,7 @@ static int path_step(json_object *steps, json_object *estimates, size_t index, s
     int64_t before[2] = {0, 0};
     for (size_t j = 0; j < json_object_array_length(needs); j++) {
         int dependency = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-        if (!state->done[dependency]) return 0;
+        if (dependency < 0 || !state->done[dependency]) return -1;
         for (size_t k = 0; k < 2; k++)
             if (state->longest[dependency][k] > before[k]) before[k] = state->longest[dependency][k];
     }
@@ -66,17 +66,13 @@ static int path_step(json_object *steps, json_object *estimates, size_t index, s
     }
     state->done[index] = true; return 1;
 }
+/* One pass in dependency order: each step's longest path is final when it is visited. */
 static json_object *critical_path(json_object *steps, json_object *estimates) {
-    struct path_state state = {0}; size_t count = json_object_array_length(steps), completed = 0;
-    for (size_t pass = 0; pass < count && completed < count; pass++) {
-        for (size_t i = 0; i < count; i++) {
-            if (state.done[i]) continue;
-            int status = path_step(steps, estimates, i, &state);
-            if (status < 0) return NULL;
-            completed += (size_t)status;
-        }
-    }
-    return completed == count ? range(state.totals[0], state.totals[1]) : NULL;
+    struct path_state state = {0}; size_t order[PLAN_STEPS], count = plan_order(steps, order);
+    if (count != json_object_array_length(steps)) return NULL;
+    for (size_t at = 0; at < count; at++)
+        if (path_step(steps, estimates, order[at], &state) < 0) return NULL;
+    return range(state.totals[0], state.totals[1]);
 }
 static bool budget_conflict(json_object *plan, json_object *estimates, json_object *path) {
     json_object *steps = f_field(plan, "steps");

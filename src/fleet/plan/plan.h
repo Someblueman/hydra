@@ -59,6 +59,14 @@ bool plan_scope_permitted(json_object *allowed, const char *scope);
 bool plan_scope_spawned(json_object *steps, const char *scope);
 int plan_relations(json_object *plan, json_object *errors);
 int plan_graph(json_object *plan, json_object *errors);
+/* reach[i][j] is true when step i needs step j, directly or through other
+ * steps (reach[i][i] means i is on a cycle). Every needs name that is no step
+ * is reported to errors as missing_dependency, unless errors is NULL. */
+void plan_reachability(json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
+/* Fills order with step indices so that each step follows the steps it needs
+ * and returns how many it placed: fewer than the steps when some are on, or
+ * depend on, a cycle. Needs names that are no step are ignored. */
+size_t plan_order(json_object *steps, size_t order[PLAN_STEPS]);
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
 int plan_obligations_validate(json_object *plan, json_object *errors);
 int plan_obligations_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
