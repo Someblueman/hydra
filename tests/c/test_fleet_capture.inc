@@ -5,6 +5,9 @@ static void capture_expect(const char *script, int status, size_t out_bytes, siz
     struct f_capture cap = {0};
     char *command[] = {(char *)"sh", (char *)"-c", (char *)script, NULL};
     assert(!f_run(command, NULL, 0, 30, &cap));
+    if (cap.status != status || cap.out_bytes != out_bytes || cap.err_bytes != err_bytes)
+        fprintf(stderr, "capture %.60s: status %d (want %d), out %zu (want %zu), err %zu (want %zu), timeout %d\n",
+                script, cap.status, status, cap.out_bytes, out_bytes, cap.err_bytes, err_bytes, (int)cap.timeout);
     assert(cap.status == status);
     assert(cap.out_bytes == out_bytes && cap.err_bytes == err_bytes);
     assert(cap.out && strlen(cap.out) == out_bytes && cap.err && strlen(cap.err) == err_bytes);
