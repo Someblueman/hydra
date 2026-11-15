@@ -134,15 +134,21 @@ assert_equal expired "$(cat "$run_dir/approvals/$request/state")" "expired reque
 cp "$ROOT/no-expiry.yml" "$ROOT/flow.yml"
 
 start_wait
-"$HYDRA_BIN" workflow decide "$run" "$request" approve >/dev/null 2>&1 &
+"$HYDRA_BIN" workflow decide "$run" "$request" approve >/dev/null 2> "$ROOT/first-decider.err" &
 first_decider=$!
-"$HYDRA_BIN" workflow decide "$run" "$request" reject >/dev/null 2>&1 &
+"$HYDRA_BIN" workflow decide "$run" "$request" reject >/dev/null 2> "$ROOT/second-decider.err" &
 second_decider=$!
 wait "$first_decider"; first_code=$?
 wait "$second_decider"; second_code=$?
 if [ "$first_code" -eq 0 ] && [ "$second_code" -ne 0 ]; then exclusive=0
 elif [ "$first_code" -ne 0 ] && [ "$second_code" -eq 0 ]; then exclusive=0
-else exclusive=1; fi
+else
+    exclusive=1
+    # Both succeeded, or neither did: say which, and what each said.
+    printf 'approve exited %s, reject exited %s; decision recorded: %s\n' "$first_code" "$second_code" \
+        "$(cat "$run_dir/approvals/$request/decision/action" 2>/dev/null || echo none)" >&2
+    cat "$ROOT/first-decider.err" "$ROOT/second-decider.err" >&2
+fi
 assert_success "$exclusive" "concurrent conflicting decisions cannot both succeed"
 "$HYDRA_BIN" workflow cancel "$run" >/dev/null
 
