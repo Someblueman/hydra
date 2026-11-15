@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -172,13 +173,36 @@ class Observer:
                 (self.directory / "native-identity.json").write_text(
                     json.dumps(sampled, indent=2) + "\n"
                 )
+            if record.get("event") == "exit" and not self.closed:
+                self._unexpected_exit()
             self.records.append(record)
             self.pending.put(record)
+
+    def _unexpected_exit(self) -> None:
+        """The control centre ended while nothing asked it to: keep the
+        process table of that moment, which still shows a short-lived
+        sender (a cleanup trap or a stray kill) more often than not."""
+        listing = subprocess.run(
+            ["ps", "-eo", "pid,ppid,pgid,etimes,args"],
+            capture_output=True, text=True, timeout=10, check=False,
+        ).stdout
+        (self.directory / "processes-at-exit.txt").write_text(listing)
+
+    def exit_description(self) -> str:
+        """How the control centre ended, from the observer's exit record."""
+        record = next((r for r in reversed(self.records) if r.get("event") == "exit"), None)
+        if record is None:
+            return "the observer ended without an exit record"
+        code = record.get("exit_code")
+        text = f"the control centre exited with status {code}"
+        if isinstance(code, int) and 128 < code < 160:
+            text += f" ({signal.Signals(code - 128).name}, which it did not ask for)"
+        return text + "; processes-at-exit.txt lists what was running then"
 
     def send(self, command: str) -> int:
         with self.lock:
             if self.process.poll() is not None or self.process.stdin is None:
-                raise RuntimeError("native observer exited")
+                raise RuntimeError(f"native observer exited: {self.exit_description()}")
             sent = time.monotonic_ns()
             with (self.directory / "controller.jsonl").open("a") as stream:
                 stream.write(json.dumps({"sent_ns": sent, "command": command}) + "\n")

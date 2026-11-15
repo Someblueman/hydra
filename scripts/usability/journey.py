@@ -289,7 +289,12 @@ class Journey:
         pending = self.settle()
         try:
             if self.observer:
+                # A control centre that already ended mid-journey has nothing
+                # left to clean up; say how it ended instead.
+                ended = self.observer.process.poll() is not None
                 cleanup = self.observer.close(attached=self.attached)
+                if ended:
+                    raise RuntimeError(f"the UI ended before cleanup: {self.observer.exit_description()}")
                 if not cleanup.get("reaped") or cleanup.get("observer_exit"):
                     raise RuntimeError(f"UI cleanup incomplete: {cleanup}")
             if pending:
