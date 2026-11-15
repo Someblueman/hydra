@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-static char root[4096], build[4096], demo[4096], child[4096], evidence[4096];
+static char root[4096], build[4096], demo[4096], child[4096], evidence[4096], gate[4096];
 static void observer_resize(void) {
     const unsigned char frame[] = "\033[2J\033[H界";
     size_t split;
@@ -195,8 +195,11 @@ static void hydra(void) {
     kt_close(&s, "q", 0, 0);
     puts("PASS Hydra: list selection, pane focus and scroll, divider, resize and restoration");
 }
+/* The heads are held back until the case opens the gate, so the workflow
+ * arrives first however long either read takes. */
 static void hydra_startup_open(struct kt_session *s, const char *tui, const char *fake) {
     const char *argv[] = {tui, "--hydra", fake, NULL};
+    (void)unlink(gate);
     kt_open_terminal(s, argv, 140, 40, NULL);
     kt_until(s, "Loading snapshot...", 3);
     kt_until(s, "visualization-proof", 3);
@@ -233,16 +236,20 @@ static void hydra_startup_selection(void) {
     kt_format(source, sizeof(source), "%s/tests/fixtures/tui/native-v2.tsv", root);
     kt_format(model, sizeof(model), "%s/startup-model.tsv", evidence);
     kt_read(source, data, sizeof(data));
-    CHECK(!setenv("HYDRA_TEST_TUI_DELAY", "1", 1) && !setenv("HYDRA_TUI_FIXTURE", model, 1),
+    kt_format(gate, sizeof(gate), "%s/startup-heads-gate", evidence);
+    CHECK(!setenv("HYDRA_TEST_TUI_GATE", gate, 1) && !setenv("HYDRA_TUI_FIXTURE", model, 1),
           "configure delayed startup snapshot");
     kt_write(model, data);
     hydra_startup_open(&s, tui, fake);
+    kt_write(gate, "");
     hydra_startup_repopulation(&s, model, data);
     save(&s, "startup-repopulation.html");
     kt_close(&s, "q", 0, 0);
     for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
         hydra_startup_open(&s, tui, fake);
         kt_send(&s, keys[i]);
+        kt_pump(&s, .3);
+        kt_write(gate, "");
         kt_until(&s, "3 heads \xc2\xb7", 3);
         kt_until(&s, waits[i], 3);
         CHECK(kt_contains(&s, selected[i]), "a selection made before the heads arrive is kept");
@@ -250,7 +257,8 @@ static void hydra_startup_selection(void) {
         save(&s, name);
         kt_close(&s, "q", 0, 0);
     }
-    CHECK(!unsetenv("HYDRA_TEST_TUI_DELAY") && !unsetenv("HYDRA_TUI_FIXTURE"),
+    (void)unlink(gate);
+    CHECK(!unsetenv("HYDRA_TEST_TUI_GATE") && !unsetenv("HYDRA_TUI_FIXTURE"),
           "restore startup fixture environment");
     puts("PASS Hydra startup: first head, single move, a run chosen early, repopulation");
 }

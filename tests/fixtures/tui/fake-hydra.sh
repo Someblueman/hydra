@@ -121,6 +121,14 @@ case "${1:-}:${2:-}" in
     tui:--data)
         if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
         if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi
+        # A case that must see other data first holds the heads back until it
+        # creates this file (at most 10 s).
+        if [ -n "${HYDRA_TEST_TUI_GATE:-}" ]; then
+            gate_wait=0
+            until [ -f "$HYDRA_TEST_TUI_GATE" ] || [ "$gate_wait" -ge 200 ]; do
+                sleep 0.05; gate_wait=$((gate_wait + 1))
+            done
+        fi
         if [ -n "${HYDRA_TUI_FIXTURE:-}" ]; then
             cat "$HYDRA_TUI_FIXTURE"
         else
