@@ -90,6 +90,11 @@ struct native_setup {
     char handoff[SETUP_ARG_MAX][SETUP_ARG_TEXT];
 };
 
+/* The unfinished record a connection error can be fixed in: the setup's own
+ * record while nothing changed the remote and the error is one a different
+ * destination or SSH config could fix (e edits it); NULL otherwise. */
+const struct setup_record *setup_fixable_record(const struct native_setup *s);
+
 /* The modal's components made for the current screen, and its title and
  * body written for this terminal (setup_modal.c). */
 void setup_modal_sync(const struct app *app, struct native_setup *s);

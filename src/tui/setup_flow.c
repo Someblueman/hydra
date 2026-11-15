@@ -641,6 +641,17 @@ static void page(struct app *app, struct native_setup *s, int direction) {
     while (rows-- > 0) move(s, direction);
 }
 
+const struct setup_record *setup_fixable_record(const struct native_setup *s) {
+    static const char *const codes[] = {"offline", "authentication_failed", "timeout", "ssh_config_invalid"};
+    const struct setup_record *r;
+    size_t i;
+    if (s->screen != SETUP_SCREEN_ERROR || s->job.active) return NULL;
+    for (i = 0; i < sizeof(codes) / sizeof(codes[0]) && strcmp(codes[i], s->current->code); i++) { }
+    if (i == sizeof(codes) / sizeof(codes[0])) return NULL;
+    r = find_record(s, s->name);
+    return r && !r->complete && !r->remote_changed ? r : NULL;
+}
+
 /* e edits or x removes the unfinished setup the form's name belongs to. */
 static void duplicate_key(struct app *app, struct native_setup *s, enum key_action action) {
     const struct setup_record *r = find_record(s, s->duplicate);
@@ -662,7 +673,8 @@ bool native_setup_applies(const struct app *app, enum key_action action) {
         if (s->screen == SETUP_SCREEN_ERROR) { setup_explain(s->current->code, &x); return x.action != NULL; }
         return s->screen != SETUP_SCREEN_RUNNING;
     case KEY_SETUP_CANCEL: case KEY_SETUP_BACKGROUND: return running(s);
-    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: return s->screen == SETUP_SCREEN_DUPLICATE;
+    case KEY_HOSTS_EDIT: return s->screen == SETUP_SCREEN_DUPLICATE || setup_fixable_record(s);
+    case KEY_HOSTS_REMOVE: return s->screen == SETUP_SCREEN_DUPLICATE;
     default: return true;
     }
 }
@@ -677,7 +689,10 @@ void native_setup_perform(struct app *app, enum key_action action) {
     case KEY_SETUP_CONTINUE: enter(app, s); break;
     case KEY_SETUP_CANCEL: if (running(s)) cancel_job(s); break;
     case KEY_SETUP_BACKGROUND: if (running(s)) close_flow(app, s); break;
-    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE: if (s->screen == SETUP_SCREEN_DUPLICATE) duplicate_key(app, s, action); break;
+    case KEY_HOSTS_EDIT: case KEY_HOSTS_REMOVE:
+        if (s->screen == SETUP_SCREEN_DUPLICATE) duplicate_key(app, s, action);
+        else if (action == KEY_HOSTS_EDIT && setup_fixable_record(s)) native_setup_edit(app, (size_t)(setup_fixable_record(s) - s->records));
+        break;
     case KEY_BACK: back(app, s); break;
     default: break;
     }

@@ -594,6 +594,41 @@ static void default_name_cases(struct app *app) {
     s->screen = SETUP_SCREEN_STEPS; s->notice[0] = '\0';
 }
 
+/* A host that cannot be reached before anything changed on it: the screen
+ * shows the ssh command to try and e reopens the form with its binding. */
+static void fixable_cases(struct app *app) {
+    struct native_setup *s = app->setup;
+    struct setup_record *r = &s->records[0];
+    char frame[65536];
+    app->cols = 120; app->rows = 32;
+    memset(r, 0, sizeof(*r));
+    copy_text(r->name, sizeof(r->name), "ovh"); copy_text(r->destination, sizeof(r->destination), "deploy@ovh.example.net");
+    copy_text(r->config, sizeof(r->config), "/Users/you/.ssh/work"); copy_text(r->summary, sizeof(r->summary), "next: Trust the host key");
+    s->record_count = 1;
+    check(load("offline.json", s->current, 1), "offline fixture loads");
+    copy_text(s->name, sizeof(s->name), "ovh");
+    s->open = true; s->screen = setup_screen_for(s->current); s->notice[0] = '\0'; s->scroll = 0;
+    hosts_focus_detail(app, true);
+    check(s->screen == SETUP_SCREEN_ERROR && render_capture(app, frame, sizeof(frame)) &&
+          strstr(frame, "ssh -F /Users/you/.ssh/work deploy@ovh.example.net") && strstr(frame, "e changes the destination") &&
+          strstr(frame, "e edit") && !strstr(frame, "hydra remote setup remove NAME"),
+          "an unreachable host shows the ssh command to try and offers e to change the destination");
+    keep("offline-fixable", 120, 32, frame);
+    setup_keys(app, "e");
+    check(s->screen == SETUP_SCREEN_FORM && !strcmp(s->editing, "ovh") &&
+          !strcmp(s->fields[SETUP_FIELD_DESTINATION].text, "deploy@ovh.example.net") && !s->job.active,
+          "e on the unreachable host opens its form with the destination and SSH config");
+    native_setup_close(app);
+    r->remote_changed = true;
+    load("offline.json", s->current, 1);
+    s->open = true; s->screen = SETUP_SCREEN_ERROR; s->editing[0] = '\0';
+    hosts_focus_detail(app, true);
+    check(render_capture(app, frame, sizeof(frame)) && !strstr(frame, "e edit") && strstr(frame, "Suggested:"),
+          "a setup that changed the remote keeps the CLI's suggestion and offers no edit");
+    native_setup_close(app);
+    s->record_count = 0; s->open = false;
+}
+
 /* A ready host: Enter follows it into Work (Esc there comes back to Hosts)
  * and asks for a fresh observation so its row appears at once. */
 static void done_cases(struct app *app) {
@@ -742,6 +777,7 @@ int main(int argc, char **argv) {
     edit_cases(app);
     default_name_cases(app);
     done_cases(app);
+    fixable_cases(app);
     freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);

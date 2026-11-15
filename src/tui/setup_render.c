@@ -360,8 +360,22 @@ static void render_handoff(struct app *app, struct native_setup *s) {
     footer(app, &p, "Enter hands over the terminal   Esc later", KT_STRONG);
 }
 
+/* A connection problem the user can check and fix from here: the ssh
+ * command that shows SSH's own answer, and e for another destination or
+ * SSH config while nothing changed the remote. */
+static void problem_fix(struct pen *p, const struct setup_record *r) {
+    char text[1400];
+    pen_text(p, 0, KT_BASE, "");
+    pen_text(p, 0, KT_BASE, "Try it in a terminal:");
+    snprintf(text, sizeof(text), "ssh%s%.1000s %.250s", r->config[0] ? " -F " : "", r->config, r->destination);
+    pen_text(p, 4, KT_STRONG, text);
+    pen_text(p, 0, KT_BASE, "Nothing has changed on the remote yet: e changes the destination or the SSH config file, and "
+             "Enter tries again as it is.");
+}
+
 static void render_problem(struct app *app, struct native_setup *s) {
     const struct setup_envelope *e = s->current;
+    const struct setup_record *fix = setup_fixable_record(s);
     struct setup_explanation x;
     struct pen p;
     char text[800];
@@ -369,12 +383,14 @@ static void render_problem(struct app *app, struct native_setup *s) {
     title(app, KT_WARNING, x.title);
     pen_begin(&p, app, 2);
     pen_text(&p, 0, KT_BASE, x.body);
+    if (fix) problem_fix(&p, fix);
     pen_text(&p, 0, KT_BASE, "");
     if (e->message[0]) { snprintf(text, sizeof(text), "Hydra says: %s", e->message); pen_text(&p, 0, KT_BASE, text); }
-    if (e->recovery[0]) { snprintf(text, sizeof(text), "Suggested: %s", e->recovery); pen_text(&p, 0, KT_BASE, text); }
+    /* The CLI's recovery names its own commands; e is this screen's way to change the binding. */
+    if (e->recovery[0] && !fix) { snprintf(text, sizeof(text), "Suggested: %s", e->recovery); pen_text(&p, 0, KT_BASE, text); }
     snprintf(text, sizeof(text), "code %s%sexit %d", e->code, dot(app), e->exit_status);
     pen_text(&p, 0, KT_MUTED, text);
-    snprintf(text, sizeof(text), "%s   Esc back", x.action ? x.action : "Nothing to retry here");
+    snprintf(text, sizeof(text), "%s%s   Esc back", x.action ? x.action : "Nothing to retry here", fix ? "   e edit" : "");
     footer(app, &p, text, x.action ? KT_STRONG : KT_MUTED);
 }
 
