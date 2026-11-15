@@ -217,6 +217,16 @@ static void approval_outlived(struct kt_session *s) {
     CHECK(!hf_glob_count(pattern), "confirming a dialog for an older revision launches nothing");
 }
 
+/* A notice the next state replaces, looked for after every read: kt_until
+ * looks once per 50 ms of output, and validation can finish sooner. */
+static void until_drawn(struct kt_session *s, const char *marker, double timeout) {
+    double end = kt_now() + timeout;
+    while (!kt_contains(s, marker) && kt_now() < end)
+        kt_pump(s, .001);
+    if (!kt_contains(s, marker))
+        U(marker, 0);
+}
+
 /* Approval is one action: E on a revision that is not validated yet asks
  * once, validates exactly that revision and runs it when it is ready. */
 static void approve_revision(struct kt_session *s) {
@@ -225,7 +235,7 @@ static void approve_revision(struct kt_session *s) {
     U("Approve plan", 3);
     U("Approve and run planner revision 3?", 3);
     S("y");
-    U("Approved revision 3; validating it, then it runs", 5);
+    until_drawn(s, "Approved revision 3; validating it, then it runs", 5);
     kt_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/*/run-id", f.home);
     {
         double deadline = kt_now() + 30;
