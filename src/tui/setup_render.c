@@ -425,7 +425,7 @@ static void render_done(struct app *app, struct native_setup *s) {
     pen_text(&p, 2, KT_BASE, text);
     snprintf(text, sizeof(text), "hydra fleet spawn %.120s --project /path/on/host -- BRANCH%s%.60s", s->name,
              agent ? " --profile " : " --no-agent", agent ? agent : "");
-    pen_text(&p, 4, KT_STRONG, text);
+    pen_text(&p, 2, KT_STRONG, text);
     pen_text(&p, 0, KT_BASE, "");
     for (i = 0; i < e->step_count; i++) step_row(app, &p, &e->steps[i], false, false);
     snprintf(text, sizeof(text), "Enter shows %.120s in Work   Esc stays in Hosts", s->name);
