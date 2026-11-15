@@ -84,6 +84,12 @@ cmd_workflow() {
             git_isolate_config
             workflow_review "$@"
             ;;
+        --driver-hook)
+            # Internal: the shell parts of a native drive (see workflow_driver_hook).
+            [ "$#" -ge 3 ] || return 2
+            shift
+            workflow_driver_hook "$@"
+            ;;
         --review-parse)
             [ "$#" -eq 3 ] || return 2
             case "$3" in normalized|runtime|data) ;; *) return 2 ;; esac
@@ -200,7 +206,7 @@ cmd_workflow() {
                 workflow_atomic_scalar "$_workflow_plan_launch/run-id" "$_cw_run" || return 1
             fi
             printf '%s\n' "$_cw_run"
-            workflow_drive "$_cw_dir"
+            workflow_drive "$_cw_dir" tail
             ;;
         status)
             if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
@@ -281,7 +287,7 @@ cmd_workflow() {
             if [ "${HYDRA_WORKFLOW_LOCKED_RUN:-}" != "$_cw_dir" ]; then
                 workflow_event "$_cw_dir" "" run.resume_requested source=local-cli
             fi
-            workflow_event "$_cw_dir" "" run.recovered "previous_owner=$_cw_owner"; workflow_drive "$_cw_dir"
+            workflow_event "$_cw_dir" "" run.recovered "previous_owner=$_cw_owner"; workflow_drive "$_cw_dir" tail
             ;;
         *)
             cli_error workflow invalid_arguments "unknown workflow command '$_cw_action'" "run hydra workflow --help"

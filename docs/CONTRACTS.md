@@ -113,7 +113,10 @@ Head history remains after teardown with `desired-state=stopped`.
   process ID of the process that writes the event (not of the shell that
   started it). A writer that finds the lock held removes it only when that
   process is no longer alive (an unreaped zombie counts as gone); otherwise it
-  retries once a second, giving up after 30 tries.
+  retries once a second, giving up after 30 tries. The experimental native run
+  driver (`HYDRA_NATIVE_DRIVER=1`, `hydra-fleet workflow-drive`) appends under
+  the same lock with the same line format and writes the same run files, and
+  its own PID is the run's `owner-pid`.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.

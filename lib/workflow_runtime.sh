@@ -531,9 +531,61 @@ $(find "$_wcs_dir/steps" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | LC_ALL=C 
 EOF
 }
 
+# Usage: workflow_native_driver
+# Prints the hydra-fleet that drives runs natively when HYDRA_NATIVE_DRIVER=1
+# asks for it and that binary implements this run layout; otherwise prints
+# nothing and the shell driver drives the run.
+workflow_native_driver() {
+    [ "${HYDRA_NATIVE_DRIVER:-}" = 1 ] || return 0
+    _wnd_binary="$(fleet_binary 2>/dev/null)" || return 0
+    [ "$("$_wnd_binary" workflow-drive --capability 2>/dev/null)" = 'workflow-drive 1' ] || return 0
+    printf '%s\n' "$_wnd_binary"
+}
+
+# Usage: workflow_drive_native <run-dir> <hydra-fleet> [tail]
+# Hands a run whose drive lock this shell holds to the native driver. When the
+# drive is the last thing this CLI process does ("tail") and no subshell runs
+# it, the process becomes the driver, as the shell driver is that process;
+# otherwise the driver is a child that outlives this shell if it dies.
+workflow_drive_native() {
+    # The driver's shell workers keep this shell's errexit setting.
+    HYDRA_DRIVER_SHELL_FLAGS="$-"
+    export HYDRA_DRIVER_SHELL_FLAGS
+    if [ "${3:-}" = tail ] && [ "$$" = "$(exec sh -c 'printf %s "$PPID"')" ]; then
+        exec "$2" workflow-drive "$1"
+    fi
+    # A terminal's interrupt reaches the driver too, which records the
+    # cancellation; this shell waits for the driver to finish it.
+    trap ':' HUP INT TERM
+    if "$2" workflow-drive "$1"; then _wdn_status=0; else _wdn_status=$?; fi
+    trap - HUP INT TERM
+    return "$_wdn_status"
+}
+
+# Usage: workflow_driver_hook <operation> <run-dir> [<argument>...]
+# The parts of a drive that the native driver runs as shell processes, each
+# exactly as the shell driver runs it at the same point.
+workflow_driver_hook() {
+    _wdh_op="$1" _wdh_dir="$2"
+    shift 2
+    case "${HYDRA_DRIVER_SHELL_FLAGS:-e}" in *e*) ;; *) set +e ;; esac
+    case "$_wdh_op:$#" in
+        step-worker:2) workflow_start_step "$_wdh_dir" "$1" "$2" ;;
+        approval-create:1) workflow_start_step "$_wdh_dir" "$1" ;;
+        approval-resume:0) workflow_approval_resume "$_wdh_dir" ;;
+        repair:1) workflow_plan_repair "$_wdh_dir" "$1" ;;
+        finish:0) workflow_plan_finish "$_wdh_dir" ;;
+        retire:0) _load_lib workflow_retire; workflow_retire_verifiers "$_wdh_dir" ;;
+        notify:2) _load_lib workflow_plan_notify; workflow_plan_notify "$_wdh_dir" "$1" "$2" ;;
+        *) return 2 ;;
+    esac
+}
+
+# Usage: workflow_drive <run-dir> [tail]
 workflow_drive() {
     _wd_dir="$1"
     if workflow_task_needs_owner "$_wd_dir"; then workflow_task_tool drive "$_wd_dir"; return $?; fi
+    _wd_native="$(workflow_native_driver)"
     _wd_drive_lock="$_wd_dir/.drive.lock"
     if ! (umask 077; mkdir "$_wd_drive_lock") 2>/dev/null; then
         _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
@@ -546,6 +598,10 @@ workflow_drive() {
     fi
     _load_lib workflow_statistics
     workflow_statistics_begin "$_wd_dir" || true
+    if [ -n "$_wd_native" ]; then
+        workflow_drive_native "$_wd_dir" "$_wd_native" "${2:-}"
+        return
+    fi
     # Record this driver's own PID. Inside a subshell, such as the one a plan
     # run drives in, $$ names the top-level process instead, which can exit
     # while the driver keeps running; the run would then look stale and a
