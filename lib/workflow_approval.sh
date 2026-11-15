@@ -171,6 +171,14 @@ workflow_approval_decide() (
         workflow_atomic_scalar "$_wad_tmp/actor-label" "$_wad_label" &&
         workflow_atomic_scalar "$_wad_tmp/decided-at" "$(date +%s)" || exit 1
     mv "$_wad_tmp" "$_wad_request/decision" || exit 1
+    # mv moves the record into a decision that already exists instead of
+    # failing. If one was recorded meanwhile, it stands, and this one
+    # succeeds only if it is the same decision.
+    if [ -d "$_wad_request/decision/${_wad_tmp##*/}" ]; then
+        rm -rf "${_wad_request:?}/decision/${_wad_tmp##*/}"
+        [ "$(sed -n '1p' "$_wad_request/decision/action")" = "$_wad_action" ]
+        exit $?
+    fi
     workflow_event "$_wad_dir" "$_wad_step" approval.decided "request=$_wad_id action=$_wad_action source=local-cli"
 )
 

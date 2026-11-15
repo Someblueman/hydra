@@ -464,6 +464,11 @@ reports a failing check in its exit status. The entries marked
 - Inbox says its seen markers are unavailable for as long as the seen store
   fails. The next refresh used to drop the notice, and the rows below it
   moved up a line until the store was read again.
+- Two different decisions on one approval request no longer both report
+  success. When a second `hydra workflow decide` arrived while the first was
+  being recorded, its record was moved inside the first and it said it had
+  been recorded. Now the first decision stands and the second is refused
+  unless it is the same decision.
 
 ## [3.0.0] - 2026-10-17
 
