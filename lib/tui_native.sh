@@ -403,7 +403,7 @@ tui_native_emit_remote_data() {
             "$(tui_native_safe_field "$HYDRA_HOME/fleet/remotes")"
         return 0
     fi
-    exec "$_tnerd_binary" tui-visual-data
+    exec "$_tnerd_binary" fleet tui-visual-data
 }
 
 # One attention stream for local and remote items: the workflow items of this
