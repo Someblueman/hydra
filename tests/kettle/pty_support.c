@@ -279,6 +279,11 @@ void kt_abort(struct kt_session *s) {
         if (active[i] == s)
             active[i] = NULL;
 }
+/* A session leader's exit revokes its controlling terminal on macOS, so
+ * the slave may no longer answer; the master reads the same settings. */
+static bool terminal_settings(const struct kt_session *s, struct termios *out) {
+    return !tcgetattr(s->slave, out) || !tcgetattr(s->master, out);
+}
 void kt_close(struct kt_session *s, const char *keys, int signum, int expected) {
     struct termios after;
     if (!poll_exit(s)) {
@@ -294,9 +299,7 @@ void kt_close(struct kt_session *s, const char *keys, int signum, int expected) 
         CHECK(s->exited, "PTY child exit deadline");
     }
     CHECK(s->status == expected, "PTY child exit status");
-    /* A session leader's exit revokes its controlling terminal on macOS, so
-     * the slave may no longer answer; the master reads the same settings. */
-    CHECK(!tcgetattr(s->slave, &after) || !tcgetattr(s->master, &after), "read restored termios");
+    CHECK(terminal_settings(s, &after), "read restored termios");
     CHECK(after.c_iflag == s->original.c_iflag && after.c_oflag == s->original.c_oflag &&
               after.c_cflag == s->original.c_cflag && after.c_lflag == s->original.c_lflag &&
               memcmp(after.c_cc, s->original.c_cc, sizeof(after.c_cc)) == 0 &&
