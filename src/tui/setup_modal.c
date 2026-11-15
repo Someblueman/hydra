@@ -93,15 +93,21 @@ static void body_pair(struct body *b, const char *label, const char *value) {
     } while (*rest);
 }
 
+static void capitalise(char *text) { text[0] = (char)toupper((unsigned char)text[0]); }
+
+/* A key without a written label as one: "max_hosts" reads "Max hosts". */
+static const char *generic_label(const char *key, char *out, size_t size) {
+    char *c;
+    copy_text(out, size, key);
+    for (c = out; *c; c++) if (*c == '_' || *c == '.') *c = ' ';
+    capitalise(out);
+    return out;
+}
+
 static void plan_row(struct body *b, const struct setup_row *row, const char *label) {
-    char value[600], generic[64], *c;
+    char value[600], generic[64];
     value_text(row, value, sizeof(value));
-    if (!label) {
-        copy_text(generic, sizeof(generic), row->key);
-        for (c = generic; *c; c++) if (*c == '_' || *c == '.') *c = ' ';
-        generic[0] = (char)toupper((unsigned char)generic[0]);
-        label = generic;
-    }
+    if (!label) label = generic_label(row->key, generic, sizeof(generic));
     body_pair(b, label, value);
 }
 
