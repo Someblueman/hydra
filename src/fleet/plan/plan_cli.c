@@ -45,7 +45,7 @@ static json_object *compile_plan(json_object *plan, json_object *policy, const c
 }
 static json_object *compile_command(const char *plan_path, const char *policy_path, const char *source, const char *output, const char *assets_dir) {
     json_object *plan, *policy, *compiled = NULL, *errors = json_object_new_array(), *result;
-    char digest[65];
+    char digest[65]; int written;
     plan = plan_read(plan_path); policy = plan_read(policy_path);
     if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
     else {
@@ -54,15 +54,12 @@ static json_object *compile_command(const char *plan_path, const char *policy_pa
         if (plan) compiled = compile_plan(plan, policy, source, assets_dir, errors);
     }
     if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
-    if (compiled && output) {
-        const char *text; json_object *canonical = plan_canonical(compiled);
-        text = json_object_to_json_string_ext(canonical, JSON_C_TO_STRING_PLAIN);
-        if (strlen(text) > PLAN_LIMIT || plan_digest(compiled, digest) || f_write(output, text, strlen(text), false))
-            plan_error(errors, "$", "artifact_write_failed", "compiled artifact must fit 256 KiB and use a new writable output path");
-        json_object_put(canonical);
-    }
+    /* One canonical serialization gives both the artifact and its digest. */
+    written = compiled ? plan_write_canonical(compiled, output, digest) : -1;
+    if (compiled && output && written)
+        plan_error(errors, "$", "artifact_write_failed", "compiled artifact must fit 256 KiB and use a new writable output path");
     result = diagnostics(errors, plan);
-    if (compiled && !json_object_array_length(errors) && !plan_digest(compiled, digest)) f_string_add(f_field(result, "data"), "sha256", digest);
+    if (!written && !json_object_array_length(errors)) f_string_add(f_field(result, "data"), "sha256", digest);
     json_object_put(plan); json_object_put(policy); json_object_put(compiled); json_object_put(errors);
     return result;
 }

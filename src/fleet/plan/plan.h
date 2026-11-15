@@ -86,14 +86,25 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
 /* Adds an invalid_source diagnostic naming the checkout and failed condition. */
 void plan_source_error(json_object *errors, const char *source);
 int plan_digest(json_object *value, char digest[65]);
+/* Writes the canonical bytes of a compiled artifact to a new file at output
+ * (when output is not NULL) and sets digest to their SHA-256, which equals
+ * plan_digest. 0 on success, -1 when it cannot be serialized, 1 when it is
+ * over PLAN_LIMIT or the file cannot be written. */
+int plan_write_canonical(json_object *compiled, const char *output, char digest[65]);
 /* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.
  * INVALID is malformed/stale evidence, distinct from a valid negative verdict. */
 enum plan_verdict { PLAN_INVALID, PLAN_PASS, PLAN_FAIL, PLAN_INCONCLUSIVE };
 enum plan_verdict plan_check_result(json_object *compiled, const char *run, json_object *check);
 int plan_check_digest(json_object *compiled, const char *check, char digest[65]);
+/* The same digest when plan_sha256 is already known to be plan_digest(compiled),
+ * such as a run's verified plan-accepted; NULL computes it. */
+int plan_bound_check_digest(json_object *compiled, const char *plan_sha256, const char *check, char digest[65]);
 int plan_recipe_digest(json_object *compiled, const char *check, char digest[65]);
 enum plan_verdict plan_report(json_object *compiled, json_object *check,
                               json_object *report, const char *subject);
+/* plan_report with plan_sha256 as in plan_bound_check_digest. */
+enum plan_verdict plan_report_bound(json_object *compiled, const char *plan_sha256, json_object *check,
+                                    json_object *report, const char *subject);
 int plan_materialize(json_object *compiled, const char *directory);
 /* Why an accepted artifact may not run. STALE fills errors with the diagnostics
  * of recompiling it against source; CHANGED recompiled to another digest. When

@@ -102,6 +102,32 @@ static void parse_cases(const char *root) {
         assert(!f_write(path, large, PLAN_LIMIT + 1, true)); assert(!plan_read(path)); free(large);
     }
 }
+/* A caller that already holds the plan digest gets the same check digest and
+ * verdicts without recomputing it; a wrong digest binds a different check. */
+static void bound_digest_cases(json_object *compiled, json_object *check, json_object *report,
+                               const char *subject, const char *expected) {
+    char accepted[65], bound[65];
+    assert(!plan_digest(compiled, accepted));
+    assert(!plan_bound_check_digest(compiled, accepted, "check", bound) && !strcmp(bound, expected));
+    assert(plan_report_bound(compiled, accepted, check, report, subject) == PLAN_PASS);
+    assert(!plan_bound_check_digest(compiled, subject, "check", bound) && strcmp(bound, expected));
+    assert(plan_report_bound(compiled, subject, check, report, subject) == PLAN_INVALID);
+    assert(plan_bound_check_digest(compiled, accepted, "missing", bound) == -1);
+}
+/* One canonical serialization is both the compiled artifact and its digest,
+ * and an existing output is never replaced. */
+static void canonical_write_cases(const char *root) {
+    char path[F_PATH], digest[65], expected[65], file[65];
+    json_object *compiled = fixture();
+    assert(compiled && !f_path(path, sizeof(path), root, "canonical.json"));
+    assert(!plan_digest(compiled, expected));
+    assert(!plan_write_canonical(compiled, NULL, digest) && !strcmp(digest, expected));
+    assert(!plan_write_canonical(compiled, path, digest) && !strcmp(digest, expected));
+    assert(!f_hash(path, file) && !strcmp(file, expected));
+    assert(plan_write_canonical(compiled, path, digest) == 1);
+    assert(!unlink(path));
+    json_object_put(compiled);
+}
 static void report_cases(void) {
     const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     char digest[65], changed[65];
@@ -112,6 +138,7 @@ static void report_cases(void) {
     report = f_parse("{\"schema_version\":2,\"verdict\":\"pass\",\"requirements\":[\"content\"],\"evidence\":\"Checked exact bytes\"}");
     f_string_add(report, "subject_sha256", subject); f_string_add(report, "validator_sha256", digest);
     assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    bound_digest_cases(compiled, check, report, subject, digest);
     f_string_add(report, "verdict", "fail"); assert(plan_report(compiled, check, report, subject) == PLAN_FAIL);
     f_string_add(report, "verdict", "inconclusive"); assert(plan_report(compiled, check, report, subject) == PLAN_INCONCLUSIVE);
     f_string_add(report, "verdict", "pass");
@@ -381,6 +408,7 @@ int main(void) {
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
     bundle_cases(root); missing_member_cases(root); simple_lowering_cases(); command_check_cases(); sha256_cases();
+    canonical_write_cases(root);
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));

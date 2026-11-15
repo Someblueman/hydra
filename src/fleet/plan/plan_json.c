@@ -104,6 +104,16 @@ int plan_digest(json_object *value, char digest[65]) {
     if (text) { f_sha256_text(text, strlen(text), digest); status = 0; }
     json_object_put(canonical); return status;
 }
+int plan_write_canonical(json_object *compiled, const char *output, char digest[65]) {
+    json_object *canonical = plan_canonical(compiled); int status = -1;
+    const char *text = canonical ? json_object_to_json_string_ext(canonical, JSON_C_TO_STRING_PLAIN) : NULL;
+    if (text) {
+        size_t size = strlen(text);
+        f_sha256_text(text, size, digest);
+        status = output && (size > PLAN_LIMIT || f_write(output, text, size, false)) ? 1 : 0;
+    }
+    json_object_put(canonical); return status;
+}
 json_object *plan_failure(const char *command, const char *code, const char *message, const char *recovery) {
     json_object *result = f_error(command, code, message);
     f_string_add(f_field(result, "error"), "recovery", recovery);
