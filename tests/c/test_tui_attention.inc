@@ -244,16 +244,18 @@ static void test_help_scroll(const char *tui, const char *hydra, const char *fak
 /* Records the argv of the Inbox's decisions and restarts. fake-hydra writes
  * one argument per line to the named file. */
 static bool inbox_argv(const char *path, const char *expected, long timeout_ms) {
-    char text[4096]; long long end = monotonic_ms() + timeout_ms;
+    char text[4096] = ""; long long end = monotonic_ms() + timeout_ms;
+    bool read = false;
     while (monotonic_ms() < end) {
         FILE *file = fopen(path, "r");
         if (file) {
             size_t length = fread(text, 1U, sizeof(text) - 1U, file);
-            text[length] = '\0'; fclose(file);
+            text[length] = '\0'; fclose(file); read = true;
             if (!strcmp(text, expected)) return true;
         }
         sleep_ms(20);
     }
+    fprintf(stderr, "  %s: %s\n%s", path, read ? "argv recorded:" : "no argv recorded", text);
     return false;
 }
 

@@ -1096,6 +1096,25 @@ static bool screen_selected(const struct measure_screen *screen, const char *tex
     return false;
 }
 
+/* The screen as text on stderr, for a check that failed on a runner where
+ * nobody can watch the terminal. */
+static void session_dump(struct session *session) {
+    const struct measure_screen *screen = session->screen;
+    const struct kt_canvas *canvas;
+    if (!screen) return;
+    canvas = screen->terminal.alternate_active ? &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
+    for (int y = 0; y < canvas->height; y++) {
+        char line[MEASURE_COLUMNS + 1];
+        int x;
+        for (x = 0; x < canvas->width && x < MEASURE_COLUMNS; x++) {
+            uint32_t glyph = canvas->cells[(size_t)y * (size_t)canvas->stride + (size_t)x].glyph;
+            line[x] = glyph >= 32 && glyph <= 126 ? (char)glyph : (glyph ? '#' : ' ');
+        }
+        line[x] = '\0';
+        fprintf(stderr, "  | %s\n", line);
+    }
+}
+
 static bool wait_for_selected(struct session *session, const char *text, long timeout_ms) {
     long long deadline = monotonic_ms() + timeout_ms;
     while (monotonic_ms() < deadline) {
@@ -1104,6 +1123,8 @@ static bool wait_for_selected(struct session *session, const char *text, long ti
         if (session->screen && screen_selected(session->screen, text)) return true;
         if (length <= 0) sleep_ms(10);
     }
+    fprintf(stderr, "  no row selected with \"%s\"; the screen:\n", text);
+    session_dump(session);
     return false;
 }
 
