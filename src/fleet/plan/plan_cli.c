@@ -384,6 +384,17 @@ static json_object *step_check_command(char **argv, bool *printed) {
         f_success("workflow plan step-check", json_object_new_object());
 }
 
+/* The repair rounds a compiled plan may run: its repair_budget for schema 2,
+ * and 0 for schema 1, which has no repair rounds. */
+static json_object *repair_budget_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *plan = f_field(compiled, "plan");
+    json_object *envelope = f_field(plan, "envelope");
+    if (envelope) {
+        printf("%d\n", f_number_is(plan, "schema_version", 2) ? json_object_get_int(f_field(envelope, "repair_budget")) : 0);
+        *printed = true;
+    }
+    json_object_put(compiled); return NULL;
+}
 static json_object *repair_command(char **argv, bool *printed) {
     int status = plan_repair(argv[1], !strcmp(argv[0], "repair-resume"));
     if (status < 0) return plan_failure("workflow plan repair", "repair_state_invalid", "recorded repair state is invalid; do not start replacement work", "inspect the run's repair records with hydra workflow status before resuming or abandoning the run");
@@ -493,6 +504,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"step-check", 3, step_check_command},
         {"repair", 2, repair_command},
         {"repair-resume", 2, repair_command},
+        {"repair-budget", 2, repair_budget_command},
         {"observed", 2, observed_command},
     };
     json_object *result = NULL;

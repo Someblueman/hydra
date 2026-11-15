@@ -183,6 +183,9 @@ workflow_plan_initialize() {
     hydra_private_touch "$1/plan-hooks.tsv" || return 1
     workflow_plan_tool hooks "$1/compiled.json" > "$1/plan-hooks.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
+    # Repair rounds are an advanced schema 2 feature; a run that has none
+    # never enters them (see workflow_plan_repair).
+    workflow_atomic_scalar "$1/plan-repair-budget" "$(workflow_plan_tool repair-budget "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     if [ -n "${_workflow_plan_expansion:-}" ]; then
         _load_lib workflow_plan_expansion
@@ -336,8 +339,15 @@ workflow_plan_finish() {
     return 0
 }
 
+# Usage: workflow_plan_repair <run-dir> [repair | repair-resume]
+# Prints 1 when a repair round was prepared, else 0. A run whose plan may not
+# repair (schema 1, or a repair budget of 0, as under the project's plan policy)
+# never calls the repair code; runs admitted before plan-repair-budget was
+# recorded still ask it.
 workflow_plan_repair() {
-    if [ ! -f "$1/compiled.json" ]; then printf '0\n'; return 0; fi
+    if [ ! -f "$1/compiled.json" ] || [ "$(sed -n '1p' "$1/plan-repair-budget" 2>/dev/null)" = 0 ]; then
+        printf '0\n'; return 0
+    fi
     workflow_plan_tool "${2:-repair}" "$1" || {
         workflow_atomic_scalar "$1/state" recovery-required
         rm -rf "$1/.drive.lock"

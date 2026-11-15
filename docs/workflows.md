@@ -227,7 +227,17 @@ and schema 2 JSON plans (`hydra workflow plan schema`), explicit policy files,
 `validate`, `compile`, `show`, `run --accept`, `result`, obligations, relations,
 reuse policies, repair rounds, staged plans, `explain` and `compare`. These are
 frozen: they keep working and are not part of the agent's planning prompt or the
-default review. Every expert plan runs through the same scheduler, and final
+default review.
+
+Repair rounds and sealed-artifact reuse in particular are advanced and
+unmaintained: they keep working and keep their tests, but get no new features.
+They run only for a schema 2 plan compiled under a policy whose
+`repair_budget` is above 0. The project's plan policy has a repair budget of 0
+and `hydra plan policy` cannot raise it, and the short plan form compiles to
+schema 1, so `hydra plan` and the control centre never enter them: such a run
+records `plan-repair-budget` 0 and the driver skips the repair step.
+
+Every expert plan runs through the same scheduler, and final
 success requires artifact-bound verification reports for the declared
 deliverables. This optional native path does not change workflow schema 1 or
 shell-only execution.

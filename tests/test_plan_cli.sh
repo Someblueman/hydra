@@ -31,6 +31,17 @@ chmod +x "$root/bin/tmux" "$root/bin/codex"
 PATH="$root/bin:$PATH"
 export PATH
 hydra() { "$HYDRA_BIN" "$@"; }
+# Every native call the planning flow makes is logged, to show that the flow
+# never enters the advanced repair rounds.
+real_fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required}"
+cat > "$root/bin/hydra-fleet" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> '$root/fleet.log'
+exec '$real_fleet' "\$@"
+EOF
+chmod +x "$root/bin/hydra-fleet"
+HYDRA_FLEET_BIN="$root/bin/hydra-fleet"
+export HYDRA_FLEET_BIN
 # Answers an interactive prompt on a terminal.
 on_terminal() {
     _answer="$1"; shift
@@ -153,6 +164,11 @@ grep -q "Result ready: hydra plan review $run" "$root/status.out"
 assert_success $? 'status finds the latest plan run and says the result is ready'
 hydra plan review > "$root/review.out"
 assert_success $? 'the review needs no identifiers'
+grep -q '^workflow-plan guard ' "$root/fleet.log"
+assert_success $? 'the planning flow ran through the logged native helper'
+if grep -E '^workflow-plan repair(-resume)? ' "$root/fleet.log" >&2; then check=1; else check=0; fi
+assert_success "$check" 'the planning flow never enters the repair rounds'
+assert_equal 0 "$(cat "$runs/$run/plan-repair-budget")" 'the run records that its plan has no repair rounds'
 # Git configuration injected through the environment (as some containers do)
 # neither stops the review nor changes what it shows.
 GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=diff.noprefix GIT_CONFIG_VALUE_0=true \

@@ -438,6 +438,15 @@ recorded once in `plan-warnings` as `source_moved<TAB>compiled-commit<TAB>head`.
 Resuming a compiled plan run likewise no longer requires the checkout to be at
 `base-commit`. Plan digests are computed in process with identical bytes.
 
+A compiled plan run also records `plan-repair-budget`, the repair rounds its
+plan may run (`workflow-plan repair-budget <compiled.json>`: the envelope's
+`repair_budget` for schema 2, `0` for schema 1). When it is `0` the driver does
+not call `workflow-plan repair` or `repair-resume` at all; a run without the
+record, admitted by an earlier release, still calls them. Repair rounds and
+sealed-artifact reuse are frozen expert features (see [workflows](workflows.md)):
+unchanged, maintained only for fixes, and never reached from `hydra plan` or the
+project's plan policy, whose repair budget is 0.
+
 A compiled plan run also records `plan-hooks.tsv`, one line per exec step on a
 head its spawn steps create: `step<TAB>agent<TAB>head` for an agent step,
 `step<TAB>command<TAB>head<TAB>check` for a step that owns a command check and
