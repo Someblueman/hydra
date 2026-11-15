@@ -101,7 +101,7 @@ int main(void) {
     assert(mkdtemp(dir)); f_home = dir; f_hydra = "hydra";
     capture_streams();
     sha256_vectors(dir);
-    capture_growth();
+    capture_growth(dir);
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
     json_utf8();

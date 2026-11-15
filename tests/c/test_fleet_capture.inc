@@ -12,14 +12,36 @@ static void capture_expect(const char *script, int status, size_t out_bytes, siz
     assert(cap.measurement_complete == (status != 125));
     f_capture_free(&cap);
 }
-static void capture_growth(void) {
-    char script[256];
+/* A file of n 'a' bytes. The output is written here rather than made with
+ * head and tr, whose handling of /dev/zero and octal escapes differs between
+ * coreutils implementations. */
+static void write_as(const char *path, size_t n) {
+    char block[4096];
+    FILE *file = fopen(path, "wb");
+    assert(file);
+    memset(block, 'a', sizeof(block));
+    while (n) {
+        size_t chunk = n < sizeof(block) ? n : sizeof(block);
+        assert(fwrite(block, 1, chunk, file) == chunk);
+        n -= chunk;
+    }
+    assert(!fclose(file));
+}
+static void capture_growth(const char *dir) {
+    char script[3 * F_PATH], out[F_PATH], err[F_PATH], under[F_PATH], at[F_PATH];
+    assert(snprintf(out, sizeof(out), "%s/capture-out", dir) < (int)sizeof(out));
+    assert(snprintf(err, sizeof(err), "%s/capture-err", dir) < (int)sizeof(err));
+    assert(snprintf(under, sizeof(under), "%s/capture-under", dir) < (int)sizeof(under));
+    assert(snprintf(at, sizeof(at), "%s/capture-at", dir) < (int)sizeof(at));
+    write_as(out, 1048579U); write_as(err, 100003U); write_as(under, F_LIMIT - 1U); write_as(at, F_LIMIT);
     capture_expect("exit 0", 0, 0, 0);
-    capture_expect("head -c 1048579 /dev/zero | tr '\\000' a; head -c 100003 /dev/zero | tr '\\000' a >&2", 0, 1048579, 100003);
-    (void)snprintf(script, sizeof(script), "head -c %u /dev/zero | tr '\\000' a", F_LIMIT - 1U);
+    (void)snprintf(script, sizeof(script), "cat '%s'; cat '%s' >&2", out, err);
+    capture_expect(script, 0, 1048579, 100003);
+    (void)snprintf(script, sizeof(script), "cat '%s'", under);
     capture_expect(script, 0, F_LIMIT - 1U, 0);
-    (void)snprintf(script, sizeof(script), "head -c %u /dev/zero | tr '\\000' a", F_LIMIT);
+    (void)snprintf(script, sizeof(script), "cat '%s'", at);
     capture_expect(script, 125, F_LIMIT, 0);
     capture_expect("while :; do printf aaaaaaaaaaaaaaaa; done", 125, F_LIMIT, 0);
     capture_expect("while :; do printf aaaaaaaaaaaaaaaa >&2; done", 125, 0, F_LIMIT);
+    unlink(out); unlink(err); unlink(under); unlink(at);
 }
