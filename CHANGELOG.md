@@ -155,6 +155,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     unchanged.
   - **Hosts screen:** "Last confirmed" reads as an age. Agent rows align
     for any name length. A finished setup no longer counts as unfinished.
+  - **Agents step:** while no agent on the host can run, the setup's agents
+    step starts on the recommended agent instead of "Continue setup". An
+    installer is still a plan that needs `y`. The step's summary counts
+    agents as they are chosen and installed.
+  - **Work and Details:** Work, filtered to a ready host with no heads,
+    says how to start one there. Details give a remote head's confirmation
+    times as ages.
 - **Breaking:** `hydra plan propose` (and `hydra workflow plan propose`)
   says in its exit status whether the revision it published passes the
   project's plan policy: 0 passes, 3 fails (the diagnostics say what to
@@ -365,6 +372,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cancelling a workflow can no longer signal an unrelated process. A step
+  kept its command's pid on record after the command had ended, while it
+  committed and sealed the result. A cancel in that window sent SIGTERM to
+  whatever process had been given that pid since.
+- `hydra-fleet` refuses to withdraw launched work with `execution_owned`
+  whether or not the launch owner still holds its lock. It used to answer
+  `invalid_state` once the owner had exited.
 - `hydra tui` observes registered hosts again. It asked the fleet helper
   for remote data in a way the helper refuses, so with any host registered,
   only `hydra fleet tui` showed remote hosts and their heads.
