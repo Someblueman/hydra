@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 /* SHA-256 (FIPS 180-4), so digests need no child process. */
@@ -80,12 +81,11 @@ void f_sha256_text(const void *data, size_t size, char digest[65]) {
     f_sha256_final(&s, digest);
 }
 
-int f_sha256_file(const char *path, char digest[65]) {
+/* Digests everything fd reads to its end and closes it; -1 on a read error. */
+static int hash_descriptor(int fd, char digest[65]) {
     unsigned char buffer[65536];
     struct f_sha256 s;
     ssize_t n;
-    int fd = open(path, O_RDONLY | O_NOFOLLOW);
-    if (fd < 0) return -1;
     f_sha256_init(&s);
     while ((n = read(fd, buffer, sizeof(buffer))) != 0) {
         if (n < 0 && errno == EINTR) continue;
@@ -95,4 +95,22 @@ int f_sha256_file(const char *path, char digest[65]) {
     close(fd);
     f_sha256_final(&s, digest);
     return 0;
+}
+
+int f_sha256_file(const char *path, char digest[65]) {
+    int fd = open(path, O_RDONLY | O_NOFOLLOW);
+    return fd < 0 ? -1 : hash_descriptor(fd, digest);
+}
+
+int f_sha256_path(const char *path, char digest[65]) {
+    struct stat st;
+    /* Non-blocking only so that opening a FIFO cannot wait for a writer. */
+    int fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (fd < 0) return -1;
+    if (fstat(fd, &st) || !(S_ISREG(st.st_mode) || S_ISCHR(st.st_mode)) ||
+        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK)) {
+        close(fd);
+        return -1;
+    }
+    return hash_descriptor(fd, digest);
 }

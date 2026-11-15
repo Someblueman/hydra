@@ -16,5 +16,8 @@ void f_sha256_final(struct f_sha256 *s, char digest[65]);
 void f_sha256_text(const void *data, size_t size, char digest[65]);
 /* The digest of a regular file read without following a final symlink; -1 on error. */
 int f_sha256_file(const char *path, char digest[65]);
+/* The digest of the regular file or character device path names, following
+ * symlinks as shasum does; -1 for anything else or on error. */
+int f_sha256_path(const char *path, char digest[65]);
 
 #endif

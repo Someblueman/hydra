@@ -141,7 +141,9 @@ bad:
     json_object_put(out); return NULL;
 }
 int task_json_hash(json_object *object, const char *scratch, char digest[65]) {
-    char path[F_PATH]; const char *text = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN); int status;
-    if (f_path(path, sizeof(path), scratch, "digest.json") || f_write(path, text, strlen(text), false)) return -1;
-    status = f_hash(path, digest); unlink(path); return status;
+    const char *text = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
+    (void)scratch;
+    if (!text) return -1;
+    f_sha256_text(text, strlen(text), digest);
+    return 0;
 }
