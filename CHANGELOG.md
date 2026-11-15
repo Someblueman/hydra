@@ -131,6 +131,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Setting up a remote host is shorter, and leads straight to work:
+  - **Finishing setup:** the finished setup ("NAME is ready") hands off to
+    Work. Enter follows the host there, Esc comes back, and the host is
+    observed at once. The done screen, the host's detail and the CLI all
+    name the `hydra fleet spawn` command that starts work on it.
+  - **Unreachable hosts:** a host that can't be reached or refuses the
+    login shows the exact `ssh` command to try. `e` on that screen opens
+    the edit form.
+  - **Host key:** the host-key question says how to compare the
+    fingerprint (`ssh-keygen -lf`).
+  - **Agent install:** an agent that the approved installer put in a
+    directory named by its plan is recorded without a second question.
+  - **CLI:** `hydra remote setup DEST` works with one argument, naming the
+    host after the destination. On a terminal, setup prints each step as it
+    starts and shows its plans as titled, labelled rows; `--json` is
+    unchanged.
+  - **Hosts screen:** "Last confirmed" reads as an age. Agent rows align
+    for any name length. A finished setup no longer counts as unfinished.
 - **Breaking:** `hydra plan propose` (and `hydra workflow plan propose`)
   says in its exit status whether the revision it published passes the
   project's plan policy: 0 passes, 3 fails (the diagnostics say what to
@@ -341,6 +359,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `hydra tui` observes registered hosts again. It asked the fleet helper
+  for remote data in a way the helper refuses, so with any host registered,
+  only `hydra fleet tui` showed remote hosts and their heads.
+- The add-host form's empty name takes the default it names (for example
+  "empty: buildbox") instead of failing with "Enter a name for this host".
 - Review, `diff`, `land` and result review no longer refuse, or change
   their output, when Git configuration is injected through the environment
   (`GIT_CONFIG_COUNT` and its `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, or
