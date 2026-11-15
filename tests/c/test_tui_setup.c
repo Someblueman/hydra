@@ -679,9 +679,9 @@ static void done_cases(struct app *app) {
     copy_text(s->records[0].name, sizeof(s->records[0].name), "ovh");
     copy_text(s->records[0].summary, sizeof(s->records[0].summary), "set up");
     s->records[0].complete = s->records[0].remote_changed = true;
-    s->record_count = 1; app->host_selected = 1;
+    s->record_count = 1; app->host_selected = 1; app->notice[0] = '\0';
     check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "This host is set up") && !strstr(frame, "not in the fleet yet") &&
-          !strstr(frame, "e edits it"), "a finished setup not observed yet is described as set up");
+          !strstr(frame, "e edits it") && !strstr(frame, "setup unfinished"), "a finished setup not observed yet is described as set up");
     s->record_count = 0; app->host_selected = 0;
 }
 

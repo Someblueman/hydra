@@ -568,7 +568,9 @@ void hosts_overlay(struct app *app) {
 void hosts_status(struct app *app, char *out, size_t size) {
     struct host_row rows[MAX_HEADS];
     size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
-    size_t hosts = kind_count(rows, count, HOST_ROW_HOST), setups = kind_count(rows, count, HOST_ROW_SETUP);
+    size_t hosts = kind_count(rows, count, HOST_ROW_HOST), setups = 0, i;
+    /* A finished setup waiting for its first observation is not unfinished. */
+    for (i = 0; i < count; i++) setups += rows[i].kind == HOST_ROW_SETUP && !app->setup->records[rows[i].index].complete;
     if (app->notice[0] || native_onboarding_active(app)) return;
     if (hosts) text_append(out, size, "%s%zu remote host%s", dot(app), hosts, hosts == 1 ? "" : "s");
     if (setups) text_append(out, size, "%s%zu setup%s unfinished", dot(app), setups, setups == 1 ? "" : "s");
