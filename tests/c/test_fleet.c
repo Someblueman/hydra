@@ -93,6 +93,21 @@ static void json_utf8(void) {
 #include "test_fleet_discovery.inc"
 #include "test_fleet_sha256.inc"
 #include "test_fleet_capture.inc"
+/* Hydra 2.x, 3.x and 4.x share fleet protocol 1; other majors are refused. */
+static void handshake_versions(void) {
+    const char *accepted[] = {"2.1.0", "3.0.0", "4.0.0"}, *refused[] = {"1.9.0", "5.0.0", "40.0.0"};
+    size_t i;
+    for (i = 0; i < 6; i++) {
+        const char *version = i < 3 ? accepted[i] : refused[i - 3];
+        char text[256];
+        json_object *data;
+        (void)snprintf(text, sizeof(text), "{\"hydra_version\":\"%s\",\"fleet_protocol\":1,\"state_schema\":2,"
+                       "\"event_schema\":1,\"json_schema\":1,\"capabilities\":[]}", version);
+        assert((data = f_parse(text)));
+        assert(f_handshake_compatible(data) == (i < 3));
+        json_object_put(data);
+    }
+}
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -102,6 +117,7 @@ int main(void) {
     capture_streams();
     sha256_vectors(dir);
     capture_growth(dir);
+    handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
     json_utf8();
