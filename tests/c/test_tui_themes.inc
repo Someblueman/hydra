@@ -41,7 +41,7 @@ static bool theme_switch(struct session *session, const char *base, const char *
     char frame[65536] = "";
     size_t used = 0U;
     long long deadline = monotonic_ms() + 2000;
-    const char *named = NULL;
+    const char *named = NULL, *start;
     mouse_input(session, "t");
     while (monotonic_ms() < deadline && !(named && strstr(named, THEME_FRAME_END))) {
         char buffer[4096];
@@ -51,11 +51,16 @@ static bool theme_switch(struct session *session, const char *base, const char *
         named = strstr(frame, name);
     }
     if (!named || !strstr(named, THEME_FRAME_END)) return false;
-    return !strncmp(frame, THEME_FRAME_BEGIN, strlen(THEME_FRAME_BEGIN)) &&
-        theme_count(frame, THEME_FRAME_BEGIN) == theme_count(frame, THEME_FRAME_END) &&
-        !strstr(frame, "\033[2J") && theme_rows_painted(frame, 24) == 24 &&
-        strstr(frame, base) != NULL && strstr(frame, base) < strstr(frame, "\xe2\x97\x86 hydra") &&
-        theme_ends_reset(frame, named);
+    /* The drain before t can stop inside a frame the program is still
+     * writing (a PTY with a small buffer, as on macOS, takes a frame in
+     * pieces): that frame's tail is not part of the switch, which starts
+     * with the next update. */
+    start = strstr(frame, THEME_FRAME_BEGIN);
+    return start && start < named &&
+        theme_count(start, THEME_FRAME_BEGIN) == theme_count(start, THEME_FRAME_END) &&
+        !strstr(start, "\033[2J") && theme_rows_painted(start, 24) == 24 &&
+        strstr(start, base) != NULL && strstr(start, base) < strstr(start, "\xe2\x97\x86 hydra") &&
+        theme_ends_reset(start, named);
 }
 
 static void test_themes(const char *tui, const char *hydra, const char *fake_bin) {

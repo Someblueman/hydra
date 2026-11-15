@@ -242,11 +242,15 @@ static void test_help_scroll(const char *tui, const char *hydra, const char *fak
 }
 
 /* Records the argv of the Inbox's decisions and restarts. fake-hydra writes
- * one argument per line to the named file. */
-static bool inbox_argv(const char *path, const char *expected, long timeout_ms) {
+ * one argument per line to the named file. The terminal keeps reading while
+ * it waits, as a real one does: the program draws before it runs the
+ * command, and a PTY with a small buffer (macOS) blocks that write until
+ * somebody reads it. */
+static bool inbox_argv(struct session *session, const char *path, const char *expected, long timeout_ms) {
     char text[4096] = ""; long long end = monotonic_ms() + timeout_ms;
     bool read = false;
     while (monotonic_ms() < end) {
+        drain_output(session);
         FILE *file = fopen(path, "r");
         if (file) {
             size_t length = fread(text, 1U, sizeof(text) - 1U, file);
@@ -280,7 +284,7 @@ static void test_inbox_decisions(const char *tui, const char *hydra, const char 
     write_input(session.master, "Y", 1U);
     (void)wait_for_marker(&session, "Approve request", 1000);
     write_input(session.master, "y", 1U);
-    result(inbox_argv(argv_path, "workflow\n--workspace-control\nR-1\napprove\nrequest-1\n", 3000),
+    result(inbox_argv(&session, argv_path, "workflow\n--workspace-control\nR-1\napprove\nrequest-1\n", 3000),
            "y approves exactly that run's request through the workflow control owner");
     unlink(argv_path);
     write_input(session.master, "N", 1U);
@@ -290,7 +294,7 @@ static void test_inbox_decisions(const char *tui, const char *hydra, const char 
     write_input(session.master, "N", 1U);
     (void)wait_for_marker(&session, "Reject request", 1000);
     write_input(session.master, "y", 1U);
-    result(inbox_argv(argv_path, "workflow\n--workspace-control\nR-1\nreject\nrequest-1\n", 3000),
+    result(inbox_argv(&session, argv_path, "workflow\n--workspace-control\nR-1\nreject\nrequest-1\n", 3000),
            "y rejects exactly that run's request");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "Inbox decision terminal restores");
@@ -321,7 +325,7 @@ static void test_inbox_restart(const char *tui, const char *hydra, const char *f
     write_input(session.master, "R", 1U);
     (void)wait_for_marker(&session, "Restart the terminal of feature-stale?", 1000);
     write_input(session.master, "y", 1U);
-    result(inbox_argv(argv_path, "resume\n--terminal\nfeature-stale\n", 3000), "y runs hydra resume --terminal for exactly that head");
+    result(inbox_argv(&session, argv_path, "resume\n--terminal\nfeature-stale\n", 3000), "y runs hydra resume --terminal for exactly that head");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "Inbox restart terminal restores");
     close_session(&session);
@@ -373,7 +377,7 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     write_input(session.master, "L", 1U);
     (void)wait_for_marker(&session, "Land kill-dry-run-worker?", 1000);
     write_input(session.master, "y", 1U);
-    result(inbox_argv(argv_path, "land\nkill-dry-run-worker\n", 3000), "y runs hydra land for exactly that worker");
+    result(inbox_argv(&session, argv_path, "land\nkill-dry-run-worker\n", 3000), "y runs hydra land for exactly that worker");
     /* The land's output opens in the viewer, which q closes without
      * quitting; q then quits from the Inbox. */
     result(wait_for_marker(&session, "esc close", 3000), "the land's output opens in the viewer");
