@@ -1,7 +1,7 @@
  # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                    this machine / 1 head / 1 running  
                                                                                                                        
  Heads ----------------------- 1  i10-h00 ----- latest output / enter to talk  Details ------------------------------  
- >* i10-h00            item10-wor * running / item10-worker                    Agent       item10-worker               
+ >* i10-h00            item10-... * running / item10-worker                    Agent       item10-worker               
                                                                                Session     running (the live           
                                   No terminal output yet.                                  terminal)                   
                                                                                Reported    nothing yet; declared when  

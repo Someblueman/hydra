@@ -23,7 +23,7 @@ def retained_screen_controls(root: Path, output: Path) -> None:
         assert owned_heads_visible(screen, True, branches), count
         # With remote hosts the Work list gains a WHERE column after the agent;
         # readiness must not depend on it.
-        located = re.sub(r"(i10-h\d\d +)item10-wor", r"\1item10  here", screen)
+        located = re.sub(r"(i10-h\d\d +)item10-\.\.\.", r"\1item10  here", screen)
         assert located != screen and owned_heads_visible(located, True, branches), count
         screens[count] = screen
     screen = screens[50]

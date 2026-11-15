@@ -1,16 +1,16 @@
  # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                 this machine / 10 heads / 10 running  
                                                                                                                        
  Heads ---------------------- 10  i10-h09 ----- latest output / enter to talk  Details ------------------------------  
-  * i10-h00            item10-wor * running / item10-worker                    Agent       item10-worker               
-  * i10-h01            item10-wor                                              Session     running (the live           
-  * i10-h02            item10-wor No terminal output yet.                                  terminal)                   
-  * i10-h03            item10-wor                                              Reported    nothing yet; declared when  
-  * i10-h04            item10-wor                                                          done: done or blocked       
-  * i10-h05            item10-wor                                              Where       this machine                
-  * i10-h06            item10-wor                                                                                      
-  * i10-h07            item10-wor                                              CHANGES                                 
-  * i10-h08            item10-wor                                              Changed     0 files in the worktree,    
- >* i10-h09            item10-wor                                                          not yet committed           
+  * i10-h00            item10-... * running / item10-worker                    Agent       item10-worker               
+  * i10-h01            item10-...                                              Session     running (the live           
+  * i10-h02            item10-... No terminal output yet.                                  terminal)                   
+  * i10-h03            item10-...                                              Reported    nothing yet; declared when  
+  * i10-h04            item10-...                                                          done: done or blocked       
+  * i10-h05            item10-...                                              Where       this machine                
+  * i10-h06            item10-...                                                                                      
+  * i10-h07            item10-...                                              CHANGES                                 
+  * i10-h08            item10-...                                              Changed     0 files in the worktree,    
+ >* i10-h09            item10-...                                                          not yet committed           
                                                                                Full diff   : diff (everything since    
                                                                                            the branch base)            
                                                                                                                        

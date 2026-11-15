@@ -157,13 +157,21 @@ static bool row_marked(const struct app *app, const struct outline_row *row) {
     return row->kind == OUTLINE_HEAD && marked_index(app, app->model.heads[row->head].branch) < app->marked_count;
 }
 
+/* A column's text within width, cut with an ellipsis like the name. */
+static void cell_text(struct app *app, int x, int y, int width, const char *text, struct kt_style tone) {
+    char cell[TEXT + 96];
+    if (width < 1) return;
+    fit_text(app, text, (size_t)width, cell, sizeof(cell));
+    kt_text(&app->frame, (struct kt_rect){x, y, width, 1}, cell, tone);
+}
+
 /* The right-hand columns of a row: agent (or step count), WHERE, status. */
 static void row_cells(struct app *app, struct kt_rect r, int y, const struct outline_row *row, const struct row_text *t,
                       const struct row_columns *k, bool lit) {
     struct kt_canvas *c = &app->frame;
     struct kt_style fill = KT_SELECTED;
-    if (k->agent >= 0) kt_text(c, (struct kt_rect){r.x + k->agent, y, r.width - k->agent, 1}, t->agent, lit ? fill : KT_MUTED);
-    if (k->where >= 0 && row->kind != OUTLINE_RUN) kt_text(c, (struct kt_rect){r.x + k->where, y, 11, 1}, t->where, lit ? fill : KT_MUTED);
+    if (k->agent >= 0) cell_text(app, r.x + k->agent, y, r.width - k->agent, t->agent, lit ? fill : KT_MUTED);
+    if (k->where >= 0 && row->kind != OUTLINE_RUN) cell_text(app, r.x + k->where, y, 11, t->where, lit ? fill : KT_MUTED);
     if (k->status >= 0) kt_text_aligned(c, (struct kt_rect){r.x + k->status, y, r.width - k->status, 1}, t->status, KT_ALIGN_RIGHT,
                                         lit ? fill : t->tone);
 }
