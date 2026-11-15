@@ -128,6 +128,19 @@ static void resize(int cols, int rows) {
     kt_pump(&s, 2.5); /* the preview refreshes every two seconds */
 }
 
+/* For a runner nobody watches: what tmux holds for the pane and how it
+ * sizes it, beside the attached pane that lacks a row. */
+static void attached_diagnostics(void) {
+    const char *names[] = {"LANG", "LC_ALL", "LC_CTYPE", "TERM"};
+    size_t i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        fprintf(stderr, "%s=%s\n", names[i], getenv(names[i]) ? getenv(names[i]) : "(unset)");
+    fprintf(stderr, "%s", hf_run(&f, NULL, -1, (const char *[]){"tmux", "-V", NULL}));
+    fprintf(stderr, "pane: %s", hf_run(&f, NULL, -1, (const char *[]){"tmux", "display-message", "-p", "-t", target,
+        "#{pane_width}x#{pane_height} cursor #{cursor_x},#{cursor_y}", NULL}));
+    fprintf(stderr, "tmux holds:\n%s\n", hf_run(&f, NULL, -1, (const char *[]){"tmux", "capture-pane", "-p", "-t", target, NULL}));
+}
+
 /* The live attached pane shows the same bytes through tmux and kettle. */
 static void attached(void) {
     int i;
@@ -144,6 +157,7 @@ static void attached(void) {
     kt_until(&s, "for agents", 8);
     kt_pump(&s, .5);
     clean_screen("attached pane");
+    if (find_row("-w\xc3\xb6rld", NULL) < 0) attached_diagnostics();
     CHECK(fg_of("-w\xc3\xb6rld") == RED_FG, "attached pane keeps provider red");
     save("attached");
     /* Ctrl-\ [ opens the agent's own tmux history: output that scrolled past
@@ -181,6 +195,12 @@ static void fixture(void) {
     kt_format(target, sizeof(target), "=%s:", session);
     kt_format(evidence, sizeof(evidence), "%s/output-fidelity-evidence", f.build);
     kt_mkdir(evidence);
+    /* The attached pane at 140x40 has room for the fixture's rows and a short
+     * prompt only: the default prompt names the user, host and worktree, and
+     * where those are long (CI runners) it wraps over three rows and scrolls
+     * the rows the checks read out of view. */
+    RUN("tmux", "send-keys", "-t", target, "-l", "PS1='$ '");
+    RUN("tmux", "send-keys", "-t", target, "Enter");
 }
 
 int main(void) {
