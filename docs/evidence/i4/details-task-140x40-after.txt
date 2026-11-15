@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / DETAILS       Local · 3 heads · 1 running · 3 need attention · 5 to repair · Remote · 2 heads, 1 task on 3 hosts (1 disconnected) 
- Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Details: task task_build on builder ───────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ task task_build on builder                                                                                                              │
-│ This is the receiver's last observation, not its current state; controls stay disabled until a fresh one arrives. r retries the host.   │
-│ Where        builder                                                                                                                    │
-│ Workspace    /work/project                                                                                                              │
-│ State        needs approval · owner recorded                                                                                            │
-│ Observation  fresh · receiver observed 2026-10-17T10:00:00Z · confirmed 2026-10-17T10:00:00Z                                            │
-│ Connection   reachable · fresh · 3s old                                                                                                 │
-│ Confirmed    2026-10-17T10:00:00Z                                                                                                       │
-│ Agent        codex  step implement                                                                                                      │
-│ Waiting      approval: Review the plan                                                                                                  │
-│ Next         decide                                                                                                                     │
-│ Result       unavailable · verification unavailable                                                                                     │
-│ Cancel       - · scope - · requested -                                                                                                  │
-│                                                                                                                                         │
-│ IDENTITY                                                                                                                                │
-│ Request      req-1                                                                                                                      │
-│ Spec         0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef                                                           │
-│                                                                                                                                         │
-│ NEXT                                                                                                                                    │
-│ Y approve  N reject  R resume  X cancel   (each confirmed; fresh evidence only)                                                         │
-│ r  retry the host    I  attention items for this task                                                                                   │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live · Remote live                                                                                                                        
- Y approve  N reject  R resume  X cancel  r retry host  Esc back  ? help  q quit                                                           
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                               3 local · 3 remote · 1 of 3 hosts disconnected · 1 running  
+                                                                                                                                           
+ Heads ─────────────────────────────────── 6  task_build ───────── remote task · no terminal here  Details ──────────────────────────────  
+  ◐ feature-live       local       codex      task task_build on builder                           task task_build on builder              
+  ▲ feature-stale      local       claude     needs approval · owner recorded                      This is the receiver's last             
+  ? feature-unavailab… local       shell      waiting approval · next decide                       observation, not its current state;     
+  ● builder/feature-b… builder     -                                                               controls stay disabled until a fresh    
+  ▲ archive/feature-i… archive     -          A remote task has no terminal here; its controls     one arrives. r retries the host.        
+ ▌◐ task_build         builder     codex      are Y approve, N reject, R resume and X cancel,      Where        builder                    
+                                              each confirmed against a fresh observation.          Workspace    /work/project              
+                                                                                                   State        needs approval · owner     
+                                                                                                                recorded                   
+                                                                                                   Observation  fresh · receiver           
+                                                                                                                observed 2026-10-17T10:00  
+                                                                                                                :00Z · confirmed           
+                                                                                                                2026-10-17T10:00:00Z       
+                                                                                                   Connection   reachable · fresh · 3s     
+                                                                                                                old                        
+                                                                                                   Confirmed    2026-10-17T10:00:00Z       
+                                                                                                   Agent        codex  step implement      
+                                                                                                   Waiting      approval: Review the plan  
+                                                                                                   Next         decide                     
+                                                                                                   Result       unavailable ·              
+                                                                                                                verification unavailable   
+                                                                                                   Cancel       - · scope - · requested    
+                                                                                                                -                          
+                                                                                                                                           
+                                                                                                   IDENTITY                                
+                                                                                                   Request      req-1                      
+                                                                                                   Spec         0123456789abcdef012345678  
+                                                                                                                9abcdef0123456789abcdef01  
+                                                                                                                23456789abcdef             
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  5 heads · 1 task · 3 need you                                                                                                            
+  ● live   Remote live · task task_build on builder · needs approval                                                                       
+ ↑/↓ select • Y approve • N reject • R resume • X cancel • n new task • / filter • L location • tab/shift+tab pane • ? help • q quit       

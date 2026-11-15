@@ -6,6 +6,10 @@ existing `Observer`, `fake-hydra.sh` and `HYDRA_TUI_FIXTURE` input mechanism.
 The viewport is 120x40 with `LC_ALL=C`. The state rows name owned `i10-hNN`
 heads and an `item10-worker` profile. They are rendering fixtures, not measured
 provider runs. The 50-head order intentionally leaves worker zero offscreen.
+On 15 November 2026 they were refreshed from `hydra-tui --headless-fixture`
+(`--size 120x40 --task` the newest head, `LC_ALL=C`) over the same rows,
+which reproduced the September captures byte for byte before the agent
+column began to cut long names with an ellipsis (`item10-...`).
 
 When refreshing them, capture the renderer's actual output and review the
 table columns, exact count, selected row and matching selected-head card.

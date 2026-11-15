@@ -121,8 +121,14 @@ static bool review_start(struct session *session, const char *tui, const char *h
                          struct review_fixture *fixture, unsigned short width, unsigned short height) {
     if (!result(open_session(session, tui, hydra, fixture->directory, width, height) == 0, "open review PTY")) return false;
     result(wait_for_raw(session), "review terminal enters raw mode");
-    write_input(session->master, "I", 1U);
-    return result(wait_for_marker(session, "ATTENTION  2 need you", 3000), "review candidates load");
+    (void)wait_for_model(session);
+    write_input(session->master, "2", 1U);
+    /* The status line counts the items once the attention read answered;
+     * the section headings are on the first rows at every size. */
+    if (!result(wait_for_markers(session, "Decisions 2", "items need you", 5000), "review candidates load")) return false;
+    /* The two approval gates of the head snapshot come first. */
+    write_input(session->master, "jj", 2U);
+    return result(wait_for_selected(session, "Result ready: R-1", 1000), "the first review candidate is selected");
 }
 
 static void review_stop(struct session *session) {
@@ -159,7 +165,7 @@ static void review_negative_cases(struct session *session, struct review_fixture
 
 static void review_references_test(struct session *session, struct review_fixture *fixture) {
     char opened[4096], calls[32768];
-    write_input(session->master, "f\r", 2U);
+    write_input(session->master, "]\r", 2U);
     result(wait_for_marker(session, "EXPLICIT-LOCAL-PREVIEW", 1000), "selected local reference opens bounded data preview");
     drain_output(session); write_input(session->master, "\033", 1U);
     (void)wait_for_marker(session, "REFERENCES  3 recorded", 1000); write_input(session->master, "j\r", 2U);
@@ -175,14 +181,16 @@ static void review_references_test(struct session *session, struct review_fixtur
 static void review_supplied_reference_test(struct session *session, struct review_fixture *fixture) {
     char calls[32768];
     const char *locator = "/tmp/explicit \"quoted\" \\ $(literal)";
-    write_input(session->master, "l", 1U);
-    result(wait_for_marker(session, "log reference:", 1000), "explicit reference input opens as text form");
+    write_input(session->master, "+", 1U);
+    result(wait_for_markers(session, "Add a reference", "absolute local path or an http(s) URL", 1000), "+ opens the reference form");
+    write_input(session->master, "\t", 1U);
     write_input(session->master, locator, strlen(locator)); write_input(session->master, "\r", 1U);
     result(wait_for_marker(session, "Reference 1/3", 3000), "explicit reference reload returns selectable references");
     result(review_read(fixture->calls, calls, sizeof(calls)) &&
         strstr(calls, "[{\"kind\":\"log\",\"locator\":\"/tmp/explicit \\\"quoted\\\" \\\\ $(literal)\"}]\n"), "reference quotes/backslashes are encoded in one literal JSON argument");
-    write_input(session->master, "p", 1U);
-    (void)wait_for_marker(session, "pr reference:", 1000);
+    write_input(session->master, "+", 1U);
+    (void)wait_for_marker(session, "Add a reference", 1000);
+    write_input(session->master, "\033[C\033[C\t", 7U);
     write_input(session->master, "javascript:alert(1)\r", 20U);
     result(wait_for_marker(session, "Unsupported reference:", 1000), "user reference input refuses unsupported protocols");
 }
@@ -270,18 +278,20 @@ static void review_result_case(struct session *session, struct review_fixture *f
     written = snprintf(text + used, 65536U - used, "TEXT\tDIFF  (complete)\nTEXT\t    +added line\nREF\tlog\tavailable\t%s\nEND\t%zu\t1\t0\n", log, lines + 2U);
     if (written < 0 || (size_t)written >= 65536U - used) { free(text); unlink(log); result(false, "result review fits"); return; }
     result(review_reload(session, fixture, text, "RESULT  plan-x"), "result review loads");
+    /* r opens the Review page whichever page was showing. */
+    (void)wait_for_marker(session, "EXACT REVIEW / evidence", 1000);
     write_input(session->master, "n", 1U); write_input(session->master, "n", 1U);
-    result(wait_for_markers(session, "HOW IT WAS VERIFIED", "Full log: press L", 1000), "n jumps to the next section heading");
+    result(wait_for_markers(session, "HOW IT WAS VERIFIED", "Full log: press", 1000), "n jumps to the next section heading");
     write_input(session->master, "n", 1U);
     result(wait_for_markers(session, "CHANGES ON plan-x-worker", "CHANGED-FILE-MARKER", 1000), "n reaches the worker branch's changes");
     write_input(session->master, "n", 1U);
     result(wait_for_marker(session, "+added line", 1000), "n reaches the diff section");
-    write_input(session->master, "L", 1U);
-    result(wait_for_markers(session, "EXACT REVIEW / full log", "FULL LOG  ", 1000), "L opens the verify log");
+    write_input(session->master, "]\r", 2U);
+    result(wait_for_markers(session, "EXACT REVIEW / full log", "FULL LOG  ", 1000), "Enter on the References page opens the verify log in full");
     write_input(session->master, "G", 1U);
     result(wait_for_marker(session, "LOG-TAIL-MARKER", 1000), "the full log extends past the bounded preview");
     write_input(session->master, "\033", 1U);
-    result(wait_for_marker(session, "EXACT REVIEW / evidence", 1000), "Esc returns from the log to the review");
+    result(wait_for_marker(session, "EXACT REVIEW / references", 1000), "Esc returns from the log to the references");
     free(text); unlink(log);
 }
 
@@ -296,9 +306,9 @@ static void test_review_navigation(const char *tui, const char *hydra) {
      * rows below the first screen at 80x24. */
     write_input(session.master, "jjjjjj", 6U);
     result(wait_for_marker(&session, "UNSPLITTABLEWORD ends the sentence.", 1000), "review prose wraps between words at 80x24");
-    write_input(session.master, "i", 1U);
-    result(wait_for_markers(&session, "Source      workflow records", "Project     /project", 1000), "selected identity view exposes exact source and project");
-    write_input(session.master, "i", 1U);
+    write_input(session.master, "]]", 2U);
+    result(wait_for_markers(&session, "Source      workflow records", "Project     /project", 1000), "the Technical page exposes the exact source and project");
+    write_input(session.master, "[[", 2U);
     write_input(session.master, "G", 1U);
     result(wait_for_marker(&session, "FINAL-REVIEW-EVIDENCE", 1000), "long review scroll reaches final evidence at 80x24");
     write_input(session.master, "g", 1U);
@@ -326,14 +336,14 @@ static void test_review_stale(const char *tui, const char *hydra) {
     if (!review_start(&session, tui, hydra, &fixture, 80, 24)) { close_session(&session); goto cleanup; }
     write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Loading exact review", 1000) && wait_for_file(fixture.pids, 1000), "slow evidence runs as tracked asynchronous capture");
-    write_input(session.master, "]", 1U);
+    write_input(session.master, "\033", 1U); sleep_ms(60); write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "Selection or revision changed", 1000), "changing candidate invalidates pending review");
     result(pids_gone_within(fixture.pids, PIDS_GONE_GRACE_MS), "candidate change removes review process and descendant");
     unlink(fixture.delay);
     result(review_reload(&session, &fixture, fixture.original, "Review unavailable"), "previous candidate response cannot satisfy new selection");
-    write_input(session.master, "[", 1U);
+    write_input(session.master, "\033", 1U); sleep_ms(60); write_input(session.master, "k\r", 2U);
     result(review_reload(&session, &fixture, fixture.original, "readiness: ready"), "return to original candidate loads exact evidence");
-    review_attention(&fixture, '2', "attempt-2"); drain_output(&session); write_input(session.master, "I", 1U);
+    review_attention(&fixture, '2', "attempt-2"); drain_output(&session); write_input(session.master, "\022", 1U);
     result(wait_for_marker(&session, "Selection or revision changed", 3000), "attempt/revision refresh invalidates displayed review");
     result(review_reload(&session, &fixture, fixture.original, "Review unavailable"), "old attempt/revision response rejected");
     review_stop(&session);
@@ -351,7 +361,7 @@ static void test_review_narrow(const char *tui, const char *hydra) {
     write_input(session.master, "G", 1U);
     result(wait_for_marker(&session, "FINAL-REVIEW-EVIDENCE", 1000), "narrow review can scroll to final evidence");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "ATTENTION  2 need you", 1000), "opening/closing review does not acknowledge candidate");
+    result(wait_for_selected(&session, "Result ready: R-1", 1000), "opening/closing review does not acknowledge candidate");
     write_marker_file(fixture.delay, "4\n"); write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Loading exact review", 1000), "narrow slow review stays responsive");
     write_input(session.master, "\033", 1U);
@@ -376,7 +386,7 @@ static void wait_review_cancellation(struct session *session, unsigned i) {
 
 static void cancel_active_review(struct session *session, struct review_fixture *fixture,
                                  const char *scratch, const char *cleaned, unsigned i) {
-    const char *keys[] = {"]", "\033q", "q", "]", "\033q", ""};
+    const char *keys[] = {"\033j\r", "\033q", "q", "\033j\r", "\033q", ""};
     if (i != 2U && i != 5U) result(review_separate_group(fixture->pids), "nested capture child has its own process group");
     drain_output(session); long long started = monotonic_ms();
     write_input(session->master, keys[i], strlen(keys[i]));

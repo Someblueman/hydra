@@ -81,10 +81,13 @@ done
 alpha=$!
 "$HYDRA_BIN" pool run work --worker beta --json > "$base/beta.json" 2>&1 &
 beta=$!
-wait "$alpha"
-assert_success $? "the first worker loop exits cleanly"
-wait "$beta"
-assert_success $? "the second worker loop exits cleanly"
+wait "$alpha"; alpha_code=$?
+wait "$beta"; beta_code=$?
+# A loop that fails says why only in its own output: show it.
+[ "$alpha_code" -eq 0 ] && [ "$beta_code" -eq 0 ] ||
+    { printf -- '--- alpha (exit %s)\n' "$alpha_code"; cat "$base/alpha.json"; printf -- '--- beta (exit %s)\n' "$beta_code"; cat "$base/beta.json"; } >&2
+assert_success "$alpha_code" "the first worker loop exits cleanly"
+assert_success "$beta_code" "the second worker loop exits cleanly"
 assert_equal 4 "$(cat "$base/alpha.json" "$base/beta.json" | grep -o '"outcome":"succeeded"' | wc -l | tr -d ' ')" "two workers execute every task exactly once"
 assert_equal "t1 t2 t3 t4" "$(LC_ALL=C sort "$base/executed" | tr '\n' ' ' | sed 's/ $//')" "each command ran once"
 work_dir="$(pool_path work)"
@@ -135,8 +138,8 @@ assert_equal none "$(json_field "$out" reason)" "nothing is handed out in place 
 assert_equal recovery-required "$(sed -n '1p' "$crash_dir/tasks/risky/state")" "a non-idempotent task with an unknown outcome becomes recovery-required"
 assert_equal 1 "$(sed -n '1p' "$crash_dir/tasks/risky/attempts")" "the uncertain attempt is not replayed"
 assert_equal unknown "$(sed -n '1p' "$crash_dir/tasks/risky/attempt-1/outcome")" "the attempt outcome is recorded as unknown"
-[ ! -d "$crash_dir/tasks/risky/attempt-2" ]
-assert_success $? "no second attempt is invented for the risky task"
+if [ ! -d "$crash_dir/tasks/risky/attempt-2" ]; then check=0; else check=1; fi
+assert_success "$check" "no second attempt is invented for the risky task"
 grep -q '"type":"task.stale_owner","detail":"outcome=unknown source=unknown"' "$crash_dir/events.jsonl"
 assert_success $? "the stale owner is recorded with an unknown outcome"
 "$HYDRA_BIN" pool create crash-safe >/dev/null
@@ -225,6 +228,10 @@ out="$("$HYDRA_BIN" pool cancel slow --json)"
 assert_equal 1 "$(json_field "$out" signalled)" "pool cancellation signals the claimed workflow task"
 wait "$patient" 2>/dev/null || true
 assert_equal cancelled "$(sed -n '1p' "$slow_dir/tasks/linger/state")" "the workflow task ends cancelled"
+# hydra workflow cancel asks the run's driver to stop; the driver records
+# the cancelled state when it has stopped the step, which can follow the
+# task's own end.
+WAIT_FOR_TIMEOUT=30 wait_for "the workflow run to end cancelled" state_is "$slow_run_dir/state" cancelled
 assert_equal cancelled "$(sed -n '1p' "$slow_run_dir/state")" "cancellation reached the workflow run through hydra workflow cancel"
 "$HYDRA_BIN" state verify >/dev/null 2>&1
 assert_success $? "state verifies after pool execution"

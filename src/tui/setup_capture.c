@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 #include "setup_flow.h"
+#include "wake.h"
+#include <poll.h>
 /* Setup children change remote machines. Unlike observation captures they are
  * not stopped when the control centre quits or is interrupted: the CLI records
  * progress before every side effect, and a later run reconciles it. Only the
@@ -69,6 +71,16 @@ void setup_capture_cancel(struct setup_capture *c) {
     (void)kill(-c->pid, SIGTERM);
 }
 
+/* More output, the deadline or the end of a cancel's grace would change the
+ * child's state; its exit arrives as a signal. */
+static void capture_wake(const struct setup_capture *c) {
+    if (!c->eof) wake_fd(c->fd, POLLIN);
+    if (!c->timed_out) wake_at(&c->started, c->budget_ms);
+    if (!c->cancelled) return;
+    if (capture_elapsed(&c->cancel_started) < SETUP_CANCEL_GRACE_MS) wake_at(&c->cancel_started, SETUP_CANCEL_GRACE_MS);
+    else wake_after(40);
+}
+
 bool setup_capture_step(struct setup_capture *c) {
     if (!c->active) return true;
     if (!c->timed_out && capture_elapsed(&c->started) >= c->budget_ms) {
@@ -86,6 +98,7 @@ bool setup_capture_step(struct setup_capture *c) {
     }
     /* A background grandchild may hold the pipe; the exit status decides. */
     if (c->reaped && !c->eof) capture_drain(c);
+    if (!c->reaped) capture_wake(c);
     return c->reaped;
 }
 
@@ -144,19 +157,15 @@ static int handoff_spawn(char *const argv[]) {
 }
 
 int setup_terminal_handoff(struct app *app, char *const argv[], const char *step) {
-    void (*previous_interrupt)(int), (*previous_quit)(int);
+    struct terminal_loan loan;
     char label[96];
     int status;
     setup_step_label(step, label, sizeof(label));
-    restore_terminal(app);
+    if (!terminal_lend(app, &loan, true)) return 125;
     printf("\033[H\033[2JHydra: %s. This terminal belongs to the step until it finishes.\n"
            "On success you return to Hydra at once; after a failure Hydra waits for Enter.\n\n", label);
     fflush(stdout);
-    previous_interrupt = signal(SIGINT, SIG_IGN);
-    previous_quit = signal(SIGQUIT, SIG_IGN);
     status = handoff_spawn(argv);
-    signal(SIGINT, previous_interrupt);
-    signal(SIGQUIT, previous_quit);
     if (status) {
         /* A step that died by signal (ssh -t included) leaves the terminal
          * as it had set it, often raw: put the control centre's own cooked
@@ -167,7 +176,6 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
         while (getchar() != '\n' && !feof(stdin)) { }
         clearerr(stdin);
     }
-    if (enter_raw(app) != 0) app->running = false;
-    frame_invalidate(app);
+    (void)terminal_return(app, &loan);
     return status;
 }

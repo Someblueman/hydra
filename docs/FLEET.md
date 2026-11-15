@@ -56,15 +56,31 @@ time and can be rerun at any point: it resumes from private state in
 command runs).
 
 ```sh
-hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
+hydra remote setup ubuntu@build-host          # named build-host
+hydra remote setup build                      # an SSH Host alias, named build
+hydra remote setup ovh ubuntu@build-host      # an explicit name
 hydra remote setup ovh --ssh-config /abs/config
 hydra remote setup status ovh
 hydra remote setup list                       # every setup: destination, status, next step
 hydra remote setup remove ovh                 # forget an unfinished setup (asks first)
 ```
 
+With one argument, a destination that is not a name (`[USER@]HOST`) names the
+setup after its host, and a word that is a name with neither setup state nor an
+alias is its own destination; a name that has setup state resumes it.
+
 Steps run in order: host key, preflight, provision, agents, then install and
-sign-in for each selected agent, verify, and alias. Each step also has its own
+sign-in for each selected agent, verify, and alias. On a terminal each step
+says what it starts (`... installing Hydra on ovh`), and a finished setup ends
+with `remote setup complete: ovh is ready` and the command that starts a head
+there with the agent it signed in to:
+
+```sh
+hydra fleet spawn ovh --project /path/on/host -- BRANCH --profile codex
+```
+
+The project must already be a Git checkout on the host; `hydra tui` then shows
+the head in Work beside local ones. Each step also has its own
 command that uses the same state: `hydra remote trust-key|preflight|provision|agents
 NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
 published last and never overwrites a different alias, so a half-configured host
@@ -94,7 +110,10 @@ exists, clone or copy the project on the host yourself and initialise it with
 configuration, then trust it explicitly (see [Operate explicitly](#operate-explicitly)).
 
 Every step that changes something first shows a plan and asks for approval.
-Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
+On a terminal the plan is titled ("Trust the host key of ovh?", "Install Hydra
+on ovh") and lists labelled rows; the host-key plan names the `ssh-keygen -lf
+/etc/ssh/ssh_host_TYPE_key.pub` command whose fingerprint to compare on the
+machine. Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
 `--json`, without a terminal, or when `CI` or `HYDRA_NONINTERACTIVE` is set, Hydra
 never prompts: it stops with `approval_required` (exit 3) and returns the plan,
 `data.plan_sha256`, and `data.next.argv`, the exact command that approves that plan
@@ -138,7 +157,12 @@ provider's official installer over `ssh -t` as your user after you approve a pla
 that shows the exact command. That command is `umask 022; ` followed by the
 recipe, so an account whose umask is 002 (the Ubuntu default) does not end up
 with a group-writable agent executable, which location records and probes
-refuse. The umask applies only to that installer session.
+refuse. The umask applies only to that installer session. When the installed
+executable lies directly in a directory the approved plan names ("Installs
+into", the recipe's `expected_dirs`, with `~` as the HOME preflight reported)
+and passes the version and help probe, that location is recorded at once
+(`recorded: true`); off PATH anywhere else, a terminal asks whether to record
+it and `--json` returns `next.argv` with `agents NAME --record EXECUTABLE=PATH`.
 
 **Upgrading an enrolled alias.** `hydra remote setup NAME` for an alias that already
 exists (and has no setup state) upgrades it. The destination and SSH config come
@@ -220,7 +244,7 @@ install, and rerunning `hydra remote provision ovh` re-verifies and switches it.
 A rerun after the upgrade is a no-op. A setup of the same version reports no
 upgrade, and a host recorded with a newer Hydra is offered this version beside
 it the same way. `hydra remote setup remove NAME` still refuses a finished setup
-whose alias is published (`setup_complete`). The Hosts tab of `hydra tui` lists
+whose alias is published (`setup_complete`). The Hosts screen of `hydra tui` lists
 such a setup with the same "older Hydra (2.9.0) on this host; upgrade to 3.0.0"
 row; Enter runs the same commands and shows the plan before anything changes.
 
@@ -251,23 +275,30 @@ hydra fleet bootstrap ovh --input /tmp/hydra-3.0.0.json --sha256 HASH
 ```
 
 **From the control centre.** `hydra tui` (not only `hydra fleet tui`) has a Hosts
-tab (`H`). `A`, or Enter on "+ Add a host", asks for the SSH destination, a name
-(the host name by default) and an optional SSH config file, then runs the same
-`hydra remote setup ... --json` commands and shows their steps. Unfinished setups
-are listed there (from `hydra remote setup list --json`); Enter continues one, `e`
+screen (`3`): This machine, the observed hosts, the unfinished setups and "+ Add a
+host" in a list, the selected one's detail beside it. `A`, or Enter on "+ Add a
+host", opens a form for the SSH destination, a name (empty takes the
+destination's host, which the field's hint names) and an optional SSH config
+file, then runs the same `hydra remote setup ... --json` commands and shows their
+steps in the detail pane. Unfinished setups are
+listed under "Setting up" (from `hydra remote setup list --json`); Enter continues one, `e`
 edits one that has not changed the remote yet (the form opens with its destination,
 name and SSH config; keeping the name removes the old record, after you approve its
 removal plan, and starts again) and `x` removes one's record after showing what stays
 on the remote. A name that already has an unfinished setup is caught in the form:
 Enter continues that setup instead, `e` edits and `x` removes it. The SSH config field
-takes `~/...`. While a step runs the screen shows it with its elapsed time; Esc or `c`
-cancels it (Hydra then shows the recorded status) and `b` keeps it running in the
-background. Each plan is shown before anything changes:
-a new host key needs `yes` typed and Enter, other plans `y` (Enter alone never
-approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
+takes `~/...`. While a step runs the screen shows it with its elapsed time; `c`
+cancels it (Hydra then shows the recorded status), and `b` or Esc leaves it running
+in the background (opening the setup again shows it). Each plan is shown in a dialog
+before anything changes: a new host key needs `yes` typed and Enter, other plans
+`y` (Enter alone never approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
 command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the
 plan on screen. A changed or ambiguous host key shows the manual `ssh-keygen`
-recovery and has no accept action. Blocking requirements are listed with their
+recovery and has no accept action. When SSH cannot reach or log in to the host
+(`offline`, `authentication_failed`, `timeout`, `ssh_config_invalid`) before
+anything changed on it, the screen shows the `ssh` command to try (with `-F` for
+the SSH config) and `e` opens the form with the destination and SSH config to
+change them; Enter tries again as it is. Blocking requirements are listed with their
 suggested fixes; Enter checks again once they are installed. Of the warnings only a
 missing or older tmux pauses setup, because heads cannot run on the host without
 tmux 3.0: the requirements are shown with the suggested fix and Enter continues
@@ -275,17 +306,26 @@ anyway. Other warnings (curl, a group-writable umask, ...) do not stop setup and
 stay visible in the step list. After provisioning
 the agent inventory is shown: choose "Install A" to review that agent's installer
 plan, "Sign in to A" for one already there, or Continue setup without agents
-(Enter on the done "Find agents" step shows the inventory again later). Agent
+(Enter on the done "Find agents" step shows the inventory again later). While no
+agent can run on the host the screen starts on the recommended one, the agent
+this machine runs or else the first with an installer; Enter there shows its plan,
+which still needs `y`. Agent
 installers and provider sign-in take over the terminal and return to Hydra when
 they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
-to reconcile, which never replays the earlier attempt.
+to reconcile, which never replays the earlier attempt. When setup finishes,
+"NAME is ready" names the command that starts a head there (`hydra fleet spawn
+NAME --project /path/on/host -- BRANCH --profile AGENT`, with the agent it signed
+in to) and Enter opens the host's work in Work, filtered to it (Esc comes back to
+Hosts); finishing asks for a fresh remote observation, so the host moves from
+"Setting up" to Observed as soon as it answers. An observed host with no work
+names the same command in its detail, and Work filtered to it does too.
 
 A development build has no pinned release helper for its version, so its
-control centre cannot provision from the Hosts tab on its own: set
+control centre cannot provision from the Hosts screen on its own: set
 `HYDRA_REMOTE_SETUP_BINARY=/abs/path/to/hydra-fleet` (the `--binary FILE` the
 CLI's `asset_unavailable` recovery names, for example the output of `make
-build-fleet-static`) and the Hosts tab passes it to `hydra remote setup`, shows
+build-fleet-static`) and the Hosts screen passes it to `hydra remote setup`, shows
 the helper as unpinned in the plan and reruns only the provisioning command
 that names that same file. Release builds leave it unset.
 
@@ -366,8 +406,8 @@ observed; that qualification needs a separately authorized operator run.
 
 ### Onboarding in the control centre
 
-`O` on the Hosts tab of `hydra tui` opens the onboarding view: the same
-records, shown and acted on through the commands above. Every action is a
+The Onboarding page of the Hosts screen (`]` or `O` on Hosts in `hydra tui`)
+shows the same records and acts on them through the commands above. Every action is a
 `hydra fleet ...` child with an explicit argv whose envelope the view displays;
 the view never decides identity, state or progress itself and writes no state.
 Its files live in `$HYDRA_HOME/fleet/onboarding/` (owner-only, created by the
@@ -378,9 +418,16 @@ loads the newest of each and reads the intent's progress through `enroll status`
 | Screen | Shows | Keys |
 | --- | --- | --- |
 | Candidates | One row per candidate (name or target, state, source, platform, observation age) and each conflicting or revoked source record, with the export, completion and intent summary. At most 100 rows; the list pages within the terminal. | `j`/`k`, PgUp/PgDn, Enter detail; `s` state (new, qualified, failed, conflicting, revoked, reviewed, unknown, enrolled), `S` source kind, `P` platform, `l` label text, `/` search, `x` clears filters; `f` find (discover a selection), `Q` qualify, `r` review, `i` intent, `c` changes, `o` open another export, `R` reload |
-| Detail | Candidate ID, target, state; provenance per source (kind, locator, name, freshness, age when observed, scope and client); labels; resolution and policy digest; qualification result and attempt count; peer fingerprint, and on a changed key the presented and recorded fingerprints with their sources; remote platform and versions; revocation (who, when, reason); and the enrollment row (status, phase, alias, operation ID). | `j`/`k` scroll, Esc |
-| Changes | Each live source's status, scope, client, cache age and the added, removed, changed, conflicting and revoked records of `discover --diff`. | `j`/`k`, Esc |
-| Intent | The intent digest and file, review time, and per host the alias, apply status and phase, candidate, principal, fingerprint, project, package digest and prefix (or that none is pinned), operation ID; then the exact apply command. | `a` apply, `s` refresh status, Esc |
+| Detail | Candidate ID, target, state; provenance per source (kind, locator, name, freshness, age when observed, scope and client); labels; resolution and policy digest; qualification result and attempt count; peer fingerprint, and on a changed key the presented and recorded fingerprints with their sources; remote platform and versions; revocation (who, when, reason); and the enrollment row (status, phase, alias, operation ID). | `j`/`k`, PgUp/PgDn scroll, Esc |
+| Changes | Each live source's status, scope, client, cache age and the added, removed, changed, conflicting and revoked records of `discover --diff`. | `j`/`k`, PgUp/PgDn, Esc |
+| Intent | The intent digest and file, review time, and per host the alias, apply status and phase, candidate, principal, fingerprint, project, package digest and prefix (or that none is pinned), operation ID; then the exact apply command. | `a` apply, `s` refresh status, scroll, Esc |
+| Selection and review forms | The fields `f`, `Q` and `r` ask for, and the exact command Enter on the last field runs. | Tab / Shift-Tab or Up / Down between fields, Enter next field (on the last field: run), Esc |
+| Running | The command and its elapsed time. | `c` or Esc cancels it, `b` leaves it running |
+
+These keys are bindings like every other screen's (`onboarding.*` in `hydra tui
+--print-keys`): the footer shows the ones that apply and `?` lists them all. On the
+list `[` or `]` goes back to the Hosts page and Esc steps back from any screen to
+the list, then to Hosts; a form's fields take every other key as text.
 
 One-host onboarding with a prepared alias, key, credentials and optional package
 takes three actions and one confirmation: `Q` with an empty list asks for the
@@ -389,9 +436,10 @@ qualify --progress` into a new export; `r` on a compatible candidate asks for th
 project, alias and optional package, digest and prefix and runs `fleet enroll
 review --output` into a new intent; `a` on the intent shows the bindings and
 the exact `hydra fleet enroll apply --input INTENT --confirm DIGEST --json`
-command, and runs it only after the operator types at least the first 12
-characters of that digest. A wrong prefix, Esc, or an intent that changed while
-the prompt was open runs nothing. `Q` on a loaded export continues its batch
+command, and runs it only after the operator confirms a dialog that names the
+intent's full digest and that command (`y` applies; it defaults to Cancel).
+Declining, Esc, or an intent that changed while the dialog was open runs
+nothing. `Q` on a loaded export continues its batch
 (the CLI skips hosts it already recorded).
 
 Revoked identities, failed or unqualified candidates and conflicting records are
@@ -404,8 +452,8 @@ no result, with Enter reading `enroll status` rather than rerunning anything.
 fresh confirmation, when the CLI reconciles each from the receiver's operation
 record instead of replaying it. The view never runs `fleet bootstrap`, `remote trust-key`
 or any other command; installing Hydra happens only as a reviewed step of the
-confirmed apply. Running children keep running when the view closes (`b`);
-`O` shows their result.
+confirmed apply. Running children keep running when you leave the page (`b`);
+`O` or `]` on Hosts shows their result.
 
 `make test-tui` (headless screens over recorded envelopes, argv checks),
 `make test-one T=onboarding_view` (the CLI's `--json` and the view's model agree
@@ -884,7 +932,7 @@ which records no time.
 No daemon or poller is involved: the measurement is taken once, by the process
 that already waits for the child, and written with the state it already writes.
 `hydra workflow statistics-data` (schema 5), `statistics-json` (export schema 3)
-and the native Statistics view read these records per workflow step through the
+and the native Stats screen read these records per workflow step through the
 read-only `workflow-task remote-tsv` helper and group remote steps into cohorts
 by host, placement mode, assignment generation and provider; see
 [Contracts](CONTRACTS.md#tui-protocols-and-parity) for the rows and
@@ -904,49 +952,58 @@ hydra fleet tui                # compatibility entry: the same, filtered to remo
 ```
 
 `hydra tui` observes every registered remote host beside the local project. A
-remote head is a row `host/branch` of the same Work and Overview lists as a
-local head, a remote task (receiver-owned, no head on this machine) a row
-`task ID`; from 95 columns a `WHERE` column names the machine, and every
-summary and detail names the host, the desired state the host recorded and the
-observation it comes from (`fresh, 3s old`, `stale, 300s old`, `unknown`). `L`
-cycles the location filter (all work, local, remote, then each host) and Esc
-shows all work again; the Hosts tab (`H`) lists the observed hosts with their
-connection, head count and observation age, Enter there follows one host's
-work and `r` asks for a fresh observation of it; `A` adds a host through
-[guided setup](#guided-remote-setup) and `O` opens
-[onboarding](#onboarding-in-the-control-centre).
+remote head is a row `host/branch` of the same Work list as a local head, a
+remote task (receiver-owned, no head on this machine) a row `task ID`; from 95
+columns a `WHERE` column names the machine, and the Details page names the host,
+the desired state the host recorded and the observation it comes from (`fresh,
+3s old`, `stale, 300s old`, `unknown`). The top bar counts local and remote heads
+apart and names disconnected hosts. `L` cycles the location filter (all work,
+local, remote, then each host), which the list's rule names, and Esc shows all
+work again; the Hosts screen (`3`) lists the observed hosts with their
+connection, head count and observation age, Enter there follows one host's work
+in Work (Esc comes back to Hosts) and `r` asks for a fresh observation of it;
+`A` adds a host through [guided setup](#guided-remote-setup) and `]` or `O`
+opens [onboarding](#onboarding-in-the-control-centre).
 
-Details, attention (`I`) and review (`r`) use the same keys for remote work.
-Select a current interactive remote head and press `a` to open its pane in the
-workspace: the selection carries host, project, branch, head and current
+The Details page, Inbox (`2`) and its review (`r`) treat remote work as local
+work: a remote decision request is an Inbox decision that names its host, and
+the same `Y` and `N` answer it. Select a current interactive remote head and
+press Enter or `a` to talk to it in the conversation pane: the selection carries
+host, project, branch, head and current
 instance into `hydra fleet attach`, the remote shell rechecks that composite
 identity and the live tmux session before handing the client to tmux, and the
-pane behaves like a local one (`Ctrl-B Tab` leaves input, `Ctrl-B x` closes
-the client while the owner session lives on, `Ctrl-B r` reconnects, `Ctrl-B n`
-switches agents, `Ctrl-B q` quits). `Ctrl-B [` scrolls the host's own tmux
-history: Hydra forwards the host tmux's default prefix and `[` through the
-client, so the host's copy mode handles PgUp/PgDn and arrows and `q` (or
-`Ctrl-B ]`) leaves it; a host tmux configured with another prefix receives
-those keys instead, which Hydra cannot verify. `x` on a remote head interrupts
+pane behaves like a local one, with the same [configurable](USAGE.md#tui-keys)
+chords (by default `Ctrl-]` leaves input, `Ctrl-\ x` closes the client while the
+owner session lives on, `Ctrl-\ r` reconnects, `Ctrl-\ n` switches agents,
+`Ctrl-\ q` quits). The history chord (`Ctrl-\ [` by default) scrolls the host's
+own tmux history: Hydra forwards the host tmux's default prefix (`Ctrl-B`) and
+`[` through the client, so the host's copy mode handles PgUp/PgDn and arrows and
+`q` (or the live-output chord, `Ctrl-\ ]`) leaves it; a host tmux configured
+with another prefix receives those keys instead, which Hydra cannot verify. `x` on a remote head interrupts
 its agent through `hydra fleet cancel` after a confirmation that names the host
 and branch (`:` offers `interrupt remote head`); removal, grouping and the
 local palette actions run on the host, not here. On a remote task row `Y`,
 `N`, `R` and `X` dispatch `hydra fleet task decide|resume|cancel` with the
-exact task, request and bound spec after a typed confirmation.
+exact task, request and bound spec after a confirmation that names the task
+and host and defaults to Cancel.
 
 Attach, interrupt and task controls are authorized only by a fresh observation
 of a host that answers. A host that stops answering is `disconnected`: its
 heads and tasks stay listed as retained rows from the last observation, with
 that observation's age, and refuse every action until the host answers again.
-When the remote observation itself fails the footer says `Remote: STALE, last
-good observation Ns ago` with the reason, every remote status reads `stale`,
-and `r` retries. Nothing in the control centre stops, completes or replays
+When the remote observation itself fails the top bar says `remote stale Ns`, the
+status line `Remote: STALE, last good observation Ns ago` with the reason, every
+remote status reads `stale`, and `r` retries. Nothing in the control centre stops, completes or replays
 remote work because an observation is missing; remote liveness is never
 observed, and a remote head is never counted as running.
 
-`hydra fleet tui` keeps working as a compatibility entry: it opens the same
-control centre filtered to remote work and reads the fleet helper's own
-`tui-visual-data` and `attention-data` streams. Paths and identifiers that
+`hydra fleet tui` keeps working as a compatibility entry: it opens the same four
+screens with the location filter preset to remote work (Work's rule reads
+"Heads · remote work") and reads the fleet helper's own `tui-visual-data` and
+`attention-data` streams. Its keys are the same, except that Stats shows the
+hosts' own latest response instead of the local session and run pages, and the
+local-only Inbox actions (request changes, land, run a check, remove a leftover
+worktree) are not offered. Paths and identifiers that
 cannot be represented within native text bounds require the CLI.
 
 Qualification evidence is host- and provider-specific; local fixtures and controlled

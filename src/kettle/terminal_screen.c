@@ -1,0 +1,228 @@
+#include "terminal_internal.h"
+#include <string.h>
+
+struct kt_screen *kt_term_screen(struct kt_terminal_model *t) {
+    return t->alternate_active ? &t->alternate : &t->primary;
+}
+
+struct kt_cell kt_term_blank(const struct kt_terminal_model *t) {
+    struct kt_cell cell = t->pen;
+    cell.glyph = ' '; cell.width = 1; cell.combining_count = 0;
+    memset(cell.combining, 0, sizeof(cell.combining));
+    return cell;
+}
+
+void kt_term_erase(struct kt_terminal_model *t, int y, int first, int last) {
+    struct kt_canvas *c = &kt_term_screen(t)->canvas;
+    struct kt_cell empty = kt_term_blank(t), *row;
+    int x;
+    if (y < 0 || y >= c->height) return;
+    if (first < 0) first = 0;
+    if (last >= c->width) last = c->width - 1;
+    if (last < first) return;
+    row = c->cells + (size_t)y * (size_t)c->stride;
+    if (!row[first].width && first > 0) row[first - 1] = empty;
+    if (row[last].width == 2 && last + 1 < c->width) row[last + 1] = empty;
+    for (x = first; x <= last; x++) row[x] = empty;
+}
+
+void kt_term_scroll(struct kt_terminal_model *t, int top, int bottom, int amount) {
+    struct kt_screen *s = kt_term_screen(t);
+    struct kt_canvas *c = &s->canvas;
+    int count = amount < 0 ? -amount : amount, i;
+    size_t stride = (size_t)c->stride;
+    if (top < 0 || bottom >= c->height || top > bottom) return;
+    if (count > bottom - top + 1) count = bottom - top + 1;
+    if (!count) return;
+    if (amount > 0) {
+        if (!t->alternate_active && top == 0 && bottom == c->height - 1 && t->history_rows) {
+            for (i = 0; i < count; i++) {
+                size_t slot = (t->history_start + t->history_count) % t->history_rows;
+                memcpy(t->history + slot * stride, c->cells + (size_t)i * stride, stride * sizeof(*c->cells));
+                if (t->history_count == t->history_rows) t->history_start = (t->history_start + 1) % t->history_rows;
+                else t->history_count++;
+                if (t->history_serial != UINT64_MAX) t->history_serial++;
+            }
+        }
+        memmove(c->cells + (size_t)top * stride, c->cells + (size_t)(top + count) * stride,
+                (size_t)(bottom - top + 1 - count) * stride * sizeof(*c->cells));
+        for (i = bottom - count + 1; i <= bottom; i++) kt_term_erase(t, i, 0, c->width - 1);
+    } else {
+        memmove(c->cells + (size_t)(top + count) * stride, c->cells + (size_t)top * stride,
+                (size_t)(bottom - top + 1 - count) * stride * sizeof(*c->cells));
+        for (i = top; i < top + count; i++) kt_term_erase(t, i, 0, c->width - 1);
+    }
+}
+
+void kt_term_index(struct kt_terminal_model *t, bool reverse) {
+    struct kt_screen *s = kt_term_screen(t);
+    s->wrap_pending = false;
+    if (reverse) {
+        if (s->y == s->top) kt_term_scroll(t, s->top, s->bottom, -1);
+        else if (s->y > 0) s->y--;
+    } else {
+        if (s->y == s->bottom) kt_term_scroll(t, s->top, s->bottom, 1);
+        else if (s->y < s->canvas.height - 1) s->y++;
+    }
+}
+
+/* The cell before the cursor that a joining scalar attaches to, if any. */
+static struct kt_cell *join_base(struct kt_screen *s, int *x) {
+    struct kt_canvas *c = &s->canvas;
+    struct kt_cell *cell;
+    *x = s->wrap_pending ? s->x : s->x - 1;
+    if (*x < 0) return NULL;
+    cell = &c->cells[(size_t)s->y * (size_t)c->stride + (size_t)*x];
+    if (!cell->width && *x > 0) { cell--; (*x)--; }
+    return cell->width ? cell : NULL;
+}
+
+/* Joins cp to the preceding cell; VS16 widens a narrow symbol like tmux 3.5. */
+static bool join_glyph(struct kt_terminal_model *t, struct kt_screen *s, uint32_t cp) {
+    struct kt_canvas *c = &s->canvas;
+    int x;
+    struct kt_cell *base = join_base(s, &x);
+    enum kt_join join = kt_cell_join(base, cp);
+    if (join == KT_JOIN_NONE) return false;
+    if (join == KT_JOIN_DROP) return true;
+    if (base->combining_count < KT_COMBINING_MAX) base->combining[base->combining_count++] = cp;
+    if (join == KT_JOIN_WIDEN && !s->wrap_pending && x + 1 < c->width && x + 1 == s->x) {
+        struct kt_cell *next = base + 1;
+        if (next->width == 2 && x + 2 < c->width) next[1] = kt_term_blank(t);
+        *next = *base; next->glyph = ' '; next->width = 0; next->combining_count = 0;
+        base->width = 2;
+        s->x = x + 2;
+        if (s->x >= c->width) { s->x = c->width - 1; s->wrap_pending = t->autowrap; }
+    }
+    return true;
+}
+
+void kt_term_glyph(struct kt_terminal_model *t, uint32_t cp) {
+    struct kt_screen *s = kt_term_screen(t);
+    struct kt_canvas *c = &s->canvas;
+    struct kt_cell *cell;
+    int width;
+    if (cp == 0xadU) cp = '-'; /* tmux and wcwidth show a soft hyphen in one column */
+    width = kt_codepoint_width(cp);
+    if (join_glyph(t, s, cp)) return;
+    if (width < 0) { cp = '?'; width = 1; }
+    if (s->wrap_pending || (width == 2 && s->x == c->width - 1)) {
+        if (t->autowrap) { kt_term_index(t, false); s->x = 0; }
+        s->wrap_pending = false;
+    }
+    if (width == 2 && c->width == 1) { cp = '?'; width = 1; }
+    if (width == 2 && s->x == c->width - 1) { cp = ' '; width = 1; }
+    cell = &c->cells[(size_t)s->y * (size_t)c->stride + (size_t)s->x];
+    if (t->insert) {
+        if (!cell->width && s->x > 0) cell[-1] = kt_term_blank(t);
+        memmove(cell + width, cell, (size_t)(c->width - s->x - width) * sizeof(*cell));
+        if (c->cells[(size_t)s->y * (size_t)c->stride + (size_t)c->width - 1].width == 2)
+            c->cells[(size_t)s->y * (size_t)c->stride + (size_t)c->width - 1] = kt_term_blank(t);
+    }
+    kt_put(c, s->x, s->y, cp, kt_cell_style(&t->pen));
+    s->x += width;
+    if (s->x >= c->width) { s->x = c->width - 1; s->wrap_pending = t->autowrap; }
+}
+
+void kt_term_save(struct kt_terminal_model *t) {
+    struct kt_screen *s = kt_term_screen(t);
+    s->saved_x = s->x; s->saved_y = s->y; s->saved_pen = t->pen;
+    memcpy(s->saved_graphics, t->graphics, sizeof(t->graphics)); s->saved_charset = t->active_charset;
+}
+
+void kt_term_restore(struct kt_terminal_model *t) {
+    struct kt_screen *s = kt_term_screen(t);
+    s->x = s->saved_x < s->canvas.width ? s->saved_x : s->canvas.width - 1;
+    s->y = s->saved_y < s->canvas.height ? s->saved_y : s->canvas.height - 1;
+    s->wrap_pending = false; t->pen = s->saved_pen;
+    memcpy(t->graphics, s->saved_graphics, sizeof(t->graphics)); t->active_charset = s->saved_charset;
+}
+
+void kt_term_reset(struct kt_terminal_model *t) {
+    int i;
+    memset(&t->pen, 0, sizeof(t->pen));
+    t->pen.foreground = t->pen.background = KT_DEFAULT;
+    t->pen.width = 1; t->pen.glyph = ' ';
+    t->alternate_active = t->origin = t->insert = t->application_cursor = t->bracketed_paste = t->mouse_sgr = false;
+    t->autowrap = t->cursor_visible = true; t->mouse_mode = 0;
+    t->history_count = t->history_start = 0;
+    memset(t->graphics, 0, sizeof(t->graphics)); t->active_charset = t->charset_target = 0;
+    t->parser_state = 0; t->utf8_length = t->reply_length = 0;
+    for (i = 0; i < 2; i++) {
+        struct kt_screen *s = i ? &t->alternate : &t->primary;
+        size_t j, count = (size_t)t->max_columns * (size_t)t->max_rows;
+        s->x = s->y = s->saved_x = s->saved_y = s->top = 0;
+        memset(s->saved_graphics, 0, sizeof(s->saved_graphics)); s->saved_charset = 0;
+        s->bottom = s->canvas.height - 1; s->wrap_pending = false; s->saved_pen = t->pen;
+        for (j = 0; j < count; j++) s->canvas.cells[j] = t->pen;
+    }
+}
+
+bool kt_term_init(struct kt_terminal_model *t, struct kt_cell *primary, struct kt_cell *alternate,
+                  int max_columns, int max_rows, struct kt_cell *history, size_t history_rows,
+                  int columns, int rows) {
+    if (!t || !primary || !alternate || primary == alternate || max_columns < 1 || max_columns > 512 ||
+        max_rows < 1 || max_rows > 256 || columns < 1 || columns > max_columns || rows < 1 || rows > max_rows ||
+        (history_rows && !history) || history_rows > 10000) return false;
+    memset(t, 0, sizeof(*t));
+    t->max_columns = max_columns; t->max_rows = max_rows;
+    t->history = history; t->history_rows = history_rows;
+    t->primary.canvas = (struct kt_canvas){primary, columns, rows, max_columns, true};
+    t->alternate.canvas = (struct kt_canvas){alternate, columns, rows, max_columns, true};
+    kt_term_reset(t);
+    return true;
+}
+
+bool kt_term_resize(struct kt_terminal_model *t, int columns, int rows) {
+    int i, x, y;
+    struct kt_cell empty = kt_term_blank(t);
+    if (columns < 1 || columns > t->max_columns || rows < 1 || rows > t->max_rows) return false;
+    if (columns == t->primary.canvas.width && rows == t->primary.canvas.height) return true;
+    for (i = 0; i < 2; i++) {
+        struct kt_screen *s = i ? &t->alternate : &t->primary;
+        for (y = 0; y < t->max_rows; y++) for (x = 0; x < t->max_columns; x++) {
+            struct kt_cell *cell = s->canvas.cells + (size_t)y * (size_t)t->max_columns + (size_t)x;
+            if (x >= columns || x >= s->canvas.width || y >= rows || y >= s->canvas.height ||
+                (x == columns - 1 && cell->width == 2)) *cell = empty;
+        }
+        s->canvas.width = columns; s->canvas.height = rows;
+        if (s->x >= columns) s->x = columns - 1;
+        if (s->y >= rows) s->y = rows - 1;
+        s->top = 0; s->bottom = rows - 1; s->wrap_pending = false;
+    }
+    return true;
+}
+
+/* A stored cell as painted into out: edge-split wide cells become spaces and
+ * ASCII surfaces get the readable approximation in the same columns. */
+static struct kt_cell drawn_cell(const struct kt_cell *row, int x, const struct kt_canvas *out) {
+    struct kt_cell cell = row[x];
+    if ((!cell.width && !x) || (cell.width == 2 && x + 1 == out->width)) {
+        cell.glyph = ' '; cell.width = 1; cell.combining_count = 0;
+    }
+    if (!out->unicode && (cell.glyph > 126 || !cell.width || cell.combining_count)) {
+        cell.glyph = cell.width ? kt_ascii_fallback(cell.glyph) : ' ';
+        cell.width = 1; cell.combining_count = 0;
+    }
+    return cell;
+}
+
+void kt_term_draw(const struct kt_terminal_model *t, struct kt_canvas *out, size_t scroll, bool cursor) {
+    const struct kt_screen *s = t->alternate_active ? &t->alternate : &t->primary;
+    size_t history = t->alternate_active ? 0 : t->history_count;
+    int y, x;
+    if (scroll > history) scroll = history;
+    kt_clear(out, KT_BASE);
+    for (y = 0; y < out->height && y < s->canvas.height; y++) {
+        size_t logical = history - scroll + (size_t)y;
+        const struct kt_cell *row = logical < history ?
+            t->history + ((t->history_start + logical) % t->history_rows) * (size_t)t->max_columns :
+            s->canvas.cells + (logical - history) * (size_t)t->max_columns;
+        for (x = 0; x < out->width && x < s->canvas.width; x++) {
+            struct kt_cell cell = drawn_cell(row, x, out);
+            if (cursor && !scroll && t->cursor_visible && y == s->y &&
+                (x == s->x || (s->x > 0 && x == s->x - 1 && !row[s->x].width))) cell.attributes ^= KT_REVERSE;
+            out->cells[(size_t)y * (size_t)out->stride + (size_t)x] = cell;
+        }
+    }
+}

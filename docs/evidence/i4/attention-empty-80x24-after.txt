@@ -1,25 +1,25 @@
 FRAME 1 80x24
- HYDRA / ATTENTION                                                             
- Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
-╭─ Attention ─────────────────────────────────────────────────────────────────╮
-│ ATTENTION  0 need you · 0 seen · 0 stale · 0 unknown                        │
-│                                                                             │
-│ Nothing needs your attention.                                               │
-│                                                                             │
-│ Attention lists what needs a decision or a look from you: an approval       │
-│ request a step is waiting on, a failed check, a result ready for review, or │
-│ a terminal that stopped. For example, a plan step asks you to approve       │
-│ before it merges.                                                           │
-│                                                                             │
-│ Items stay listed until the request is resolved; Enter shows what an item   │
-│ asks and r reviews a result.                                                │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Live                                                                          
- j/k select  Enter details  r review  s mark seen  Esc back  ? help  q quit    
+ ◆ hydra  1 Work  2 Inbox 1  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Needs you ───────────────────────────────────────────────── 1 · enter opens ──
+ Agents 1                                                                      
+ ▌▲ Terminal stopped: notes-cleanup                                            
+ ▌  worktree and files kept · R restarts it                                    
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   1 item needs you · decisions first, then failures                   
+ ↑/↓ select • enter open • R resume • c run check • ? help • q quit            

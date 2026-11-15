@@ -258,8 +258,8 @@ static const struct { const char *code; struct setup_explanation text; } explana
     {"host_key_changed", {"The host key changed: Hydra will not connect", "The machine answered with a different SSH key than the one recorded for it. That happens when a server is reinstalled, but it is also what an intercepted connection looks like. Hydra never accepts a changed key and wrote nothing.", "Enter checks again after you fix known_hosts"}},
     {"host_key_ambiguous", {"known_hosts already has a different entry", "Your known_hosts file has another key for this host (for example of a different type). Hydra does not choose between them and wrote nothing. Check the entry with ssh-keygen -F, remove it deliberately if it is wrong, then check again.", "Enter checks again"}},
     {"known_hosts_unwritable", {"Hydra cannot add the key to known_hosts", "The known_hosts file is not safely writable (wrong owner or permissions). Nothing was written. Fix the file's ownership or mode, then continue.", "Enter tries again"}},
-    {"authentication_failed", {"SSH could not log in", "The machine answered, but it did not accept your SSH credentials. Check that ssh DESTINATION works in a terminal (keys, agent, user name), then continue.", "Enter tries again"}},
-    {"offline", {"The machine cannot be reached", "SSH could not connect. Check the name, your network or VPN, and that the machine is running.", "Enter tries again"}},
+    {"authentication_failed", {"SSH could not log in", "The machine answered, but it did not accept your SSH credentials. Check that the ssh command below works in a terminal (keys, agent, user name), then continue.", "Enter tries again"}},
+    {"offline", {"The machine cannot be reached", "SSH could not connect. Check the name, your network or VPN, and that the machine is running; the ssh command below shows SSH's own answer.", "Enter tries again"}},
     {"timeout", {"The machine did not answer in time", "SSH gave up waiting. The step may be retried safely; Hydra reconciles anything it had started.", "Enter tries again"}},
     {"prerequisite_missing", {"The machine is missing requirements", "Some tools Hydra needs are not installed. Hydra never uses sudo; install them yourself, then check again.", "Enter checks again"}},
     {"platform_unsupported", {"This machine's platform is not supported", "Hydra ships remote runtimes for Linux x86_64 and aarch64. Other platforms need a binary you build and supply with --binary.", NULL}},
@@ -333,12 +333,13 @@ void setup_running_label(const char *id, char *out, size_t size) {
     else setup_step_label(id, out, size);
 }
 
-static const char *const statuses[][3] = {
-    /* status, label, mark (unicode) */
-    {"done", "done", "\xe2\x9c\x93"}, {"skipped", "skipped", "-"}, {"failed", "failed", "\xe2\x9c\x97"},
-    {"outcome_unknown", "outcome unknown", "?"}, {"approval_required", "needs your approval", "!"},
-    {"blocked", "blocked", "!"}, {"in_progress", "in progress", "~"}, {"running", "running", ">"},
-    {"pending", "not started", " "}, {"upgrade_available", "upgrade available", "^"},
+static const char *const statuses[][4] = {
+    /* status, label, mark, its ASCII form */
+    {"done", "done", "\xe2\x9c\x93", "+"}, {"skipped", "skipped", "-", "-"}, {"failed", "failed", "\xe2\x9c\x97", "x"},
+    {"outcome_unknown", "outcome unknown", "?", "?"}, {"approval_required", "needs your approval", "\xe2\x97\x90", "~"},
+    {"blocked", "blocked", "\xe2\x96\xb2", "!"}, {"in_progress", "in progress", "\xe2\x97\x90", "~"},
+    {"running", "running", "\xe2\x97\x8f", "*"}, {"pending", "not started", "\xe2\x97\x8b", "-"},
+    {"upgrade_available", "upgrade available", "^", "^"},
 };
 
 static int status_index(const char *status) {
@@ -355,13 +356,18 @@ const char *setup_status_label(const char *status) {
 const char *setup_status_mark(const char *status, bool ascii) {
     int i = status_index(status);
     if (i < 0) return " ";
-    if (ascii && !strcmp(status, "done")) return "+";
-    if (ascii && !strcmp(status, "failed")) return "x";
-    return statuses[i][2];
+    return statuses[i][ascii ? 3 : 2];
 }
 
 bool setup_status_finished(const char *status) {
     return !strcmp(status, "done") || !strcmp(status, "skipped");
+}
+
+bool setup_preflight_blocked(const struct setup_envelope *e) {
+    size_t i;
+    if (!strcmp(e->code, "prerequisite_missing")) return true;
+    for (i = 0; i < e->requirement_count; i++) if (e->requirements[i].blocking && strcmp(e->requirements[i].status, "ok")) return true;
+    return false;
 }
 
 const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e) {
@@ -371,6 +377,21 @@ const struct setup_requirement *setup_heads_requirement(const struct setup_envel
         if (!strcmp(r->name, "tmux") && strcmp(r->status, "ok")) return r;
     }
     return NULL;
+}
+
+bool setup_agent_usable(const struct setup_envelope *e) {
+    size_t i;
+    for (i = 0; i < e->agent_count; i++)
+        if (!strcmp(e->agents[i].status, "on_path") || !strcmp(e->agents[i].status, "recorded")) return true;
+    return false;
+}
+
+size_t setup_recommended_row(const struct setup_envelope *e, const char *const local[], size_t count) {
+    size_t i, k;
+    if (!e->choice_count || setup_agent_usable(e)) return 0;
+    for (i = 0; i < e->choice_count; i++)
+        for (k = 0; k < count; k++) if (local[k] && !strcmp(local[k], e->choices[i].agent)) return i + 1;
+    return 1;
 }
 
 const struct setup_step *setup_open_step(const struct setup_envelope *e) {

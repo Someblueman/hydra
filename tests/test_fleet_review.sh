@@ -96,6 +96,13 @@ grep -q "^TEXT${tab}readiness: ready$" "$fixture/review.tsv"
 grep -q '+alpha change' "$fixture/review.tsv"
 grep -q '+beta change' "$fixture/review.tsv"
 [ "$(wc -c < "$fixture/review.tsv" | tr -d ' ')" -le 1048576 ]
+# Git configuration injected through the environment neither stops the review
+# nor changes its diffs.
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.noprefix GIT_CONFIG_VALUE_0=true review review > "$fixture/review-injected.json"
+jq -e '.ok and .data.readiness=="ready"' "$fixture/review-injected.json" >/dev/null
+jq -S '.data.diffs' "$fixture/review.json" > "$fixture/review-diffs"
+jq -S '.data.diffs' "$fixture/review-injected.json" > "$fixture/review-injected-diffs"
+cmp "$fixture/review-diffs" "$fixture/review-injected-diffs"
 snapshot > "$fixture/after.sha256"
 cmp "$fixture/before.sha256" "$fixture/after.sha256"
 # Explicit references: local files, bounded previews, no symlink/FIFO reads,

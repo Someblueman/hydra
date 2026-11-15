@@ -67,8 +67,8 @@ assert_success $? 'recording grants nothing'
 assert_equal "drwx------" "$(mode_of "$head/planning/decisions/$id")" 'the decision directory is private'
 assert_equal "-rw-------" "$(mode_of "$head/planning/decisions/$id/decision.json")" 'the decision record is private'
 assert_equal "-rw-------" "$(mode_of "$head/planning/decisions/$id/inputs/$left_sha.json")" 'the selected input is kept privately under its digest'
-test -f "$head/planning/decisions/$id/inputs/$right_sha.json"
-assert_success $? 'the rejected input is kept under its digest'
+if test -f "$head/planning/decisions/$id/inputs/$right_sha.json"; then check=0; else check=1; fi
+assert_success "$check" 'the rejected input is kept under its digest'
 grep -q '"analysis":"hydra-plan-evaluate-1","compiler":"hydra-plan-1"' "$head/planning/decisions/$id/decision.json"
 assert_success $? 'the record names the compiler and analysis versions'
 grep -q '"policy":{"schema_version":1,"sha256":"[0-9a-f]\{64\}"}' "$head/planning/decisions/$id/decision.json"

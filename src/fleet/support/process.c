@@ -26,31 +26,61 @@ static void capture_log(struct f_control *control, int stream, const char *bytes
         size -= (size_t)n; bytes += n; control->remaining[stream] -= (size_t)n;
     }
 }
-/* Pipes belong to run; capture buffers belong to its caller. */
+/* Pipes belong to run; capture buffers belong to its caller. A buffer starts
+ * small and doubles as output arrives, up to F_LIMIT bytes plus a NUL. */
+#define CAPTURE_INITIAL 16384U
 struct capture_stream {
     int pipe[2];
     char *buffer;
-    size_t used;
+    size_t used, capacity;
+    char **owner;
+    bool full;
 };
-/* Drain one stream and report whether its fixed capture limit was reached. */
+static bool stream_init(struct capture_stream *stream, char **owner) {
+    stream->owner = owner;
+    stream->capacity = CAPTURE_INITIAL;
+    stream->buffer = *owner = calloc(CAPTURE_INITIAL + 1, 1);
+    return stream->buffer != NULL;
+}
+/* Room for more output; false once the limit is reached or memory runs out,
+ * which run reports like a full capture (status 125). */
+static bool stream_room(struct capture_stream *stream) {
+    size_t capacity = stream->capacity > F_LIMIT / 2 ? F_LIMIT : stream->capacity * 2;
+    char *grown;
+    if (stream->used < stream->capacity) return true;
+    if (stream->capacity == F_LIMIT || !(grown = realloc(stream->buffer, capacity + 1))) return false;
+    stream->buffer = *stream->owner = grown;
+    stream->capacity = capacity;
+    return true;
+}
+static void close_stream(struct capture_stream *stream) {
+    if (stream->pipe[0] < 0) return;
+    close(stream->pipe[0]);
+    stream->pipe[0] = -1;
+}
+/* Drain one stream and report whether its capture limit was reached. */
 static bool drain_stream(struct capture_stream *stream, int index, struct f_control *control) {
     if (stream->pipe[0] < 0) return false;
-    ssize_t n = read(stream->pipe[0], stream->buffer + stream->used, F_LIMIT - stream->used);
+    stream->full = !stream_room(stream);
+    ssize_t n = stream->full ? 0 : read(stream->pipe[0], stream->buffer + stream->used, stream->capacity - stream->used);
     if (n > 0) {
         capture_log(control, index, stream->buffer + stream->used, (size_t)n);
         stream->used += (size_t)n;
+        stream->buffer[stream->used] = '\0';
         if (control && control->observe && index == 0)
             control->observe(control->context, stream->buffer, stream->used);
     }
-    bool full = stream->used == F_LIMIT;
-    if (n == 0 || full || (n < 0 && errno != EAGAIN && errno != EINTR)) {
-        close(stream->pipe[0]);
-        stream->pipe[0] = -1;
-    }
+    bool full = stream->full || stream->used == F_LIMIT;
+    stream->full = full;
+    /* A full stream stays open until run has killed the writers: closed
+     * first, a writer that ignores SIGPIPE would see EPIPE and could report
+     * it on the other stream before the kill lands. */
+    if ((n == 0 && !full) || (n < 0 && errno != EAGAIN && errno != EINTR)) close_stream(stream);
     return full;
 }
-static void measure_input(FILE *in, size_t size, bool child_started, struct f_capture *cap, int result) {
-    cap->measurement_complete = result == 0 && !cap->stop_unknown && cap->out_bytes < F_LIMIT && cap->err_bytes < F_LIMIT;
+static bool truncated(const struct capture_stream streams[2]) { return streams[0].full || streams[1].full; }
+static void measure_input(FILE *in, size_t size, bool child_started, struct f_capture *cap, int result, bool cut) {
+    cap->measurement_complete = result == 0 && !cap->stop_unknown && !cut;
     if (in && size && child_started) {
         off_t consumed = lseek(fileno(in), 0, SEEK_CUR);
         if (consumed < 0 || (unsigned long long)consumed > size) {
@@ -85,14 +115,12 @@ static void exited_grace(pid_t pid, struct capture_stream streams[2], long *exit
     if (*exited_at >= 0 && milliseconds() - *exited_at >= EXITED_GRACE_MS) close_streams(streams);
 }
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
-    struct capture_stream streams[2] = {{{-1, -1}, NULL, 0}, {{-1, -1}, NULL, 0}};
+    struct capture_stream streams[2] = {{{-1, -1}, NULL, 0, 0, NULL, false}, {{-1, -1}, NULL, 0, 0, NULL, false}};
     int status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL;
     long deadline, exited_at = -1, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
     memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
-    cap->out = calloc(F_LIMIT + 1, 1); cap->err = calloc(F_LIMIT + 1, 1);
-    streams[0].buffer = cap->out; streams[1].buffer = cap->err;
-    if (!cap->out || !cap->err || !(in = tmpfile())) goto done;
+    if (!stream_init(&streams[0], &cap->out) || !stream_init(&streams[1], &cap->err) || !(in = tmpfile())) goto done;
     if (control && control->stop && control->stop(control->context)) { cap->cancelled = true; cap->status = 130; result = 0; goto done; }
     if (size && fwrite(input, 1, size, in) != size) goto done;
     rewind(in);
@@ -101,7 +129,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
     if (pid < 0) goto done;
     if (!pid) {
         (void)setpgid(0, 0);
-        signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL);
+        signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL); signal(SIGPIPE, SIG_DFL);
         dup2(fileno(in), STDIN_FILENO); dup2(streams[0].pipe[1], STDOUT_FILENO); dup2(streams[1].pipe[1], STDERR_FILENO);
         close(streams[0].pipe[0]); close(streams[0].pipe[1]); close(streams[1].pipe[0]); close(streams[1].pipe[1]); fclose(in);
         execvp(argv[0], argv); _exit(127);
@@ -124,6 +152,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
         for (i = 0; i < 2; i++) {
             if (drain_stream(&streams[i], i, control)) {
                 (void)kill(-pid, SIGKILL);
+                close_stream(&streams[i]);
                 stopped = true;
                 deadline = 0;
             }
@@ -137,12 +166,12 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
         if (cap->cancelled && milliseconds() >= deadline) { cap->stop_unknown = true; if (control) control->stop_unknown = true; break; }
     }
     cap->status = cap->timeout ? 124 : (f_stopped || cap->cancelled ? 130 : (WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)));
-    if (streams[0].used == F_LIMIT || streams[1].used == F_LIMIT) cap->status = 125;
+    if (truncated(streams)) cap->status = 125;
     result = 0;
 done:
     cap->out_bytes = streams[0].used; cap->err_bytes = streams[1].used;
     if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, cap->stop_unknown ? WNOHANG : 0) < 0 && errno == EINTR) { } }
-    measure_input(in, size, child_started, cap, result);
+    measure_input(in, size, child_started, cap, result, truncated(streams));
     if (in) fclose(in);
     if (streams[0].pipe[0] >= 0) close(streams[0].pipe[0]);
     if (streams[0].pipe[1] >= 0) close(streams[0].pipe[1]);
@@ -166,4 +195,27 @@ char *f_quote(const char *value) {
         value++;
     }
     result[at++] = '\''; result[at] = '\0'; return result;
+}
+/* Git reads configuration from GIT_CONFIG_COUNT with GIT_CONFIG_KEY_<n> and
+ * GIT_CONFIG_VALUE_<n>, and from GIT_CONFIG_PARAMETERS (what git -c passes to
+ * its children). Removing them from this process makes later Git children
+ * read only the repository's, the user's and the system's configuration. */
+#define GIT_CONFIG_PAIRS_MAX 4096UL
+void f_git_isolate_config(void) {
+    const char *count = getenv("GIT_CONFIG_COUNT");
+    unsigned long pairs = 0, i;
+    char name[48];
+    if (count) {
+        char *end = NULL;
+        pairs = strtoul(count, &end, 10);
+        if (!end || *end || pairs > GIT_CONFIG_PAIRS_MAX) pairs = GIT_CONFIG_PAIRS_MAX;
+    }
+    for (i = 0; i < pairs; i++) {
+        (void)snprintf(name, sizeof(name), "GIT_CONFIG_KEY_%lu", i);
+        (void)unsetenv(name);
+        (void)snprintf(name, sizeof(name), "GIT_CONFIG_VALUE_%lu", i);
+        (void)unsetenv(name);
+    }
+    (void)unsetenv("GIT_CONFIG_COUNT");
+    (void)unsetenv("GIT_CONFIG_PARAMETERS");
 }

@@ -1,25 +1,25 @@
 FRAME 1 80x24
- HYDRA / STATISTICS                                                            
- Work Details Overview Attention Recovery Flows [Stats] Workspace Hosts        
-╭─ RUNS ─────────╮ ╭─ RUNNING ──────╮ ╭─ NEED ATTENTIO─╮ ╭─ RETRIES ──────────╮
-│ 1              │ │ 0              │ │ 0              │ │ 0                  │
-│                │ │ steps right    │ │ failed,        │ │                    │
-│ in this scope  │ │ now            │ │ blocked or...  │ │ repeated attempts  │
-╰────────────────╯ ╰────────────────╯ ╰────────────────╯ ╰────────────────────╯
- Avg 258.7s over 3 steps, max 636s; tokens in 3.85M, cached 3.74M, out 23.0k   
-╭─ RUNS / newest creation first ──────────────────────────────────────────────╮
-│                                                                             │
-│ > kill-dry-run                     succeeded           09-07 13:30 UTC      │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│                                                                             │
-│ 1/1 / Enter evidence / g graph                                              │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Recorded workflow runs · all recorded · all work                              
- D back  M metric  C cohorts  L location  T range  / find  ? help  q quit      
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Runs ───────────────────────────────────────── all recorded · all workflows   
+ 1 run · 3 steps · 0 need attention · tokens in 3.85M · timing 3/3             
+                                                                               
+ Workflow runs ─────────────────────────────────────── 1 of 1 · newest first   
+  RUN                          STATE                CREATED                    
+▌ kill-dry-run                 ✓ succeeded          09-07 13:30 UTC            
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   Workflow runs · all recorded · all workflows                        
+ ↑/↓ select • enter evidence • T range • / filter • g graph • ? help • q quit  

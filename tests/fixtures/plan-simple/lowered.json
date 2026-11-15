@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "id": "add-a-greeting-file-and",
+  "objective": "Add a greeting file and a test for it",
+  "context": [],
+  "assumptions": [],
+  "questions": [],
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "profile:codex",
+      "make"
+    ],
+    "effects": [
+      "execute",
+      "worktree"
+    ],
+    "writes": [
+      "add-a-greeting-file-and-work:*"
+    ],
+    "parallelism": 1,
+    "timeout_seconds": 2400,
+    "artifact_bytes": 1048576,
+    "max_heads": 1,
+    "disk_mb": 1024,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "steps": [
+    {
+      "id": "spawn-worker",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "add-a-greeting-file-and-work",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "implement",
+      "role": "compose",
+      "kind": "exec",
+      "needs": [
+        "spawn-worker"
+      ],
+      "writes": [
+        "add-a-greeting-file-and-work:*"
+      ],
+      "args": {
+        "head": "add-a-greeting-file-and-work",
+        "profile": "codex",
+        "prompt": "Create greeting.txt with a friendly greeting and tests/greeting.sh that fails unless it is non-empty.",
+        "result_file": "summary",
+        "timeout": 1800
+      }
+    },
+    {
+      "id": "check",
+      "role": "verify",
+      "kind": "exec",
+      "needs": [
+        "spawn-worker",
+        "implement"
+      ],
+      "writes": [],
+      "args": {
+        "argv": [
+          "make",
+          "check"
+        ],
+        "head": "add-a-greeting-file-and-work",
+        "timeout": 600
+      }
+    }
+  ],
+  "deliverables": [
+    {
+      "description": "The commit branch add-a-greeting-file-and-work reached after step implement",
+      "destination": "run-artifact",
+      "id": "implement",
+      "output": "commit",
+      "step": "implement"
+    }
+  ],
+  "checks": [
+    {
+      "definition": "make check exits 0 on the worker's commit",
+      "deliverable": "implement",
+      "id": "check",
+      "input": "subject",
+      "method": "command",
+      "report": "report",
+      "step": "check"
+    }
+  ],
+  "requirements": [
+    {
+      "check": "check",
+      "criterion": "make check passes with the new test",
+      "deliverable": "implement",
+      "id": "done-1"
+    }
+  ],
+  "data": {
+    "inputs": {},
+    "schema_version": 1,
+    "steps": {
+      "check": {
+        "inputs": {
+          "subject": {
+            "output": "commit",
+            "step": "implement"
+          }
+        },
+        "outputs": {
+          "report": {
+            "max_bytes": 4096,
+            "path": "report.json",
+            "type": "object"
+          }
+        }
+      },
+      "implement": {
+        "outputs": {
+          "commit": {
+            "max_bytes": 128,
+            "path": "commit",
+            "type": "file"
+          },
+          "summary": {
+            "max_bytes": 4096,
+            "path": "summary",
+            "type": "file"
+          }
+        }
+      }
+    }
+  }
+}

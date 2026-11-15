@@ -126,5 +126,5 @@ json_object *plan_inspect_cli(int argc, char **argv) {
     result = f_success(command, data);
 done:
     json_object_put(estimates); json_object_put(right); json_object_put(left);
-    return result ? result : f_error("workflow plan inspect", "invalid_inspection_input", "expected a supported compiled plan and optional closed-schema estimates bound to its exact digest");
+    return result ? result : plan_failure("workflow plan inspect", "invalid_inspection_input", "expected a supported compiled plan and optional closed-schema estimates bound to its exact digest", "pass a compiled plan from hydra workflow plan compile and, optionally, estimates written for its exact digest");
 }

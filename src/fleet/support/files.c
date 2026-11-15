@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -51,23 +52,18 @@ int f_remove_tree(const char *path) {
     }
     closedir(dir); if (rmdir(path)) status = -1; return status;
 }
-int f_hash(const char *path, char digest[65]) {
-    struct f_capture cap = {0}; char *argv[] = {(char *)"shasum", (char *)"-a", (char *)"256", (char *)path, NULL};
-    size_t i; int status = -1;
-    if (f_run(argv, NULL, 0, 30, &cap)) goto done;
-    if (cap.status == 127) {
-        char *gnu[] = {(char *)"sha256sum", (char *)path, NULL};
-        f_capture_free(&cap); if (f_run(gnu, NULL, 0, 30, &cap)) goto done;
-    }
-    if (cap.status || strlen(cap.out) < 64) goto done;
-    for (i = 0; i < 64; i++) if (nibble(cap.out[i]) < 0) goto done;
-    memcpy(digest, cap.out, 64); digest[64] = '\0'; status = 0;
-done:
-    f_capture_free(&cap); return status;
-}
+int f_hash(const char *path, char digest[65]) { return f_sha256_path(path, digest); }
 
 int f_copy(char *dst, size_t size, const char *value) {
     int n = snprintf(dst, size, "%s", value ? value : "");
+    return n >= 0 && (size_t)n < size ? 0 : -1;
+}
+int f_format(char *dst, size_t size, const char *format, ...) {
+    va_list args;
+    int n;
+    va_start(args, format);
+    n = vsnprintf(dst, size, format, args);
+    va_end(args);
     return n >= 0 && (size_t)n < size ? 0 : -1;
 }
 int f_path(char *dst, size_t size, const char *a, const char *b) {

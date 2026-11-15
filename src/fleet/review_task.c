@@ -1,5 +1,6 @@
 #include "fleet/review_task.h"
 #include "fleet/review_projection.h"
+#include "fleet/review_contract.h"
 #include "fleet/attention_tui.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
@@ -280,15 +281,6 @@ static bool reviewed_result(json_object *out, json_object *result, json_object *
     inventory(out, result, "artifacts", &budget); inventory(out, result, "evidence", &budget); diffs(out, result, selection);
     f_string_add(out, "candidate_state", "verified_retained"); return passed;
 }
-/* task_git honors the process environment. Reject repository redirects before
- * invoking any verifier/import, so review cannot write outside private scratch. */
-static bool clean_git_environment(void)
-{
-    static const char *const redirects[] = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_SHALLOW_FILE", "GIT_GRAFT_FILE", "GIT_CONFIG", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_EXEC_PATH"};
-    size_t i;
-    for (i = 0; i < sizeof(redirects) / sizeof(redirects[0]); i++) if (getenv(redirects[i])) return false;
-    return true;
-}
 static json_object *selected_request(json_object *data, json_object *selection)
 {
     json_object *rows = f_field(data, "requests"), *found = NULL; size_t i;
@@ -355,7 +347,10 @@ static json_object *review_task(json_object *selection, json_object *references)
     json_object *out = initial_review(selection, references), *response = NULL, *data, *collection, *result;
     char *args[] = {"result", (char *)value(selection, "host"), "--id", (char *)value(selection, "task_id"), "--timeout", "5"};
     bool before, after, verified;
-    if (!clean_git_environment()) { unavailable(out, NULL, "git_environment_redirect"); goto cleanup; }
+    /* task_git honors the process environment: refuse repository redirects
+     * before any verifier or import, so review cannot write outside private
+     * scratch, and drop injected configuration. */
+    if (!review_git_hermetic()) { unavailable(out, NULL, "git_environment_redirect"); goto cleanup; }
     before = record_observation(out, selection, NULL);
     if (strcmp(value(selection, "request_id"), "-")) { review_request(out, selection, before); goto cleanup; }
     response = task_remote_cli(6, args); data = f_field(response, "data"); collection = f_field(data, "collection"); result = f_field(collection, "result");

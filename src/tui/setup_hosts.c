@@ -4,10 +4,10 @@
 #endif
 #include "internal.h"
 #include "setup_flow.h"
-/* Hosts tab entries for remote setup: an "Add a host" row and one row per
- * setup record. Records, their destinations and progress come from the
- * read-only `hydra remote setup list --json`; the TUI never reads the private
- * setup directory itself. */
+/* The Hosts rows: This machine, the observed hosts, one row per setup
+ * record not finished yet, and "Add a host". Records, their destinations and
+ * progress come from the read-only `hydra remote setup list --json`; the TUI
+ * never reads the private setup directory itself. */
 #define SETUP_SWEEP_BUDGET_MS 30000L
 
 /* Replaces the records with the listed ones; a failed listing keeps them. */
@@ -53,20 +53,24 @@ void native_setup_sweep_tick(struct app *app) {
 
 /* ---- Rows ---- */
 
-/* Observed hosts first, then unfinished setups, then "Add a host"; without
- * any observed host the add row leads. */
+static bool row_matches(const struct app *app, const char *name) {
+    return !app->hosts || !app->hosts->filter[0] || strstr(name, app->hosts->filter) != NULL;
+}
+
+/* This machine first (the control centre's own), the observed hosts, the
+ * unfinished setups, then "Add a host". */
 size_t hosts_rows(const struct app *app, struct host_row *rows, size_t capacity) {
     const struct native_setup *s = app->setup;
     size_t count = 0, i;
-    bool observed = app->model.host_count > 0;
-    if (!observed && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
-    for (i = 0; i < app->model.host_count && count < capacity; i++) rows[count++] = (struct host_row){HOST_ROW_HOST, i};
+    if (!app->fleet && count < capacity) rows[count++] = (struct host_row){HOST_ROW_MACHINE, 0};
+    for (i = 0; i < app->model.host_count && count < capacity; i++)
+        if (row_matches(app, app->model.hosts[i].name)) rows[count++] = (struct host_row){HOST_ROW_HOST, i};
     for (i = 0; s && i < s->record_count && count < capacity; i++) {
         /* A finished setup is an ordinary fleet host; list it once. */
         if (s->records[i].complete && host_for_name(app, s->records[i].name)) continue;
-        rows[count++] = (struct host_row){HOST_ROW_SETUP, i};
+        if (row_matches(app, s->records[i].name)) rows[count++] = (struct host_row){HOST_ROW_SETUP, i};
     }
-    if (observed && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
+    if (count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
     return count;
 }
 
@@ -75,35 +79,18 @@ size_t hosts_row_count(const struct app *app) {
     return hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
 }
 
-void hosts_open_row(struct app *app) {
+bool hosts_selected_row(const struct app *app, struct host_row *row) {
     struct host_row rows[MAX_HEADS];
     size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
-    const struct host_row *row;
-    if (app->host_selected >= count) app->host_selected = 0;
-    if (!count) return;
-    row = &rows[app->host_selected];
-    if (row->kind == HOST_ROW_ADD) native_setup_open_form(app);
-    else if (row->kind == HOST_ROW_SETUP) native_setup_resume(app, app->setup->records[row->index].name);
-    else {
-        /* Follow this host's work beside everything else, filtered to it. */
-        location_set(app, app->model.hosts[row->index].name);
-        enter_view(app, 0);
-    }
-}
-
-/* r on a host row: a fresh observation of the fleet, named for that host. */
-void hosts_retry_row(struct app *app) {
-    struct host_row rows[MAX_HEADS];
-    size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
-    if (app->host_selected < count && rows[app->host_selected].kind == HOST_ROW_HOST) remote_retry(app, app->model.hosts[rows[app->host_selected].index].name);
-    else remote_retry(app, NULL);
+    if (!count) return false;
+    *row = rows[app->host_selected < count ? app->host_selected : 0];
+    return true;
 }
 
 bool hosts_setup_selected(const struct app *app, size_t *record) {
-    struct host_row rows[MAX_HEADS];
-    size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
-    if (app->host_selected >= count || rows[app->host_selected].kind != HOST_ROW_SETUP) return false;
-    *record = rows[app->host_selected].index;
+    struct host_row row;
+    if (!hosts_selected_row(app, &row) || row.kind != HOST_ROW_SETUP) return false;
+    *record = row.index;
     /* A finished setup offering an upgrade is neither edited nor removed here. */
     return !app->setup->records[*record].complete && !app->setup->records[*record].upgrade;
 }
@@ -111,54 +98,12 @@ bool hosts_setup_selected(const struct app *app, size_t *record) {
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size) {
     const struct setup_record *r;
     if (row->kind == HOST_ROW_ADD) {
-        copy_text(name, name_size, "+ Add a host");
-        copy_text(state, state_size, app->model.host_count ? "A: set up another machine over SSH" : "set up a machine over SSH");
+        copy_text(name, name_size, "Add a host");
+        copy_text(state, state_size, "set up a machine over SSH");
         return;
     }
     r = &app->setup->records[row->index];
     copy_text(name, name_size, r->name);
     if (app->setup->job.active && !strcmp(app->setup->name, r->name)) copy_text(state, state_size, "setup running...");
     else copy_text(state, state_size, r->summary[0] ? r->summary : "checking setup status...");
-}
-
-/* ---- Local Hosts tab ---- */
-
-static void hub_hit(struct app *app, size_t index) {
-    if (app->hit_count >= MAX_HEADS) return;
-    app->hit_rows[app->hit_count] = app->hit_bottom[app->hit_count] = app->line + 1;
-    app->hit_left[app->hit_count] = 3; app->hit_right[app->hit_count] = app->cols - 3;
-    app->hit_items[app->hit_count++] = index;
-}
-
-/* Name and setup state side by side, or stacked below 60 columns. */
-static void hub_row(struct app *app, const struct host_row *row, size_t index) {
-    char name[160], state[200], line[400];
-    bool selected = index == app->host_selected, narrow = app->content_width < 60;
-    int width = app->content_width, state_x = narrow ? 4 : 26;
-    enum tv_style name_tone = row->kind == HOST_ROW_ADD ? TV_STRONG : TV_BASE;
-    setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
-    hub_hit(app, index);
-    snprintf(line, sizeof(line), "%c %s", selected ? '>' : ' ', name);
-    if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, narrow ? width : 24, selected ? TV_SELECTED : name_tone, line);
-    if (narrow) app->line++;
-    if (app->line < app->limit) column(app, state_x, width - state_x, selected && !narrow ? TV_SELECTED : TV_MUTED, state);
-    app->line++;
-}
-
-void render_setup_hub(struct app *app) {
-    struct host_row rows[SETUP_RECORDS + 1];
-    size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0])), i;
-    if (app->host_selected >= count) app->host_selected = 0;
-    style(app, TONE_STRONG); linef(app, "REMOTE HOSTS"); style(app, TONE_BASE);
-    paragraph(app, "Hydra can run agents on other machines over SSH, for example a build box with more cores or a "
-              "machine that already has the right toolchain, when a task needs more than this machine offers. Adding a "
-              "host checks its SSH host key and requirements, installs a matching Hydra there and helps you install "
-              "and sign in to agents. Nothing changes on the remote until you approve it.", TV_BASE);
-    linef(app, "");
-    for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
-    linef(app, "");
-    if (app->remote_stale) paragraph(app, app->remote_error, TV_WARNING);
-    paragraph(app, count > 1 ? "Enter continues a host's setup or upgrades its Hydra; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
-                             : "Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.", TV_MUTED);
 }

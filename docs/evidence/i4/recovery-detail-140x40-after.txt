@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / RECOVERY                                                             Local · 3 heads · 1 running · 3 need attention · 4 to repair 
- Work  Details  Overview  Attention  [Recovery]  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Recovery ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ RECOVERY  4 findings                                                                                                                    │
-│ RECOVERY FINDING                                                                                                                        │
-│ Terminal stopped: feature-stale                                                                                                         │
-│ The terminal session for feature-stale is no longer running. Its worktree and files are kept; nothing was removed from the repository.  │
-│ Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is finished.             │
-│                                                                                                                                         │
-│ DIAGNOSTICS                                                                                                                             │
-│ Kind        dead-session                                                                                                                │
-│ Source      /tmp/hydra/map                                                                                                              │
-│ Confidence  exact                                                                                                                       │
-│ Inspect     hydra doctor                                                                                                                │
-│                                                                                                                                         │
-│ NEXT                                                                                                                                    │
-│ Enter runs the check and shows its output here; d returns to the list                                                                   │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- Enter run the check  d back to list  Esc back  ? help  q quit                                                                             
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 7 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ ◌ Reading what needs you…                                       HEAD                                                                      
+ Decisions 2                                                     Head        feature-stale                                                 
+  ◐ Approval gates: feature-live                                 ID          head_bbbbbbbbbbbbbbbb                                         
+    1 of 2 approved · : approvals lists them                     Instance    instance_bbbbbbbbbbbbbbbb                                     
+  ◐ Approval gates: feature-stale                                Liveness    stopped                                                       
+    0 of 1 approved · : approvals lists them                     Desired     running                                                       
+ Agents 2                                                        Observed    running                                                       
+ ▌▲ Terminal stopped: feature-stale                              Source      /tmp/hydra/state/head_stale                                   
+ ▌  worktree and files kept · R restarts it                                                                                                
+  ? State unknown: feature-unavailable                           DIAGNOSTICS                                                               
+    Hydra cannot read whether its terminal runs · o opens it     Kind        dead-session                                                  
+ Repairs 3                                                       Source      /tmp/hydra/map                                                
+  ▲ Leftover lock: state_project_0123456789abcdefabcd.lock       Confidence  exact                                                         
+    no work affected; c runs its check                           Inspect     hydra doctor                                                  
+  ▲ Leftover worktree from a removed task: feature-old (/tmp…                                                                              
+    x removes it; the branch is kept                             DIAGNOSTICS                                                               
+  ▲ Removal did not finish: feature-stale                        Kind        teardown-failure                                              
+    c shows what is left                                         Source      /tmp/hydra/state/head_stale                                   
+                                                                 Confidence  exact                                                         
+                                                                 Inspect     hydra worktree doctor status                                  
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live                                                                                                                                   
+ ↑/↓ select • enter open • R resume • o open in Work • c run check • tab/shift+tab pane • [/] page • : commands • ? help • q quit          

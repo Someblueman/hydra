@@ -1,0 +1,20 @@
+version: 1
+id: docs-check
+description: Check the links in the README
+resources:
+  disk_mb: 1
+steps:
+  - id: create
+    kind: spawn
+    needs: []
+    idempotent: false
+    args:
+      branch: docs-check
+      terminal_mode: headless
+  - id: links
+    kind: exec
+    needs: [create]
+    idempotent: false
+    args:
+      head: docs-check
+      argv: [sh, -c, "sleep 1; echo README.md:12 links to a missing section; exit 1"]

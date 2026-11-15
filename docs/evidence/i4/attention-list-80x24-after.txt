@@ -1,25 +1,25 @@
 FRAME 1 80x24
- HYDRA / ATTENTION                                                             
- Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
-╭─ Attention ─────────────────────────────────────────────────────────────────╮
-│ ATTENTION  5 need you · 0 seen · 1 stale · 1 unknown                        │
-│ 1 failed check or step needs a decision                                     │
-│   WHAT                     TASK                        STATE                │
-│ > Check failed             kill-dry-run · repo-check   NEW                  │
-│     Step repo-check (attempt 1) failed its check; review the log, then      │
-│     send the plan back or retry. It decides req-dry-run-flag,               │
-│     req-no-removal.                                                         │
-│   Approval needed          notes-cleanup · merge-gate  NEW                  │
-│     Step merge-gate (attempt 1) is waiting for your decision; marking it    │
-│     seen does not approve it.                                               │
-│   Result ready for review  kill-dry-run · implement    NEW                  │
-│     Step implement (attempt 1) finished and sealed its output; its result,  │
-│     checks and changes are ready to review.                                 │
-│   Result ready for review  feature-build · verify      NEW                  │
-│     Step verify (attempt 2) finished and sealed its output; its result,     │
-│     checks and changes are ready to review.                                 │
-│   Approval expired         docs-refresh                stale                │
-│     Step release-gate (attempt 1) asked for a decision, but the request     │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Live                                                                          
- j/k select  Enter details  r review  s mark seen  Esc back  ? help  q quit    
+ ◆ hydra  1 Work  2 Inbox 8  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Needs you ───────────────────────────────────────────────── 8 · enter opens ──
+ Decisions 1                                                                   
+ ▌◐ Approve merge-gate: notes-cleanup                                          
+ ▌  run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new                   
+ Failed 1                                                                      
+  ✗ Check failed: kill-dry-run                                                 
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-flag, req-no-removal… 
+ Ready for review 3                                                            
+  ✓ Result ready: kill-dry-run                                                 
+    run run_2cdf8bbe1a4e · step implement · attempt 1 · new                    
+  ✓ Result ready: feature-build                                                
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on builder · new          
+  ✓ Result ready: feature/very-long-task-name-for-the-wrapping-check-of-the-a… 
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new                    
+ Agents 1                                                                      
+  ▲ Terminal stopped: notes-cleanup                                            
+    worktree and files kept · R restarts it                                    
+ Repairs 2                                                                     
+  ▲ (stale) Approval expired: docs-refresh                                     
+    run run_55aa66bb77cc · step release-gate · attempt 1                       
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ select • enter open • Y approve • N reject • r review • ? help • q quit   

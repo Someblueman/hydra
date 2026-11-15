@@ -33,7 +33,7 @@ char *review_scalar(const char *directory, const char *name)
     return strdup(bytes);
 }
 
-bool review_git_environment_clean(void)
+bool review_git_hermetic(void)
 {
     static const char *const redirects[] = {"GIT_DIR",
                                             "GIT_WORK_TREE",
@@ -46,10 +46,9 @@ bool review_git_environment_clean(void)
                                             "GIT_CONFIG",
                                             "GIT_CONFIG_SYSTEM",
                                             "GIT_CONFIG_GLOBAL",
-                                            "GIT_CONFIG_COUNT",
-                                            "GIT_CONFIG_PARAMETERS",
                                             "GIT_EXEC_PATH"};
     size_t i;
+    f_git_isolate_config();
     for (i = 0; i < sizeof(redirects) / sizeof(redirects[0]); i++)
         if (getenv(redirects[i]))
             return false;
@@ -111,7 +110,7 @@ static bool git_oid_file(const char *path, size_t wanted, char out[65])
     char *hash[] = {"git", "-C", scratch, "hash-object", (char *)path, NULL};
     struct f_capture capture = {0};
     bool ok = false;
-    if (!review_git_environment_clean() || !mkdtemp(scratch))
+    if (!review_git_hermetic() || !mkdtemp(scratch))
         return false;
     (void)snprintf(format, sizeof(format), "--object-format=%s", wanted == 64U ? "sha256" : "sha1");
     if (f_run(init, NULL, 0, 30, &capture) || capture.status)
@@ -287,7 +286,7 @@ json_object *review_retained(const char *run, const char *project, json_object *
     f_string_add(out, "source_base",
                  compiled ? "bound to accepted plan; source contents not independently retained"
                           : "recorded provenance only; source contents not independently retained");
-    if (!review_git_environment_clean())
+    if (!review_git_hermetic())
         reason = "git_environment_redirect";
     else if (mkdtemp(scratch)) {
         if (snapshot(run, scratch, compiled))

@@ -37,14 +37,16 @@ are read-only. Local previews are capped at 4096 bytes; the producer leaves URLs
 unopened, while native `o` explicitly passes a selected URL to the operating
 system opener without ingesting its content.
 
-In the native TUI, `I` opens attention, `j`/`k` or arrows select, `Enter` shows
-detail, `s` marks a revision seen, and `r` opens exact review. At acceptance
+In the native TUI, Inbox (`2`; at acceptance time `I` opened attention) lists the
+items, `j`/`k` or arrows select, `Enter` shows detail, `s` marks a revision seen,
+and `r` opens exact review. At acceptance
 time the seen marker belonged to one client; it is now kept per user through
 `hydra workflow attention-seen` (see [contracts](CONTRACTS.md#tui-protocols-and-parity)),
 so the measured two-client independence no longer applies to clients sharing a
-`HYDRA_HOME`. Within review, `i` shows identity, `f` references, `o` follows a
-selected reference, `L` opens a check's full log, `n`/`N` move between sections,
-`j`/`k` scroll, and `Esc` backs out. Seen state never approves or accepts a
+`HYDRA_HOME`. Within review (its Review page), `L` opens a check's full log,
+`n`/`N` move between sections, `j`/`k` scroll, Enter opens the selected reference
+and `Esc` backs out; the identity and the supplied references, once `i` and `f`,
+are its Technical and References pages, and `+` supplies a reference. Seen state never approves or accepts a
 workflow. A stale snapshot must be refreshed before review.
 
 ## Accepted bounded measurement

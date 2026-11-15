@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats                                                       this machine / 3 heads / 1 running  
+                                                                                                                                           
+ Sessions  Runs  Cohorts ---------------------------------------------------------------------------------- all recorded / all workflows   
+                                                                                                                                           
+  Runs                              Running                           Need attention                    Retries                            
+  3                                 1                                 0                                 1                                  
+  in this scope                     steps right now                   failed, blocked or unknown        repeated attempts                  
+                                                                                                                                           
+ Latest attempts average 176.0s over 6 timed steps, longest 636s. Timing 6/7, Attempts 7/7, 0 undated, 0 outside range.                    
+ Agent tokens in 3.97M, cached 3.74M, out 27.0k (2 of 2 agent steps reported); cost $0.2500.                                               
+ Remote CPU 5.5s (2/4), peak RSS 50.0M (1/4) from 4 task receipts; local steps unmeasured. C shows the remote cohorts.                     
+                                                                                                                                           
+ Runs created, last 7 days                              Run outcomes                                                                       
+ -6d   0                                                Succeeded     2   ###########################-------------                         
+ -5d   0                                                Failed        0                                                                    
+ -4d   0                                                Running       1   #############---------------------------                         
+ -3d   0                                                Queued        0                                                                    
+ -2d   0                                                Blocked       0                                                                    
+ -1d   0                                                Cancelled     0                                                                    
+ -0d   3  ##########################################    Unknown       0                                                                    
+                                                                                                                                           
+ Workflow runs --------------------------------------------------------------------------------------------------- 1 of 3 / newest first   
+  RUN                          STATE                CREATED          TOKENS                   ID                                           
+> kill-dry-run                 + succeeded          09-07 13:30 UTC  3.85M in / 23.0k out     run_bbbbbbbbbbbbbbbbbbbb                     
+  task-handoff                 * running            09-07 13:00 UTC                           run_pppppppppppppppppppp                     
+  task-handoff                 + succeeded          09-07 12:00 UTC  120.0k in / 4.0k out     run_rrrrrrrrrrrrrrrrrrrr                     
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  * live   Workflow runs / all recorded / all workflows                                                                                    
+ ^/v select | enter evidence | [/] pages | T range | / filter | g graph | w workflow | M metric | C cohorts | L location | ? help | q quit 

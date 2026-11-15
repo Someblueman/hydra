@@ -60,6 +60,11 @@ static bool environment(json_object *value, json_object *envelope) {
     return true;
 }
 
+/* The declared side may be absent in a draft that has not been validated yet. */
+static bool same_text(const char *value, const char *declared) {
+    return declared && !strcmp(value, declared);
+}
+
 static bool subject(json_object *plan, json_object *value, json_object *requirement,
                     json_object *deliverable) {
     const char *const keys[] = {"deliverable", "step", "output", NULL};
@@ -68,8 +73,8 @@ static bool subject(json_object *plan, json_object *value, json_object *requirem
     const char *output = f_string(value, "output");
     (void)plan;
     if (!task_keys(value, keys) || !plan_id(delivery_id) || !plan_id(step) || !plan_id(output) ||
-        !deliverable || strcmp(delivery_id, f_string(requirement, "deliverable")) ||
-        strcmp(step, f_string(deliverable, "step")) || strcmp(output, f_string(deliverable, "output"))) return false;
+        !deliverable || !same_text(delivery_id, f_string(requirement, "deliverable")) ||
+        !same_text(step, f_string(deliverable, "step")) || !same_text(output, f_string(deliverable, "output"))) return false;
     return step_output(plan, step, output) != NULL;
 }
 
@@ -377,22 +382,27 @@ static json_object *derived(json_object *plan, json_object *requirement) {
     return out;
 }
 
+static json_object *declared(json_object *obligation) {
+    json_object *row = plan_canonical(obligation);
+    const char *domain = f_string(row, "domain"), *method = f_string(f_field(row, "evaluation"), "method");
+    json_object_object_add(row, "derived", json_object_new_boolean(false));
+    f_string_add(row, "structural_status", "structurally_satisfiable");
+    f_string_add(row, "semantic_status", ((!domain || !strcmp(domain, "feature")) && method && (!strcmp(method, "executable") || !strcmp(method, "command"))) ? "not_assessed" : "semantic_review_required");
+    return row;
+}
+
+/* Diagnostics project drafts that failed validation too, so records that are
+ * not objects, and collections that are absent or not arrays, are skipped. */
 json_object *plan_obligations_projection(json_object *plan) {
     json_object *out = json_object_new_array();
     json_object *obligations = f_field(plan, "obligations");
+    json_object *rows = obligations ? obligations : f_field(plan, "requirements");
     size_t i;
-    if (obligations) {
-        for (i = 0; i < json_object_array_length(obligations); i++) {
-            json_object *row = plan_canonical(json_object_array_get_idx(obligations, i));
-            const char *domain = f_string(row, "domain"), *method = f_string(f_field(row, "evaluation"), "method");
-            json_object_object_add(row, "derived", json_object_new_boolean(false));
-            f_string_add(row, "structural_status", "structurally_satisfiable");
-            f_string_add(row, "semantic_status", ((!domain || !strcmp(domain, "feature")) && method && !strcmp(method, "executable")) ? "not_assessed" : "semantic_review_required");
-            json_object_array_add(out, row);
-        }
-    } else {
-        json_object *requirements = f_field(plan, "requirements");
-        for (i = 0; i < json_object_array_length(requirements); i++) json_object_array_add(out, derived(plan, json_object_array_get_idx(requirements, i)));
+    if (!json_object_is_type(rows, json_type_array)) return out;
+    for (i = 0; i < json_object_array_length(rows); i++) {
+        json_object *row = json_object_array_get_idx(rows, i);
+        if (!json_object_is_type(row, json_type_object)) continue;
+        json_object_array_add(out, obligations ? declared(row) : derived(plan, row));
     }
     return out;
 }
@@ -412,7 +422,7 @@ static bool contains_word(const char *text, const char *word) {
 json_object *plan_obligations_reviews(json_object *plan) {
     json_object *out = json_object_new_array(), *obligations = f_field(plan, "obligations");
     size_t i;
-    if (!obligations) return out;
+    if (!json_object_is_type(obligations, json_type_array)) return out;
     for (i = 0; i < json_object_array_length(obligations); i++) {
         json_object *obligation = json_object_array_get_idx(obligations, i), *evaluation = f_field(obligation, "evaluation");
         const char *domain = f_string(obligation, "domain"), *definition = NULL;

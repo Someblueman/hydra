@@ -56,6 +56,24 @@ event_verify_file() {
     done < "$_evf_file"
 }
 
+# event_verify_file's rules in one pass, for callers that must stay quick on a
+# log of any length: each line a bounded schema-v1 envelope, numbered one
+# after the other.
+_event_stream_valid() {
+    LC_ALL=C awk -v max="$HYDRA_EVENT_MAX_BYTES" '
+        {
+            if ($0 == "" || length($0) > max + 0 || substr($0, 1, 1) != "{" || substr($0, length($0)) != "}") exit 1
+            if (!match($0, /"sequence":[0-9]+[,}]/)) exit 1
+            sequence = substr($0, RSTART + 11, RLENGTH - 12)
+            if (sequence !~ /^[1-9][0-9]*$/ || length(sequence) > 10 || sequence + 0 > 4294967294) exit 1
+            if (!index($0, "\"schema_version\":1") || !index($0, "\"event_id\":\"evt_") ||
+                !index($0, "\"project_id\":\"project_") || !index($0, "\"head_id\":\"head_") ||
+                !index($0, "\"instance_id\":\"instance_")) exit 1
+            if (NR > 1 && sequence + 0 != expected) exit 1
+            expected = sequence + 1
+        }' "$1"
+}
+
 event_emit() {
     _ee_project="$1"
     _ee_head="$2"
@@ -74,38 +92,123 @@ event_emit() {
     hydra_private_touch "$_ee_file" || return 1
     _ee_lock="events_${_ee_project}_${_ee_head}"
     acquire_lock "$_ee_lock" "event append" || return 1
-    if [ -s "$_ee_file" ] && ! event_line_valid "$(tail -n 1 "$_ee_file")"; then
-        release_lock "$_ee_lock"; return 1
-    fi
-    _ee_last_sequence="$(tail -n 1 "$_ee_file" 2>/dev/null | _event_sequence)"
-    if [ -n "$_ee_last_sequence" ]; then
-        _event_uint "$_ee_last_sequence" 4294967293 || { release_lock "$_ee_lock"; return 1; }
-        _ee_sequence=$((_ee_last_sequence + 1))
-    else
-        _ee_sequence="$(_event_sequence_after_empty "$_ee_file")" || {
-            release_lock "$_ee_lock"
-            echo "Error: event sequence cursor or archive history is invalid; repair or reconcile the stream before appending" >&2
-            return 1
-        }
-    fi
-    _ee_id="$(hydra_new_id evt "$_ee_project|$_ee_head|$_ee_instance|$_ee_sequence")" || {
-        release_lock "$_ee_lock"; return 1;
-    }
-    _ee_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    _ee_line="{\"schema_version\":1,\"event_id\":\"$_ee_id\",\"sequence\":$_ee_sequence,\"occurred_at\":\"$_ee_time\",\"project_id\":\"$_ee_project\",\"head_id\":\"$_ee_head\",\"instance_id\":\"$_ee_instance\",\"run_id\":null,\"type\":\"$(json_escape "$_ee_type")\",\"actor\":{\"kind\":\"$(json_escape "$_ee_actor_kind")\",\"id\":\"$(json_escape "$_ee_actor_id")\"},\"payload\":$_ee_payload}"
-    _ee_bytes="$(printf '%s' "$_ee_line" | LC_ALL=C wc -c | tr -d ' ')"
-    if [ "$_ee_bytes" -gt "$HYDRA_EVENT_MAX_BYTES" ]; then
-        release_lock "$_ee_lock"
-        echo "Error: event exceeds $HYDRA_EVENT_MAX_BYTES bytes" >&2
-        return 1
-    fi
-    printf '%s\n' "$_ee_line" >> "$_ee_file" || { release_lock "$_ee_lock"; return 1; }
-    _event_write_next_sequence "$_ee_file" $((_ee_sequence + 1)) || { release_lock "$_ee_lock"; return 1; }
+    _ee_id="$(_event_append_locked "$_ee_file" "$_ee_project" "$_ee_head" "$_ee_instance" "$_ee_type" \
+        "$_ee_actor_kind" "$_ee_actor_id" "$_ee_payload" "")" || { release_lock "$_ee_lock"; return 1; }
     release_lock "$_ee_lock"
     if command -v notify_event >/dev/null 2>&1; then
         notify_event "$_ee_type" "$_ee_project" "$_ee_head" || true
     fi
     printf '%s\n' "$_ee_id"
+}
+
+# Appends one event to <file> with the next sequence number of that file's own
+# stream; the caller holds the lock that serializes its writers. <extra> is
+# inserted after the sequence member: empty, or ',"name":value'.
+# Prints the event ID.
+_event_append_locked() {
+    _eal_file="$1" _eal_project="$2" _eal_head="$3" _eal_instance="$4" _eal_type="$5"
+    _eal_actor_kind="$6" _eal_actor_id="$7" _eal_payload="$8" _eal_extra="$9"
+    if [ -s "$_eal_file" ] && ! event_line_valid "$(tail -n 1 "$_eal_file")"; then
+        return 1
+    fi
+    _eal_last_sequence="$(tail -n 1 "$_eal_file" 2>/dev/null | _event_sequence)"
+    if [ -n "$_eal_last_sequence" ]; then
+        _event_uint "$_eal_last_sequence" 4294967293 || return 1
+        _eal_sequence=$((_eal_last_sequence + 1))
+    else
+        _eal_sequence="$(_event_sequence_after_empty "$_eal_file")" || {
+            echo "Error: event sequence cursor or archive history is invalid; repair or reconcile the stream before appending" >&2
+            return 1
+        }
+    fi
+    _eal_id="$(hydra_new_id evt "$_eal_project|$_eal_head|$_eal_instance|$_eal_sequence")" || return 1
+    _eal_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    _eal_line="{\"schema_version\":1,\"event_id\":\"$_eal_id\",\"sequence\":$_eal_sequence$_eal_extra,\"occurred_at\":\"$_eal_time\",\"project_id\":\"$_eal_project\",\"head_id\":\"$_eal_head\",\"instance_id\":\"$_eal_instance\",\"run_id\":null,\"type\":\"$(json_escape "$_eal_type")\",\"actor\":{\"kind\":\"$(json_escape "$_eal_actor_kind")\",\"id\":\"$(json_escape "$_eal_actor_id")\"},\"payload\":$_eal_payload}"
+    _eal_bytes="$(printf '%s' "$_eal_line" | LC_ALL=C wc -c | tr -d ' ')"
+    if [ "$_eal_bytes" -gt "$HYDRA_EVENT_MAX_BYTES" ]; then
+        echo "Error: event exceeds $HYDRA_EVENT_MAX_BYTES bytes" >&2
+        return 1
+    fi
+    printf '%s\n' "$_eal_line" >> "$_eal_file" || return 1
+    _event_write_next_sequence "$_eal_file" $((_eal_sequence + 1)) || return 1
+    printf '%s\n' "$_eal_id"
+}
+
+# An instance's activity log holds its activity.changed events apart from the
+# head's event log: they can be removed once a session checkpoint or summary
+# represents them, while lifecycle events keep the head log's retention.
+event_activity_file() {
+    _eaf_dir="$(state_v2_head_dir "$1" "$2")" || return 1
+    hydra_valid_id "$3" || return 1
+    printf '%s/instances/%s/activity.jsonl\n' "$_eaf_dir" "$3"
+}
+
+# Appends an activity.changed event to the instance's activity log. The event
+# carries head_next_sequence, the head log's next sequence number when it was
+# recorded: it follows every head event numbered below that and precedes the
+# rest, so the two logs read back in the order they were written. The caller
+# holds the head's activity lock, which serializes activity log writers; the
+# event lock is taken here so that number cannot move meanwhile.
+# Usage: event_emit_activity <project> <head> <instance> <payload>
+event_emit_activity() {
+    _eeac_project="$1" _eeac_head="$2" _eeac_instance="$3" _eeac_payload="$4"
+    hydra_valid_id "$_eeac_project" && hydra_valid_id "$_eeac_head" && \
+        hydra_valid_id "$_eeac_instance" || return 1
+    case "$_eeac_payload" in \{*\}) ;; *) return 1 ;; esac
+    _eeac_events="$(event_file_for_head "$_eeac_project" "$_eeac_head")" || return 1
+    _eeac_file="$(event_activity_file "$_eeac_project" "$_eeac_head" "$_eeac_instance")" || return 1
+    [ -d "${_eeac_file%/*}" ] && [ ! -L "${_eeac_file%/*}" ] && [ ! -L "$_eeac_file" ] || return 1
+    hydra_private_touch "$_eeac_file" || return 1
+    _eeac_lock="events_${_eeac_project}_${_eeac_head}"
+    acquire_lock "$_eeac_lock" "activity append" || return 1
+    if [ -s "$_eeac_events" ]; then
+        _eeac_next="$(tail -n 1 "$_eeac_events" | _event_sequence)"
+        if _event_uint "$_eeac_next" 4294967293; then _eeac_next=$((_eeac_next + 1)); else _eeac_next=""; fi
+    else
+        _eeac_next="$(_event_sequence_after_empty "$_eeac_events" 2>/dev/null)" || _eeac_next=""
+    fi
+    if [ -z "$_eeac_next" ]; then
+        release_lock "$_eeac_lock"
+        echo "Error: the head event log has no valid sequence; repair it before recording activity" >&2
+        return 1
+    fi
+    _eeac_id="$(_event_append_locked "$_eeac_file" "$_eeac_project" "$_eeac_head" "$_eeac_instance" \
+        activity.changed observer tmux "$_eeac_payload" ",\"head_next_sequence\":$_eeac_next")" || {
+        release_lock "$_eeac_lock"; return 1;
+    }
+    release_lock "$_eeac_lock"
+    printf '%s\n' "$_eeac_id"
+}
+
+# Removes the events numbered up to <through> from the start of a stream whose
+# earlier events another record represents (an activity log covered by a
+# session checkpoint or summary). Later events keep their sequence numbers and
+# the cursor keeps numbering continuous; an emptied log is removed and its
+# cursor kept. The caller holds the stream's writer lock.
+# Usage: event_drop_prefix_locked <file> <through-sequence>
+event_drop_prefix_locked() {
+    _edp_file="$1" _edp_through="$2"
+    _event_uint "$_edp_through" 4294967294 || return 1
+    [ ! -L "$_edp_file" ] || return 1
+    [ -f "$_edp_file" ] || return 0
+    [ -s "$_edp_file" ] || { rm -f "$_edp_file"; return 0; }
+    _event_stream_valid "$_edp_file" || return 1
+    _edp_last="$(tail -n 1 "$_edp_file" | _event_sequence)"
+    _event_uint "$_edp_last" 4294967293 || return 1
+    [ "$(head -n 1 "$_edp_file" | _event_sequence)" -le "$_edp_through" ] || return 0
+    _edp_tmp="$(mktemp_adjacent "$_edp_file")" || return 1
+    if ! awk -v through="$_edp_through" '
+            match($0, /"sequence":[0-9]+[,}]/) && substr($0, RSTART + 11, RLENGTH - 12) + 0 > through + 0' \
+            "$_edp_file" > "$_edp_tmp" ||
+        ! _event_write_next_sequence "$_edp_file" $((_edp_last + 1)); then
+        rm -f "$_edp_tmp"
+        return 1
+    fi
+    if [ -s "$_edp_tmp" ]; then
+        atomic_replace "$_edp_file" "$_edp_tmp"
+    else
+        rm -f "$_edp_tmp" "$_edp_file"
+    fi
 }
 
 _event_write_next_sequence() {

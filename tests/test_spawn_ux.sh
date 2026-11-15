@@ -84,10 +84,11 @@ run_in_tty() {
         tty_output="$(tmux -L "$tty_server" capture-pane -p -t "$_rit_name" -S - 2>/dev/null || true)"
         case "$tty_output" in *__HYDRA_RC=*__*) break ;; esac
         case "$tty_output" in
-            *"Typing goes to the agent"*)
+            # Work names the agent being typed to in the conversation's rule.
+            *"typing to "*)
                 if [ "$tty_workspace" -eq 0 ]; then
                     tty_workspace=1
-                    tmux -L "$tty_server" send-keys -t "$_rit_name" C-b q
+                    tmux -L "$tty_server" send-keys -t "$_rit_name" "C-\\" q
                 fi
                 ;;
         esac
@@ -171,7 +172,7 @@ if tmux -L "$tty_server" -V >/dev/null 2>&1; then
     if run_in_tty ux-basic "HYDRA_TUI_BIN='$test_base_dir/missing-hydra-tui' '$HYDRA_BIN' spawn tty/basic --no-agent"; then
         assert_equal "0" "$tty_rc" "shell-only interactive spawn succeeds"
         assert_equal "0" "$tty_workspace" "shell-only spawn does not open the workspace"
-        assert_not_contains "$tty_output" "Session Manager" "shell-only spawn does not open the basic TUI"
+        assert_not_contains "$tty_output" "native TUI is unavailable" "shell-only spawn does not try to open the control centre"
         assert_contains "$tty_output" "Head 'tty/basic' created" "shell-only spawn prints the context block"
         assert_contains "$tty_output" "hydra switch tty/basic" "shell-only spawn offers direct attach"
         assert_equal "tty_basic attached=0" "$(tmux -L "$tty_server" list-sessions -F '#{session_name} attached=#{session_attached}' 2>/dev/null | grep '^tty_basic ')" "shell-only head session exists and is not attached"

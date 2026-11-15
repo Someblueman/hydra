@@ -67,15 +67,12 @@ data_items="$(grep -c '^ITEM	' "$fixture/attention-data")"
 data_count="$(awk -F '\t' '/^END	/ { print $2 }' "$fixture/attention-data")"
 [ "$data_count" -eq "$data_items" ]
 awk -F '\t' '/^ITEM	/ { if (NF != 21 || length($15) != 64 || length($16) != 64 || $15 !~ /^[0-9a-f]+$/ || $16 !~ /^[0-9a-f]+$/) exit 1 }' "$fixture/attention-data"
-cat > "$fixture/bin/shasum" <<'SHASUM'
-#!/bin/sh
-exit 1
-SHASUM
-chmod +x "$fixture/bin/shasum"
-if "$root/bin/hydra" fleet attention-data --json > "$fixture/attention-data-malformed"; then exit 1; fi
-grep -q '"code":"projection_failed"' "$fixture/attention-data-malformed"
-if grep -q '^HYDRA_ATTENTION	[123]$' "$fixture/attention-data-malformed"; then exit 1; fi
-rm "$fixture/bin/shasum"
+# Revision and identity hashes are computed in process: a broken shasum or
+# sha256sum on PATH changes nothing.
+for tool in shasum sha256sum; do printf '#!/bin/sh\nexit 1\n' > "$fixture/bin/$tool"; chmod +x "$fixture/bin/$tool"; done
+"$root/bin/hydra" fleet attention-data --json > "$fixture/attention-data-hashless"
+cmp "$fixture/attention-data" "$fixture/attention-data-hashless"
+rm "$fixture/bin/shasum" "$fixture/bin/sha256sum"
 for case in past malformed null zero; do
   HYDRA_TEST_EXPIRY="$case"
   export HYDRA_TEST_EXPIRY

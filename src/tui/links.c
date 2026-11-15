@@ -32,10 +32,11 @@ static bool native_links_load(FILE *input, struct native_links *m) {
     return header && project && end && !ferror(input);
 }
 
-void native_links_accept(struct app *app, FILE *input) {
+bool native_links_accept(struct app *app, FILE *input) {
     struct native_links *next=input ? calloc(1,sizeof(*next)) : NULL;
     bool ok=next && native_links_load(input,next);
     if (input) fclose(input);
-    if (!ok) { free(next); if (app->links) app->links->stale=true; return; }
+    if (!ok) { free(next); if (app->links) app->links->stale=true; return false; }
     free(app->links); app->links=next;
+    return true;
 }

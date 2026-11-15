@@ -2,10 +2,11 @@
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] " \
+#define SETUP_USAGE "remote setup NAME [DEST] | remote setup DEST [--ssh-config /abs] [--binary FILE] " \
     "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote setup list; " \
     "remote setup remove NAME [--approve PLAN_SHA256]; " \
     "remote trust-key NAME [--fingerprint SHA256:...]; " \
@@ -300,6 +301,22 @@ static json_object *cancelled(struct setup_ctx *ctx) {
     json_object_object_add(data, "exit_status", json_object_new_int(128 + (int)f_stopped));
     return setup_error(ctx, "cancelled", "setup was interrupted", "rerun hydra remote setup NAME to resume", data);
 }
+/* On a terminal, each step says what it starts before it runs (the
+ * summary rows follow at the end); --json and pipes stay quiet. */
+static void announce(const struct setup_ctx *ctx, const char *step) {
+    static const char *const words[][2] = {
+        {"host_key", "checking the host key of"}, {"preflight", "checking requirements on"},
+        {"provision", "installing Hydra on"}, {"agents", "looking for agents on"},
+        {"verify", "verifying the connection to"}, {"alias", "adding the host"},
+    };
+    const char *agent = strchr(step, ':');
+    size_t i;
+    if (!ctx->interactive) return;
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); i++)
+        if (!strcmp(step, words[i][0])) { fprintf(stderr, "... %s %s\n", words[i][1], ctx->name); fflush(stderr); return; }
+    if (agent) fprintf(stderr, "... %s %s on %s\n", !strncmp(step, "sign_in:", 8) ? "signing in to" : "installing", agent + 1, ctx->name);
+    fflush(stderr);
+}
 /* Runs every open step in order; state decides where a rerun resumes. */
 static json_object *guided(struct setup_ctx *ctx, const char *approve) {
     struct step_list list; const char *step; json_object *result, *data;
@@ -307,6 +324,7 @@ static json_object *guided(struct setup_ctx *ctx, const char *approve) {
     while ((step = first_open_step(ctx, &list))) {
         if (f_stopped) return cancelled(ctx);
         f_copy(current, sizeof(current), step);
+        announce(ctx, current);
         result = run_step(ctx, current, approve);
         if (!json_object_get_boolean(f_field(result, "ok"))) return result;
         json_object_put(result);
@@ -363,11 +381,37 @@ static unsigned open_flags(enum setup_kind kind) {
     if (kind == K_SETUP) return SETUP_CREATE;
     return kind == K_STATUS ? SETUP_READONLY : 0U;
 }
+/* ---- One argument: `remote setup DEST` ----
+ * A destination that is not a name ([USER@]HOST[:...]) names the setup after
+ * its host, as the control centre's form does; a word that is a valid name
+ * but has neither setup state nor an alias is its own destination. */
+static bool default_name(const char *destination, char name[128]) {
+    const char *host = strrchr(destination, '@');
+    size_t used = 0;
+    for (host = host ? host + 1 : destination; *host && *host != ':' && used < 63; host++)
+        if (isalnum((unsigned char)*host) || (used && strchr("_.-", *host))) name[used++] = *host;
+    name[used] = '\0';
+    return setup_name_valid(name);
+}
+static json_object *open_new(struct setup_ctx *ctx, const char *name, const char *config) {
+    json_object *result = setup_state_open(ctx, name, NULL, config, SETUP_CREATE);
+    const char *code = f_string(f_field(result, "error"), "code");
+    if (!code || strcmp(code, "setup_not_started")) return result;
+    json_object_put(result);
+    setup_state_close(ctx);
+    return setup_state_open(ctx, name, name, config, SETUP_CREATE);
+}
+
 /* ---- Upgrade mode: an enrolled alias without setup state (upgrade.c) ---- */
 /* Existing setup state always wins; otherwise an enrolled NAME is upgraded. */
 static json_object *open_context(struct setup_ctx *ctx, const struct setup_options *o) {
     const char *name = o->positional[0], *dest = o->positional[1], *config = o->values[OPT_SSH_CONFIG], *code;
+    static char derived[128];
     struct f_remote alias; json_object *result;
+    if (o->spec->kind == K_SETUP && !dest && !setup_name_valid(name) && f_target(name) && default_name(name, derived)) {
+        dest = name; name = derived;
+    }
+    if (o->spec->kind == K_SETUP && !dest && f_remote_load(name, &alias)) return open_new(ctx, name, config);
     if (o->spec->kind != K_SETUP || f_remote_load(name, &alias)) return setup_state_open(ctx, name, dest, config, open_flags(o->spec->kind));
     result = setup_state_open(ctx, name, dest, config, 0);
     code = f_string(f_field(result, "error"), "code");
@@ -466,6 +510,26 @@ static void print_setups(json_object *setups) {
         fputc('\n', stderr);
     }
 }
+/* A finished setup: what the host is ready for, and the one command that
+ * starts work there (with the agent setup signed in to, if any). */
+static void print_ready(json_object *data) {
+    json_object *steps = f_field(data, "steps");
+    const char *name = f_string(data, "name"), *agent = NULL;
+    size_t i;
+    for (i = 0; i < json_object_array_length(steps) && !agent; i++) {
+        const char *id = f_string(json_object_array_get_idx(steps, i), "id");
+        if (id && !strncmp(id, "sign_in:", 8) && !strcmp(f_string(json_object_array_get_idx(steps, i), "status"), "done")) agent = id + 8;
+    }
+    fputs("remote setup complete", stderr);
+    if (!name) { fputc('\n', stderr); return; }
+    fputs(": ", stderr); print_safe(name); fputs(" is ready\n", stderr);
+    fputs("next: start a head there, in a Git checkout on the host:\n  hydra fleet spawn ", stderr);
+    print_safe(name);
+    fputs(" --project /path/on/host -- BRANCH", stderr);
+    if (agent) { fputs(" --profile ", stderr); print_safe(agent); }
+    else fputs(" --no-agent", stderr);
+    fputs("\n  then follow it with hydra tui (Work shows it beside local heads)\n", stderr);
+}
 int setup_emit(json_object *result, bool json) {
     json_object *data = f_field(result, "data"), *error = f_field(result, "error");
     bool ok = json_object_get_boolean(f_field(result, "ok"));
@@ -476,7 +540,7 @@ int setup_emit(json_object *result, bool json) {
     if (!ok) print_error(error, data);
     else if (f_string(data, "usage")) { fputs("usage: ", stderr); print_safe(f_string(data, "usage")); fputc('\n', stderr); }
     if (f_field(data, "next")) print_next(f_field(data, "next"));
-    else if (ok && f_field(data, "steps")) fputs("remote setup complete\n", stderr);
+    else if (ok && f_field(data, "steps")) print_ready(data);
     fflush(stderr);
     return ok ? 0 : 1;
 }

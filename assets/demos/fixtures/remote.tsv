@@ -1,0 +1,3 @@
+HYDRA_FLEET_TUI	3
+T	build-box	responded	1	-	reachable	fresh	2026-11-14T10:00:00Z	4
+F	build-box	/work/search	bench-tuning	head_cccccccccccccccccccc	instance_cccccccccccccccccccc	running

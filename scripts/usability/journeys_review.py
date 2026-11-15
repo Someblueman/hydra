@@ -7,22 +7,62 @@ import re
 import time
 from pathlib import Path
 
-from usability.journey import Journey, prose
+from usability.journey import (
+    TOP_BAR,
+    Journey,
+    footer,
+    list_column,
+    page,
+    prose,
+    see_column,
+    see_footer,
+    select,
+)
 from usability.journeys_plan import (
     GREETING,
-    converse_and_validate,
+    converse_to_proposal,
     execute,
     listed_heads,
+    plan_page,
     provider_fixture,
+    talk,
     worker_diff,
 )
+
+
+def run_page(j: Journey) -> None:
+    """Select the run in the Work list (under the planning head that
+    launched it); its Run page shows beside the list."""
+    j.keys(b"1")
+    j.escape()
+    see_footer(j, "select")
+    select(j, "plan run ux")
+
+
+def run_next(j: Journey, *texts: str) -> str:
+    """What to do next with the selected run: its Run page's "Next" row. A
+    short screen cuts the Run page above that row (the steps and graph take
+    the rows), so there the same row is read from the Plan page of the
+    planning head that launched the run ("Runs it launched"), paged down."""
+    try:
+        return see_column(j, "Next", *texts, timeout=4)
+    except TimeoutError:
+        j.proof.append({"note": "the Run page's Next row is below the visible rows", "at_ns": time.monotonic_ns()})
+    select(j, "greeting")
+    plan_page(j)
+    for _ in range(6):
+        try:
+            return see_column(j, "Next", *texts, timeout=2)
+        except TimeoutError:
+            j.keys(b"\x1b[6~")
+    return see_column(j, "Next", *texts)
 
 
 def result_review(j: Journey) -> None:
     provider_fixture(j, GREETING)
     j.open()
-    converse_and_validate(j, "greeting")
-    run = execute(j, "greeting", "approved")
+    converse_to_proposal(j, "greeting")
+    run = execute(j, "greeting", "approved", 1)
     j.check((run / "state").read_text().strip() == "succeeded", "The approved run succeeded")
     delivery = json.loads(j.cli("workflow", "plan", "result", run.name))
     j.check(delivery["ok"], "Independent delivery verification passed")
@@ -37,44 +77,46 @@ def result_review(j: Journey) -> None:
     j.check(bool(j.command("git", "rev-parse", "--verify", "ux-verifier")),
             "Retiring the verifier kept its branch")
 
-    # Overview's run panel: the finished run, its worker and what to do next.
-    j.keys(b"\x1b\x1b3")
-    j.see_all("RUN / plan run ux-greeting", "succeeded")
-    j.see_all("Worker branch ux-worker holds the result", "hydra land ux-worker")
-    j.see("dismiss")
-    j.see("(retired)")
+    # The Run page: the finished run, its worker and what to do next.
+    run_page(j)
+    j.see_all("plan run ux-greeting", "succeeded")
+    run_next(j, "Worker branch ux-worker holds the result", "hydra land ux-worker", "dismiss")
+    j.escape()
+    see_footer(j, "select")
+    select(j, "plan run ux")
     # Work groups the run's heads under the planning conversation that launched it.
-    j.keys(b"1")
-    j.see_all("Heads in this project", "plan run ux-greeting")
     screen = j.screen()
-    j.check("ux-worker" not in screen.split("plan run ux-greeting")[0],
+    listing = "\n".join(list_column(screen))
+    j.check("ux-worker" not in listing.split("plan run ux")[0],
             "The worker head is not listed as a separate top-level head")
-    j.keys(b"j\r")
-    j.see_all("worker", "ux-worker")
-    j.see("retired")
+    j.keys(b"l")
+    # The retired verifier stays listed in its run; from 100 columns its
+    # agent column says it was retired.
+    screen = j.see_all("worker ux-w", "verifier", *(("retired",) if j.columns >= 100 else ()))
     # U15: a clean worktree holding a two-file commit must not read as no change.
-    screen = j.screen()
-    worker_rows = [line for line in screen.splitlines() if "ux-worker" in line]
+    worker_rows = [line for line in list_column(screen) if "worker" in line]
     j.check(not any(" 0 files" in row or "0 changed" in row for row in worker_rows),
             "The worker's committed two-file change is not summarised as zero files")
-    j.keys(b"j\r")
-    details = j.see("Details: ux-worker")
-    j.expect("x  dismiss" in details or "x remove" in details,
-             "Worker details offer removing the worker head (dismissing the result)")
-    j.check("0 changed files" not in details and "not yet committed" in details,
+    select(j, "worker ux-w")
+    see_footer(j, "x remove")
+    details = page(j, b"]", "CHANGES", "Full diff")
+    j.check("0 changed files" not in details and "notyetcommitted" in "".join(prose(details).split()),
             "Worker details label uncommitted changes separately from the task's diff")
     # U15: the task's full diff is one action away and shows the committed files.
     j.keys(b":")
-    j.see("INPUT TO HYDRA")
-    j.keys(b"diff\r")
-    j.see_all("+++ b/greeting.txt", "+++ b/lib/greet.sh", f"+{GREETING}")
-    j.see("Press Enter to return to Hydra")
+    j.see("type to filter")
+    j.keys(b"diff")
+    j.see("Show diff of the selected head")
     j.keys(b"\r")
-    j.see("HYDRA /")
+    j.see_all("+++ b/greeting.txt", "+++ b/lib/greet.sh", f"+{GREETING}")
+    j.expect("Press Enter to return" not in j.screen(), "The diff opens inside Hydra, not in a shell detour")
+    j.escape()
+    j.see_all(*TOP_BAR, "plan run ux")
 
-    # Attention: the result, then its review.
-    j.keys(b"I")
-    j.see_all("Result ready for review", "ux-greeting")
+    # Inbox: the result, then its review.
+    j.keys(b"2")
+    j.see_all("Result ready: ux-greeting", "Ready to land: ux-worker")
+    select(j, "Result ready: ux-greeting")
     j.keys(b"r")
     j.see("verdict PASS")
     screen = review_section(j, "WHAT WAS CHECKED")
@@ -96,12 +138,13 @@ def result_review(j: Journey) -> None:
 
 
 def review_section(j: Journey, heading: str, presses: int = 16) -> str:
-    """Move through review sections with n until heading is at the top, or
-    as high as the end of the review allows."""
+    """Move through review sections with n until heading is at the top of
+    the review (under its identity lines), or as high as the end of the
+    review allows."""
     screen = j.screen()
     for _ in range(presses):
         rows = screen.splitlines()
-        if any(heading in row for row in rows[3:7]):
+        if any(heading in row for row in rows[3:9]):
             return screen
         j.keys(b"n")
         time.sleep(0.3)
@@ -121,8 +164,8 @@ def review_section(j: Journey, heading: str, presses: int = 16) -> str:
 def recovery(j: Journey) -> None:
     provider_fixture(j, "Hello from Hydar", fixed=GREETING)
     j.open()
-    converse_and_validate(j, "greeting")
-    run = execute(j, "greeting", "first")
+    converse_to_proposal(j, "greeting")
+    run = execute(j, "greeting", "first", 1)
     j.check((run / "state").read_text().strip() == "failed", "The first run failed its check")
     j.check((run / "steps/repo-check/state").read_text().strip() == "failed",
             "The repository check step is the one that failed")
@@ -132,20 +175,28 @@ def recovery(j: Journey) -> None:
     j.until(lambda: "finished: failed" in notices.read_text(), 30,
             "The planning agent was told the run failed")
 
-    # Plain-language failure in the run panel and in Attention.
-    j.keys(b"\x1b\x1b3")
-    j.see_all("RUN / plan run ux-greeting", "failed")
-    j.expect_see("Step repo-check failed on ux-worker",
-                 "The run panel names the failed step and its head")
-    j.keys(b"I")
-    # Wait for the loaded list (an item Attention offers for this run).
-    screen = j.see_all("[Attention]", "ux-greeting")
-    rows = [line.lower() for line in screen.splitlines() if "repo-check" in line]
+    # Plain-language failure on the Run page and in the Inbox.
+    run_page(j)
+    j.see_all("plan run ux-greeting", "failed")
+    j.expect(bool(run_next(j, "Step repo-check failed on ux-worker")),
+             "The Run page names the failed step and its head")
+    j.escape()
+    j.keys(b"2")
+    # Wait for the loaded list (an item the Inbox offers for this run).
+    screen = j.see_all("Failed", "ux-greeting")
+    rows = [line.lower() for line in screen.splitlines() if "repo-check" in line or "failed" in line.lower()]
     j.expect(any("fail" in row for row in rows),
-             "Attention lists the failed repository check in plain language")
-    # Review whichever item Attention offers for this run; the result is the run's.
+             "The Inbox lists the failed repository check in plain language")
+    # Review the failure the Inbox offers for this run; the result is the run's.
+    select(j, "ux-greeting")
     j.keys(b"r")
-    screen = j.see("RESULT  ux-greeting")
+    screen = j.see_any("RESULT  ux-greeting", "r loads exact review")
+    if "r loads exact review" in screen:
+        # The item changed under the review while the run's records landed;
+        # the review says to load it again, and r does.
+        j.proof.append({"note": "the review asked to be loaded again", "at_ns": time.monotonic_ns()})
+        j.keys(b"r")
+        screen = j.see("RESULT  ux-greeting")
     j.expect("verdict FAILED" in screen, "The review states the run's verdict as failed")
     screen = review_section(j, "WHAT WAS CHECKED")
     rows = [line for line in screen.splitlines() if "greeting-committed" in line]
@@ -155,25 +206,20 @@ def recovery(j: Journey) -> None:
     j.expect("Ran: sh checks/greeting.sh" in screen, "The review shows the failed check's command")
     j.expect('committed greeting.txt says "Hello from Hydar"' in prose(screen),
              "The review summarises the failing log line")
-    j.keys(b"\x1b\x1b")
+    j.escape(2)
 
-    # Supported recovery: the agent already has the failure; ask it for a fix,
-    # validate the new revision and execute it with one key.
+    # Supported recovery: the agent already has the failure; ask it for a fix
+    # and approve the new revision with one key and its confirmation.
     j.keys(b"1")
-    j.see("greeting")
-    j.keys(b"a")
-    j.see("Typing goes to the agent")
-    j.attached = True
+    j.escape()
+    see_footer(j, "select")
+    select(j, "greeting")
+    j.attach_agent()
     j.see("FIXTURE RECEIVED HYDRA NOTICE")
-    j.keys(b"fix\r")
-    j.see("PROPOSAL FIX READY")
-    j.keys(b"\x02\t")
-    j.attached = False
-    j.keys(b"B")
-    j.see("unvalidated")
-    j.keys(b"V")
-    j.see("awaiting approval")
-    second = execute(j, "greeting", "fixed")
+    j.leave_agent()
+    talk(j, "fix", "PROPOSAL FIX READY")
+    plan_page(j)
+    second = execute(j, "greeting", "fixed", 2)
     j.check((second / "state").read_text().strip() == "succeeded",
             "The corrected revision succeeded")
     j.check(json.loads(j.cli("workflow", "plan", "result", second.name))["ok"],
@@ -183,5 +229,4 @@ def recovery(j: Journey) -> None:
             "The recovered worker branch holds the corrected change")
     j.check((run / "state").read_text().strip() == "failed",
             "The failed run's record is kept, not rewritten")
-
-
+    j.check(footer(j.screen()) != "", "The control centre is still up after recovery")

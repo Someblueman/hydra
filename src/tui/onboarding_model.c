@@ -90,13 +90,6 @@ static void header(const struct sj_doc *d, struct onb_envelope *e, int exit_stat
     text_at(d, 0, "error.recovery", e->recovery, sizeof(e->recovery));
 }
 
-void onb_envelope_only(struct onb_envelope *e, const char *text, size_t length, int exit_status) {
-    struct doc doc;
-    if (!doc_open(&doc, text, length)) { memset(e, 0, sizeof(*e)); e->exit_status = exit_status; return; }
-    header(&doc.d, e, exit_status);
-    doc_close(&doc);
-}
-
 /* ---- Candidates ---- */
 
 static void source_ref(const struct sj_doc *d, int token, struct onb_source_ref *s) {

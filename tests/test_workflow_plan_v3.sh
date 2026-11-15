@@ -9,7 +9,21 @@ case "$fixture_native" in /*) ;; *) fixture_native="$root/$fixture_native" ;; es
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 active_branch=
+# A failed check exits through set -e without a word; say which case, run
+# and state it was, with the run's own output.
+report_failure() {
+    [ -n "${mode+set}" ] || return 0
+    printf 'Workflow v3 case "%s" failed (expected %s, report %s): run %s, state %s\n' \
+        "$mode" "$expected" "$report_verdict" "${run:-none}" "${state:-unknown}" >&2
+    for diagnostic in "$fixture/run-$mode.out" "$fixture/run-$mode.err" "${run_dir:+$run_dir/events.jsonl}"; do
+        [ -s "$diagnostic" ] || continue
+        printf -- '--- %s\n' "${diagnostic##*/}" >&2
+        tail -n 30 "$diagnostic" >&2
+    done
+}
 cleanup() {
+    status=$?
+    [ "$status" -eq 0 ] || report_failure
     [ -z "$active_branch" ] || "$root/bin/hydra" kill "$active_branch" --force >/dev/null 2>&1 || true
     rm -rf "$fixture"
 }
@@ -44,6 +58,7 @@ git init -q; git config user.name Test; git config user.email test@example.inval
 run_case() {
     mode=$1; expected=$2; report_verdict=$3
     branch="plan-smoke-${mode:-ok}"
+    run='' state='' run_dir=
     active_branch=$branch
     cp "$fixture/plan.base.json" "$fixture/plan.json"
     fixture_json v3-mode "$fixture/plan.json" "$mode" "$branch"
@@ -52,7 +67,7 @@ run_case() {
     "$root/bin/hydra" workflow plan check-definition "$fixture/compiled.json" check >/dev/null
     "$root/bin/hydra" workflow plan check-recipe "$fixture/compiled.json" check >/dev/null
     digest=$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$fixture/compile-$mode.json")
-    HYDRA_V3_FAULT="$mode" "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run-$mode.out" 2>/dev/null || true
+    HYDRA_V3_FAULT="$mode" "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run-$mode.out" 2> "$fixture/run-$mode.err" || true
     [ -n "$(sed -n '1p' "$fixture/run-$mode.out")" ]
     run=$(sed -n '1p' "$fixture/run-$mode.out")
     run_dir=$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print -quit)

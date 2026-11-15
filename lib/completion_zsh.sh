@@ -177,7 +177,7 @@ _hydra() {
                     _arguments '--fix[Auto-fix detected issues]' '--fix-permissions[Remove group/other write from your own Hydra state]'
                     ;;
                 tui)
-                    _arguments '--basic[Use the maintained shell TUI]' '--capabilities[Show TUI capability diagnostics]'
+                    _arguments '--capabilities[Show TUI capability diagnostics]'
                     ;;
                 template)
                     _arguments '1:subcommand:(list create show edit delete)'

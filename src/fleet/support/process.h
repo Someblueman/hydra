@@ -24,4 +24,6 @@ void f_capture_free(struct f_capture *cap);
 int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap);
 int f_run_controlled(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control);
 char *f_quote(const char *value);
+/* Removes Git configuration injected through the environment from this process. */
+void f_git_isolate_config(void);
 #endif

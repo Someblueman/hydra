@@ -40,6 +40,28 @@ static int fleet_record(struct model *model, char **fields, char *error, size_t 
     copy_text(head->age, sizeof(head->age), "-");
     return 0;
 }
+/* "-" or the exit status of the agent, at most three digits. */
+static bool agent_exit_field(const char *text) {
+    size_t length = strspn(text, "0123456789");
+    return !strcmp(text, "-") || (length && length <= 3U && !text[length]);
+}
+
+/* The optional trailing fields of a local head row: its terminal mode and,
+ * after it, the status its agent exited with ("-" while none is recorded). */
+static int head_trailing(struct head *head, size_t count, char **fields, char *error, size_t error_size) {
+    if (count > 30U && strcmp(fields[30], "interactive") && strcmp(fields[30], "headless")) {
+        copy_text(error, error_size, "native data contains an invalid terminal mode");
+        return -1;
+    }
+    if (count > 31U && !agent_exit_field(fields[31])) {
+        copy_text(error, error_size, "native data contains an invalid agent exit status");
+        return -1;
+    }
+    if (count > 30U) copy_text(head->terminal, sizeof(head->terminal), fields[30]);
+    if (count > 31U && strcmp(fields[31], "-")) copy_text(head->agent_exit, sizeof(head->agent_exit), fields[31]);
+    return 0;
+}
+
 static int head_record(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
     struct head *head;
     if (model->head_count >= MAX_HEADS) {
@@ -80,12 +102,7 @@ static int head_record(struct model *model, size_t count, char **fields, char *e
     copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
     copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
     copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
-    if (count > 30U && strcmp(fields[30], "interactive") && strcmp(fields[30], "headless")) {
-        copy_text(error, error_size, "native data contains an invalid terminal mode");
-        return -1;
-    }
-    if (count > 30U) copy_text(head->terminal, sizeof(head->terminal), fields[30]);
-    return 0;
+    return head_trailing(head, count, fields, error, error_size);
 }
 
 static int host_record(struct model *model, char **fields, char *error, size_t error_size) {
@@ -238,7 +255,7 @@ static int fleet_record_line(struct model *model, const struct stream_state *sta
 }
 
 static int local_record_line(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
-    if ((count == 30U || count == 31U) && !strcmp(fields[0], "H")) return head_record(model, count, fields, error, error_size);
+    if (count >= 30U && count <= 32U && !strcmp(fields[0], "H")) return head_record(model, count, fields, error, error_size);
     if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
     return 1;
 }

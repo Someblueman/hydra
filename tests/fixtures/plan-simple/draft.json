@@ -1,0 +1,11 @@
+{
+  "plan": "simple-1",
+  "objective": "Add a greeting file and a test for it",
+  "steps": [
+    {"id": "implement", "agent": "Create greeting.txt with a friendly greeting and tests/greeting.sh that fails unless it is non-empty."},
+    {"id": "check", "run": ["make", "check"], "needs": ["implement"]}
+  ],
+  "done_when": [
+    {"criterion": "make check passes with the new test", "check": "check"}
+  ]
+}

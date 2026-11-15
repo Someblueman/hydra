@@ -57,19 +57,7 @@ done:
     free(bytes); return status;
 }
 static int rt_hash_bytes(const char *bytes, size_t used, char digest[65]) {
-    struct f_capture cap = {0}; int status = -1;
-    char *args[] = {"shasum", "-a", "256", NULL};
-    if (f_run(args, bytes, used, 30, &cap)) goto done;
-    if (cap.status == 127) {
-        char *gnu[] = {"sha256sum", NULL}; f_capture_free(&cap);
-        if (f_run(gnu, bytes, used, 30, &cap)) goto done;
-    }
-    if (cap.status || cap.out_bytes < 64) goto done;
-    memcpy(digest, cap.out, 64); digest[64] = '\0';
-    if (!task_hex(digest, 64)) goto done;
-    status = 0;
-done:
-    f_capture_free(&cap); return status;
+    f_sha256_text(bytes, used, digest); return 0;
 }
 static void references(json_object *value, json_object *refs, unsigned depth);
 static void reference_object(json_object *value, json_object *refs, unsigned depth) {

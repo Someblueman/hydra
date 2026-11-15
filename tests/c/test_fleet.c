@@ -77,8 +77,37 @@ static void ssh_reasons(void) {
     f_ssh_reason("bad\033[31m line\n", reason, 6);
     assert(!strcmp(reason, "bad?["));
 }
+/* Multibyte UTF-8 parses on every json-c version; malformed UTF-8 never does. */
+static void json_utf8(void) {
+    json_object *obj;
+    obj = f_parse("{\"a\":\"caf\xc3\xa9 \xe2\x9a\xa0 \xf0\x9f\x98\x80\"}");
+    assert(obj && !strcmp(f_string(obj, "a"), "caf\xc3\xa9 \xe2\x9a\xa0 \xf0\x9f\x98\x80")); json_object_put(obj);
+    assert(!f_parse("{\"a\":\"\xff\"}")); assert(!f_parse("{\"a\":\"\xe2\x9a\"}"));
+    assert(!f_parse("{\"a\":\"\x80\"}")); assert(!f_parse("{\"a\":\"x\xc3"));
+    assert(!f_parse("{\"a\":\"\xc0\x80\"}")); assert(!f_parse("{\"a\":\"\xed\xa0\x80\"}"));
+    assert(!f_parse("{\"a\":\"\xf4\x90\x80\x80\"}")); assert(!f_parse("{\"\xc3\xa9\":1,\xc3\xa9}"));
+    obj = f_parse("{\"\xc3\xa9\":\"q\\\"\xc3\xa9\\\\\xe2\x9a\xa0\"}");
+    assert(obj && !strcmp(f_string(obj, "\xc3\xa9"), "q\"\xc3\xa9\\\xe2\x9a\xa0")); json_object_put(obj);
+}
 #include "test_fleet_attention.inc"
 #include "test_fleet_discovery.inc"
+#include "test_fleet_sha256.inc"
+#include "test_fleet_capture.inc"
+/* Hydra 2.x, 3.x and 4.x share fleet protocol 1; other majors are refused. */
+static void handshake_versions(void) {
+    const char *accepted[] = {"2.1.0", "3.0.0", "4.0.0"}, *refused[] = {"1.9.0", "5.0.0", "40.0.0"};
+    size_t i;
+    for (i = 0; i < 6; i++) {
+        const char *version = i < 3 ? accepted[i] : refused[i - 3];
+        char text[256];
+        json_object *data;
+        (void)snprintf(text, sizeof(text), "{\"hydra_version\":\"%s\",\"fleet_protocol\":1,\"state_schema\":2,"
+                       "\"event_schema\":1,\"json_schema\":1,\"capabilities\":[]}", version);
+        assert((data = f_parse(text)));
+        assert(f_handshake_compatible(data) == (i < 3));
+        json_object_put(data);
+    }
+}
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -86,8 +115,12 @@ int main(void) {
     char *hang[] = {(char *)"sleep", (char *)"10", NULL};
     assert(mkdtemp(dir)); f_home = dir; f_hydra = "hydra";
     capture_streams();
+    sha256_vectors(dir);
+    capture_growth(dir);
+    handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
+    json_utf8();
     quoted = f_quote("a'b;$(touch nope)"); assert(quoted && !strcmp(quoted, "'a'\\''b;$(touch nope)'")); free(quoted);
     assert(!f_target("-oProxyCommand=evil") && !f_target("host;evil") && f_target("ubuntu@example.test"));
     assert(!f_run(echo, "literal input", 13, 2, &cap));

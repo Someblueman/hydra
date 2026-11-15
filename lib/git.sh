@@ -175,6 +175,24 @@ validate_worktree_path() {
     return 0
 }
 
+# Removes Git configuration injected through the environment (GIT_CONFIG_COUNT
+# with its GIT_CONFIG_KEY_<n> and GIT_CONFIG_VALUE_<n> pairs, and
+# GIT_CONFIG_PARAMETERS) from this shell and every command it starts, so a
+# result review or a landing reads only the repository's, the user's and the
+# system's Git configuration. The native review helper does the same.
+# Usage: git_isolate_config
+git_isolate_config() {
+    _gic_count="${GIT_CONFIG_COUNT:-0}"
+    case "$_gic_count" in ''|*[!0-9]*) _gic_count=0 ;; esac
+    [ "${#_gic_count}" -le 4 ] && [ "$_gic_count" -le 4096 ] || _gic_count=4096
+    _gic_index=0
+    while [ "$_gic_index" -lt "$_gic_count" ]; do
+        unset "GIT_CONFIG_KEY_$_gic_index" "GIT_CONFIG_VALUE_$_gic_index"
+        _gic_index=$((_gic_index + 1))
+    done
+    unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+}
+
 # Check if a git branch exists
 # Usage: git_branch_exists <branch_name>
 # Returns: 0 if exists, 1 if not

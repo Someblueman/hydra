@@ -1,0 +1,1 @@
+{"schema_version":1,"envelope":{"hosts":["local"],"tools":["sh","git","make","profile:codex"],"effects":["execute","worktree"],"writes":["@spawned:*"],"parallelism":1,"timeout_seconds":3600,"artifact_bytes":1048576,"max_heads":4,"disk_mb":1024,"retry_budget":0,"repair_budget":0}}

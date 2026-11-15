@@ -5,7 +5,7 @@ Installs this checkout into a private prefix (as the usability runner under scri
 drives the installed native TUI over a PTY through the states in flows.py at
 80x24 and 140x40 in the dark, light and no-colour themes, keeps the raw byte
 stream of every state, renders each through the product's own terminal
-interpreter (termviz-cells) to HTML and SVG with exact colours, runs the
+interpreter (kettle-cells) to HTML and SVG with exact colours, runs the
 layout lint and writes one contact sheet: OUTPUT/index.html.
 """
 
@@ -138,7 +138,7 @@ def install(output: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--cells", type=Path, required=True, help="the termviz-cells executable")
+    parser.add_argument("--cells", type=Path, required=True, help="the kettle-cells executable")
     parser.add_argument("--baseline", type=Path, help="an earlier output directory for before/after columns")
     parser.add_argument("--flow", choices=tuple(flows.FLOWS), nargs="+", default=list(flows.FLOWS))
     parser.add_argument("--theme", choices=THEMES, nargs="+", default=list(THEMES))

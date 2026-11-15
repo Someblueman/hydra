@@ -80,7 +80,11 @@ Observation and measurement (item 10, statistics): the task owner records
 telemetry block 1 in every receipt, statistics schema 5 and export schema 3 add
 remote cohorts, and the first Linux container baseline is published with
 provisional budgets. The concurrent headless observation defect it found (item 10
-finding 1, runs ending `observation_unavailable`) is fixed.
+finding 1, runs ending `observation_unavailable`) is fixed. Unreleased: feed
+schema 6 carries those `T` rows beside head-session `H` rows (export schema 4),
+and the Statistics view no longer points at this roadmap for what it does not
+measure: it says which receipts measured CPU and memory and that local steps and
+interactive sessions are not measured.
 
 Automated acceptance: `make test-acceptance` runs the Acceptance sentences of U1,
 U2, U3, U6, U7, U8, U9, U12, U13, U15 and U17 against a fresh installation;
@@ -139,7 +143,7 @@ Open after 3.0.0, by what each item still needs:
   `avahi-browse` on a real LAN; onboarding a real multi-host fleet through the
   operator view; a real host key rotation.
 - **Statistics:** telemetry from real remote hosts and provider cost figures.
-- **Standalone termviz:** the user's publication decision.
+- **Standalone kettle:** the user's publication decision.
 
 These priorities do not establish a release date; compatibility impact still
 determines the next version.
@@ -401,13 +405,20 @@ an acceptance blocker, not optional cosmetic polish.
       The UI remains the interaction surface, accurately reflects each outcome, and
       never requires a successful-action shell detour or a return-to-UI keypress.
 
-- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics currently
-      drops the other tabs and shows an empty recorded-workflow dashboard while an
-      agent session exists. Retain the common navigation, selected work and a clear
-      return path. Explain which activity is covered: a standalone agent session is
-      not automatically a recorded workflow run. Show relevant available activity,
-      distinguish no history from filters excluding data or unsupported measurements,
-      and avoid large empty charts and unexplained `unavailable` fields. Acceptance:
+- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics keeps the
+      common navigation, the selected work and a clear return path. It now covers
+      head sessions as well as recorded workflow runs: every start or resume of a
+      head is listed with its length and the time its terminal was active, quiet
+      or unobserved, sessions per day are charted, and a project without runs
+      opens on its sessions instead of an empty workflow dashboard. Activity is
+      inferred from tmux window output while a control centre is open and is
+      labelled as inferred; observed coverage is shown, unobserved time is never
+      called quiet, unknown values are `--`, "no history" is told apart from
+      "filtered out", and empty charts are not drawn. Still open: tokens and cost
+      for interactive sessions (they need each provider's own session records),
+      activity while no control centre is running, the workflow-runs page's own
+      empty charts, and the redesign of the screen. Headless and remote heads are
+      deliberately not inferred; their owners report exact status. Acceptance:
       navigate to and from statistics during standalone agent work and a recorded
       workflow, with both empty and populated history, without losing context.
 - [x] **U14 — Faithful, readable agent output.** The supplied output capture contains
@@ -1440,14 +1451,14 @@ or claim that source reachability proves host health. Keep shared multi-user
 inventory and automatic failover outside this slice until their authority and
 reconciliation contracts are separately approved.
 
-## Native workspace and standalone termviz track
+## Native workspace and standalone kettle track
 
 This track develops dependency-free C terminal infrastructure, using Hydra as its
 first real consumer and eventual standalone release as the direction. Existing
 visualization architecture and limits are documented in the native helper
-behavior in [workflows.md](workflows.md) and the [termviz module guide](../src/termviz/README.md).
+behavior in [workflows.md](workflows.md) and the [kettle module guide](../src/kettle/README.md).
 
-Termviz owns reusable rendering, layout, input routing, and terminal screen
+Kettle owns reusable rendering, layout, input routing, and terminal screen
 interpretation. Hydra owns agent/workflow semantics and authoritative actions.
 Keep OS-specific terminal lifecycle and PTY process handling in small adapters,
 separate from the portable core. Add no third-party dependencies. Preserve the
@@ -1455,12 +1466,12 @@ shell-only path, current CLI/state contracts, and tmux authority for Hydra heads
 the standalone shell example does not introduce a competing Hydra execution owner.
 
 Milestones 1–8 are implemented: the workspace foundation and embedded shell
-(see the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset),
+(see the [terminal contract](../src/kettle/TERMINAL.md) for the qualified subset),
 the Hydra workspace with conversation-first planning, comprehensive overview,
 monitoring and statistics layouts (A–D), integrated working terminals, operational
 views, interaction and visual polish, a recorded real-workflow exercise, and local
-standalone source readiness (`make test-termviz-export`; see
-[ownership and compatibility boundaries](../src/termviz/STANDALONE.md)). Codex CLI
+standalone source readiness (`make test-kettle-export`; see
+[ownership and compatibility boundaries](../src/kettle/STANDALONE.md)). Codex CLI
 0.153.3 is the qualified agent in the recorded local configuration.
 
 Installed-build feedback on 13 September reopened product, visual and real-workflow
@@ -1484,19 +1495,21 @@ implementation checks do not establish that the experience is product-ready.
       test-workflow-metrics`, `tests/test_workflow_statistics.sh`,
       `tests/test_workflow_task.sh`); telemetry from real remote hosts and any
       provider cost figures remain operator observations, and transport time is
-      not recorded by the protocol.
-- [ ] Standalone termviz release. Darwin 25.6.0 arm64 (Apple Clang 17, UBSan) and
+      not recorded by the protocol. *Unreleased:* feed schema 6 keeps these rows
+      beside the head-session `H` rows and exports schema 4; the Statistics view
+      drops its pointer to this roadmap for unmeasured resources.
+- [ ] Standalone kettle release. Darwin 25.6.0 arm64 (Apple Clang 17, UBSan) and
       Linux aarch64 (Debian GCC 12.2, ASan/UBSan) passed standalone component/PTY
       checks on 8 September 2026; other platforms remain unqualified. Publication
       needs a separate release decision; local readiness does not authorize
       repository creation, pushing or publication. *3.0.0:* `make
-      test-termviz-export` re-run on Linux x86_64 (Ubuntu GCC 13.3, no sanitizer)
-      with the 3.0 tree and the [STANDALONE.md](../src/termviz/STANDALONE.md)
+      test-kettle-export` re-run on Linux x86_64 (Ubuntu GCC 13.3, no sanitizer)
+      with the 3.0 tree and the [STANDALONE.md](../src/kettle/STANDALONE.md)
       boundaries reviewed as current; the publication decision stays with the
       user and nothing here creates a repository or publishes a package.
 
-Full terminal compatibility, a broad widget catalogue, new telemetry collection and
-remote execution changes require their own bounded scope.
+Full terminal compatibility, a broad widget catalogue and remote execution changes
+require their own bounded scope.
 
 ## Simplification alongside feature work
 
@@ -1510,8 +1523,8 @@ remote execution changes require their own bounded scope.
       for dataflow; make any structured-parser dependency an explicit toolchain
       decision rather than growing ad hoc YAML or shell interpolation.
 - [ ] Present historical heads as inspectable history with explicit restore, not as
-      live workers. Preserve the dashboard and shell-only TUI; expand views only for
-      a concrete operator need rather than requiring decorative frontend parity.
+      live workers. Preserve the dashboard; expand views only for a concrete
+      operator need rather than requiring decorative frontend parity.
 
 There is no usage evidence yet to justify deleting a major shipped feature. Review
 actual workflows and maintenance cost before proposing removal. Revisit storage or

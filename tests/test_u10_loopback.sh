@@ -18,12 +18,20 @@ root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-u10-loopback}"
 tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-u10-loopback}"
 build="${BUILD_DIR:?BUILD_DIR is required: run via make test-u10-loopback}"
-cells="$build/termviz-cells"
+cells="$build/kettle-cells"
 
 skip() { printf 'SKIP U10 loopback: %s\n' "$1"; exit 0; }
 if [ "$(id -u)" -ne 0 ]; then
     if [ -z "${U10_ELEVATED:-}" ] && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-        exec sudo -n -E env "PATH=$PATH" U10_ELEVATED=1 sh "$0" "$@"
+        # The elevated run gets what it needs as env arguments: sudo may keep
+        # none of the environment (sudo-rs, Ubuntu's sudo from 26.04, ignores -E).
+        set -- "PATH=$PATH" U10_ELEVATED=1 "BUILD_DIR=$build" "HYDRA_FLEET_BIN=$fleet" "HYDRA_TUI_BIN=$tui"
+        for _u10_name in LANG LC_ALL LC_CTYPE TERM TMPDIR TMUX_TMPDIR; do
+            eval "_u10_set=\${$_u10_name+set} _u10_value=\${$_u10_name-}"
+            # shellcheck disable=SC2154
+            [ -z "$_u10_set" ] || set -- "$@" "$_u10_name=$_u10_value"
+        done
+        exec sudo -n env "$@" sh "$0"
     fi
     skip "needs root or passwordless sudo to create a throwaway account and run sshd"
 fi

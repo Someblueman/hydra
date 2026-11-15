@@ -7,12 +7,14 @@ session + one git worktree per branch ("head"). Library code lives in `lib/*.sh`
 tests are POSIX shell scripts in `tests/*.sh` plus C tests in `tests/c/`.
 Optional native helpers are built with `make build-core build-tui build-fleet`;
 fleet additionally needs JSON-C development files and pkg-config at build time.
+`hydra tui` has no shell fallback: without the `build-tui` helper it prints how to
+get one and exits 1 (`hydra list` and `hydra switch` work without it).
 
 ### Toolchain
 - Required to run/lint/test: `git`, `tmux` (>= 3.0), `dash`, `shellcheck`, GNU `make`.
   `/bin/sh` is `dash` on this VM, which is exactly what the POSIX-compliance checks
   assume, so tests run under dash by default.
-- Optional (improve UX, not required for tests): `fzf` (interactive `switch`/`tui`),
+- Optional (improve UX, not required for tests): `fzf` (interactive `switch`),
   `gh` (GitHub issue/PR features), and an AI CLI such as `claude`/`aider`/`gemini`.
 
 ### Lint / Test / Run (standard commands, see `Makefile` and `README.md`)

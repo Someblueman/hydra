@@ -1,6 +1,7 @@
 #ifndef HYDRA_FLEET_SUPPORT_FILES_H
 #define HYDRA_FLEET_SUPPORT_FILES_H
 #include "fleet/fleet.h"
+#include "fleet/support/sha256.h"
 
 /* Strings are borrowed and output buffers caller-owned. Free f_read/f_hex_read results. */
 int f_path(char *dst, size_t size, const char *a, const char *b);
@@ -8,7 +9,16 @@ int f_mkdirs(const char *path);
 char *f_read(const char *path, size_t limit);
 int f_write(const char *path, const char *data, size_t size, bool replace);
 int f_copy(char *dst, size_t size, const char *value);
+/* Formats into dst; -1 when it does not fit. A function, not snprintf at
+ * each call site: with fortify on, macOS makes every snprintf a macro with a
+ * branch of its own. */
+#if defined(__GNUC__) || defined(__clang__)
+int f_format(char *dst, size_t size, const char *format, ...) __attribute__((format(printf, 3, 4)));
+#else
+int f_format(char *dst, size_t size, const char *format, ...);
+#endif
 bool f_name(const char *value);
+/* f_sha256_path: the digest of a file, following symlinks. */
 int f_hash(const char *path, char digest[65]);
 char *f_hex_read(const char *path);
 int f_remove_tree(const char *path);

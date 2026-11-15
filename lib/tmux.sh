@@ -132,24 +132,6 @@ tmux_clear_snapshot() {
     _TMUX_SNAPSHOT_PANES=""
 }
 
-# Latest window_activity timestamp for a session from the snapshot.
-# Usage: tmux_snapshot_window_activity <session>
-# Returns: unix timestamp or 0
-tmux_snapshot_window_activity() {
-    _sa_session="$1"
-    if [ -z "${_TMUX_SNAPSHOT_PANES:-}" ]; then
-        printf '%s' "0"
-        return 0
-    fi
-    printf '%s\n' "$_TMUX_SNAPSHOT_PANES" | awk -F '	' -v s="$_sa_session" '
-        $1 == s {
-            act = $4 + 0
-            if (act > max) max = act
-        }
-        END { print max + 0 }
-    '
-}
-
 # True if every pane in the session is marked pane_dead.
 # Usage: tmux_snapshot_session_dead <session>
 # Returns: 0 if all panes dead, 1 otherwise
@@ -413,7 +395,7 @@ write_session_launcher() {
     _wsl_q_shell="$(tmux_shell_quote "$_wsl_shell")"
     _wsl_banner="Hydra head $_wsl_branch | $_wsl_label | repo $_wsl_repo_name"
 
-    _wsl_names=""
+    _wsl_names="" _wsl_state_dir="" _wsl_instance=""
     {
         printf '#!/bin/sh\n'
         printf '# Hydra head launcher for %s. Identity and paths: hydra provenance %s\n' \
@@ -422,6 +404,10 @@ write_session_launcher() {
             _wsl_name="${_wsl_pair%%=*}"
             printf '%s=%s\n' "$_wsl_name" "$(tmux_shell_quote "${_wsl_pair#*=}")"
             _wsl_names="$_wsl_names $_wsl_name"
+            case "$_wsl_name" in
+                HYDRA_STATE_DIR) _wsl_state_dir="${_wsl_pair#*=}" ;;
+                HYDRA_INSTANCE_ID) _wsl_instance="${_wsl_pair#*=}" ;;
+            esac
         done
         [ -z "$_wsl_names" ] || printf 'export%s\n' "$_wsl_names"
         cat <<EOF
@@ -447,17 +433,27 @@ printf '%s\\n' $_wsl_q_details
 unset _hydra_sep
 EOF
         if [ -n "$_wsl_agent_command" ]; then
+            _wsl_q_exit="''"
+            [ -z "$_wsl_state_dir" ] || [ -z "$_wsl_instance" ] || \
+                _wsl_q_exit="$(tmux_shell_quote "$_wsl_state_dir/instances/$_wsl_instance/agent-exit")"
             cat <<EOF
 # The agent owns the terminal: Ctrl-C reaches only the agent, Ctrl-Z is
 # ignored, and this pane returns to a shell when the agent exits.
+# The instance's agent-exit record ("<status> <epoch>") says that it left:
+# starting clears an earlier one, and it is renamed into place when written.
+_hydra_exit=$_wsl_q_exit
+[ -z "\$_hydra_exit" ] || rm -f "\$_hydra_exit"
 trap '' TSTP
 trap : INT
 set -m 2>/dev/null || :
 $_wsl_agent_command
 _hydra_status=\$?
 trap - INT TSTP
+if [ -n "\$_hydra_exit" ] && _hydra_tmp="\$(mktemp "\${_hydra_exit%/*}/.hydra-tmp.XXXXXX" 2>/dev/null)"; then
+    { printf '%s %s\\n' "\$_hydra_status" "\$(date +%s)" > "\$_hydra_tmp" && mv -f "\$_hydra_tmp" "\$_hydra_exit"; } 2>/dev/null || rm -f "\$_hydra_tmp"
+fi
 printf 'Hydra: %s exited with status %s; this pane is now a shell for head %s.\\n' $_wsl_q_label "\$_hydra_status" $_wsl_q_branch
-unset _hydra_status
+unset _hydra_status _hydra_exit _hydra_tmp
 EOF
         fi
         if [ -n "$_wsl_default_command" ]; then

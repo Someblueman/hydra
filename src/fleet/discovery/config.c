@@ -97,19 +97,7 @@ static json_object *effective_parse(char *text) {
 /* Bind the entire effective policy without disclosing ProxyCommand arguments.
  * The public projection remains intentionally limited to non-secret fields. */
 static int policy_hash(const char *text, char hash[65]) {
-    struct f_capture cap = {0}; int status = -1;
-    char *argv[] = {"shasum", "-a", "256", NULL};
-    if (f_run(argv, text, strlen(text), 5, &cap)) goto done;
-    if (cap.status == 127) {
-        char *fallback[] = {"sha256sum", NULL};
-        f_capture_free(&cap);
-        if (f_run(fallback, text, strlen(text), 5, &cap)) goto done;
-    }
-    if (!cap.status && strlen(cap.out) >= 64 && strspn(cap.out, "0123456789abcdef") >= 64) {
-        memcpy(hash, cap.out, 64); hash[64] = '\0'; status = 0;
-    }
-done:
-    f_capture_free(&cap); return status;
+    f_sha256_text(text, strlen(text), hash); return 0;
 }
 json_object *hd_resolve(const char *target, const char *config, unsigned seconds) {
     struct f_capture cap = {0}; json_object *data = NULL, *result; char hash[65];

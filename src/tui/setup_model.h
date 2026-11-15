@@ -84,6 +84,16 @@ bool setup_status_finished(const char *status);
  * or newer) when preflight reported it as not ok; NULL otherwise. Keyed on
  * the requirement name, never on its detail text. */
 const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e);
+/* Requirements stop setup until they are installed: preflight reported
+ * prerequisite_missing, or a blocking requirement is not ok. */
+bool setup_preflight_blocked(const struct setup_envelope *e);
+/* An agent on the host can run now: on its PATH or at a recorded location. */
+bool setup_agent_usable(const struct setup_envelope *e);
+/* The agents screen's recommended row while no agent on the host is usable:
+ * the first choice whose agent this machine also runs (local, count names),
+ * else the first choice. Returns its row (the choice's index plus one), or 0
+ * (Continue setup) once an agent is usable or when nothing is offered. */
+size_t setup_recommended_row(const struct setup_envelope *e, const char *const local[], size_t count);
 /* First step that is neither done nor skipped, or NULL. */
 const struct setup_step *setup_open_step(const struct setup_envelope *e);
 /* One-line summary for a host list row. */

@@ -9,7 +9,14 @@ if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ] && [ "$(id -u)" = 0 ]; then
     printf 'SKIP plan repair fault injection: chmod 500 cannot refuse writes as root (uid 0); run as an unprivileged user to cover it. Running the case without the fault.\n'
     HYDRA_TEST_PLAN_REPAIR_FAULT=0
 fi
-fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
+# HYDRA_TEST_FIXTURE_DIR names a new fixture directory, so that two runs of a
+# case record the same paths (tests/test_workflow_driver_differential.sh).
+if [ -n "${HYDRA_TEST_FIXTURE_DIR:-}" ]; then
+    fixture="$HYDRA_TEST_FIXTURE_DIR"
+    (umask 077 && mkdir "$fixture")
+else
+    fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
+fi
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_FLEET_BIN

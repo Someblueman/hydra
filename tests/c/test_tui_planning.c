@@ -3,7 +3,9 @@
 #include "../../src/tui/task_name.h"
 #include "../../src/tui/plan_diagnostics.h"
 #include "../../src/tui/plan_summary.h"
+#include "../../src/tui/plan_draft.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures;
@@ -113,10 +115,35 @@ static void execution_cases(void) {
     check(!plan_summary_parse("Tools: sh\n", 10U, &s), "a preview without budgets has no approval summary");
 }
 
+/* A draft not validated yet, read in words from the JSON it was published
+ * as: the workflow schema (spawn, command and agent steps, the envelope's
+ * limits) and the simple form (agent instructions, a command to run). */
+static void draft_cases(void) {
+    static const char schema[] = "{\"schema_version\":1,\"objective\":\"x\",\"envelope\":{\"tools\":[\"sh\",\"profile:codex\"],"
+        "\"writes\":[],\"timeout_seconds\":181},\"steps\":[{\"id\":\"spawn\",\"role\":\"work\",\"kind\":\"spawn\",\"needs\":[],"
+        "\"args\":{\"branch\":\"plan-smoke\"}},{\"id\":\"compose\",\"role\":\"compose\",\"kind\":\"exec\",\"needs\":[\"spawn\"],"
+        "\"args\":{\"head\":\"plan-smoke\",\"argv\":[\"sh\",\"compose.sh\"],\"timeout\":30}},{\"id\":\"write\",\"role\":\"work\","
+        "\"kind\":\"exec\",\"args\":{\"head\":\"plan-smoke\",\"profile\":\"codex\",\"prompt\":\"Write the report.\",\"result_file\":\"r\"}}]}";
+    static const char simple[] = "{\"plan\":\"simple-1\",\"steps\":[{\"id\":\"implement\",\"agent\":\"Create greeting.txt.\"},"
+        "{\"id\":\"check\",\"run\":[\"make\",\"check\"],\"needs\":[\"implement\"]}]}";
+    struct plan_draft *d = calloc(1, sizeof(*d));
+    if (!d) { check(false, "draft account memory"); return; }
+    check(plan_draft_parse(schema, sizeof(schema) - 1U, d) && d->step_count == 3U && d->heads == 1U && d->minutes == 4U &&
+          !strcmp(d->tools, "sh, profile:codex") && !d->writes[0], "a schema draft names its steps, heads, tools and time limit");
+    check(!strcmp(d->steps[0].what, "starts a head on branch plan-smoke") && !strcmp(d->steps[1].what, "runs sh compose.sh in plan-smoke") &&
+          !strcmp(d->steps[2].what, "codex in plan-smoke: Write the report."), "each schema step says what it does, the worker's instructions too");
+    check(plan_draft_parse(simple, sizeof(simple) - 1U, d) && d->step_count == 2U && !strcmp(d->steps[0].kind, "agent") &&
+          !strcmp(d->steps[0].what, "Create greeting.txt.") && !strcmp(d->steps[1].what, "runs make check"),
+          "a simple draft gives the agent's instructions and the command it runs");
+    check(!plan_draft_parse("{\"broken\":", 10U, d) && !plan_draft_parse("[]", 2U, d), "a draft that is not a plan object is not summarised");
+    free(d);
+}
+
 int main(void) {
     branch_cases();
     profile_cases();
     summary_cases();
     execution_cases();
+    draft_cases();
     return failures ? 1 : 0;
 }

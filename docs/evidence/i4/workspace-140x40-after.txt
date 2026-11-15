@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / PLAN TOGETHER                                           Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  Attention  Recovery  Workflows  Statistics  [Workspace]  Hosts                                                   
-╭─ PROJECT ────────╮│╭─ SELECTED WORK ──────────────────────────────────────────────────────╮│╭─ DEPENDENCIES ────────────────────────────╮
-│ - This project   │││add-kill                                                              │││kill-dry-run / succeeded                   │
-│>  - add-kill     │││Session   running                                                     │││╭────────────────────╮     ╭───────────────│
-│     + plan run ki│││Agent     codex                                                       ││││ spawn-worker       │──┬─>│ implement     │
-│   └ notes-cleanup│││Where     this machine · this project                                 ││││ succeeded          │  │  │ succeeded     │
-│                  │││Changes   0 files not yet committed · 0 queued                        │││╰────────────────────╯  │  ╰───────────────│
-│                  │││Reported  nothing yet                                                 │││                        │                  │
-│                  │││                                                                      │││╭────────────────────╮  │                  │
-│                  │││                                                                      ││││ spawn-check        │──┘                  │
-│                  │││                                                                      ││││ succeeded          │                     │
-│                  │││                                                                      │││╰────────────────────╯                     │
-│                  │││a  talk to the agent here      Enter  full details                    ││╰───────────────────────────────────────────╯
-│                  │││:  more actions                d  technical details                   ││─────────────────────────────────────────────
-│                  │││                                                                      ││╭─ ACTIVITY ────────────────────────────────╮
-│                  │││                                                                      │││2 heads (+1 in runs) · 1 need attention · 1│
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││Selected add-kill · 3 events · 2 messages ·│
-│                  │││                                                                      │││Approval requests 0 of 0 approved · 0 queue│
-│                  │││                                                                      │││Claims 0 · scopes 0  (coordination with oth│
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││NEEDS REPAIR                               │
-│                  │││                                                                      │││Terminal stopped: notes-cleanup            │
-│                  │││                                                                      │││Recovery explains each finding and runs its│
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-│                  │││                                                                      │││                                           │
-╰──────────────────╯│╰──────────────────────────────────────────────────────────────────────╯│╰───────────────────────────────────────────╯
- Live                                                                                                                                      
- Tab pane  Enter details  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit                                 
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
+                                                                                                                                           
+ Heads ─────────────────────── 3  add-kill ──────────────────────── latest output · enter to talk  Details  Plan ────────────────────────  
+ ▌● add-kill           codex      ● running · codex                                                No plan on screen for this head.        
+    ▸ ✓ plan run kill… 4/4                                                                                                                 
+  ▲ notes-cleanup      claude     No terminal output yet.                                          L land worker…  r result review  s      
+                                                                                                   run status                              
+                                                                                                                                           
+                                                                                                   Runs it launched                        
+                                                                                                   Plan    plan 60c5133478a6 approved      
+                                                                                                           2026-09-26 10:21 UTC · run      
+                                                                                                           run_aaaaaaaaaaaaaaaaaaaa ·      
+                                                                                                           succeeded                       
+                                                                                                   Next    Worker branch kill-dry-run-wor  
+                                                                                                           ker holds the result: review    
+                                                                                                           (: diff) · land (hydra land     
+                                                                                                           kill-dry-run-worker) ·          
+                                                                                                           dismiss (x removes the worker   
+                                                                                                           head, keeps the branch)         
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  2 heads · 1 needs you                                                                                                                    
+  ● live   add-kill · running                                                                                                              
+ ↑/↓ select • enter/a talk • x remove • n new task • / filter • L location • tab/shift+tab pane • [/] page • : commands • ? help • q quit  

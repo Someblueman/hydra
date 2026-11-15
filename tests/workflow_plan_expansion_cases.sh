@@ -49,12 +49,12 @@ assert_success $? 'admission reports the round number'
 sha1="$(grep -o '"compiled_sha256":"[a-f0-9]*"' "$ROOT/admit1.json" | sed -n '1p' | sed 's/.*://; s/"//g')"
 # JSON escapes the slashes of the reported path.
 compiled1="$(grep -o '"compiled":"[^"]*"' "$ROOT/admit1.json" | sed -n '1p' | sed 's/^"compiled":"//; s/"$//; s|\\/|/|g')"
-[ -f "$compiled1" ] && [ "${#sha1}" -eq 64 ]
-assert_success $? 'the admitted round has a compiled artifact and digest'
+if [ -f "$compiled1" ] && [ "${#sha1}" -eq 64 ]; then check=0; else check=1; fi
+assert_success "$check" 'the admitted round has a compiled artifact and digest'
 chain_dir="$(dirname "$compiled1")"
 expansions="$(dirname "$chain_dir")"
-[ "$(basename "$expansions")" = "$run" ] && [ -f "$chain_dir/expansion.json" ] && [ -f "$chain_dir/proposal.json" ]
-assert_success $? 'the round lives under the head planning state of the base run'
+if [ "$(basename "$expansions")" = "$run" ] && [ -f "$chain_dir/expansion.json" ] && [ -f "$chain_dir/proposal.json" ]; then check=0; else check=1; fi
+assert_success "$check" 'the round lives under the head planning state of the base run'
 assert_equal 700 "$(stat -c %a "$chain_dir" 2>/dev/null || stat -f %Lp "$chain_dir")" 'round directories are private'
 assert_equal 600 "$(stat -c %a "$chain_dir/expansion.json" 2>/dev/null || stat -f %Lp "$chain_dir/expansion.json")" 'expansion records are private'
 grep -q '"effects":"artifact_only"' "$chain_dir/expansion.json" && grep -q '"joins":{"compose1":\["spawn1"\]}' "$chain_dir/expansion.json"
@@ -126,16 +126,16 @@ grep -q '^Expansion round 2 admitted' "$ROOT/admit2.txt" && grep -q 'join compos
 assert_success $? 'the text admission prints the chain with the frozen join'
 sha2="$(sed -n 's/^Round 2: [a-f0-9]*, not executed; run: hydra workflow plan run .* --accept \([a-f0-9]\{64\}\)$/\1/p' "$ROOT/admit2.txt")"
 compiled2="$expansions/round-2/compiled.json"
-[ "${#sha2}" -eq 64 ] && [ -f "$compiled2" ]
-assert_success $? 'the text view names the run command of the new round'
+if [ "${#sha2}" -eq 64 ] && [ -f "$compiled2" ]; then check=0; else check=1; fi
+assert_success "$check" 'the text view names the run command of the new round'
 "$HYDRA_BIN" workflow plan run "$compiled2" --accept "$sha2" > "$ROOT/run2.out" 2> "$ROOT/run2.err"
 assert_failure $? 'a failing branch fails the round run'
 run2="$(sed -n '1p' "$ROOT/run2.out")"
 "$HYDRA_BIN" workflow status "$run2" --json > "$ROOT/status2.json"
 grep -q '"state":"failed"' "$ROOT/status2.json" && grep -q '"step_id":"compose2","state":"cancelled","attempts":0' "$ROOT/status2.json"
 assert_success $? 'the join behind the failed branch never ran'
-[ ! -f "$(run_dir_of "$run2")/delivery.json" ]
-assert_success $? 'a skipped join produces no delivery'
+if [ ! -f "$(run_dir_of "$run2")/delivery.json" ]; then check=0; else check=1; fi
+assert_success "$check" 'a skipped join produces no delivery'
 expand_cli --json > "$ROOT/chain2.json"
 grep -q '"id":"third","kind":"new","of":null,"deliverable":"report3","status":"fail"' "$ROOT/chain2.json"
 assert_success $? 'the chain records the failed claim as failed, not unknown'

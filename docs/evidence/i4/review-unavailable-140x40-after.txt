@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ EXACT REVIEW / evidence / UNAVAILABLE                                                                                                   │
-│ kill-dry-run · implement                                                                                                                │
-│ Result · run run_2cdf8bbe1a4e · attempt-1 · not current                                                                                 │
-│ Review unavailable: failed, malformed or identity mismatch                                                                              │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- Esc back to the list  ? help  q quit                                                                                                      
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     EXACT REVIEW / evidence / UNAVAILABLE                                     
+  ◐ Approve merge-gate: notes-cleanup                            kill-dry-run · implement                                                  
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     Result · run run_2cdf8bbe1a4e · attempt-1 · not current                   
+ Failed 1                                                        Review unavailable: failed, malformed or identity mismatch                
+  ✗ Check failed: kill-dry-run                                                                                                             
+    run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…                                                                              
+ Ready for review 3                                                                                                                        
+ ▌✓ Result ready: kill-dry-run                                                                                                             
+ ▌  run run_2cdf8bbe1a4e · step implement · attempt 1 · new                                                                                
+  ✓ Result ready: feature-build                                                                                                            
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…                                                                              
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…                                                                              
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new                                                                                
+ Agents 1                                                                                                                                  
+  ▲ Terminal stopped: notes-cleanup                                                                                                        
+    worktree and files kept · R restarts it                                                                                                
+ Repairs 2                                                                                                                                 
+  ▲ (stale) Approval expired: docs-refresh                                                                                                 
+    run run_55aa66bb77cc · step release-gate · attempt 1                                                                                   
+  ▲ Needs inspection: index-rebuild                                                                                                        
+    run run_aa11bb22cc33 · on archive                                                                                                      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ scroll • space/b page • n/N section • plus add reference • tab/shift+tab pane • [/] page • : commands • esc back • ? help • q quit    

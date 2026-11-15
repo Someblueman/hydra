@@ -65,44 +65,8 @@ for n in $COUNTS; do
     _time_cmd "status" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" status"
     _time_cmd "doctor" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" doctor"
 
-    # TUI refresh (tui_build_list) without an interactive terminal
-    TUI_MS="$({
-        export HYDRA_HOME="$home"
-        export HYDRA_MAP="$home/map"
-        export HYDRA_LIB_DIR="$HYDRA_ROOT/lib"
-        # shellcheck disable=SC1091
-        . "$HYDRA_ROOT/lib/output.sh"
-        # shellcheck disable=SC1091
-        . "$HYDRA_ROOT/lib/locks.sh"
-        # shellcheck disable=SC1091
-        . "$HYDRA_ROOT/lib/tmux.sh"
-        # shellcheck disable=SC1091
-        . "$HYDRA_ROOT/lib/state.sh"
-        # shellcheck disable=SC1091
-        . "$HYDRA_ROOT/lib/tui.sh"
-        TUI_TEMP_LIST="$(mktemp)"
-        # Used by tui_build_list (sourced globals)
-        # shellcheck disable=SC2034
-        TUI_ITEM_COUNT=0
-        # shellcheck disable=SC2034
-        TUI_SELECTED=0
-        # shellcheck disable=SC2034
-        TUI_OFFSET=0
-        # shellcheck disable=SC2034
-        TUI_ROWS=24
-        # shellcheck disable=SC2034
-        TUI_ACTIVITY_DIR=""
-        _start="$(date +%s%N 2>/dev/null || date +%s)"
-        tui_build_list
-        _end="$(date +%s%N 2>/dev/null || date +%s)"
-        rm -f "$TUI_TEMP_LIST"
-        if [ ${#_start} -gt 10 ]; then
-            echo $(( (_end - _start) / 1000000 ))
-        else
-            echo $(( _end - _start ))
-        fi
-    })"
-    printf '  tui_build_list: %sms\n' "$TUI_MS"
+    # Control-centre refresh: the shell snapshot the native TUI reads
+    _time_cmd "tui --data" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" tui --data"
 
     (cd "$repo" && "$HYDRA_BIN" kill --all --force) >/dev/null 2>&1 || true
     # Kill only sessions recorded for this isolated HYDRA_HOME, never a

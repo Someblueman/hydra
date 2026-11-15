@@ -11,6 +11,7 @@
 #include "fleet/plan/plan.h"
 #include "fleet/workflow/workflow_task.h"
 #include "fleet/workflow/workflow_usage.h"
+#include "fleet/workflow/workflow_drive.h"
 #include "fleet/review.h"
 #include "fleet/review_task.h"
 #include "fleet/setup/setup.h"
@@ -52,14 +53,22 @@ static bool raw_workflow_task(int argc, char **argv, int *status) {
     else return false;
     return true;
 }
+/* Commands that need none of the process settings below. The run driver keeps
+ * the caller's locale and signal dispositions for the workers it starts. */
+static bool early_command(int argc, char **argv, int *status) {
+    if (argc == 2 && !strcmp(argv[1], "--version")) { puts("Hydra fleet protocol 1"); *status = 0; return true; }
+    if (argc < 2 || strcmp(argv[1], "workflow-drive")) return false;
+    *status = wdr_main(argc - 2, argv + 2);
+    return true;
+}
 int main(int argc, char **argv) {
     static char home[F_PATH]; json_object *result = NULL; int status;
     f_home = getenv("HYDRA_HOME"); f_hydra = getenv("HYDRA_BIN_CMD");
     if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return 1; f_home = home; }
     if (!f_hydra) f_hydra = "hydra";
+    if (early_command(argc, argv, &status)) return status;
     signal(SIGINT, stopped); signal(SIGTERM, stopped); signal(SIGHUP, stopped); signal(SIGPIPE, SIG_IGN);
     setenv("LC_ALL", "C", 1);
-    if (argc == 2 && !strcmp(argv[1], "--version")) { puts("Hydra fleet protocol 1"); return 0; }
     if (raw_workflow_task(argc, argv, &status)) return status;
     if (argc >= 2 && !strcmp(argv[1], "workflow-plan")) result = plan_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "workflow-review")) result = review_cli(argc - 2, argv + 2);

@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ ◆ hydra  1 Work   2 Inbox 2   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 2 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Ready for review 1                                              ✓ Ready to land: kill-dry-run-worker                                      
+ ▌✓ Ready to land: kill-dry-run-worker                           plan run kill-dry-run succeeded · L lands it                              
+ ▌  plan run kill-dry-run succeeded · L lands it                                                                                           
+ Agents 1                                                        What is waiting                                                           
+  ▲ Terminal stopped: notes-cleanup                              Plan run kill-dry-run succeeded; its result is on the worker branch       
+    worktree and files kept · R restarts it                      kill-dry-run-worker. L lands it: hydra land merges the commit its checks  
+                                                                 verified into your current branch, removes the worker head and keeps its  
+                                                                 branch. Nothing is pushed, and Hydra refuses while your checkout has      
+                                                                 tracked changes.                                                          
+                                                                                                                                           
+                                                                 Worker      kill-dry-run-worker                                           
+                                                                 Run         run_aaaaaaaaaaaaaaaaaaaa                                      
+                                                                 Planned by  add-kill                                                      
+                                                                                                                                           
+                                                                 L Land    o Open in Work                                                  
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   2 items need you · decisions first, then failures                                                                               
+ ↑/↓ select • enter open • L land • o open in Work • tab/shift+tab pane • [/] page • : commands • esc back • ? help • q quit               

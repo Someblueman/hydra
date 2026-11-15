@@ -1,0 +1,31 @@
+FRAME 1 100x30
+ # hydra  1 Work   2 Inbox .   3 Hosts   4 Stats               this machine / 3 heads / 1 running  
+                                                                                                   
+ Sessions  Runs ------------------------------------------------------- all recorded / all heads   
+                                                                                                   
+  Sessions                Active                  Quiet                   Unobserved               
+  5                       1h05m                   1h13m                   3h42m                    
+  1 open now              inferred from output    inferred, 53%           no Hydra open            
+                                                                                                   
+ Observed 38% of 6h00m; 10m00s reported, the rest inferred from output.                            
+ Known: Length 4/5, Observed 2/5, 1 undated, 0 outside range.                                      
+                                                                                                   
+ Head sessions ----------------------------------------------------------- 1 of 5 / newest first   
+  HEAD                 AGENT     STATE       STARTED      LENGTH  ACTIVE  QUIET                    
+> fix-login-timeout    codex     * open      09-07 13:00  1h00m   25m00s  23m00s                   
+  docs-refresh         opencode  + ended     09-07 10:00  2h00m   40m00s  50m00s                   
+  docs-refresh         opencode  r replaced  09-07 08:00  2h00m   --      --                       
+  nightly-import       codex     ! ended     09-06 13:06  1h00m   --      --                       
+  old-experiment       -         + ended     --           --      --      --                       
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+                                                                                                   
+  * live   Head sessions / all recorded / all heads                                                
+ ^/v select | enter evidence | [/] sessions/runs | T range | / filter | ? help | q quit            

@@ -7,15 +7,16 @@ help reads, and derives a discoverability score per goal."""
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from usability.journey import Journey, prose, sessions_of
+from usability.journey import LEFT_INPUT, TOP_BAR, TYPING, Journey, prose, sessions_of
 from usability.journeys_plan import finished_run, planning_converse, planning_prepare, runs
-from usability.policy import Reading, key_bytes, learned_tab_method, rank, read_screen
+from usability.policy import Reading, dialog, form_fields, key_bytes, learned_tab_method, page_strips, rank, read_screen
 
 Predicate = Callable[[str], bool]
 
@@ -52,6 +53,7 @@ class Trial:
         self.hints_read = 0
         self.help_open = False
         self.tab_method: str | None = None
+        self.page_keys = False  # learned once a footer or help names "[/] page"
         self.exhausted: dict[str, set[str]] = {}
         self.history: list[tuple[str, str]] = []
         self.unresponsive: list[str] = []
@@ -104,33 +106,54 @@ class Trial:
                     self.j.expect(False, f"The visible control '{label}' ({' '.join(keys)}) responds when pressed")
 
     def answer(self, reading: Reading, phase: Phase) -> bool:
-        """An open prompt: answer it from the goal's own words, confirm when the
-        goal is to go ahead, otherwise cancel (a dead end)."""
-        prompt = reading.prompt
-        if reading.prompt_kind == "text":
-            for pattern, value in phase.answers.items():
-                if pattern.lower() in prompt.lower():
-                    self.j.keys(value.encode() + b"\r")
-                    self.steps += 1
-                    self.fits += 1
-                    self.j.proof.append({"trial_answer": pattern, "value": value, "at_ns": time.monotonic_ns()})
-                    self.changed()
-                    return True
-        if reading.prompt_kind == "yes-no" and phase.confirm:
-            self.press(["y", "Enter"], "y/N confirm", "prompt", True)
+        """An open dialog: fill a form from the goal's own words, confirm when
+        the goal is to go ahead, otherwise cancel (a dead end). A command's
+        output closes with Esc, which its footer offers."""
+        if reading.prompt_kind == "form" and self.fill(reading, phase):
             return True
-        if reading.prompt_kind in ("yes-no", "text"):
+        if reading.prompt_kind == "yes-no" and phase.confirm:
+            self.press(["y"], "y confirm", "prompt", True)
+            return True
+        if reading.prompt_kind in ("yes-no", "form", "palette"):
             # A question the goal gives no answer to: cancel it, a dead end.
             self.dead_ends += 1
-            self.press(["Esc"], f"cancel the prompt: {prompt[:60]}", "prompt", False)
+            self.press(["Esc"], f"cancel the dialog: {reading.prompt[:60]}", "prompt", False)
             return True
         return False
+
+    def fill(self, reading: Reading, phase: Phase) -> bool:
+        """Each field in order: type the answer of a text field, move a choice
+        field to the answer it lists (Right from the first option), Tab to the
+        next; Enter submits. Fields the goal does not answer keep their value."""
+        fields = form_fields(reading.dialog)
+        answered = [(label, row, next((v for k, v in phase.answers.items() if k.lower() == label.lower()), None))
+                    for label, row in fields]
+        if not any(value is not None for _, _, value in answered):
+            return False
+        keys = b""
+        for label, row, value in answered:
+            options = [o for o in re.split(r"\s{2,}", row) if o]
+            if value is not None and len(options) > 1 and value in options:
+                keys += key_bytes("Right") * options.index(value)  # type: ignore[operator]
+            elif value:
+                keys += value.encode()
+            self.j.proof.append({"trial_answer": label, "value": value, "at_ns": time.monotonic_ns()})
+            keys += b"\t"
+        self.j.keys(keys[:-1] + b"\r")
+        self.steps += 1
+        self.fits += 1
+        self.changed()
+        return True
 
     def step(self, screen: str, phase: Phase) -> bool:
         self.before = screen
         reading = read_screen(screen, self.help_open)
         self.hints_read += len(reading.affordances)
         self.tab_method = learned_tab_method(reading, screen) or self.tab_method
+        self.page_keys = self.page_keys or any(
+            "[" in a.keys and "]" in a.keys and "page" in a.label for a in reading.affordances)
+        if self.page_keys and not reading.pages and not self.help_open:
+            reading.pages = page_strips(screen)
         digest = hashlib.sha256(body(screen).encode()).hexdigest()[:16]
         if reading.prompt and self.answer(reading, phase):
             return True
@@ -239,7 +262,7 @@ def start_task_setup(j: Journey) -> None:
 
 
 def start_task_verify(j: Journey) -> None:
-    j.attached = "Typing goes to the agent" in j.screen()
+    j.attached = TYPING in j.screen()
     listing = j.cli("list", "--json")
     j.check('"first-task"' in listing, "The head first-task exists after the trial")
     worktree = Path(j.cli("path", "first-task"))
@@ -280,10 +303,11 @@ def remove_verify(j: Journey) -> None:
 
 
 def removal_consequences(j: Journey, screen: str) -> None:
-    text = prose(screen)
-    if "Remove 1 head" in text and not getattr(j, "_removal_seen", False):
+    found = dialog(screen.splitlines())
+    text = " ".join(" ".join(found[1]).split()) if found else ""
+    if "Remove sample?" in text and not getattr(j, "_removal_seen", False):
         j._removal_seen = True  # type: ignore[attr-defined]
-        for phrase in ("closes the terminal", "deletes the worktree", "branch is kept"):
+        for phrase in ("Closes its terminal", "deletes its worktree", "The branch sample is kept"):
             j.expect(phrase in text, f"Removal asks before acting and explains: {phrase}")
 
 
@@ -293,8 +317,8 @@ def attention_setup(j: Journey) -> None:
 
 
 def attention_done(screen: str) -> bool:
-    rows = screen.splitlines()
-    return bool(rows) and "ATTENTION" in rows[0] and ("Nothing needs your attention" in screen or "need you" in screen)
+    """The Inbox is up and has read what waits (or that nothing does)."""
+    return "Needs you" in screen and ("Nothing needs you" in screen or " need you" in screen)
 
 
 def attention_verify(j: Journey) -> None:
@@ -307,13 +331,11 @@ def leave_setup(j: Journey) -> None:
     j.seed()
     j.open()
     j.see("sample")
-    j.keys(b"a")
-    j.see("Typing goes to the agent")
-    j.attached = True
+    j.attach_agent()
 
 
 def leave_verify(j: Journey) -> None:
-    j.attached = "Typing goes to the agent" in j.screen()
+    j.attached = TYPING in j.screen()
     j.check(bool(sessions_of(j)), "The agent's terminal session is still running")
     if j.attached:
         j.expect(typed_marker(j, Path(j.cli("path", "sample")), "trial-return"),
@@ -327,7 +349,7 @@ def approve_setup(j: Journey) -> None:
 
 
 def approve_done(screen: str) -> bool:
-    return "RUN RECORDED" in screen or "LAUNCH REQUESTED" in screen
+    return "RUN RECORDED" in screen or "LAUNCH REQUESTED" in screen or "validating it, then it runs" in screen
 
 
 def approve_verify(j: Journey) -> None:
@@ -338,15 +360,16 @@ def approve_verify(j: Journey) -> None:
 
 
 def approval_consequences(j: Journey, screen: str) -> None:
+    """The approval dialog, once seen: it names the exact revision and the
+    policy that bounds it, and says what happens before anything runs. The
+    plan's heads and steps are on the Plan page behind it."""
     text = prose(screen)
-    if "execution approval" in text and not getattr(j, "_approval_seen", False):
+    if "Approve and run" in text and not getattr(j, "_approval_seen", False):
         j._approval_seen = True  # type: ignore[attr-defined]
-        j.expect("Policy:" in text, "Approval shows the policy that bounds execution")
-        j.expect("digest" in text and "revision" in text, "Approval names the exact revision and digest")
-        j.expect("y executes exactly this validated revision" in text,
-                 "Approval says what y does before anything runs")
-        j.expect("head" in text.lower() or "spawn" in text.lower(),
-                 "Approval says which heads the plan creates")
+        j.expect("plan policy" in text, "Approval names the policy that bounds execution")
+        j.expect(re.search(r"revision \d+\?", text) is not None, "Approval names the exact revision")
+        j.expect("validates exactly this revision" in text and "nothing runs" in text,
+                 "Approval says what approving does, and when nothing runs, before anything runs")
 
 
 GOALS = {
@@ -354,8 +377,8 @@ GOALS = {
         "start-task",
         [Phase("Start work on a new task called first-task using a plain shell, no agent",
                ("start", "new", "task", "begin"),
-               lambda s: "Typing goes to the agent" in s,
-               answers={"Task name": "first-task", "Agent profile": "none", "Objective": ""})],
+               lambda s: TYPING in s,
+               answers={"Task": "first-task", "Agent": "none", "Objective": ""})],
         start_task_setup, start_task_verify),
     "why-stopped": Goal(
         "why-stopped",
@@ -364,22 +387,24 @@ GOALS = {
                stopped_explained),
          Phase("Open the full details of the head sample",
                ("detail", "full"),
-               lambda s: "Details: sample" in s and "kept" in prose(s))],
+               lambda s: "The terminal is gone" in s and "CHANGES" in s and "kept" in prose(s))],
         stopped_setup, why_stopped_verify),
     "find-attention": Goal(
         "find-attention",
         [Phase("Find out whether anything needs a decision from you",
-               ("attention", "decision", "needs"),
+               # The screen that lists what waits for a decision was "Attention";
+               # it is "Inbox" now, a word for what waits for you.
+               ("attention", "decision", "needs", "inbox"),
                attention_done)],
         attention_setup, attention_verify),
     "leave-return": Goal(
         "leave-return",
         [Phase("Stop typing to the agent and return to Hydra's own controls",
                ("leave", "return", "back", "hydra"),
-               lambda s: "Keys go to Hydra" in s or ("Typing goes to the agent" not in s and "HYDRA /" in s)),
+               lambda s: LEFT_INPUT in s or (TYPING not in s and all(t in s for t in TOP_BAR))),
          Phase("Go back to typing to the agent",
                ("agent", "talk", "attach", "reconnect", "conversation"),
-               lambda s: "Typing goes to the agent" in s)],
+               lambda s: TYPING in s)],
         leave_setup, leave_verify),
     "remove-stopped": Goal(
         "remove-stopped",

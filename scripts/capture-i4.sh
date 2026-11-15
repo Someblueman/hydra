@@ -1,6 +1,7 @@
 #!/bin/sh
-# Captures every I4 screen state (attention queue and detail, exact review,
-# details, recovery, run, result and failure screens) at 80x24 and 140x40 as
+# Captures every I4 screen state (Inbox: the attention list, an item's
+# Summary, Review, References and Technical pages and recovery findings;
+# details, run, result and failure screens) at 80x24 and 140x40 as
 # plain text from deterministic fixtures. tests/test_native_tui_i4.sh compares
 # a fresh capture with the committed docs/evidence/i4/*-after.txt files.
 # usage: scripts/capture-i4.sh TUI_BIN REPO_ROOT OUT_DIR LABEL
@@ -38,25 +39,27 @@ shotf() {
         "$tui" --headless-fixture "$fixture" --size "$size" "$@" > "$out/$name-$size-$label.txt" 2>&1
     done
 }
-# The attention queue with its realistic fixture, then any keys and reviews.
+# Inbox with the realistic attention fixture, then any keys and reviews. The
+# list is approval, failure, three results, the stopped terminal, the expired
+# approval and the item Hydra cannot classify, in that order.
 shota() {
     name="$1"; shift
     shot "$name" --attention-fixture "$f/attention-v3.tsv" --view attention "$@"
 }
 shota attention-list
-shota attention-detail-failure --keys "$enter"
+shota attention-detail-failure --keys "j$enter"
 shota attention-detail-result --keys "jj$enter"
-shota attention-detail-unknown --keys "jjjjjj$enter"
+shota attention-detail-unknown --keys "jjjjjjj$enter"
 shot attention-empty --attention-fixture "$work/attention-empty.tsv" --view attention
 shot attention-stale --attention-fixture "$f/attention-v3.tsv" --attention-fixture "$work/attention-broken.tsv" --view attention
 shot attention-unavailable --attention-fixture "$work/attention-broken.tsv" --view attention
 shot attention-loading --view attention
-shota review-failure --review-fixture "$f/review-failure.tsv"
+shota review-failure --keys j --review-fixture "$f/review-failure.tsv"
 shota review-result --keys jj --review-fixture "$f/review-result.tsv"
 shota review-result-changes --keys jj --review-fixture "$f/review-result.tsv" --keys nnnnn
-shota review-references --keys jj --review-fixture "$f/review-result.tsv" --keys f
-shota review-reference-preview --keys jj --review-fixture "$work/review-result-log.tsv" --keys "f$enter"
-shota review-identity --keys jj --review-fixture "$f/review-result.tsv" --keys i
+shota review-references --keys jj --review-fixture "$f/review-result.tsv" --keys "]"
+shota review-reference-preview --keys jj --review-fixture "$work/review-result-log.tsv" --keys "]$enter"
+shota review-identity --keys jj --review-fixture "$f/review-result.tsv" --keys "]]"
 shota review-log --keys jj --review-fixture "$work/review-result-log.tsv" --keys L
 shota review-unavailable --keys jj --review-fixture "$work/review-mismatch.tsv"
 shot work-list --workflow-fixture "$f/workflow-runs.tsv" --view heads
@@ -67,12 +70,15 @@ shot details-stopped --workflow-fixture "$f/workflow-runs.tsv" --view detail --t
 shot details-technical --workflow-fixture "$f/workflow-runs.tsv" --diagnostics --task kill-dry-run-worker
 shotf details-remote "$f/native-v2.tsv" --remote-fixture "$f/remote-v3.tsv" --view detail --task archive/feature-index
 shotf details-task "$f/native-v2.tsv" --remote-fixture "$f/remote-v3.tsv" --view detail --task task_build
-shotf recovery-list "$f/native-v2.tsv" --view recovery
-shotf recovery-detail "$f/native-v2.tsv" --view recovery --diagnostics
+shotf recovery-list "$f/native-v2.tsv" --view recovery --keys "jj$enter"
+shotf recovery-detail "$f/native-v2.tsv" --view recovery --diagnostics --keys "jj$enter"
+# A plan run that succeeded with its worker still listed is ready to land.
+shot inbox-land --workflow-fixture "$f/workflow-runs.tsv" --attention-fixture "$work/attention-empty.tsv" --view inbox
 shot overview-run --workflow-fixture "$f/workflow-runs.tsv" --view overview
 shot overview-run-live --workflow-fixture "$f/workflow-runs-running.tsv" --view overview
 shot overview-empty-run --view overview
 shot workflows --workflow-fixture "$f/workflow-runs.tsv" --view workflows
+shot work-plan --workflow-fixture "$f/workflow-runs.tsv" --view workspace
 shot workspace --workflow-fixture "$f/workflow-runs.tsv" --view workspace
 shot workspace-enter --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys "$tab$enter"
 shot workspace-monitor --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys C

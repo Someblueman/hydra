@@ -23,7 +23,24 @@ static bool delivery_role(json_object *plan, json_object *d, const char *role) {
     return !strcmp(role, "compose") && !strcmp(destination, "run-artifact");
 }
 static bool executable_recipe(json_object *plan, json_object *step, const char *method) {
-    return f_number_is(plan, "schema_version", 2) || !method || strcmp(method, "executable") || f_field(f_field(step, "args"), "argv");
+    return f_number_is(plan, "schema_version", 2) || !method || (strcmp(method, "executable") && strcmp(method, "command")) ||
+        f_field(f_field(step, "args"), "argv");
+}
+/* A command check's report is written by Hydra from its exit status and the
+ * commit it ran on, so it is schema 1 only and its subject is the commit an
+ * agent step on the same head recorded. */
+static bool known_method(json_object *plan, const char *method) {
+    if (!method) return false;
+    if (!strcmp(method, "command")) return f_number_is(plan, "schema_version", 1);
+    return !strcmp(method, "executable") || !strcmp(method, "assessment");
+}
+static void command_subject(json_object *plan, json_object *check, json_object *step, json_object *producer, const char *output, json_object *errors) {
+    const char *method = f_string(check, "method");
+    const char *head = f_string(f_field(step, "args"), "head"), *agent_head = f_string(f_field(producer, "args"), "head");
+    if (!method || strcmp(method, "command")) return;
+    if (!output || strcmp(output, "commit") || !f_string(f_field(producer, "args"), "profile") || !head || !agent_head || strcmp(head, agent_head) ||
+        !plan_spawns(f_field(plan, "steps"), head))
+        plan_error(errors, "checks", "invalid_verification", "a command check runs on a head the plan creates and consumes the commit output of an agent step on that head");
 }
 static void check_ownership(json_object *requirements, const char *check, json_object *errors) {
     if (!check) return; /* Missing IDs are rejected by structural validation. */
@@ -54,8 +71,9 @@ static void coverage(json_object *plan, json_object *errors) {
         json_object *ref = input && f_string(c, "step") ? f_field(f_field(f_field(f_field(f_field(plan, "data"), "steps"), f_string(c, "step")), "inputs"), input) : NULL;
         json_object *report = output(plan, f_string(c, "step"), f_string(c, "report"));
         const char *producer = f_string(ref, "step"), *name = f_string(ref, "output");
-        if (!method || (strcmp(method, "executable") && strcmp(method, "assessment")))
-            plan_error(errors, "checks", "unsupported_evaluation", "evaluation methods are executable and assessment; human judgment needs a separate authorized stage");
+        if (!known_method(plan, method))
+            plan_error(errors, "checks", "unsupported_evaluation", "evaluation methods are executable, assessment and (schema 1) command; human judgment needs a separate authorized stage");
+        command_subject(plan, c, step, record(steps, producer), name, errors);
         if (!d || !role || strcmp(role, "verify") || !plan_text(f_field(c, "definition")) || !plan_id(input) || !plan_id(f_string(c, "report")) ||
             !producer || !name || !f_string(d, "step") || !f_string(d, "output") || strcmp(producer, f_string(d, "step")) || strcmp(name, f_string(d, "output")) ||
             !f_string(report, "type") || strcmp(f_string(report, "type"), "object") ||
@@ -70,18 +88,6 @@ static void coverage(json_object *plan, json_object *errors) {
         if (!plan_text(f_field(r, "criterion")) || !d || !c || !f_string(c, "deliverable") || strcmp(f_string(c, "deliverable"), f_string(d, "id")))
             plan_error(errors, "requirements", "uncovered_requirement", "every requirement needs an explicit criterion and a check for its final deliverable");
     }
-}
-static void dependencies(json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {
-    size_t n = json_object_array_length(steps), i, j, k;
-    for (i = 0; i < n; i++) {
-        json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs");
-        for (j = 0; j < json_object_array_length(needs); j++) {
-            int index = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-            if (index < 0) plan_error(errors, "steps.needs", "missing_dependency", "dependency does not name a step");
-            else reach[i][index] = true;
-        }
-    }
-    for (k = 0; k < n; k++) for (i = 0; i < n; i++) for (j = 0; j < n; j++) reach[i][j] = reach[i][j] || (reach[i][k] && reach[k][j]);
 }
 static void write_conflicts(json_object *writes, json_object *other_writes, json_object *errors) {
     size_t a, b;
@@ -100,7 +106,7 @@ static void profile_handoff(json_object *plan, json_object *s, json_object *erro
 int plan_graph(json_object *plan, json_object *errors) {
     bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
     json_object *steps = f_field(plan, "steps"); size_t n = json_object_array_length(steps), i, j;
-    dependencies(steps, reach, errors);
+    plan_reachability(steps, reach, errors);
     for (i = 0; i < n; i++) {
         json_object *s = json_object_array_get_idx(steps, i), *writes = f_field(s, "writes");
         const char *head = f_string(f_field(s, "args"), "head"); unsigned producers = 0;

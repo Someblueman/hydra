@@ -132,7 +132,8 @@ cases() {
     rm -f "$fixture/tty-commands" "$fixture/curl-calls" "$fixture/logins"
     out="$fixture/out"
     base='"host_key":{"status":"done"},"preflight":{"status":"done"},"provision":{"status":"done"}'
-    write_state n1 "$base"
+    # n1's preflight reported the remote HOME, as a real one does.
+    write_state n1 '"host_key":{"status":"done"},"preflight":{"status":"done","detail":{"home":"'"$AGENTS_REMOTE_HOME"'"}},"provision":{"status":"done"}'
 
     # Inventory through the receiver; nothing selected without a terminal.
     run 0 "$out" agents n1 --json
@@ -140,6 +141,7 @@ cases() {
     has "$out" '"profile":"claude","executable":"claude","on_path":null,"candidates":\[\],"recorded":null,"status":"missing"'
     has "$out" '"agent":"claude","status":"missing","install_argv":\["hydra","remote","install-agent","n1","--agent","claude","--json"\]'
     has "$out" '"selected":\[\]'
+    has "$(state n1)" '"summary":"0 usable, 0 off PATH, 0 selected"'
     [ "$(step_status n1 agents)" = "done" ] || fail "agents step not done"
 
     # No recipe for launch-only agents: manual instructions, nothing selected.
@@ -154,6 +156,8 @@ cases() {
     has "$out" '"docs_url":"https:\\/\\/code.claude.com\\/docs\\/en\\/setup"'; has "$out" '"source":"built-in"'
     has "$out" '"id":"install_agent:claude","status":"approval_required"'
     has "$(state n1)" '"selected":\["claude"\]'
+    # Choosing an agent counts it in the step's summary at once.
+    has "$(state n1)" '"summary":"0 usable, 0 off PATH, 1 selected"'
     hash="$(json_value "$out" plan_sha256)"
     [ "${#hash}" -eq 64 ] || fail "no plan hash"
     if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "an unapproved installer ran"; fi
@@ -162,6 +166,12 @@ cases() {
     in_tty 'n
 ' "$out" install-agent n1 --agent claude
     has "$out" 'approval_declined'
+    # The terminal plan reads as one: a title, labelled rows, and none of the
+    # members that only identify the plan for its hash.
+    has "$out" 'Install claude on n1'
+    has "$out" 'Command  *umask 022; curl -fsSL https://claude.ai/install.sh | bash'
+    has "$out" 'Recipe  *built into this Hydra release'; has "$out" 'Installs into  *~/.local/bin'
+    lacks "$out" 'schema_version'; lacks "$out" 'kind: install_agent'
     if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "a declined installer ran"; fi
 
     # A failing installer is recorded and changes nothing else.
@@ -189,9 +199,15 @@ cases() {
     path="$AGENTS_REMOTE_HOME/.local/bin/claude"
     [ -x "$path" ] || fail "installer did not create claude"
     [ -n "$(find "$path" -prune -perm 755)" ] || fail "installer under remote umask 002 left claude group-writable"
-    has "$out" '"installed_by_hydra":true'; has "$out" '"recorded":false'
-    has "$out" "\"next\":{\"step\":\"agents\",\"argv\":\[\"hydra\",\"remote\",\"agents\",\"n1\",\"--record\",\"claude=$(printf '%s' "$path" | sed 's|/|\\\\/|g')\",\"--json\"\]"
+    # ~/.local/bin is where the approved plan said it installs: the location
+    # is recorded without a second question or a --record step.
+    has "$out" '"installed_by_hydra":true'; has "$out" '"recorded":true'
+    lacks "$out" '"--record"'
+    [ "$(cat "$AGENTS_REMOTE_HOME/.hydra/agents/locations/claude")" = "$path" ] || fail "the planned location was not recorded"
     [ "$(step_status n1 install_agent:claude)" = "done" ] || fail "install not done"
+    # The agents step counts the installed, recorded agent as usable.
+    has "$(state n1)" '"summary":"1 usable, 0 off PATH, 1 selected"'
+    lacks "$(state n1)" '"summary":"0 usable'
     before="$(lines "$fixture/tty-commands")"
     run 0 "$out" install-agent n1 --agent claude --json
     [ "$(lines "$fixture/tty-commands")" = "$before" ] || fail "a finished install ran again"
@@ -267,6 +283,13 @@ cases() {
     has "$out" '"id":"install_agent:claude","status":"skipped"'; has "$out" '"code":"tty_required"'
     in_tty '' "$out" setup n2 --json
     has "$out" '"id":"sign_in:claude","status":"done"'; has "$out" '"id":"alias","status":"done"'
+    # On a terminal without --json each step says what it starts, and the
+    # finished setup names the command that starts a head with that agent.
+    write_state n3 "$base"',"agents":{"status":"done","detail":{"selected":["claude"]}}'
+    in_tty '' "$out" setup n3
+    has "$out" '[.][.][.] signing in to claude on n3'; has "$out" '[.][.][.] verifying the connection to n3'
+    has "$out" 'remote setup complete: n3 is ready'
+    has "$out" 'hydra fleet spawn n3 --project /path/on/host -- BRANCH --profile claude'
 }
 
 (umask 022; cases 022)

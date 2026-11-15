@@ -115,13 +115,63 @@ static void write_recorded_text(FILE *out, const char *label, const struct hs_mo
     }
 }
 
+/* JSON export schema: 4 adds head sessions (feed schema 6), 3 added the
+ * location filter, remote block, cohorts and telemetry (feed schema 5), 2
+ * added the recorded metrics (feed schema 3). */
+static unsigned export_version(unsigned feed) {
+    return feed >= 6 ? 4U : feed >= 5 ? 3U : feed >= 3 ? 2U : 1U;
+}
+
+static const char *sum_state(size_t eligible, size_t known) {
+    if (!eligible) return "unavailable";
+    if (!known) return "unknown";
+    return known == eligible ? "known" : "partial";
+}
+
+/* A sum over the sessions that reported it; never a number when none did. */
+static void write_session_sum(FILE *out, const char *name, size_t eligible, size_t known, uint64_t sum) {
+    fprintf(out, ",\"%s\":{\"state\":\"%s\",\"eligible\":%zu,\"known\":%zu,\"sum\":", name, sum_state(eligible, known), eligible, known);
+    if (known) fprintf(out, "%llu}", (unsigned long long)sum);
+    else fputs("null}", out);
+}
+
+static void write_fraction(FILE *out, const char *name, uint64_t part, uint64_t whole) {
+    fprintf(out, ",\"%s\":", name);
+    if (whole) fprintf(out, "%.9g", (double)part / (double)whole);
+    else fputs("null", out);
+}
+
+/* Head sessions: lengths, and time active, quiet and unobserved. Active and
+ * quiet are inferred from terminal output except for the reported seconds. */
+static void write_sessions(FILE *out, const struct hs_model *m, const struct hs_filter *filter) {
+    struct hs_session_summary s;
+    uint64_t observed;
+    size_t day;
+    hs_session_summarize(m, filter, &s);
+    observed = s.active_sum + s.quiet_sum;
+    fprintf(out, ",\"sessions\":{\"scope\":\"head_sessions\",\"count\":%zu,\"open\":%zu,\"undated\":%zu", s.sessions, s.open, s.undated);
+    fprintf(out, ",\"length_seconds\":{\"state\":\"%s\",\"eligible\":%zu,\"known\":%zu", sum_state(s.sessions, s.length_known), s.sessions, s.length_known);
+    if (s.length_known) fprintf(out, ",\"sum\":%llu,\"mean\":%llu,\"max\":%llu}", (unsigned long long)s.length_sum,
+                                (unsigned long long)(s.length_sum / s.length_known), (unsigned long long)s.length_max);
+    else fputs(",\"sum\":null,\"mean\":null,\"max\":null}", out);
+    write_session_sum(out, "active_seconds", s.sessions, s.activity_known, s.active_sum);
+    write_session_sum(out, "quiet_seconds", s.sessions, s.activity_known, s.quiet_sum);
+    write_session_sum(out, "unobserved_seconds", s.sessions, s.coverage_known, s.unobserved_sum);
+    write_session_sum(out, "reported_seconds", s.sessions, s.coverage_known, s.reported_sum);
+    write_fraction(out, "observed_fraction", observed, s.coverage_known ? observed + s.unobserved_sum : 0);
+    write_fraction(out, "quiet_fraction_of_observed", s.quiet_sum, observed);
+    fputs(",\"started_daily\":[", out);
+    for (day = 0; day < 7; day++) fprintf(out, "%s%zu", day ? "," : "", s.daily[day]);
+    fputs("],\"inference\":{\"source\":\"tmux\",\"confidence\":\"inferred\",\"exact\":\"reported_seconds\"}}", out);
+}
+
 static bool write_one(FILE *out, const struct hs_model *m,
                       const struct hs_filter *filter) {
     enum hs_metric metric;
     struct hs_summary cohort;
     hs_summarize(m, filter, &cohort);
     fprintf(out, "{\"schema_version\":%u,\"availability\":\"known\",\"observed\":%llu,\"filter\":{\"days\":%u,\"attention\":%s,\"query\":",
-            m->schema_version >= 5 ? 3U : m->schema_version >= 3 ? 2U : 1U,
+            export_version(m->schema_version),
             (unsigned long long)m->observed, filter->days, filter->attention ? "true" : "false");
     hs_json_string(out, filter->query);
     fputs(",\"workflow\":", out); hs_json_string(out, filter->workflow);
@@ -137,6 +187,7 @@ static bool write_one(FILE *out, const struct hs_model *m,
     }
     fputc('}', out);
     write_recovery_outcomes(out, m, filter);
+    if (m->schema_version >= 6) write_sessions(out, m, filter);
     if (m->schema_version >= 3) {
         fputs(",\"recorded\":{\"unknown_receiver_outcomes\":", out);
         write_recorded_metric(out, m, filter, 0);
@@ -183,7 +234,7 @@ bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
     if (!out || !left || !right || !filter) return false;
     hs_summarize(left, filter, &lc); hs_summarize(right, filter, &rc);
     fprintf(out, "{\"schema_version\":%u,\"availability\":\"known\",\"left\":",
-            left->schema_version >= 5 || right->schema_version >= 5 ? 3U : left->schema_version >= 3 || right->schema_version >= 3 ? 2U : 1U);
+            export_version(left->schema_version > right->schema_version ? left->schema_version : right->schema_version));
     write_one(out, left, filter);
     fputs(",\"right\":", out);
     write_one(out, right, filter);
@@ -199,6 +250,16 @@ bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
     return !ferror(out);
 }
 
+static void write_sessions_text(FILE *out, const char *label, const struct hs_model *model,
+                                const struct hs_filter *filter) {
+    struct hs_session_summary s;
+    hs_session_summarize(model, filter, &s);
+    fprintf(out, "%s sessions count=%zu open=%zu length_known=%zu length_sum=%llu activity_known=%zu active_sum=%llu quiet_sum=%llu coverage_known=%zu unobserved_sum=%llu reported_sum=%llu inferred_from=tmux\n",
+            label, s.sessions, s.open, s.length_known, (unsigned long long)s.length_sum, s.activity_known,
+            (unsigned long long)s.active_sum, (unsigned long long)s.quiet_sum, s.coverage_known,
+            (unsigned long long)s.unobserved_sum, (unsigned long long)s.reported_sum);
+}
+
 static void write_text_cohort(FILE *out, const char *label, const struct hs_model *model,
                               const struct hs_filter *filter) {
     struct hs_summary cohort;
@@ -211,6 +272,7 @@ static void write_text_cohort(FILE *out, const char *label, const struct hs_mode
             label, recovered.eligible, recovered.successes + recovered.failures,
             recovered.successes, recovered.failures, recovered.unknown, recovered.missing_history);
     if (model->schema_version >= 3) write_recorded_text(out, label, model, filter);
+    if (model->schema_version >= 6) write_sessions_text(out, label, model, filter);
     for (enum hs_metric metric = HS_QUEUE; metric < HS_METRICS; metric++) {
         struct hs_metric_summary value;
         hs_metric_summarize(model, filter, metric, &value);

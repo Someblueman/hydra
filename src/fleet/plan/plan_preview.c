@@ -103,6 +103,34 @@ static void preview_obligations(json_object *plan, FILE *out) {
     json_object_put(obligations); json_object_put(reviews);
 }
 
+/* A proposal asset runs as written, so the review shows its text: the first
+ * lines, each bounded without splitting a UTF-8 sequence, control bytes blanked. */
+#define PLAN_ASSET_PREVIEW_LINES 40U
+#define PLAN_ASSET_PREVIEW_WIDTH 200U
+static void asset_line(const char *line, size_t length, FILE *out) {
+    size_t shown = length, i;
+    if (shown > PLAN_ASSET_PREVIEW_WIDTH) {
+        shown = PLAN_ASSET_PREVIEW_WIDTH;
+        while (shown && ((unsigned char)line[shown] & 0xC0) == 0x80) shown--;
+    }
+    fputs("      | ", out);
+    for (i = 0; i < shown; i++) fputc((unsigned char)line[i] < 32 || line[i] == 127 ? ' ' : line[i], out);
+    fputs(shown < length ? " [...]\n" : "\n", out);
+}
+static void asset_preview(json_object *compiled, const char *path, FILE *out) {
+    const char *text = strncmp(path, "assets/", 7) ? NULL : f_string(f_field(compiled, "assets"), path + 7);
+    size_t lines = 0;
+    if (!text) return;
+    fprintf(out, "    text:\n");
+    while (*text) {
+        size_t length = strcspn(text, "\n");
+        if (lines++ < PLAN_ASSET_PREVIEW_LINES) asset_line(text, length, out);
+        text += length + (text[length] == '\n');
+    }
+    if (lines > PLAN_ASSET_PREVIEW_LINES)
+        fprintf(out, "      [...] %zu more lines (full text: workflow plan show <compiled.json> --json)\n", lines - PLAN_ASSET_PREVIEW_LINES);
+}
+
 static bool preview_inputs(json_object *compiled, FILE *out) {
     json_object *inputs = f_field(f_field(compiled, "data"), "inputs");
     if (!inputs) return true;
@@ -110,10 +138,11 @@ static bool preview_inputs(json_object *compiled, FILE *out) {
     json_object_object_foreach(inputs, name, decl) {
         const char *origin = f_string(decl, "source");
         if (!f_string(decl, "path") || !task_hex(f_string(decl, "sha256"), 64)) return false;
-        if (origin && !strcmp(origin, "bundle"))
+        if (origin && !strcmp(origin, "bundle")) {
             fprintf(out, "Input %s: carried by this plan as %s, %lld bytes at most (%s)\n", name, f_string(decl, "path"),
                 (long long)json_object_get_int64(f_field(decl, "max_bytes")), f_string(decl, "sha256"));
-        else fprintf(out, "Input %s: %s (%s)\n", name, f_string(decl, "path"), f_string(decl, "sha256"));
+            asset_preview(compiled, f_string(decl, "path"), out);
+        } else fprintf(out, "Input %s: %s (%s)\n", name, f_string(decl, "path"), f_string(decl, "sha256"));
     }
     return true;
 }

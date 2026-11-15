@@ -20,8 +20,15 @@ void native_review_sync(struct app *app, const struct native_review_identity *id
 void native_review_open(struct app *app, const struct native_review_identity *identity);
 bool native_review_load(struct app *app, const struct native_review_identity *identity, const char *path);
 void native_review_tick(struct app *app);
-bool native_review_key(struct app *app, char key);
-bool native_review_render(struct app *app);
+/* A key of the Review page, or of the References page when references. */
+bool native_review_key(struct app *app, char key, bool references);
+/* Esc on a review page: closes a reference preview or the full log; false
+ * when there is nothing to close. */
+bool native_review_back(struct app *app);
+/* The review records a local log that L can open in full. */
+bool native_review_has_log(const struct app *app);
+/* Draws the Review or References page in the content area. */
+bool native_review_render(struct app *app, bool references);
 bool native_review_active(const struct app *app);
 
 #endif

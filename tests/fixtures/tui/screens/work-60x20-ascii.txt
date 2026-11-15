@@ -1,0 +1,21 @@
+FRAME 1 60x20
+ #  1 Work  2 Inbox 11  3 Hosts  4 Stats                   
+ Heads ------------------------------------------ 1/2 tab  
+ >~ feature-live                                 needs you 
+  ! feature-stale                            terminal gone 
+  ? feature-unavailable                            unknown 
+  > * run visualization-proof                      running 
+  > + run second-run                             succeeded 
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+                                                           
+  3 heads / 3 need you                                     
+  * live   feature-live / running                          
+ ^/v select | enter/a talk | x remove | ? help | q quit    

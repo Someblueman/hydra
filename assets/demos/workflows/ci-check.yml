@@ -1,0 +1,36 @@
+version: 1
+id: ci-check
+description: Build and test the ranking fix
+parallelism: 2
+resources:
+  disk_mb: 1
+steps:
+  - id: create
+    kind: spawn
+    needs: []
+    idempotent: false
+    args:
+      branch: ci-check
+      terminal_mode: headless
+  - id: build
+    kind: exec
+    needs: [create]
+    idempotent: true
+    args:
+      head: ci-check
+      argv: [sh, -c, "echo compiling 14 files; sleep 1; echo build ok"]
+  - id: test
+    kind: exec
+    needs: [build]
+    idempotent: true
+    retry: 1
+    args:
+      head: ci-check
+      argv: [sh, -c, "if [ ! -f .flaky-once ]; then : > .flaky-once; echo test_rank timed out; exit 1; fi; sleep 2; echo 42 passed"]
+  - id: lint
+    kind: exec
+    needs: [build]
+    idempotent: true
+    args:
+      head: ci-check
+      argv: [sh, -c, "sleep 1; echo lint clean"]

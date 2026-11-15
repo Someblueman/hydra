@@ -27,8 +27,20 @@ cleanup() {
         rm -rf "$fixture"
     fi
 }
+# A step that fails under set -e prints nothing itself: its JSON went to a
+# file. Show the newest fixture outputs so the case log names the failure,
+# as the placement case does.
+report_failure() {
+    printf 'FAIL task acceptance (exit %s); newest fixture outputs:\n' "$1" >&2
+    # shellcheck disable=SC2012 # the test's own plain names; find cannot sort by time portably
+    ls -t "$fixture" 2>/dev/null | head -n 4 | while IFS= read -r report_file; do
+        [ -f "$fixture/$report_file" ] || continue
+        printf -- '--- %s\n' "$report_file" >&2
+        cut -c 1-600 "$fixture/$report_file" | head -n 20 >&2
+    done
+}
 test_code=0
-trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' 0
+trap 'test_code=$?; [ "$test_code" -eq 0 ] || report_failure "$test_code"; cleanup || test_code=1; exit "$test_code"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 # shellcheck source=/dev/null

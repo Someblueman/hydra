@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / OVERVIEW                                                                                                Local · no agent work yet 
- Work  Details  [Overview]  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Overview ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                                                                                                                         │
-│  No agent work in this project yet.                                                                                                     │
-│                                                                                                                                         │
-│  Overview summarises what is running, what needs a decision, what changed and each run's progress.                                      │
-│  Press n to start a task; it appears here as soon as its terminal opens.                                                                │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit                                                              
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                                                          nothing running  
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                     ◇                                                                     
+                                                                                                                                           
+                                                     No agent work in this project yet                                                     
+                                                                                                                                           
+                                     A head is one task: its own branch, worktree, terminal and agent.                                     
+                                 Hydra creates them; you talk to each agent here and approve what it does.                                 
+                                                                                                                                           
+                                           n start a task • 3 add a remote host • : all commands                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live                                                                                                                                   
+ ↑/↓ select • n new task • / filter • L location • tab/shift+tab pane • [/] page • : commands • ? help • q quit                            

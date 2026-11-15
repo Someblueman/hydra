@@ -9,10 +9,14 @@ extern char **environ;
  * output captured so the control centre stays on screen; interactive commands
  * such as switch or dashboard still take over the terminal. */
 
+/* Runs a command that needs the terminal: the control centre steps aside,
+ * the command's output stays up until Enter, then the screen is repainted.
+ * Only switch and dashboard still do this; everything else is captured. */
 static int run_argv(struct app *app, char *const argv[]) {
+    struct terminal_loan loan;
     pid_t pid;
     int status = 0;
-    restore_terminal(app);
+    if (!terminal_lend(app, &loan, false)) return -1;
     printf("\033[H\033[2J");
     fflush(stdout);
     if (posix_spawnp(&pid, app->hydra, NULL, NULL, argv, environ) != 0) {
@@ -25,10 +29,7 @@ static int run_argv(struct app *app, char *const argv[]) {
     fflush(stdout);
     while (getchar() != '\n' && !feof(stdin)) { }
     clearerr(stdin);
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
+    if (!terminal_return(app, &loan)) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
@@ -41,18 +42,69 @@ void show_result(struct app *app, const char *title, const char *text) {
     app->help = false;
 }
 
+/* An action that did not finish is kept for the session with its output, so
+ * it can be read again after the notice is gone (oldest dropped first). */
+void action_failed(struct app *app, const char *title, const char *output) {
+    struct failed_action *f;
+    if (app->failed_count == FAILED_ACTIONS) {
+        memmove(&app->failed[0], &app->failed[1], sizeof(app->failed[0]) * (FAILED_ACTIONS - 1U));
+        app->failed_count--;
+    }
+    f = &app->failed[app->failed_count++];
+    copy_text(f->title, sizeof(f->title), title);
+    copy_text(f->output, sizeof(f->output), output && output[0] ? output : "The action produced no output.");
+    f->at = time(NULL);
+}
+
+/* The output of the actions that failed this session, newest first. */
+void actions_failed_show(struct app *app) {
+    char text[8192] = "";
+    size_t i;
+    if (!app->failed_count) { toast(app, KT_TOAST_INFO, "No action has failed in this session"); return; }
+    for (i = app->failed_count; i-- > 0;)
+        text_append(text, sizeof(text), "== %s\n%s\n\n", app->failed[i].title, app->failed[i].output);
+    show_result(app, "Your failed actions", text);
+}
+
+/* A short outcome over the frame; it never takes input. Without the loop
+ * (deterministic rendering, direct calls) it is the status-line notice. */
+void toast(struct app *app, enum kt_toast_kind kind, const char *text) {
+    if (!app->cmds || !app->program) { copy_text(app->notice, sizeof(app->notice), text); return; }
+    if (!app->toasts_ready) { kt_toasts_init(&app->toasts, TOAST_TAG); app->toasts.width = 60; app->toasts_ready = true; }
+    kt_toasts_push(&app->toasts, app->cmds, kind, text);
+    app->notice[0] = '\0';
+}
+
+static bool group_name(struct app *app, char *group, size_t size) {
+    struct kt_textinput input;
+    struct kt_field field;
+    char body[160];
+    kt_textinput_init(&input, group, size);
+    memset(&field, 0, sizeof(field));
+    field.kind = KT_FIELD_TEXT; field.label = "Group name"; field.input = &input;
+    snprintf(body, sizeof(body), "Puts the %zu marked head%s in one group, so they can be followed together.",
+             app->marked_count, app->marked_count == 1U ? "" : "s");
+    return dialog_form_body(app, "Group marked heads", body, &field, 1) == 0 && group[0];
+}
+
 void group_marked_action(struct app *app) {
-    char group[TEXT] = "";
+    char group[TEXT] = "", output[8192];
     char *argv[MAX_HEADS + 5U];
     size_t index, count = 0U;
-    if (prompt_text(app, "Group for selected heads: ", group, sizeof(group)) != 0 || group[0] == '\0') return;
+    if (!group_name(app, group, sizeof(group))) return;
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)"group";
     argv[count++] = (char *)"create";
     argv[count++] = group;
     for (index = 0U; index < app->marked_count; index++) argv[count++] = app->marked[index];
     argv[count] = NULL;
-    if (run_argv(app, argv) == 0) app->marked_count = 0U;
+    if (run_captured(app, argv, output, sizeof(output), 30000L) == 0) {
+        app->marked_count = 0U;
+        toast(app, KT_TOAST_SUCCESS, "Grouped the marked heads");
+        return;
+    }
+    action_failed(app, "Grouping the marked heads did not finish", output);
+    show_result(app, "Grouping did not finish", output[0] ? output : "The command produced no output.");
 }
 
 static const char *first_line(const char *text, char *out, size_t size) {
@@ -96,10 +148,14 @@ static void removal_names(char targets[][TEXT], size_t count, char *names, size_
 }
 
 static bool removal_confirmed(struct app *app, size_t count, const char *names) {
-    char question[1024], answer[TEXT] = "";
-    snprintf(question, sizeof(question), "Remove %zu head%s (%s)? This closes the terminal and deletes the worktree; the branch is kept and heads with uncommitted changes are refused. y/N: ",
-             count, count == 1U ? "" : "s", names);
-    if (prompt_text(app, question, answer, sizeof(answer)) == 0 && (!strcasecmp(answer, "y") || !strcasecmp(answer, "yes"))) return true;
+    char body[1536] = "";
+    if (count == 1U)
+        text_append(body, sizeof(body), "Remove %s?\n\nCloses its terminal and deletes its worktree. The branch %s is "
+                    "kept. A head with uncommitted or untracked changes is refused, never forced.", names, names);
+    else
+        text_append(body, sizeof(body), "Remove %zu heads (%s)?\n\nCloses their terminals and deletes their worktrees. "
+                    "The branches are kept. A head with uncommitted or untracked changes is refused, never forced.", count, names);
+    if (dialog_confirm(app, count == 1U ? "Remove head" : "Remove heads", body, "Remove", true)) return true;
     copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
     return false;
 }
@@ -148,6 +204,8 @@ static void removal_notice(struct app *app, char targets[][TEXT], const struct r
 
 static void removal_report(struct app *app, char targets[][TEXT], const struct removal *r) {
     removal_notice(app, targets, r);
+    if (r->failed) action_failed(app, app->notice, r->transcript);
+    else if (app->notice[0]) { char done[TEXT]; copy_text(done, sizeof(done), app->notice); toast(app, KT_TOAST_SUCCESS, done); }
     if (r->failed) show_result(app, "REMOVAL OUTPUT", r->transcript);
     copy_text(app->result_text, sizeof(app->result_text), r->transcript);
     if (!r->failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
@@ -191,161 +249,148 @@ void remove_heads_action(struct app *app) {
     retarget_selection(app);
 }
 
-void kill_marked_action(struct app *app) { remove_heads_action(app); }
+/* x removes the selected or marked heads; Inbox removes leftover worktrees itself. */
+void remove_key_action(struct app *app) { remove_heads_action(app); }
 
-/* Run the recorded inspection command for the selected recovery finding. */
-void recovery_check_action(struct app *app) {
-    const struct recovery *item;
-    char command[TEXT], *argv[16], *save = NULL, *word, output[8192], title[TEXT + 64], detail[1024];
-    size_t count = 0U;
-    int status;
-    if (app->recovery_selected >= app->model.recovery_count) return;
-    item = &app->model.recovery[app->recovery_selected];
-    copy_text(command, sizeof(command), item->action);
-    word = strtok_r(command, " ", &save);
-    if (!word) { copy_text(app->notice, sizeof(app->notice), "No check is recorded for this finding"); return; }
-    argv[count++] = (char *)app->hydra;
-    if (strcmp(word, "hydra") != 0) argv[count++] = word;
-    while ((word = strtok_r(NULL, " ", &save)) != NULL && count < 15U) argv[count++] = word;
-    argv[count] = NULL;
-    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    snprintf(app->notice, sizeof(app->notice), "Running %s...", item->action);
-    status = run_captured(app, argv, output, sizeof(output), 30000L);
-    if (status == 0) snprintf(app->notice, sizeof(app->notice), "Check finished: %s", item->action);
-    else snprintf(app->notice, sizeof(app->notice), "Check failed (exit %d): %s", status, item->action);
-    show_result(app, title, output[0] ? output : "The check produced no output.");
-}
-
-static bool orphan_removal_confirmed(struct app *app, const struct recovery *item) {
-    char question[1024], answer[TEXT] = "";
-    snprintf(question, sizeof(question), "Remove leftover worktree %.300s? This deletes only that directory; the branch is kept. y/N: ", item->label);
-    if (prompt_text(app, question, answer, sizeof(answer)) == 0 && (!strcasecmp(answer, "y") || !strcasecmp(answer, "yes"))) return true;
-    copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
-    return false;
-}
-
-/* Remove the selected leftover worktree through the shell gc authority, scoped
- * to its path. Worktrees with uncommitted changes are never offered; gc keeps
- * its own dirty refusal and the UI never adds --include-dirty. */
-void recovery_remove_action(struct app *app) {
-    const struct recovery *item;
-    char path[SOURCE_TEXT], output[8192];
-    char *argv[] = {(char *)app->hydra, (char *)"gc", (char *)"--policy", (char *)"orphaned", (char *)"--apply", (char *)"--path", path, NULL};
-    if (app->recovery_selected >= app->model.recovery_count) return;
-    item = &app->model.recovery[app->recovery_selected];
-    if (!strcmp(item->kind, "orphan-worktree-dirty")) {
-        copy_text(app->notice, sizeof(app->notice), "This worktree has uncommitted changes, so Hydra keeps it; review the work there first");
-        return;
-    }
-    if (strcmp(item->kind, "orphan-worktree") != 0 || !item->source[0]) {
-        copy_text(app->notice, sizeof(app->notice), "x removes leftover worktrees only; Enter runs this finding's check");
-        return;
-    }
-    if (!orphan_removal_confirmed(app, item)) return;
-    copy_text(path, sizeof(path), item->source);
-    snprintf(app->notice, sizeof(app->notice), "Removing leftover worktree %.200s...", path);
-    if (run_captured(app, argv, output, sizeof(output), 60000L) == 0 && strstr(output, "removed-orphan\t") != NULL) {
-        snprintf(app->notice, sizeof(app->notice), "Removed leftover worktree %.200s; the branch is kept", path);
-    } else {
-        copy_text(app->notice, sizeof(app->notice), "The worktree was not removed; see output");
-        show_result(app, "REMOVAL OUTPUT", output[0] ? output : "The removal produced no output.");
-    }
-    native_observations_tick(app, true);
-}
-
-/* x removes heads in the list views and a leftover worktree in Recovery. */
-void remove_key_action(struct app *app) {
-    if (app->view == 3) recovery_remove_action(app);
-    else remove_heads_action(app);
-}
-
-/* Order preserves first-substring-match selection after exact and prefix
- * matches. Arguments are literal argv entries. */
-enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_INTERRUPT };
-struct palette_action {
-    const char *name;
-    const char *command;
-    const char *subcommand;
+/* The command palette (:): every binding that applies where the user is,
+ * then the CLI commands below, searched by name as one types (kettle's
+ * palette). Read-only commands run captured and open in the output viewer;
+ * only switch and dashboard need the terminal, and their labels say so. */
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_IMPORT,
+                     ACTION_FAILED, ACTION_THEME, ACTION_LEAVE, ACTION_LEAVE_HEAD, ACTION_INTERRUPT, ACTION_LAND };
+struct palette_command {
+    const char *name, *label, *command, *subcommand;
     enum palette_scope scope;
 };
 
-static const struct palette_action palette[] = {
-    {"switch", "switch", NULL, ACTION_HEAD},
-    {"kill", "kill", NULL, ACTION_REMOVE},
-    {"remove", "kill", NULL, ACTION_REMOVE},
-    {"regenerate", "regenerate", NULL, ACTION_GLOBAL},
-    {"spawn", "spawn", NULL, ACTION_SPAWN},
-    {"new task", "spawn", NULL, ACTION_SPAWN},
-    {"status", "status", NULL, ACTION_GLOBAL},
-    {"claims", "claim", "list", ACTION_GLOBAL},
-    {"collisions", "collision", NULL, ACTION_COMPARE},
-    {"scopes", "scope", "show", ACTION_HEAD},
-    {"queue", "queue", NULL, ACTION_GLOBAL},
-    {"resources", "resource", "status", ACTION_HEAD},
-    {"git diff", "diff", NULL, ACTION_HEAD},
-    {"approvals", "gate", "status", ACTION_HEAD},
-    {"recovery inspect", "doctor", NULL, ACTION_GLOBAL},
-    {"dashboard", "dashboard", NULL, ACTION_GLOBAL},
-    {"interrupt remote head", "fleet", "cancel", ACTION_INTERRUPT}
+static const struct palette_command palette_commands[] = {
+    {"diff", "Show diff of the selected head", "diff", NULL, ACTION_HEAD},
+    {"claims", "Claims", "claim", "list", ACTION_GLOBAL},
+    {"scopes", "Scopes of the selected head", "scope", "show", ACTION_HEAD},
+    {"queue", "Queue", "queue", NULL, ACTION_GLOBAL},
+    {"resources", "Resources of the selected head", "resource", "status", ACTION_HEAD},
+    {"approvals", "Approval gates of the selected head", "gate", "status", ACTION_HEAD},
+    {"collisions", "Collisions with another head", "collision", NULL, ACTION_COMPARE},
+    {"status", "Status", "status", NULL, ACTION_GLOBAL},
+    {"doctor", "Recovery inspection (doctor)", "doctor", NULL, ACTION_GLOBAL},
+    {"regenerate", "Regenerate", "regenerate", NULL, ACTION_GLOBAL},
+    {"spawn", "New task (spawn)", NULL, NULL, ACTION_SPAWN},
+    {"kill", "Remove heads (kill)", NULL, NULL, ACTION_REMOVE},
+    {"import", "Import plan files", NULL, NULL, ACTION_IMPORT},
+    {"land", "Land worker: merge the verified result of the selected head's run", NULL, NULL, ACTION_LAND},
+    {"failed", "Your failed actions", NULL, NULL, ACTION_FAILED},
+    {"theme", "Theme: terminal, dark, light", NULL, NULL, ACTION_THEME},
+    {"switch", "Switch to the selected head (leaves Hydra)", "switch", NULL, ACTION_LEAVE_HEAD},
+    {"dashboard", "Dashboard (leaves Hydra)", "dashboard", NULL, ACTION_LEAVE},
+    {"interrupt", "Interrupt remote head", NULL, NULL, ACTION_INTERRUPT}
 };
+#define PALETTE_COMMANDS (sizeof(palette_commands) / sizeof(palette_commands[0]))
+#define PALETTE_DIALOG 3U
 
-static const struct palette_action *match_palette(const char *query) {
-    size_t index, total = sizeof(palette) / sizeof(palette[0]);
-    for (index = 0U; index < total; index++) if (!strcmp(palette[index].name, query)) return &palette[index];
-    for (index = 0U; index < total; index++) if (!strncmp(palette[index].name, query, strlen(query))) return &palette[index];
-    for (index = 0U; index < total; index++) if (strstr(palette[index].name, query) != NULL) return &palette[index];
-    return NULL;
+static void palette_theme(struct app *app) {
+    char text[64];
+    app->theme = (app->theme + 1) % 3;
+    snprintf(text, sizeof(text), "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
+    toast(app, KT_TOAST_INFO, text);
 }
 
-void execute_palette(struct app *app, const char *query) {
-    size_t count = 0U;
-    const struct palette_action *chosen;
+/* Runs a CLI command with its output captured into the viewer. */
+static void palette_capture(struct app *app, const struct palette_command *chosen, char *const argv[]) {
+    char output[8192], title[TEXT];
+    int status;
+    snprintf(app->notice, sizeof(app->notice), "Running %s...", chosen->name);
+    status = run_captured(app, argv, output, sizeof(output), 30000L);
+    app->notice[0] = '\0';
+    snprintf(title, sizeof(title), status ? "%s (exit %d)" : "%s", chosen->label, status);
+    if (status) action_failed(app, title, output);
+    show_result(app, title, output[0] ? output : "The command produced no output.");
+}
+
+static bool palette_local(struct app *app, const struct palette_command *chosen) {
+    switch (chosen->scope) {
+    case ACTION_SPAWN: new_task_action(app); return true;
+    case ACTION_REMOVE: remove_heads_action(app); return true;
+    case ACTION_IMPORT: plan_action_import(app); return true;
+    case ACTION_FAILED: actions_failed_show(app); return true;
+    case ACTION_THEME: palette_theme(app); return true;
+    case ACTION_LAND: work_land(app); return true;
+    default: return false;
+    }
+}
+
+/* A remote head's own commands run on its host: removing it interrupts its
+ * agent there, and head commands are refused here. True when handled. */
+static bool palette_remote(struct app *app, const struct palette_command *chosen, const struct head *head, bool head_needed) {
+    bool remote = head && head_remote(head);
+    if (chosen->scope == ACTION_INTERRUPT || (chosen->scope == ACTION_REMOVE && remote)) {
+        if (remote) fleet_action(app);
+        else copy_text(app->notice, sizeof(app->notice), "Select a remote head to interrupt");
+        return true;
+    }
+    if (!head_needed || !remote) return false;
+    copy_text(app->notice, sizeof(app->notice), "That command runs on the head's host; a attaches, x interrupts");
+    return true;
+}
+
+static void palette_command(struct app *app, const struct palette_command *chosen) {
     struct head *head = selected_head(app);
     char other[TEXT] = "";
     char *argv[6]; /* executable, command, subcommand, head, comparison, NULL */
-    if (query[0] == '\0') {
-        copy_text(app->notice, sizeof(app->notice), "action search canceled");
-        return;
-    }
-    chosen = match_palette(query);
-    if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
-    if (chosen->scope == ACTION_SPAWN) { new_task_action(app); return; }
-    if (chosen->scope == ACTION_INTERRUPT || (chosen->scope == ACTION_REMOVE && head && head_remote(head))) {
-        if (head && head_remote(head)) fleet_action(app);
-        else copy_text(app->notice, sizeof(app->notice), "select a remote head to interrupt");
-        return;
-    }
-    if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
-    if ((chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE) && head && head_remote(head)) {
-        copy_text(app->notice, sizeof(app->notice), "that action runs on the head's host; a attaches, x interrupts");
-        return;
-    }
+    size_t count = 0U;
+    bool head_needed = chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE || chosen->scope == ACTION_LEAVE_HEAD;
+    if (palette_remote(app, chosen, head, head_needed) || palette_local(app, chosen)) return;
+    if (head_needed && head == NULL) { copy_text(app->notice, sizeof(app->notice), "Select a head for that command"); return; }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
     if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;
-    if (chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE) {
-        if (head == NULL) { copy_text(app->notice, sizeof(app->notice), "select a head for that action"); return; }
-        argv[count++] = head->branch;
-    }
+    if (head_needed) argv[count++] = head->branch;
     if (chosen->scope == ACTION_COMPARE) {
         if (prompt_text(app, "Compare with head: ", other, sizeof(other)) != 0 || other[0] == '\0') return;
         argv[count++] = other;
     }
     argv[count] = NULL;
-    (void)run_argv(app, argv);
+    if (chosen->scope == ACTION_LEAVE || chosen->scope == ACTION_LEAVE_HEAD) (void)run_argv(app, argv);
+    else palette_capture(app, chosen, argv);
+}
+
+static bool palette_final(int result) { return result == KT_PALETTE_CHOSEN || result == KT_PALETTE_CANCELLED; }
+
+void palette_open(struct app *app) {
+    static struct kt_binding commands[PALETTE_COMMANDS];
+    struct kt_binding rows[KEY_ACTIONS];
+    struct kt_help_source sources[2];
+    struct kt_palette palette;
+    struct kt_modal modal;
+    const struct kt_binding *chosen;
+    size_t i;
+    uint32_t chain = key_applying(app, rows);
+    rows[KEY_PALETTE].scope = 0;
+    for (i = 0; i < PALETTE_COMMANDS; i++) {
+        memset(&commands[i], 0, sizeof(commands[i]));
+        commands[i].name = palette_commands[i].name; commands[i].label = palette_commands[i].label;
+        commands[i].action = KEY_ACTIONS + (uint32_t)i; commands[i].scope = 1U;
+    }
+    sources[0] = (struct kt_help_source){rows, KEY_ACTIONS, chain};
+    sources[1] = (struct kt_help_source){commands, PALETTE_COMMANDS, 1U};
+    kt_palette_init(&palette, "Commands");
+    (void)kt_palette_set(&palette, sources, 2);
+    modal = kt_palette_modal(&palette, PALETTE_DIALOG, app->cols - 4 < 72 ? app->cols - 4 : 72);
+    if (dialog_run(app, &modal, palette_final) != KT_PALETTE_CHOSEN || !(chosen = kt_palette_chosen(&palette))) return;
+    if (chosen->action < KEY_ACTIONS) key_perform(app, (enum key_action)chosen->action);
+    else palette_command(app, &palette_commands[chosen->action - KEY_ACTIONS]);
 }
 
 /* Fleet interruption carries host, project and observed instance to the
  * public CLI; only a fresh observation of an answering host authorizes it. */
 void fleet_action(struct app *app) {
     struct head *head = selected_head(app);
-    char confirm[TEXT] = "", refusal[TEXT], question[TEXT + 200];
+    char body[512], refusal[TEXT];
     char *argv[12];
     if (head == NULL || head->remote_host[0] == '\0') return;
     if (remote_action_refusal(app, head, refusal, sizeof(refusal))) { copy_text(app->notice, sizeof(app->notice), refusal); return; }
-    snprintf(question, sizeof(question), "Interrupt %.100s on %.60s? This sends Ctrl-C to its agent; the worktree and files stay on the host. Type yes: ",
-             head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host);
-    if (prompt_text(app, question, confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0) {
+    snprintf(body, sizeof(body), "Interrupt %.100s on %.60s?\n\nThis sends Ctrl-C to its agent; the worktree and its "
+             "files stay on the host.", head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host);
+    if (!dialog_confirm(app, "Interrupt remote head", body, "Interrupt", true)) {
         copy_text(app->notice, sizeof(app->notice), "Interrupt cancelled; nothing was sent");
         return;
     }
@@ -354,5 +399,10 @@ void fleet_action(struct app *app) {
     argv[4] = (char *)"--project"; argv[5] = head->remote_project;
     argv[6] = (char *)"--instance"; argv[7] = head->instance;
     argv[8] = (char *)"--"; argv[9] = head->remote_branch; argv[10] = NULL;
-    (void)run_argv(app, argv);
+    {
+        char output[4096];
+        if (run_captured(app, argv, output, sizeof(output), 30000L) == 0) { toast(app, KT_TOAST_SUCCESS, "Interrupt sent to the remote head"); return; }
+        action_failed(app, "Interrupting a remote head did not finish", output);
+        show_result(app, "Interrupt did not finish", output[0] ? output : "The command produced no output.");
+    }
 }

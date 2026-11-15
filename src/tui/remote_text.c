@@ -32,10 +32,10 @@ const char *remote_head_status(const struct app *app, const struct head *h) {
     return h->desired[0] ? h->desired : "unknown";
 }
 
-enum tv_style remote_head_tone(const struct app *app, const struct head *h) {
+struct kt_style remote_head_tone(const struct app *app, const struct head *h) {
     const char *status = remote_head_status(app, h);
-    if (!strcmp(status, "stale") || !strcmp(status, "disconnected") || !strcmp(status, "unknown")) return TV_WARNING;
-    return TV_BASE;
+    if (!strcmp(status, "stale") || !strcmp(status, "disconnected") || !strcmp(status, "unknown")) return KT_WARNING;
+    return KT_BASE;
 }
 
 /* "fresh, 3s old" / "stale, 120s old (host disconnected)" / "unknown". */
@@ -86,28 +86,28 @@ const char *task_status(const struct app *app, const struct task_observation *t)
     return t->state;
 }
 
-enum tv_style task_tone(const struct app *app, const struct task_observation *t) {
+struct kt_style task_tone(const struct app *app, const struct task_observation *t) {
     const char *status = task_status(app, t);
     if (!strcmp(status, "stale") || !strcmp(status, "unknown") || !strcmp(t->state, "failed") ||
-        !strcmp(t->state, "waiting_approval") || !strcmp(t->state, "outcome_unknown")) return TV_WARNING;
-    if (!strcmp(t->state, "running")) return TV_SUCCESS;
-    return TV_BASE;
+        !strcmp(t->state, "waiting_approval") || !strcmp(t->state, "outcome_unknown")) return KT_WARNING;
+    if (!strcmp(t->state, "running")) return KT_SUCCESS;
+    return KT_BASE;
 }
 
 /* The remote source's freshness for the footer; false when nothing remote
  * is known and nothing failed. */
-bool remote_footer_text(const struct app *app, char *out, size_t size, enum tv_style *tone) {
+bool remote_footer_text(const struct app *app, char *out, size_t size, struct kt_style *tone) {
     long limit = 2L * HYDRA_TUI_REFRESH_SECONDS + HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS / 1000L;
     if (app->remote_stale) {
         snprintf(out, size, "Remote: STALE, last good observation %lds ago%s%s", remote_age(app),
                  app->remote_error[0] ? "; " : "", app->remote_error);
-        *tone = TV_WARNING;
+        *tone = KT_WARNING;
         return true;
     }
     if (!app->remote_known || !app->model.host_count) return false;
-    if (remote_age(app) > limit) { snprintf(out, size, "Remote updated %lds ago", remote_age(app)); *tone = TV_BASE; return true; }
+    if (remote_age(app) > limit) { snprintf(out, size, "Remote updated %lds ago", remote_age(app)); *tone = KT_BASE; return true; }
     snprintf(out, size, "Remote live");
-    *tone = TV_MUTED;
+    *tone = KT_MUTED;
     return true;
 }
 
@@ -119,4 +119,31 @@ void remote_retry(struct app *app, const char *host) {
     if (host && host[0]) snprintf(app->notice, sizeof(app->notice), "Reconnecting to %.100s: requesting a fresh observation", host);
     else copy_text(app->notice, sizeof(app->notice), "Requesting a fresh remote observation");
     native_observations_tick(app, true);
+}
+
+void epoch_age_text(const char *value, char *out, size_t size) {
+    char *end;
+    long long at = strtoll(value, &end, 10);
+    long long age = (long long)time(NULL) - at;
+    if (!value[0] || *end || at <= 0) { copy_text(out, size, value[0] ? value : "-"); return; }
+    if (age < 0) age = 0;
+    if (age < 120) snprintf(out, size, "%llds ago", age);
+    else if (age < 7200) snprintf(out, size, "%lldm ago", age / 60);
+    else snprintf(out, size, "%lldh ago", age / 3600);
+}
+
+const char *const HOST_START_TEXT = "No work on this host yet. Start a head there from a terminal, in a Git checkout on the host:";
+
+void host_start_command(const char *name, char *out, size_t size) {
+    snprintf(out, size, "hydra fleet spawn %.100s --project /path/on/host -- BRANCH", name);
+}
+
+/* Observed and answering with no rows, or set up and not observed yet. */
+bool host_awaits_work(const struct app *app, const char *name) {
+    const struct host_observation *host = host_for_name(app, name);
+    size_t i;
+    if (host) return host_answering(host) && !host->heads && !host->tasks;
+    for (i = 0; app->setup && i < app->setup->record_count; i++)
+        if (app->setup->records[i].complete && !strcmp(app->setup->records[i].name, name)) return true;
+    return false;
 }

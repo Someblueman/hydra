@@ -10,11 +10,23 @@
 #include <time.h>
 #include <unistd.h>
 
+/* The refusal for a task withdrawal cannot move, or NULL when it can. Work
+ * with a launch claim is execution_owned whether or not its owner still holds
+ * the lock: the answer comes from the durable claim, so a task that already
+ * finished is refused the same way while its owner exits and afterwards. */
+static json_object *withdraw_refusal(const char *directory, json_object *state) {
+    char path[F_PATH]; struct stat st;
+    bool claimed = strcmp(f_string(state, "launch_intent"), "pending") || f_path(path, sizeof(path), directory, "launch.json") ||
+                   !lstat(path, &st) || errno != ENOENT;
+    if (!claimed && !strcmp(f_string(state, "state"), "accepted")) return NULL;
+    return f_error("fleet-task-withdraw", claimed ? "execution_owned" : "invalid_state",
+                   "only an accepted task without a launch claim can be withdrawn; inspect its status without replaying work");
+}
 /* Withdrawal shares the launch owner lock, so a start that already holds the
  * lock wins and a withdrawn record can never be launched afterwards. The
  * admission slot is never requested before launch, so nothing is released. */
 json_object *task_withdraw(const char *id) {
-    char root[F_PATH], directory[F_PATH], path[F_PATH]; int owner = -1; struct stat st;
+    char root[F_PATH], directory[F_PATH], path[F_PATH]; int owner = -1;
     json_object *receipt = task_status(id), *state = NULL, *withdrawal = NULL, *result = NULL;
     if (!json_object_get_boolean(f_field(receipt, "ok"))) return receipt;
     json_object_put(receipt);
@@ -27,12 +39,7 @@ json_object *task_withdraw(const char *id) {
     }
     state = task_read_record(directory, "state.json"); if (!task_runtime_valid(state)) goto io;
     if (!strcmp(f_string(state, "state"), "withdrawn")) { result = task_status(id); goto done; }
-    if (f_path(path, sizeof(path), directory, "launch.json")) goto io;
-    if (strcmp(f_string(state, "state"), "accepted") || strcmp(f_string(state, "launch_intent"), "pending") || !lstat(path, &st) || errno != ENOENT) {
-        result = f_error("fleet-task-withdraw", !strcmp(f_string(state, "state"), "accepted") ? "execution_owned" : "invalid_state",
-            "only an accepted task without a launch claim can be withdrawn; inspect its status without replaying work");
-        goto done;
-    }
+    if ((result = withdraw_refusal(directory, state))) goto done;
     withdrawal = json_object_new_object(); json_object_object_add(withdrawal, "schema_version", json_object_new_int(1));
     json_object_object_add(withdrawal, "withdrawn_at", json_object_new_int64((int64_t)time(NULL)));
     {

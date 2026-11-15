@@ -216,28 +216,42 @@ int plan_materialize(json_object *compiled, const char *directory) {
         task_write_json(directory, "data.json", f_field(compiled, "data"), false) || task_write_json(directory, "compiled.json", compiled, false)) return -1;
     return materialize_bundle(compiled, directory);
 }
-int plan_admit(json_object *compiled, const char *source, const char *accepted) {
-    char digest[65], expected[65]; json_object *errors = json_object_new_array(), *fresh = NULL; int status = -1;
-    if (!task_hex(accepted, 64) || plan_digest(compiled, digest) || strcmp(digest, accepted)) goto done;
-    fresh = plan_compile(f_field(compiled, "plan"), f_field(compiled, "policy"), source, f_field(compiled, "assets"), errors);
-    if (!fresh || plan_digest(fresh, expected) || strcmp(digest, expected)) goto done;
-    status = 0;
-done:
-    json_object_put(errors); json_object_put(fresh); return status;
+enum plan_admission plan_admission(json_object *compiled, const char *source, const char *accepted, json_object *errors, json_object **fresh) {
+    char digest[65], expected[65]; json_object *recompiled;
+    if (fresh) *fresh = NULL;
+    if (!task_hex(accepted, 64)) return PLAN_DIGEST_FORMAT;
+    if (plan_digest(compiled, digest)) return PLAN_UNDIGESTIBLE;
+    if (strcmp(digest, accepted)) return PLAN_DIGEST_MISMATCH;
+    recompiled = plan_compile(f_field(compiled, "plan"), f_field(compiled, "policy"), source, f_field(compiled, "assets"), errors);
+    if (!recompiled) return PLAN_STALE;
+    if (fresh) *fresh = recompiled;
+    if (plan_digest(recompiled, expected) || strcmp(digest, expected)) { if (!fresh) json_object_put(recompiled); return PLAN_CHANGED; }
+    if (!fresh) json_object_put(recompiled);
+    return PLAN_ADMITTED;
 }
-int plan_heads_available(json_object *compiled, const char *source) {
+int plan_admit(json_object *compiled, const char *source, const char *accepted) {
+    json_object *errors = json_object_new_array();
+    enum plan_admission status = plan_admission(compiled, source, accepted, errors, NULL);
+    json_object_put(errors); return status == PLAN_ADMITTED ? 0 : -1;
+}
+/* Exit status 1 from show-ref means the ref is absent; 0 means it exists. */
+static int ref_exists(const char *source, const char *prefix, const char *branch, char ref[PLAN_REF]) {
+    struct f_capture cap = {0}; int status;
+    char *argv[] = {"show-ref", "--verify", "--quiet", ref, NULL};
+    if (snprintf(ref, PLAN_REF, "%s%s", prefix, branch) >= PLAN_REF) return -1;
+    status = task_git(source, argv, &cap); f_capture_free(&cap);
+    return status == 1 ? 0 : status == 0 ? 1 : -1;
+}
+int plan_heads_available(json_object *compiled, const char *source, char conflict[PLAN_REF]) {
     json_object *steps = f_field(f_field(compiled, "plan"), "steps"); size_t i;
+    const char *const refs[] = {"refs/heads/", "refs/remotes/origin/"};
     for (i = 0; i < json_object_array_length(steps); i++) {
         const char *branch = f_string(f_field(json_object_array_get_idx(steps, i), "args"), "branch");
-        char ref[128]; struct f_capture cap = {0}; int status;
-        char *argv[] = {"show-ref", "--verify", "--quiet", ref, NULL};
         if (!branch) continue;
-        if (snprintf(ref, sizeof(ref), "refs/heads/%s", branch) >= (int)sizeof(ref)) return -1;
-        status = task_git(source, argv, &cap); f_capture_free(&cap);
-        if (status != 1) return -1;
-        if (snprintf(ref, sizeof(ref), "refs/remotes/origin/%s", branch) >= (int)sizeof(ref)) return -1;
-        status = task_git(source, argv, &cap); f_capture_free(&cap);
-        if (status != 1) return -1;
+        for (size_t r = 0; r < sizeof(refs) / sizeof(refs[0]); r++) {
+            int status = ref_exists(source, refs[r], branch, conflict);
+            if (status) return status;
+        }
     }
     return 0;
 }

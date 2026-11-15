@@ -84,6 +84,13 @@ cmd_events() {
             release_lock "$_ce_lock"
             [ "$_ce_status" -eq 0 ] || return "$_ce_status"
             [ -z "$_ce_archive" ] || echo "Archive: $_ce_archive"
+            # Activity events live in instance activity logs, which the
+            # archive cannot hold apart from lifecycle events: they are
+            # removed once a session summary or checkpoint covers them.
+            if [ "$_ce_dry_run" -eq 0 ]; then
+                _load_lib workflow_sessions
+                session_maintain_head "$1" "$2" || echo "Warning: session summaries were not brought up to date" >&2
+            fi
             ;;
         *) echo "Usage: hydra events <verify|tail|filter|repair|retain>" >&2; return 1 ;;
     esac

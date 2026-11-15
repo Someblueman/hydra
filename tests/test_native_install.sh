@@ -93,6 +93,22 @@ if find "$shell_only_prefix/libexec/hydra" -name 'hydra-tui*' -print | grep . >/
 else
     assert_success 0 "shell-only installation removes the native TUI and metadata"
 fi
+(unset HYDRA_TUI_BIN; HOME="$home" HYDRA_HOME="$home/.hydra" "$shell_only_prefix/bin/hydra" tui \
+    > "$test_root/shell-only-tui.out" 2> "$test_root/shell-only-tui.err")
+assert_equal "1" "$?" "shell-only installation refuses hydra tui instead of starting another interface"
+assert_equal "" "$(cat "$test_root/shell-only-tui.out")" "shell-only hydra tui writes nothing to stdout"
+if grep -Fq "native TUI is unavailable" "$test_root/shell-only-tui.err" &&
+   grep -Fq "'hydra list' and 'hydra switch' work without it" "$test_root/shell-only-tui.err"; then
+    assert_success 0 "shell-only hydra tui says what is missing and what still works"
+else
+    assert_success 1 "shell-only hydra tui says what is missing and what still works"
+fi
+if find "$shell_only_prefix/lib/hydra" -name 'tui_*.sh' ! -name tui_native.sh ! -name tui_attach.sh \
+    ! -name tui_head_output.sh -print | grep . >/dev/null; then
+    assert_success 1 "installation ships only the native TUI's shell libraries"
+else
+    assert_success 0 "installation ships only the native TUI's shell libraries"
+fi
 
 bad="$test_root/bad"
 mkdir -p "$bad"
@@ -163,10 +179,10 @@ HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_
 if [ "$archive_status" -ne 0 ]; then cat "$test_root/archive-source.out"; fi
 assert_success "$archive_status" "source archive auto-builds native TUI without Git metadata"
 assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
-assert_equal "hydra-3.0.0-source-tree" \
+assert_equal "hydra-4.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-3.0.0-source-tree" \
+assert_equal "hydra-4.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "statistics_cohorts.h"
+#include "statistics.h"
 /* Remote cohorts are a view over the recorded task evidence of the matched
  * runs. Nothing here samples processes or hosts; a cohort without a
  * measurement says so and why. */
@@ -47,12 +47,52 @@ void statistics_location_cycle(struct statistics_view *v, int direction) {
     copy_text(v->filter.location, sizeof(v->filter.location), names[selected]);
 }
 
-const char *statistics_location_label(const struct statistics_view *v) {
-    return v->filter.location[0] ? v->filter.location : "local and remote";
+bool statistics_cohorts_recorded(const struct hs_model *m) {
+    size_t i;
+    for (i = 0; m && i < m->step_count; i++) if (m->steps[i].remote.recorded) return true;
+    return false;
 }
 
+/* ---- the cohorts page ---------------------------------------------------- */
+
+#define COHORT_ROWS (HS_COHORTS * HS_COHORT_KINDS)
+
+struct cohort_table {
+    struct hs_cohort rows[COHORT_ROWS];
+    enum hs_cohort_kind kinds[COHORT_ROWS];
+    size_t count;
+    bool truncated;
+};
+
+/* Every kind's cohorts, in kind order, as one table. */
+static void collect(const struct hs_model *m, const struct hs_filter *f, struct cohort_table *t) {
+    enum hs_cohort_kind kind;
+    t->count = 0; t->truncated = false;
+    for (kind = HS_BY_LOCATION; kind < HS_COHORT_KINDS && t->count < COHORT_ROWS; kind++) {
+        size_t room = COHORT_ROWS - t->count, i;
+        size_t count = hs_cohorts(m, f, kind, t->rows + t->count, room < HS_COHORTS ? room : HS_COHORTS);
+        if (count == HS_COHORTS || t->count + count == COHORT_ROWS) t->truncated = true;
+        for (i = 0; i < count; i++) t->kinds[t->count + i] = kind;
+        t->count += count;
+    }
+}
+
+static struct cohort_table cohorts;
+
+size_t statistics_cohort_count(struct statistics_view *v) {
+    collect(v->model, &v->filter, &cohorts);
+    if (v->step_scroll >= cohorts.count) v->step_scroll = cohorts.count ? cohorts.count - 1 : 0;
+    return cohorts.count;
+}
+
+enum { COHORT_KIND, COHORT_KEY, COHORT_RUNS, COHORT_STEPS, COHORT_OK, COHORT_FAIL, COHORT_WALL, COHORT_CPU,
+       COHORT_RSS, COHORT_BYTES, COHORT_UNMEASURED };
+static const struct stats_column cohort_columns[] = {
+    {"KIND", 10, 0}, {"COHORT", 18, 0}, {"RUN", 3, 56}, {"STEP", 4, 56}, {"OK", 2, 110}, {"FAIL", 4, 110},
+    {"WALL", 11, 66}, {"CPU", 11, 78}, {"PEAK RSS", 11, 110}, {"BYTES", 11, 122}, {"UNMEASURED", 24, 0}};
+
 /* The table shows the recorded reason token; the long sentences stay in the
- * export and in the page header. */
+ * export. */
 static const char *short_reason(const struct hs_cohort *k) {
     if (!k->reason[0]) return "no reason recorded";
     if (!strncmp(k->reason, "local step", 10)) return "no task receipt";
@@ -61,77 +101,119 @@ static const char *short_reason(const struct hs_cohort *k) {
     return k->reason;
 }
 
-static void cohort_row(struct tv_canvas *c, int x, int row, int width, const struct hs_cohort *k, enum hs_cohort_kind kind, bool wide, bool selected) {
-    char wall[40], cpu[40], rss[40], bytes[40], why[120];
-    enum tv_style tone = selected ? TV_SELECTED : k->step_states[HS_FAILED] ? TV_WARNING : TV_BASE;
-    statistics_remote_text(HS_WALL_SECONDS, k->remote[HS_WALL_SECONDS], k->remote_known[HS_WALL_SECONDS], k->remote_steps, wall, sizeof(wall));
-    statistics_remote_text(HS_CPU_MICROSECONDS, k->remote[HS_CPU_MICROSECONDS], k->remote_known[HS_CPU_MICROSECONDS], k->remote_steps, cpu, sizeof(cpu));
-    statistics_remote_text(HS_PEAK_RSS_BYTES, k->remote[HS_PEAK_RSS_BYTES], k->remote_known[HS_PEAK_RSS_BYTES], k->remote_steps, rss, sizeof(rss));
-    statistics_remote_text(HS_TRANSPORT_BYTES, k->remote[HS_TRANSPORT_BYTES], k->remote_known[HS_TRANSPORT_BYTES], k->remote_steps, bytes, sizeof(bytes));
-    if (k->unmeasured) snprintf(why, sizeof(why), "%zu %s", k->unmeasured, short_reason(k));
-    else copy_text(why, sizeof(why), "all measured");
-    if (wide) dashboard_text(c, x, row, width, tone, "%c%-10.10s %-18.18s %3zu %4zu %3zu %3zu  %-11.11s %-11.11s %-11.11s %-11.11s %s",
-        selected ? '>' : ' ', hs_cohort_kind_name(kind), k->key, k->runs, k->steps, k->step_states[HS_SUCCEEDED], k->step_states[HS_FAILED], wall, cpu, rss, bytes, why);
-    else dashboard_text(c, x, row, width, tone, "%c%-9.9s %-14.14s %3zu %3zu  %-9.9s %-9.9s  %s",
-        selected ? '>' : ' ', hs_cohort_kind_name(kind), k->key, k->runs, k->steps, wall, cpu, why);
+static void remote_cell(const struct hs_cohort *k, enum hs_remote_count count, char *out, size_t size) {
+    statistics_remote_text(count, k->remote[count], k->remote_known[count], k->remote_steps, out, size);
 }
 
-/* Collects every kind's cohorts into one scrollable table. */
-static size_t collect(const struct hs_model *m, const struct hs_filter *f, struct hs_cohort *rows, enum hs_cohort_kind *kinds, size_t capacity, bool *truncated) {
-    size_t total = 0;
-    enum hs_cohort_kind kind;
-    *truncated = false;
-    for (kind = HS_BY_LOCATION; kind < HS_COHORT_KINDS && total < capacity; kind++) {
-        size_t count = hs_cohorts(m, f, kind, rows + total, capacity - total < HS_COHORTS ? capacity - total : HS_COHORTS), i;
-        if (count == HS_COHORTS || total + count == capacity) *truncated = true;
-        for (i = 0; i < count; i++) kinds[total + i] = kind;
-        total += count;
+static void count_cell(size_t value, char *out, size_t size) { (void)snprintf(out, size, "%zu", value); }
+
+static void cohort_cell(void *context, size_t row, int column, char *out, size_t size, kt_color *color) {
+    static const enum hs_remote_count measured[] = {HS_WALL_SECONDS, HS_CPU_MICROSECONDS, HS_PEAK_RSS_BYTES, HS_TRANSPORT_BYTES};
+    const struct cohort_table *t = context;
+    const struct hs_cohort *k = &t->rows[row];
+    if (column != COHORT_KEY) *color = KT_COLOR_MUTED;
+    switch (column) {
+    case COHORT_KIND: copy_text(out, size, hs_cohort_kind_name(t->kinds[row])); break;
+    case COHORT_KEY: copy_text(out, size, k->key); break;
+    case COHORT_RUNS: count_cell(k->runs, out, size); break;
+    case COHORT_STEPS: count_cell(k->steps, out, size); break;
+    case COHORT_OK: count_cell(k->step_states[HS_SUCCEEDED], out, size); break;
+    case COHORT_FAIL:
+        count_cell(k->step_states[HS_FAILED], out, size);
+        if (k->step_states[HS_FAILED]) *color = KT_COLOR_WARNING;
+        break;
+    case COHORT_UNMEASURED:
+        if (k->unmeasured) (void)snprintf(out, size, "%zu %s", k->unmeasured, short_reason(k));
+        else copy_text(out, size, "all measured");
+        break;
+    default: remote_cell(k, measured[column - COHORT_WALL], out, size); break;
     }
-    return total;
 }
 
-static void compact(struct statistics_view *v, struct tv_canvas *c, struct tv_rect r, const struct hs_summary *s, struct hs_cohort *rows, enum hs_cohort_kind *kinds, size_t total) {
-    char wall[40], cpu[40];
-    size_t i, start = v->step_scroll < total ? v->step_scroll : (total ? total - 1 : 0);
-    int row = r.y + 2;
-    statistics_remote_text(HS_WALL_SECONDS, s->remote[HS_WALL_SECONDS], s->remote_known[HS_WALL_SECONDS], s->remote_steps, wall, sizeof(wall));
-    statistics_remote_text(HS_CPU_MICROSECONDS, s->remote[HS_CPU_MICROSECONDS], s->remote_known[HS_CPU_MICROSECONDS], s->remote_steps, cpu, sizeof(cpu));
-    dashboard_text(c, 1, r.y, r.width - 2, TV_STRONG, "REMOTE COHORTS / C back");
-    dashboard_text(c, 1, r.y + 1, r.width - 2, TV_BASE, "%zu local / %zu remote / wall %s / cpu %s", s->steps - s->remote_steps, s->remote_steps, wall, cpu);
-    for (i = start; i < total && row < r.y + r.height; i++, row++)
-        dashboard_text(c, 1, row, r.width - 2, i == start ? TV_SELECTED : TV_BASE, "%s %s / %zu steps / %zu unmeasured", hs_cohort_kind_name(kinds[i]), rows[i].key, rows[i].steps, rows[i].unmeasured);
-    if (!total) dashboard_text(c, 1, row, r.width - 2, TV_WARNING, "No matching runs / 0 reset");
+struct remote_totals { char wall[40], cpu[40], rss[40], bytes[40]; size_t hosts; };
+
+static void remote_totals(const struct hs_summary *s, const struct cohort_table *t, struct remote_totals *r) {
+    size_t i;
+    statistics_remote_text(HS_WALL_SECONDS, s->remote[HS_WALL_SECONDS], s->remote_known[HS_WALL_SECONDS], s->remote_steps,
+                           r->wall, sizeof(r->wall));
+    statistics_remote_text(HS_CPU_MICROSECONDS, s->remote[HS_CPU_MICROSECONDS], s->remote_known[HS_CPU_MICROSECONDS],
+                           s->remote_steps, r->cpu, sizeof(r->cpu));
+    statistics_remote_text(HS_PEAK_RSS_BYTES, s->remote[HS_PEAK_RSS_BYTES], s->remote_known[HS_PEAK_RSS_BYTES],
+                           s->remote_steps, r->rss, sizeof(r->rss));
+    statistics_remote_text(HS_TRANSPORT_BYTES, s->remote[HS_TRANSPORT_BYTES], s->remote_known[HS_TRANSPORT_BYTES],
+                           s->remote_steps, r->bytes, sizeof(r->bytes));
+    r->hosts = 0;
+    for (i = 0; i < t->count; i++) if (t->kinds[i] == HS_BY_HOST) r->hosts++;
 }
 
-void statistics_cohorts_render(struct app *app, struct tv_canvas *c, struct tv_rect r) {
-    static struct hs_cohort rows[HS_COHORTS * HS_COHORT_KINDS];
-    static enum hs_cohort_kind kinds[HS_COHORTS * HS_COHORT_KINDS];
+static void cohort_tiles(struct kt_canvas *c, const struct stats_frame *f, const struct hs_summary *s,
+                         const struct remote_totals *r) {
+    char steps[24], hosts[64], rss[64];
+    struct stats_tile tiles[4] = {
+        {"Remote steps", steps, hosts, KT_BASE}, {"Wall", r->wall, "remote steps, latest attempts", KT_BASE},
+        {"CPU", r->cpu, rss, KT_BASE}, {"Transport", r->bytes, "bytes, time not recorded", KT_BASE}};
+    (void)snprintf(steps, sizeof(steps), "%zu", s->remote_steps);
+    (void)snprintf(hosts, sizeof(hosts), "on %zu host%s, %zu local", r->hosts, r->hosts == 1 ? "" : "s",
+                   s->steps - s->remote_steps);
+    (void)snprintf(rss, sizeof(rss), "peak RSS %s", r->rss);
+    stats_tiles(c, f->top, f->width, tiles);
+}
+
+static void cohort_notes(struct kt_canvas *c, const struct stats_frame *f, const struct hs_summary *s,
+                         const struct remote_totals *r) {
+    char text[256];
+    (void)snprintf(text, sizeof(text), "%zu local steps, %zu remote steps on %zu host%s; telemetry block on %zu/%zu receipts. "
+                   "n/N: reported by n of N remote steps.", s->steps - s->remote_steps, s->remote_steps, r->hosts,
+                   r->hosts == 1 ? "" : "s", s->remote_telemetry, s->remote_steps);
+    stats_note(c, f->top + 4, f->width, text);
+    stats_note(c, f->top + 5, f->width, "Local steps carry no task receipt: CPU, memory and transport unknown, never zero. "
+               "Transport time is not recorded.");
+}
+
+/* One line in place of the tiles and notes when narrow. */
+static void cohort_summary(const struct app *app, struct kt_canvas *c, int y, int width, const struct hs_summary *s,
+                           const struct remote_totals *r) {
+    char text[256];
+    const char *sep = dot(app);
+    (void)snprintf(text, sizeof(text), "%zu remote%s%zu local%swall %s%scpu %s", s->remote_steps, sep,
+                   s->steps - s->remote_steps, sep, r->wall, sep, r->cpu);
+    (void)kt_text_aligned(c, (struct kt_rect){1, y, width, 1}, text, KT_ALIGN_LEFT, KT_BASE);
+}
+
+static void cohort_list(struct app *app, struct kt_canvas *c, struct kt_rect area) {
     struct statistics_view *v = app->statistics;
-    struct hs_summary s;
-    char wall[40], cpu[40], rss[40], bytes[40];
-    size_t total, i, start, host_count = 0;
-    bool truncated, wide = r.width >= 120;
-    int row = r.y + 5, available;
-    hs_summarize(v->model, &v->filter, &s);
-    total = collect(v->model, &v->filter, rows, kinds, HS_COHORTS * HS_COHORT_KINDS, &truncated);
-    if (r.height < 12 || r.width < 65) { compact(v, c, r, &s, rows, kinds, total); return; }
-    for (i = 0; i < total; i++) if (kinds[i] == HS_BY_HOST) host_count++;
-    statistics_remote_text(HS_WALL_SECONDS, s.remote[HS_WALL_SECONDS], s.remote_known[HS_WALL_SECONDS], s.remote_steps, wall, sizeof(wall));
-    statistics_remote_text(HS_CPU_MICROSECONDS, s.remote[HS_CPU_MICROSECONDS], s.remote_known[HS_CPU_MICROSECONDS], s.remote_steps, cpu, sizeof(cpu));
-    statistics_remote_text(HS_PEAK_RSS_BYTES, s.remote[HS_PEAK_RSS_BYTES], s.remote_known[HS_PEAK_RSS_BYTES], s.remote_steps, rss, sizeof(rss));
-    statistics_remote_text(HS_TRANSPORT_BYTES, s.remote[HS_TRANSPORT_BYTES], s.remote_known[HS_TRANSPORT_BYTES], s.remote_steps, bytes, sizeof(bytes));
-    dashboard_text(c, 1, r.y, r.width - 2, TV_STRONG, "REMOTE COHORTS / recorded task evidence / location: %s", statistics_location_label(v));
-    dashboard_text(c, 1, r.y + 1, r.width - 2, TV_BASE, "%zu local steps, %zu remote steps on %zu host%s; telemetry block on %zu/%zu receipts",
-        s.steps - s.remote_steps, s.remote_steps, host_count, host_count == 1 ? "" : "s", s.remote_telemetry, s.remote_steps);
-    dashboard_text(c, 1, r.y + 2, r.width - 2, TV_BASE, "Wall %s / CPU %s / peak RSS %s / transport %s (remote steps; n/N when partly reported)", wall, cpu, rss, bytes);
-    dashboard_text(c, 1, r.y + 3, r.width - 2, TV_MUTED, "Local steps carry no task receipt: CPU, memory and transport unknown, never zero. Transport time is not recorded.");
-    dashboard_text(c, 1, r.y + 4, r.width - 2, TV_BORDER, wide ? " KIND       COHORT             RUN STEP  OK FAIL  WALL        CPU         PEAK RSS    BYTES       UNMEASURED (n reason)"
-        : " KIND      COHORT         RUN STP  WALL      CPU        UNMEASURED");
-    available = r.height - 7;
-    if (available < 1) return;
-    start = v->step_scroll < total ? v->step_scroll : (total ? total - 1 : 0);
-    if (v->step_scroll > start) v->step_scroll = start;
-    for (i = start; i < total && row < r.y + r.height - 2; i++, row++) cohort_row(c, 1, row, r.width - 2, &rows[i], kinds[i], wide, i == start);
-    if (!total) dashboard_text(c, 1, row, r.width - 2, TV_WARNING, "No matching runs / 0 reset filters");
-    dashboard_text(c, 1, r.y + r.height - 1, r.width - 2, TV_BORDER, "%zu cohorts%s / j,k scroll / L location / C or M back / r refresh", total, truncated ? " (more than shown)" : "");
+    struct stats_list l;
+    if (!cohorts.count) {
+        stats_empty(app, c, area, "Remote cohorts", v->model->run_count, "No remote steps recorded yet", NULL);
+        return;
+    }
+    memset(&l, 0, sizeof(l));
+    l.title = "Remote cohorts"; l.order = cohorts.truncated ? "more than shown" : "by kind";
+    l.columns = cohort_columns; l.column_count = sizeof(cohort_columns) / sizeof(cohort_columns[0]);
+    l.count = cohorts.count; l.selected = v->step_scroll; l.cell = cohort_cell; l.context = &cohorts; l.focused = true;
+    stats_list_view(app, c, area, &l);
+}
+
+void stats_cohorts_page(struct app *app, struct kt_canvas *c) {
+    struct statistics_view *v = app->statistics;
+    struct hs_summary summary;
+    struct remote_totals totals;
+    struct stats_frame f;
+    struct kt_rect list, unused;
+    int row;
+    hs_summarize(v->model, &v->filter, &summary);
+    (void)statistics_cohort_count(v);
+    remote_totals(&summary, &cohorts, &totals);
+    stats_layout(app, c, 2, false, &f);
+    stats_strip(app, c, &f);
+    row = stats_list_row(&f, 2);
+    if (f.tiles) {
+        cohort_tiles(c, &f, &summary, &totals);
+        cohort_notes(c, &f, &summary, &totals);
+    } else if (c->height >= 8) {
+        cohort_summary(app, c, f.top, f.width, &summary, &totals);
+        if (!f.summary) row++;
+    }
+    stats_areas(app, c, &f, row, &list, &unused);
+    cohort_list(app, c, list);
 }

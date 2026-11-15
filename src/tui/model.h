@@ -20,6 +20,9 @@ struct head {
     char notification_source[SOURCE_TEXT];
     /* interactive, headless, or empty when an older row did not say. */
     char terminal[16];
+    /* The status the current instance's agent exited with, as the head
+     * launcher recorded it; empty while none is recorded. */
+    char agent_exit[8];
     /* Remote heads: the host observation's freshness and age, and whether
      * the row was retained from an earlier observation of a host that no
      * longer answers (never fresh, never an authority for actions). */

@@ -172,7 +172,7 @@ script that knows hidden shortcuts does not establish discoverability either.
 
 ## Build on the current tests
 
-`tests/termviz/pty_support.{c,h}` already provides real PTY input, resizing, screen
+`tests/kettle/pty_support.{c,h}` already provides real PTY input, resizing, screen
 inspection, clear/overflow counters and HTML screen capture. Attached PTY tests
 exercise real attachment. Retain these helpers and their focused regression tests.
 The existing `test-tui-pty` target also uses canned producers, and the onboarding

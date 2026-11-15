@@ -78,18 +78,20 @@ def window_checks() -> None:
 def stimulus_checks() -> None:
     state = ClientState()
     keys, response, _ = _step(state, "navigation", "t")
-    assert keys == b"\n" and response == (7, 1, 9, "[Details]") and state.view == "details"
+    assert keys == b"2" and response == (1, 2, 9, "Needs you") and state.view == "inbox"
     keys, response, _ = _step(state, "search", "t")
-    assert response == (1, 38, len("Search: t"), "Search: t")
+    assert keys == b"1/t\n" and response == (1, 38, len("Filter: t"), "Filter: t") and state.view == "work"
     keys, response, _ = _step(state, "resize", "t")
-    assert keys == (100, 32) and response == (98, 2, 1, "+")
+    assert keys == (100, 32) and response == (1, 30, len("Filter: t"), "Filter: t")
     keys, response, _ = _step(state, "cancel", "t")
-    assert keys == b"\x1b" and response == (1, 30, 4, "Live") and state.view == "work"
+    assert keys == b"\x1b" and response == (2, 30, 6, "* live") and state.view == "work"
+    keys, response, _ = _step(state, "search", "t")
+    assert keys == b"/t\n" and response == (1, 30, len("Filter: t"), "Filter: t")
     keys, response, _ = _step(state, "resize", "t")
-    assert keys == (120, 40) and response == (118, 2, 1, "+")
+    assert keys == (120, 40) and response == (1, 38, len("Filter: t"), "Filter: t")
     attached = ClientState(attached=True)
     keys, response, _ = _step(attached, "navigation", "t")
-    assert keys == b"\x02x\x1b" and response == (1, 1, 6, "[Work]") and not attached.attached
+    assert keys == b"\x1cx\x1b" and response == (48, 2, 29, "latest output / enter to talk") and not attached.attached
 
 
 def _window() -> dict:

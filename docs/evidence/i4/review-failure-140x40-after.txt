@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ EXACT REVIEW / evidence                                                                                                                 │
-│ kill-dry-run · repo-check                                                                                                               │
-│ Failure · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                  │
-│                                                                                                                                         │
-│ RESULT  kill-dry-run  -  verdict FAILED  -  run failed                                                                                  │
-│ Objective: add hydra kill --dry-run so a removal can be previewed without removing anything                                             │
-│                                                                                                                                         │
-│ WHAT WAS PRODUCED                                                                                                                       │
-│   answer - the implementation summary (step implement, available)                                                                       │
-│     388 bytes                                                                                                                           │
-│     | Added --dry-run to hydra kill; the worktree listing is printed before                                                             │
-│     | the sessions are closed.                                                                                                          │
-│                                                                                                                                         │
-│ WHAT WAS CHECKED                                                                                                                        │
-│   FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it would remove (check: repo-check)                                  │
-│   FAIL    req-no-removal - a dry run removes nothing (check: repo-check)                                                                │
-│                                                                                                                                         │
-│ HOW IT WAS VERIFIED                                                                                                                     │
-│   Check repo-check (command): the repository test suite                                                                                 │
-│     Ran: make test-one T=kill                                                                                                           │
-│     On head kill-dry-run-check in step repo-check, exit code 1                                                                          │
-│     Report: fail (verified) - 2 of 12 cases failed                                                                                      │
-│     Summary lines from the output:                                                                                                      │
-│       FAIL: a dry run removes nothing (worktree kill-dry-run-worker is gone)                                                            │
-│       Tests: 12, Passed: 10, Failed: 2                                                                                                  │
-│     Full log (22144 bytes): press L - /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/repo-check/attempt-1/output.log              │
-│                                                                                                                                         │
-│ STEPS  (state, duration, attempts)                                                                                                      │
-│   spawn-worker       spawn  succeeded  5s           attempts 1, head kill-dry-run-worker                                                │
-│   implement          exec   succeeded  58s          attempts 1, head kill-dry-run-worker                                                │
-│       agent codex, version codex-cli 0.46.0, model gpt-6-sol, effort xhigh                                                              │
-│       tokens in 21.3k, cached 20.9k, out 980; cost not reported                                                                         │
-│   repo-check         exec   failed     41s          attempts 1, head kill-dry-run-check                                                 │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- j/k scroll  n/N section  Space/b page  L full log  f references  i identity  Esc back  ? help  q quit                                     
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     EXACT REVIEW / evidence                                                   
+  ◐ Approve merge-gate: notes-cleanup                            kill-dry-run · repo-check                                                 
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     Failure · run run_2cdf8bbe1a4e · attempt-1 · read-only                    
+ Failed 1                                                                                                                                  
+ ▌✗ Check failed: kill-dry-run                                   RESULT  kill-dry-run  -  verdict FAILED  -  run failed                    
+ ▌  run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    Objective: add hydra kill --dry-run so a removal can be previewed without 
+ Ready for review 3                                                  removing anything                                                     
+  ✓ Result ready: kill-dry-run                                                                                                             
+    run run_2cdf8bbe1a4e · step implement · attempt 1 · new      WHAT WAS PRODUCED                                                         
+  ✓ Result ready: feature-build                                    answer - the implementation summary (step implement, available)         
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…        388 bytes                                                             
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…        | Added --dry-run to hydra kill; the worktree listing is printed      
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new              before                                                            
+ Agents 1                                                            | the sessions are closed.                                            
+  ▲ Terminal stopped: notes-cleanup                                                                                                        
+    worktree and files kept · R restarts it                      WHAT WAS CHECKED                                                          
+ Repairs 2                                                         FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it     
+  ▲ (stale) Approval expired: docs-refresh                             would remove (check: repo-check)                                    
+    run run_55aa66bb77cc · step release-gate · attempt 1           FAIL    req-no-removal - a dry run removes nothing (check: repo-check)  
+  ▲ Needs inspection: index-rebuild                                                                                                        
+    run run_aa11bb22cc33 · on archive                            HOW IT WAS VERIFIED                                                       
+                                                                   Check repo-check (command): the repository test suite                   
+                                                                     Ran: make test-one T=kill                                             
+                                                                     On head kill-dry-run-check in step repo-check, exit code 1            
+                                                                     Report: fail (verified) - 2 of 12 cases failed                        
+                                                                     Summary lines from the output:                                        
+                                                                       FAIL: a dry run removes nothing (worktree kill-dry-run-worker is    
+                                                                           gone)                                                           
+                                                                       Tests: 12, Passed: 10, Failed: 2                                    
+                                                                     Full log (22144 bytes): press L -                                     
+                                                                         /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/repo-check/at
+                                                                         tempt-1/output.log                                                
+                                                                                                                                           
+                                                                 STEPS  (state, duration, attempts)                                        
+                                                                   spawn-worker       spawn  succeeded  5s           attempts 1, head      
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ scroll • space/b page • n/N section • plus add reference • L full log • tab/shift+tab pane • [/] page • : commands • ? help • q quit  

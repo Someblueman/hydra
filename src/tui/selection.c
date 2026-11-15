@@ -43,17 +43,11 @@ void retarget_selection(struct app *app) {
         if (task_visible(app, &app->model.tasks[index])) { app->task_row = true; app->task_selected = index; return; }
     }
 }
-static void bounded_selection(size_t *index, size_t count, int direction) {
-    if (*index >= count) { *index = 0; return; }
-    if (direction > 0 && *index + 1 < count) (*index)++;
-    if (direction < 0 && *index) (*index)--;
-}
 static bool move_workspace_selection(struct app *app, int direction) {
     switch (app->view) {
         case 8: statistics_move(app, direction); return true;
-        case 7: native_workspace_move(app, direction); return true;
-        case 5: workflow_move(app, direction); return true;
-        case 6: bounded_selection(&app->host_selected, hosts_row_count(app), direction); return true;
+        case 7: outline_move(app, direction, false); work_selection_changed(app); return true;
+        case 6: hosts_move(app, direction); return true;
         default: return false;
     }
 }
@@ -61,8 +55,6 @@ static bool move_workspace_selection(struct app *app, int direction) {
 void move_selection(struct app *app, int direction) {
     size_t index;
     if (move_workspace_selection(app, direction)) return;
-    if (app->view == 3) { bounded_selection(&app->recovery_selected, app->model.recovery_count, direction); return; }
-    if (app->view <= 4) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
     retarget_selection(app);
     if (selected_head(app) == NULL) return;
     if (direction > 0) {
@@ -94,7 +86,7 @@ void toggle_mark(struct app *app) {
     struct head *head = selected_head(app);
     size_t index;
     if (head == NULL) return;
-    if (head_remote(head)) { copy_text(app->notice, sizeof(app->notice), "Remote heads are not marked: removal and grouping run on their host"); return; }
+    if (head_remote(head)) { work_selection_notice(app, "Remote heads are not marked: removal and grouping run on their host"); return; }
     index = marked_index(app, head->branch);
     if (index < app->marked_count) {
         app->marked_count--;

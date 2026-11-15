@@ -36,12 +36,17 @@ static void join_consumers(json_object *plan, json_object *delivery, bool reach[
         required_checks(plan, delivery, j, reach, errors);
     }
 }
+/* True when one of a step's inputs (absent in an unvalidated draft) is the given context. */
+static bool has_context(json_object *inputs, const char *context) {
+    if (!json_object_is_type(inputs, json_type_object)) return false;
+    json_object_object_foreach(inputs, name, ref) { (void)name; if (f_field(ref, context)) return true; }
+    return false;
+}
 static void check_contexts(json_object *plan, json_object *errors) {
     json_object *checks = f_field(plan, "checks"), *data = f_field(f_field(plan, "data"), "steps");
     for (size_t i = 0; i < json_object_array_length(checks); i++) {
-        const char *id = f_string(json_object_array_get_idx(checks, i), "step"); bool context = false;
-        json_object *inputs = f_field(f_field(data, id), "inputs");
-        json_object_object_foreach(inputs, name, ref) { (void)name; if (f_field(ref, "validation")) context = true; }
+        const char *id = f_string(json_object_array_get_idx(checks, i), "step");
+        bool context = has_context(f_field(f_field(data, id), "inputs"), "validation");
         if (!context) plan_error(errors, "checks", "missing_validation_context", "distributed validators require an input with validation: plan");
     }
 }
@@ -49,10 +54,9 @@ static void repair_contexts(json_object *plan, json_object *errors) {
     if (!json_object_get_int(f_field(f_field(plan, "envelope"), "repair_budget"))) return;
     json_object *steps = f_field(plan, "steps"), *data = f_field(f_field(plan, "data"), "steps");
     for (size_t i = 0; i < json_object_array_length(steps); i++) {
-        json_object *step = json_object_array_get_idx(steps, i); bool context = false;
+        json_object *step = json_object_array_get_idx(steps, i);
         if (!strcmp(f_string(step, "role"), "verify")) continue;
-        json_object *inputs = f_field(f_field(data, f_string(step, "id")), "inputs");
-        json_object_object_foreach(inputs, name, ref) { (void)name; if (f_field(ref, "repair")) context = true; }
+        bool context = has_context(f_field(f_field(data, f_string(step, "id")), "inputs"), "repair");
         if (!context && !f_field(f_field(f_field(plan, "reuse_policy"), "steps"), f_string(step, "id")))
             plan_error(errors, "data", "missing_repair_context", "repairable producers and composers require an input with repair: plan unless explicitly eligible for sealed-artifact reuse");
     }

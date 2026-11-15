@@ -55,24 +55,13 @@ static json_object *lowered_plan(const struct px_chain *chain, json_object *prop
     json_object_object_add(plan, "envelope", plan_canonical(f_field(proposal, "envelope") ? f_field(proposal, "envelope") : f_field(base, "envelope")));
     return plan;
 }
-static void reachability(json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS]) {
-    size_t n = json_object_array_length(steps);
-    for (size_t i = 0; i < n; i++) {
-        json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs");
-        for (size_t j = 0; json_object_is_type(needs, json_type_array) && j < json_object_array_length(needs); j++) {
-            int index = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-            if (index >= 0) reach[i][index] = true;
-        }
-    }
-    for (size_t k = 0; k < n; k++) for (size_t i = 0; i < n; i++) for (size_t j = 0; j < n; j++) reach[i][j] = reach[i][j] || (reach[i][k] && reach[k][j]);
-}
 /* Every join has members and every other node feeds or follows a join, so
  * the admitted work converges into the membership recorded here. */
 static json_object *frozen_joins(json_object *proposal) {
     json_object *steps = f_field(proposal, "steps"), *joins = f_field(proposal, "joins"), *out = json_object_new_object();
     bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}}, is_join[PLAN_STEPS] = {false}; size_t n = json_object_array_length(steps);
     if (n > PLAN_STEPS) goto invalid;
-    reachability(steps, reach);
+    plan_reachability(steps, reach, NULL);
     for (size_t j = 0; j < json_object_array_length(joins); j++) {
         const char *id = f_text(json_object_array_get_idx(joins, j)); int index = plan_index(steps, id);
         json_object *needs = f_field(json_object_array_get_idx(steps, (size_t)index), "needs");

@@ -40,6 +40,30 @@ def strip_frame(line: str) -> str:
     return line.strip().strip("|│").strip()
 
 
+def squeezed(text: str) -> str:
+    """Text without any whitespace: a sentence the terminal wrapped at any
+    column still matches."""
+    return "".join(text.split())
+
+
+def says(screen: str, sentence: str) -> bool:
+    """Whether the screen shows the sentence, however it is wrapped (a
+    dialog's side borders are not part of its text)."""
+    return squeezed(sentence) in squeezed(usability.prose(screen))
+
+
+def column_rows(screen: str, anchor: str) -> list[str]:
+    """The rows of the pane whose left edge shows ``anchor`` (a label such as
+    "Agent" on the Details page), from its column rightwards, stripped."""
+    rows = screen.splitlines()
+    for row in rows:
+        match = re.search(rf"(?:^|\s){re.escape(anchor)}\s", row)
+        if match:
+            x = match.start() + (1 if row[match.start()] == " " else 0)
+            return [r[x:].strip() for r in rows]
+    return []
+
+
 def pane_text(screen: str, anchor: str) -> str:
     """Text of the pane that shows `anchor`, with its wrapped rows rejoined.
     The pane's column span is the frame-free run around the anchor's row."""
@@ -103,7 +127,7 @@ class Case(usability.Journey):
             directory, self.repo, {**self.env, **(argv_env or {})}, self.columns,
             40 if self.columns > 80 else 24)
         self.observer.wait("raw-ready", timeout=15)
-        self.see("HYDRA /")
+        self.see_all(*usability.TOP_BAR)
 
     def quit(self) -> dict:
         """Leave the control centre with q and require a clean exit."""
@@ -120,8 +144,9 @@ class Case(usability.Journey):
         return [strip_frame(line) for line in self.screen().splitlines()]
 
     def tab_bar(self, screen: str | None = None) -> str:
+        """The top bar: the brand, the four screens by their keys, the summary."""
         lines = (screen or self.screen()).splitlines()
-        return lines[1] if len(lines) > 1 else ""
+        return lines[0] if lines else ""
 
     def hint(self, screen: str | None = None) -> str:
         lines = (screen or self.screen()).rstrip("\n").splitlines()
@@ -157,12 +182,14 @@ class Case(usability.Journey):
         return screen
 
     def selected_row(self, screen: str | None = None) -> str:
-        """The row marked as selected in a list (leading '>' inside the frame,
-        which may be nested as in Overview's panels)."""
-        for line in (screen or self.screen()).splitlines():
-            body = re.sub(r"^[|│ ]+", "", line).rstrip("|│ ")
-            if body.startswith("> ") or body.startswith(">* "):
-                return body
+        """The Work list's selected row, as "> name": the selection bar ('>'
+        without Unicode) and the row's status glyph are dropped."""
+        for line in usability.list_column(screen or self.screen()):
+            if usability.selected(line):
+                words = line[2:].split()
+                if words and not words[0][:1].isalnum():
+                    words = words[1:]  # the status glyph
+                return "> " + " ".join(words)
         return ""
 
     def watch(self, seconds: float, interval: float = 0.1) -> list[str]:
@@ -258,6 +285,13 @@ def select_head(j: Case, name: str, attempts: int = 12) -> str:
     raise AssertionError(f"head {name!r} not found in the list; last selected {j.selected_row()!r}")
 
 
+# What each screen shows of its own once it is up.
+SCREEN_MARKERS = {
+    "Work": ("Heads ",), "Inbox": ("Needs you",), "Hosts": ("+ Add a host",),
+    "Stats": ("Sessions  Runs",),
+}
+
+
 def heads(j: Case) -> set[str]:
     """Branch names from `hydra list` (its rows may start with the current-head marker)."""
     rows = j.cli("list").splitlines()
@@ -273,18 +307,18 @@ def heads(j: Case) -> set[str]:
 
 
 def tab_position(j: Case, *labels: str) -> int:
-    """1-based position of a tab in the visible bar (help: 1-9 jump to a tab); 0 if absent."""
-    names = [t.strip("[]") for t in j.tab_bar().split()]
-    return next((i + 1 for i, n in enumerate(names) if n in labels), 0)
+    """The key the top bar gives a screen ("2 Inbox"); 0 if absent."""
+    match = re.search(r"\b([1-9]) (" + "|".join(map(re.escape, labels)) + r")\b", j.tab_bar())
+    return int(match.group(1)) if match else 0
 
 
 def goto_tab(j: Case, *labels: str) -> str:
-    """Press the number the visible tab bar gives the tab and wait for it."""
+    """Press the number the visible top bar gives the screen and wait for it."""
     position = tab_position(j, *labels)
     if not position:
-        raise AssertionError(f"tab {labels} not in the bar {j.tab_bar()!r}")
+        raise AssertionError(f"screen {labels} not in the bar {j.tab_bar()!r}")
     j.keys(str(position).encode())
-    return j.see_any(*(f"[{label}]" for label in labels))
+    return j.see_all(*next(SCREEN_MARKERS[label] for label in labels if label in SCREEN_MARKERS))
 
 
 def make_stopped(j: Case, branch: str) -> None:

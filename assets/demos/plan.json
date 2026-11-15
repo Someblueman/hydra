@@ -1,0 +1,12 @@
+{
+  "plan": "simple-1",
+  "objective": "Add an inverted index so a query no longer rescans every file",
+  "steps": [
+    {"id": "index", "timeout": 1200, "agent": "Add src/index.c: build a term -> files map while files are written and keep it under .search/index."},
+    {"id": "query", "timeout": 1200, "agent": "Answer queries from the index in src/search.c; fall back to a scan when the index is missing or stale."},
+    {"id": "check", "timeout": 300, "run": ["make", "test"]}
+  ],
+  "done_when": [
+    {"criterion": "make test passes, including new tests for the index", "check": "check"}
+  ]
+}

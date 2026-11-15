@@ -12,17 +12,7 @@
 #include <unistd.h>
 
 int auth_hash(const char *text, char digest[65]) {
-    struct f_capture cap = {0}; int rc = -1;
-    char *argv[] = {(char *)"shasum", (char *)"-a", (char *)"256", NULL};
-    char *linux_argv[] = {(char *)"sha256sum", NULL};
-    if (f_run(argv, text, strlen(text), 5, &cap) || cap.status) {
-        f_capture_free(&cap);
-        if (f_run(linux_argv, text, strlen(text), 5, &cap) || cap.status) goto done;
-    }
-    if (cap.out_bytes < 64 || strspn(cap.out, "0123456789abcdef") != 64) goto done;
-    memcpy(digest, cap.out, 64); digest[64] = 0; rc = 0;
-done:
-    f_capture_free(&cap); return rc;
+    f_sha256_text(text, strlen(text), digest); return 0;
 }
 int auth_path(const char *agent, char path[F_PATH]) {
     const char *root = NULL, *suffix = NULL; char base[F_PATH];

@@ -72,7 +72,7 @@ json_object *plan_delivery(const char *run) {
         if (!file) goto done;
         json_object_put(file); report = plan_read(path);
         if (!plan_repair_fresh(run, c, f_string(subject, "sha256")) ||
-            plan_report(compiled, c, report, f_string(subject, "sha256")) != PLAN_PASS) {
+            plan_report_bound(compiled, digest, c, report, f_string(subject, "sha256")) != PLAN_PASS) {
             json_object_put(report); goto done;
         }
         json_object_object_add(f_field(delivery, "checks"), f_string(c, "id"), report);

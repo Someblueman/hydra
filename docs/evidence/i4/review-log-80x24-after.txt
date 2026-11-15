@@ -1,25 +1,25 @@
 FRAME 1 80x24
- HYDRA / ATTENTION                                                             
- Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
-╭─ Attention ─────────────────────────────────────────────────────────────────╮
-│ EXACT REVIEW / full log                                                     │
-│ kill-dry-run · implement                                                    │
-│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                       │
-│                                                                             │
-│ FULL LOG  2,663 bytes                                                       │
-│ /tmp/hydra-i4-capture.IZy8Y0/output.log                                     │
-│                                                                             │
-│ [PASS] check number 0 of the fixture suite                                  │
-│ [PASS] check number 1 of the fixture suite                                  │
-│ [PASS] check number 2 of the fixture suite                                  │
-│ [PASS] check number 3 of the fixture suite                                  │
-│ [PASS] check number 4 of the fixture suite                                  │
-│ [PASS] check number 5 of the fixture suite                                  │
-│ [PASS] check number 6 of the fixture suite                                  │
-│ [PASS] check number 7 of the fixture suite                                  │
-│ [PASS] check number 8 of the fixture suite                                  │
-│ [PASS] check number 9 of the fixture suite                                  │
-│ [PASS] check number 10 of the fixture suite                                 │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Live                                                                          
- j/k scroll  Space/b page  g/G top/end  Esc back  ? help  q quit               
+ ◆ hydra  1 Work  2 Inbox 8  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Summary  Review  References  Technical  ──────────────────────────────────────
+ EXACT REVIEW / full log                                                       
+ kill-dry-run · implement                                                      
+ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                         
+                                                                               
+ FULL LOG  2,663 bytes                                                         
+ /tmp/hydra-i4-capture.hNQ6HP/output.log                                       
+                                                                               
+ [PASS] check number 0 of the fixture suite                                    
+ [PASS] check number 1 of the fixture suite                                    
+ [PASS] check number 2 of the fixture suite                                    
+ [PASS] check number 3 of the fixture suite                                    
+ [PASS] check number 4 of the fixture suite                                    
+ [PASS] check number 5 of the fixture suite                                    
+ [PASS] check number 6 of the fixture suite                                    
+ [PASS] check number 7 of the fixture suite                                    
+ [PASS] check number 8 of the fixture suite                                    
+ [PASS] check number 9 of the fixture suite                                    
+ [PASS] check number 10 of the fixture suite                                   
+ [PASS] check number 11 of the fixture suite                                   
+  ● live   8 items need you · decisions first, then failures                   
+ ↑/↓ scroll • space/b page • n/N section • L full log • ? help • q quit        

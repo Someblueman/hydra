@@ -1,0 +1,7 @@
+HYDRA_STATISTICS	6	1788789600
+H	head_aaaaaaaaaaaaaaaaaaaa	instance_aaaaaaaaaaaaaaa1	fix-login-timeout	codex	interactive	open	1788786000	-	-	1500	1380	720	0
+H	head_bbbbbbbbbbbbbbbbbbbb	instance_bbbbbbbbbbbbbbb2	docs-refresh	opencode	interactive	ended	1788775200	1788782400	done	2400	3000	1800	600
+H	head_bbbbbbbbbbbbbbbbbbbb	instance_bbbbbbbbbbbbbbb1	docs-refresh	opencode	interactive	superseded	1788768000	1788775200	-	-	-	7200	0
+H	head_cccccccccccccccccccc	instance_ccccccccccccccc1	nightly-import	codex	headless	ended	1788700000	1788703600	failed	-	-	3600	0
+H	head_dddddddddddddddddddd	instance_ddddddddddddddd1	old-experiment	-	interactive	ended	-	1788600000	abandoned	-	-	-	-
+Z	0	0	5

@@ -127,14 +127,114 @@ static json_object *approval_error(const struct setup_ctx *ctx, struct gate *gat
 static void print_safe(const char *text) {
     for (; *text; text++) fputc((unsigned char)*text < 0x20 || *text == 0x7f ? '?' : *text, stderr);
 }
-static void print_plan(json_object *plan, const char *digest) {
-    fputs("Review this remote setup plan:\n", stderr);
-    json_object_object_foreach(plan, key, value) {
-        fprintf(stderr, "  %s: ", key);
-        print_safe(json_object_is_type(value, json_type_string) ? json_object_get_string(value)
-                                                                : json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN));
-        fputc('\n', stderr);
+/* ---- The plan on a terminal ----
+ * The same canonical plan the hash binds, as labelled rows: nested members
+ * flattened (binary.sha256), lists joined, and the members that only
+ * identify the plan (schema, kind, name, destination) left out. */
+static const char *const plan_labels[][2] = {
+    {"fingerprint", "Fingerprint"}, {"key_type", "Key type"}, {"host", "Host"}, {"known_hosts", "Will be added to"},
+    {"hashed", "Hashed entry"}, {"change", "Change"}, {"platform", "Platform"}, {"hydra_version", "Hydra version"},
+    {"binary.trust", "Trust"}, {"binary.source", "Binary source"}, {"binary.name", "Binary"}, {"binary.sha256", "Binary SHA-256"},
+    {"package_sha256", "Package SHA-256"}, {"prefix", "Install location"}, {"changes", "Changes"}, {"agent", "Agent"},
+    {"executable", "Executable"}, {"command", "Command"}, {"effect", "Runs"}, {"source", "Recipe"}, {"docs_url", "Provider docs"},
+    {"verified_on", "Recipe checked"}, {"requires", "Requires"}, {"expected_dirs", "Installs into"}, {"peer_fingerprint", "Host key"},
+};
+static const char *const plan_values[][3] = {
+    {"binary.trust", "pinned", "pinned: its digest is recorded in this Hydra release"},
+    {"binary.trust", "unpinned", "unpinned: not a Hydra release binary; approve only if you trust where it came from"},
+    {"binary.source", "release-asset", "Hydra release download, checked against the pinned digest"},
+    {"binary.source", "local-helper", "this machine's own hydra-fleet helper"},
+    {"binary.source", "binary", "the file passed with --binary"},
+    {"source", "built-in", "built into this Hydra release"},
+    {"source", "local", "LOCAL recipe from $HYDRA_HOME/fleet/agent-recipes.json"},
+};
+static bool plan_hidden(const char *key) {
+    static const char *const hidden[] = {"schema", "schema_version", "kind", "name", "destination"};
+    size_t i;
+    for (i = 0; i < sizeof(hidden) / sizeof(hidden[0]); i++) if (!strcmp(key, hidden[i])) return true;
+    return false;
+}
+static const char *plan_label(const char *key) {
+    size_t i;
+    for (i = 0; i < sizeof(plan_labels) / sizeof(plan_labels[0]); i++) if (!strcmp(key, plan_labels[i][0])) return plan_labels[i][1];
+    return NULL;
+}
+/* A member by dotted path ("binary.sha256"); NULL when absent. */
+static json_object *plan_member(json_object *plan, const char *path) {
+    char head[64]; const char *dot = strchr(path, '.');
+    if (!dot) return f_field(plan, path);
+    if ((size_t)(dot - path) >= sizeof(head)) return NULL;
+    memcpy(head, path, (size_t)(dot - path)); head[dot - path] = '\0';
+    return plan_member(f_field(plan, head), dot + 1);
+}
+static void print_scalar(json_object *value) {
+    print_safe(json_object_is_type(value, json_type_string) ? json_object_get_string(value) : json_object_to_json_string(value));
+}
+static void print_list(json_object *value) {
+    size_t i;
+    for (i = 0; i < json_object_array_length(value); i++) {
+        if (i) fputs(", ", stderr);
+        print_scalar(json_object_array_get_idx(value, i));
     }
+}
+static void print_value(const char *key, json_object *value) {
+    size_t i;
+    if (json_object_is_type(value, json_type_array)) { print_list(value); return; }
+    if (json_object_is_type(value, json_type_boolean)) { fputs(json_object_get_boolean(value) ? "yes" : "no", stderr); return; }
+    for (i = 0; i < sizeof(plan_values) / sizeof(plan_values[0]); i++)
+        if (!strcmp(key, plan_values[i][0]) && json_object_is_type(value, json_type_string) && !strcmp(json_object_get_string(value), plan_values[i][1])) {
+            fputs(plan_values[i][2], stderr);
+            return;
+        }
+    print_scalar(value);
+}
+static void print_row(const char *label, const char *path, json_object *value) {
+    fprintf(stderr, "  %-18s", label);
+    print_value(path, value);
+    fputc('\n', stderr);
+}
+/* Members without a label of their own, after the labelled ones. */
+static void print_rest(json_object *object, const char *prefix) {
+    json_object_object_foreach(object, key, value) {
+        char path[128];
+        snprintf(path, sizeof(path), "%s%s%s", prefix, prefix[0] ? "." : "", key);
+        if ((!prefix[0] && plan_hidden(key)) || plan_label(path)) continue;
+        if (json_object_is_type(value, json_type_object)) print_rest(value, path);
+        else print_row(path, path, value);
+    }
+}
+static void print_rows(json_object *plan) {
+    size_t i;
+    for (i = 0; i < sizeof(plan_labels) / sizeof(plan_labels[0]); i++) {
+        json_object *value = plan_member(plan, plan_labels[i][0]);
+        if (value && !json_object_is_type(value, json_type_object)) print_row(plan_labels[i][1], plan_labels[i][0], value);
+    }
+    print_rest(plan, "");
+}
+static void print_title(json_object *plan) {
+    const char *kind = f_string(plan, "kind"), *name = f_string(plan, "name");
+    if (!kind || !name) { fputs("Review this remote setup plan:\n", stderr); return; }
+    if (!strcmp(kind, "host_key")) fputs("Trust the host key of ", stderr);
+    else if (!strcmp(kind, "provision")) fputs("Install Hydra on ", stderr);
+    else if (!strcmp(kind, "install_agent")) { fputs("Install ", stderr); print_safe(f_string(plan, "agent") ? f_string(plan, "agent") : "an agent"); fputs(" on ", stderr); }
+    else if (!strcmp(kind, "remove")) fputs("Remove the setup record of ", stderr);
+    else { fputs("Review this plan for ", stderr); }
+    print_safe(name);
+    fputs(!strcmp(kind, "host_key") || !strcmp(kind, "remove") ? "?\n" : "\n", stderr);
+}
+/* How to read the presented key's fingerprint on the machine itself. */
+static void print_key_check(json_object *plan) {
+    const char *type = f_string(plan, "key_type");
+    char lower[32]; size_t i;
+    if (!type || strlen(type) >= sizeof(lower) || strspn(type, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789") != strlen(type)) return;
+    for (i = 0; type[i]; i++) lower[i] = (char)((type[i] >= 'A' && type[i] <= 'Z') ? type[i] - 'A' + 'a' : type[i]);
+    lower[i] = '\0';
+    fprintf(stderr, "Compare the fingerprint with what this prints on the machine itself:\n  ssh-keygen -lf /etc/ssh/ssh_host_%s_key.pub\n", lower);
+}
+static void print_plan(json_object *plan, const char *digest, bool host_key) {
+    print_title(plan);
+    print_rows(plan);
+    if (host_key) print_key_check(plan);
     fprintf(stderr, "  plan sha256: %s\n", digest);
 }
 static bool confirmed(bool host_key) {
@@ -174,7 +274,7 @@ json_object *setup_plan_gate(struct setup_ctx *ctx, const char *step, json_objec
             result = approval_error(ctx, &gate, "approval_mismatch", gate.host_key ? "the host key fingerprint does not match the approved value"
                                                                                   : "the approved hash does not match the current plan");
     } else if (ctx->interactive) {
-        print_plan(gate.plan, gate.digest);
+        print_plan(gate.plan, gate.digest, gate.host_key);
         if (!confirmed(gate.host_key))
             result = setup_error(ctx, "approval_declined", "the plan was not approved; nothing was changed", "rerun when you are ready to review the plan again", NULL);
     } else {

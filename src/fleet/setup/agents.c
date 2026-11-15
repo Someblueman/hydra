@@ -148,19 +148,6 @@ static json_object *inventory_of(struct setup_ctx *ctx, bool live, json_object *
 }
 json_object *setup_inventory(struct setup_ctx *ctx, json_object **error) { return inventory_of(ctx, false, error); }
 
-/* ---- Selection ---- */
-int setup_agent_select(struct setup_ctx *ctx, const char *agent) {
-    json_object *detail = setup_state_detail(ctx, "agents"), *copy = NULL, *selected;
-    char status[32];
-    if (detail && json_object_deep_copy(detail, &copy, NULL)) return -1;
-    if (!copy) copy = json_object_new_object();
-    selected = f_field(copy, "selected");
-    if (!array(selected)) { selected = json_object_new_array(); json_object_object_add(copy, "selected", selected); }
-    if (listed(selected, agent)) { json_object_put(copy); return 0; }
-    json_object_array_add(selected, json_object_new_string(agent));
-    if (f_copy(status, sizeof(status), setup_state_status(ctx, "agents"))) { json_object_put(copy); return -1; }
-    return setup_state_step(ctx, "agents", status, copy);
-}
 static bool has_recipe(const struct setup_ctx *ctx, const char *agent) {
     json_object *error = NULL, *recipe = setup_recipe(ctx, agent, &error);
     bool found = recipe != NULL;
@@ -211,6 +198,41 @@ static const char *summary_of(json_object *inventory, json_object *selected, cha
     }
     snprintf(out, size, "%zu usable, %zu off PATH, %zu selected", present, off, array(selected) ? json_object_array_length(selected) : 0);
     return out;
+}
+/* ---- Selection ---- */
+/* Records the agents step's detail again with its status kept and its
+ * summary counted from the detail's own inventory and selection, so the
+ * summary never lags an installer, a recorded location or a choice. */
+static int agents_store(struct setup_ctx *ctx, json_object *copy) {
+    char status[32], summary[128];
+    if (f_copy(status, sizeof(status), setup_state_status(ctx, "agents"))) { json_object_put(copy); return -1; }
+    if (array(f_field(copy, "agents"))) f_string_add(copy, "summary", summary_of(copy, f_field(copy, "selected"), summary, sizeof(summary)));
+    return setup_state_step(ctx, "agents", status, copy);
+}
+int setup_agent_select(struct setup_ctx *ctx, const char *agent) {
+    json_object *detail = setup_state_detail(ctx, "agents"), *copy = NULL, *selected;
+    if (detail && json_object_deep_copy(detail, &copy, NULL)) return -1;
+    if (!copy) copy = json_object_new_object();
+    selected = f_field(copy, "selected");
+    if (!array(selected)) { selected = json_object_new_array(); json_object_object_add(copy, "selected", selected); }
+    if (listed(selected, agent)) { json_object_put(copy); return 0; }
+    json_object_array_add(selected, json_object_new_string(agent));
+    return agents_store(ctx, copy);
+}
+/* After an installer: the agents step shows the inventory taken after it,
+ * or a fresh one when a location was recorded since (NULL). A step that never
+ * ran keeps its absent inventory; failing to refresh leaves the earlier one,
+ * which the next `remote agents` replaces. */
+static void agents_refresh(struct setup_ctx *ctx, json_object *inventory) {
+    json_object *detail = setup_state_detail(ctx, "agents"), *error = NULL, *fresh = NULL, *copy = NULL;
+    if (!array(f_field(detail, "agents"))) return;
+    if (!inventory && !(inventory = fresh = inventory_of(ctx, true, &error))) { json_object_put(error); return; }
+    if (!json_object_deep_copy(detail, &copy, NULL)) {
+        json_object_object_add(copy, "agents", json_object_get(f_field(inventory, "agents")));
+        f_string_add(copy, "source", f_string(inventory, "source"));
+        (void)agents_store(ctx, copy);
+    }
+    json_object_put(fresh);
 }
 static json_object *choices(const struct setup_ctx *ctx, json_object *inventory) {
     json_object *list = json_object_new_array(); size_t i;
@@ -355,9 +377,38 @@ static json_object *record_next(const struct setup_ctx *ctx, const char *executa
     json_object_object_add(next, "approval_sha256", NULL);
     return next;
 }
-static json_object *installed(struct setup_ctx *ctx, const char *step, json_object *recipe, json_object *row, const char *path) {
+/* Whether path lies directly in a directory the approved installer plan
+ * named (expected_dirs, "~" being the HOME preflight reported). */
+static bool in_planned_dir(struct setup_ctx *ctx, json_object *recipe, const char *path) {
+    const char *home = f_string(setup_state_detail(ctx, "preflight"), "home"), *slash = strrchr(path, '/');
+    json_object *dirs = f_field(recipe, "expected_dirs");
+    size_t i;
+    if (!home || home[0] != '/' || !slash || !array(dirs)) return false;
+    for (i = 0; i < json_object_array_length(dirs); i++) {
+        const char *dir = f_text(json_object_array_get_idx(dirs, i));
+        char expanded[F_PATH];
+        if (!dir || snprintf(expanded, sizeof(expanded), "%s%s", !strncmp(dir, "~/", 2) ? home : "", !strncmp(dir, "~/", 2) ? dir + 1 : dir) >= (int)sizeof(expanded))
+            continue;
+        if (strlen(expanded) == (size_t)(slash - path) && !strncmp(expanded, path, (size_t)(slash - path))) return true;
+    }
+    return false;
+}
+/* The installer put the agent where its approved plan said it would: that
+ * location is recorded without a second question. Elsewhere off PATH the
+ * user is asked (on a terminal) or given the --record command. */
+static bool record_planned(struct setup_ctx *ctx, json_object *recipe, const char *executable, const char *path) {
+    char record[F_PATH + 80]; json_object *error;
+    if (!in_planned_dir(ctx, recipe, path)) return false;
+    snprintf(record, sizeof(record), "%s=%s", executable, path);
+    if ((error = record_location(ctx, record))) { json_object_put(error); return false; }
+    if (ctx->interactive) { fputs("Recorded ", stderr); print_safe(executable); fputs(" at ", stderr); print_safe(path); fputs(", where the approved installer puts it.\n", stderr); }
+    return true;
+}
+static json_object *installed(struct setup_ctx *ctx, const char *step, json_object *recipe, json_object *inventory, const char *path) {
+    json_object *row = agent_inventory_row(inventory, f_string(recipe, "executable"));
     const char *executable = f_string(recipe, "executable"), *status = f_string(row, "status");
-    bool off_path = status && !strcmp(status, "found_off_path"), recorded = off_path && offer_record(ctx, executable, path);
+    bool off_path = status && !strcmp(status, "found_off_path");
+    bool recorded = off_path && (record_planned(ctx, recipe, executable, path) || offer_record(ctx, executable, path));
     json_object *detail = json_object_new_object(), *result; char summary[F_PATH + 64];
     snprintf(summary, sizeof(summary), "installed at %s%s", path, off_path && !recorded ? " (off PATH, not recorded)" : "");
     f_string_add(detail, "summary", summary); f_string_add(detail, "agent", f_string(recipe, "agent"));
@@ -365,6 +416,7 @@ static json_object *installed(struct setup_ctx *ctx, const char *step, json_obje
     json_object_object_add(detail, "installed_by_hydra", json_object_new_boolean(true));
     json_object_object_add(detail, "recorded", json_object_new_boolean(recorded || (status && !strcmp(status, "recorded"))));
     result = finished(ctx, step, "done", detail);
+    agents_refresh(ctx, recorded ? NULL : inventory);
     if (off_path && !recorded && json_object_get_boolean(f_field(result, "ok")))
         json_object_object_add(f_field(result, "data"), "next", record_next(ctx, executable, path));
     return result;
@@ -386,7 +438,7 @@ static json_object *install_verify(struct setup_ctx *ctx, const char *step, json
     else if (!probe_ok(ctx, f_string(recipe, "agent"), path, row))
         result = stopped(ctx, step, "failed", "version/help probe failed", "install_failed", "the installed executable did not pass the --version and help probe",
                          "run it on the remote to inspect the problem; if it is group-writable, chmod go-w it; then rerun", NULL);
-    else result = installed(ctx, step, recipe, row, path);
+    else result = installed(ctx, step, recipe, inventory, path);
     json_object_put(inventory);
     return result;
 }

@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
- Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ATTENTION DETAIL                                                                                                                        │
-│ Check failed · kill-dry-run · repo-check                                                                                                │
-│ Status      New: not marked seen yet; listed until the run is resolved.                                                                 │
-│ Why         Step repo-check (attempt 1) failed its check; review the log, then send the plan back or retry. It decides                  │
-│             req-dry-run-flag, req-no-removal.                                                                                           │
-│ Next        r reviews the failed requirement and its log. To send the plan back, open its planning conversation from Work: F requests   │
-│             changes, V validates the revision and E runs it.                                                                            │
-│                                                                                                                                         │
-│ IDENTITY                                                                                                                                │
-│ Kind        failure · check_failed                                 Source      workflow records                                         │
-│ Project     project_7f3a                                           Host        -                                                        │
-│ Task        -                                                      Run         run_2cdf8bbe1a4e                                         │
-│ Step        repo-check                                             Attempt     attempt-1                                                │
-│ Head        head_b2c4d6e8                                          Instance    instance_b2c4d6e8                                        │
-│ Request     -                                                      Binding     -                                                        │
-│ Freshness   fresh                                                                                                                       │
-│ Route       workflow-evidence · navigable                                                                                               │
-│ Revision   7777777777777777777777777777777777777777777777777777777777777777                                                             │
-│ Identity   8888888888888888888888888888888888888888888888888888888888888888                                                             │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- r review  s mark seen / new again  Space/b scroll  Esc back to the list  ? help  q quit                                                   
+ ◆ hydra  1 Work   2 Inbox 8   3 Hosts   4 Stats                                                       this machine · 3 heads · 1 running  
+                                                                                                                                           
+ Needs you ───────────────────────────────────── 8 · 0 seen ──   Summary  Review  References  Technical  ──────────────────────────────────
+ Decisions 1                                                     ✗ Check failed: kill-dry-run                                              
+  ◐ Approve merge-gate: notes-cleanup                            run run_2cdf8bbe1a4e · step repo-check · req-dry-run-flag,                
+    run run_9ab1c3d5e7f9 · step merge-gate · attempt 1 · new     req-no-removal · attempt 1 · new                                          
+ Failed 1                                                                                                                                  
+ ▌✗ Check failed: kill-dry-run                                   What failed                                                               
+ ▌  run run_2cdf8bbe1a4e · step repo-check · req-dry-run-fla…    Step repo-check (attempt 1) failed its check; review the log, then send   
+ Ready for review 3                                              the plan back or retry. It decides req-dry-run-flag, req-no-removal.      
+  ✓ Result ready: kill-dry-run                                                                                                             
+    run run_2cdf8bbe1a4e · step implement · attempt 1 · new      Run         run_2cdf8bbe1a4e                                              
+  ✓ Result ready: feature-build                                  Host        this machine                                                  
+    run run_71a2b3c4d5e6 · step verify · attempt 2 · on buil…    Status      New: not marked seen yet; listed until the run is resolved.   
+  ✓ Result ready: feature/very-long-task-name-for-the-wrappi…    Next        r reviews the failed requirement and its log.                 
+    run run_0f1e2d3c4b5a · step implement · attempt 3 · new                                                                                
+ Agents 1                                                        r Review    s Seen                                                        
+  ▲ Terminal stopped: notes-cleanup                                                                                                        
+    worktree and files kept · R restarts it                                                                                                
+ Repairs 2                                                                                                                                 
+  ▲ (stale) Approval expired: docs-refresh                                                                                                 
+    run run_55aa66bb77cc · step release-gate · attempt 1                                                                                   
+  ▲ Needs inspection: index-rebuild                                                                                                        
+    run run_aa11bb22cc33 · on archive                                                                                                      
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+                                                                                                                                           
+  ● live   8 items need you · decisions first, then failures                                                                               
+ ↑/↓ select • enter open • r review • s seen • tab/shift+tab pane • [/] page • : commands • esc back • ? help • q quit                     

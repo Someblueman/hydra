@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             3 heads · 1 running  
+                                                                               
+ Sessions  Runs ─────────────────────────────────── all recorded · all heads   
+ Head sessions ─────────────────────────────────────────────────────────────── 
+  No sessions recorded yet                                                     
+                                                                               
+  A session is recorded each time a head is started or resumed. While a        
+  control centre is open, it also records when the head's terminal is active   
+  or quiet. Start work from the Work tab.                                      
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+                                                                               
+  ● live   Head sessions · all recorded · all heads                            
+ [/] sessions/runs • T range • / filter • L location • ? help • q quit         

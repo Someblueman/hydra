@@ -64,7 +64,12 @@ static int probe(const char *path, const char *run_id) {
 }
 
 static void malformed(struct hs_model *m) {
+    assert(!load("HYDRA_STATISTICS\t7\t10\nZ\t0\t0\t0\n",m));
+    assert(!load("HYDRA_STATISTICS\t1\t10\nZ\t0\t0\n",m));
+    assert(!load("HYDRA_STATISTICS\t45\t10\nZ\t0\t0\t0\n",m));
+    /* Schema 6 closes with the session count; schema 5 (3.0.0) does not. */
     assert(!load("HYDRA_STATISTICS\t6\t10\nZ\t0\t0\n",m));
+    assert(!load("HYDRA_STATISTICS\t5\t10\nZ\t0\t0\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t1\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t0\t0\nX\tafter terminator\n",m));
@@ -98,6 +103,143 @@ static void usage_malformed(struct hs_model *m) {
     assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nU\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t2\n", m));
     assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\tmany\t1\t1\t-\nZ\t1\t2\n", m));
     assert(!load("HYDRA_STATISTICS\t3\t10\nR\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\nS\trun_a\tx\texec\tsucceeded\t1\t-\t-\t-\t-\nU\trun_a\tx\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t1\n", m));
+}
+
+/* Schema 6 H rows: one head session each. Times are known one by one; an
+ * unknown time never becomes zero in a sum. */
+#define SESSION_FEED "HYDRA_STATISTICS\t6\t1788789600\n"
+#define SESSION_ENDED "H\thead_a\tinstance_a1\tfeature/alpha\tcodex\tinteractive\tended\t1788786000\t1788787800\tdone\t600\t900\t300\t0\n"
+#define SESSION_OPEN "H\thead_b\tinstance_b1\tbeta\tclaude\tinteractive\topen\t1788789000\t-\t-\t250\t150\t200\t300\n"
+#define SESSION_UNSEEN "H\thead_c\tinstance_c1\tgamma\t-\theadless\tsuperseded\t1788700000\t1788700100\tfailed\t-\t-\t100\t0\n"
+#define SESSION_UNDATED "H\thead_d\tinstance_d1\tdelta\t-\tinteractive\tended\t-\t1788780000\t-\t-\t-\t-\t-\n"
+static void session_ended_row(const struct hs_model *m) {
+    const struct hs_session *s = &m->sessions[0];
+    uint64_t length;
+    assert(!strcmp(s->head, "head_a") && !strcmp(s->instance, "instance_a1") && !strcmp(s->branch, "feature/alpha"));
+    assert(!strcmp(s->profile, "codex") && !strcmp(s->outcome, "done") && s->state == HS_SESSION_ENDED && !s->headless);
+    assert(s->started_known && s->ended_known && s->started == 1788786000 && s->ended == 1788787800);
+    assert(s->active_known && s->quiet_known && s->unobserved_known && s->reported_known);
+    assert(s->active == 600 && s->quiet == 900 && s->unobserved == 300 && s->reported == 0);
+    assert(hs_session_length(m, s, &length) && length == 1800);
+}
+
+static void session_rows(struct hs_model *m) {
+    const struct hs_session *s;
+    uint64_t length;
+    assert(load(SESSION_FEED SESSION_ENDED SESSION_OPEN SESSION_UNSEEN SESSION_UNDATED "Z\t0\t0\t4\n", m));
+    assert(m->schema_version == 6 && m->session_count == 4 && m->run_count == 0);
+    session_ended_row(m);
+    s = &m->sessions[1];
+    assert(s->state == HS_SESSION_OPEN && !s->ended_known && !s->outcome[0] && s->reported == 300);
+    assert(hs_session_length(m, s, &length) && length == 600);
+    s = &m->sessions[2];
+    assert(s->state == HS_SESSION_SUPERSEDED && s->headless && !s->profile[0] && !strcmp(s->outcome, "failed"));
+    assert(!s->active_known && !s->quiet_known && s->unobserved_known && s->unobserved == 100);
+    s = &m->sessions[3];
+    assert(!s->started_known && s->ended_known && !s->active_known && !s->unobserved_known && !s->reported_known);
+    assert(!hs_session_length(m, s, &length));
+}
+
+static void session_mixed_rows(struct hs_model *m) {
+    uint64_t length;
+    /* Runs, steps and sessions share one feed. */
+    assert(load(SESSION_FEED "R\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\n"
+        "S\trun_a\timplement\texec\tsucceeded\t1\t1788789000\t1788789600\t-\t-\n" SESSION_OPEN "Z\t1\t1\t1\n", m));
+    assert(m->run_count == 1 && m->step_count == 1 && m->session_count == 1);
+    /* A time after the sample is not believed; an end before the start is not an end. */
+    assert(load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\t1788789700\t1788789000\t-\t-\t-\t0\t0\nZ\t0\t0\t1\n", m));
+    assert(!m->sessions[0].started_known && m->sessions[0].ended_known);
+    assert(load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\t1788789000\t1788788000\t-\t-\t-\t0\t0\nZ\t0\t0\t1\n", m));
+    assert(m->sessions[0].started_known && !m->sessions[0].ended_known && !hs_session_length(m, &m->sessions[0], &length));
+}
+
+static void session_summaries(struct hs_model *m) {
+    struct hs_filter f = {0};
+    struct hs_session_summary s;
+    assert(load(SESSION_FEED SESSION_ENDED SESSION_OPEN SESSION_UNSEEN SESSION_UNDATED "Z\t0\t0\t4\n", m));
+    hs_session_summarize(m, &f, &s);
+    assert(s.sessions == 4 && s.open == 1 && s.undated == 1 && s.excluded_undated == 0);
+    assert(s.length_known == 3 && s.length_sum == 2500 && s.length_max == 1800);
+    assert(s.activity_known == 2 && s.active_sum == 850 && s.quiet_sum == 1050);
+    assert(s.coverage_known == 3 && s.unobserved_sum == 600 && s.reported_sum == 300);
+    assert(s.daily[6] == 2 && s.daily[5] == 1 && s.daily[4] == 0);
+}
+
+static void session_filters(struct hs_model *m) {
+    struct hs_filter f = {0};
+    struct hs_session_summary s;
+    assert(load(SESSION_FEED SESSION_ENDED SESSION_OPEN SESSION_UNSEEN SESSION_UNDATED "Z\t0\t0\t4\n", m));
+    f.days = 1; hs_session_summarize(m, &f, &s);
+    assert(s.sessions == 2 && s.excluded_undated == 1 && s.undated == 0 && s.length_sum == 2400);
+    f.days = 0; f.attention = true; hs_session_summarize(m, &f, &s);
+    assert(s.sessions == 1 && s.activity_known == 0 && s.active_sum == 0 && s.coverage_known == 1);
+}
+
+/* Head sessions are local work: a remote or host location leaves none. */
+static void session_locations(struct hs_model *m) {
+    struct hs_filter f = {0};
+    struct hs_session_summary s;
+    assert(load(SESSION_FEED SESSION_ENDED SESSION_OPEN SESSION_UNSEEN SESSION_UNDATED "Z\t0\t0\t4\n", m));
+    memcpy(f.location, "local", 6); hs_session_summarize(m, &f, &s); assert(s.sessions == 4);
+    memcpy(f.location, "remote", 7); hs_session_summarize(m, &f, &s); assert(s.sessions == 0);
+    memcpy(f.location, "alpha", 6); hs_session_summarize(m, &f, &s); assert(s.sessions == 0);
+}
+
+static void session_queries(struct hs_model *m) {
+    struct hs_filter f = {0};
+    struct hs_session_summary s;
+    assert(load(SESSION_FEED SESSION_ENDED SESSION_OPEN SESSION_UNSEEN SESSION_UNDATED "Z\t0\t0\t4\n", m));
+    memcpy(f.query, "CLAUDE", 7); hs_session_summarize(m, &f, &s);
+    assert(s.sessions == 1 && s.open == 1 && s.reported_sum == 300);
+    memcpy(f.query, "instance_a1", 12); hs_session_summarize(m, &f, &s); assert(s.sessions == 1 && s.length_sum == 1800);
+    memcpy(f.query, "absent", 7); hs_session_summarize(m, &f, &s); assert(s.sessions == 0 && s.length_known == 0);
+    /* A workflow filter selects runs; it does not hide sessions. */
+    memset(&f, 0, sizeof(f)); memcpy(f.workflow, "release-check", 14); hs_session_summarize(m, &f, &s); assert(s.sessions == 4);
+    /* Nothing known stays unknown: no length, no activity, no coverage. */
+    assert(load(SESSION_FEED SESSION_UNDATED "Z\t0\t0\t1\n", m));
+    memset(&f, 0, sizeof(f)); hs_session_summarize(m, &f, &s);
+    assert(s.sessions == 1 && s.length_known == 0 && s.activity_known == 0 && s.coverage_known == 0);
+    assert(s.length_sum == 0 && s.active_sum == 0 && s.unobserved_sum == 0 && s.undated == 1);
+}
+
+/* Session rows are refused before schema 6 (schema 5 is 3.0.0's remote
+ * cohorts feed), and so is anything malformed. */
+static void session_malformed(struct hs_model *m) {
+    assert(!load("HYDRA_STATISTICS\t4\t1788789600\n" SESSION_ENDED "Z\t0\t0\n", m));
+    assert(!load("HYDRA_STATISTICS\t4\t1788789600\nZ\t0\t0\t0\n", m));
+    assert(!load("HYDRA_STATISTICS\t5\t1788789600\n" SESSION_ENDED "Z\t0\t0\n", m));
+    assert(!load("HYDRA_STATISTICS\t5\t1788789600\n" SESSION_ENDED "Z\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "Z\t0\t0\n", m));
+    assert(load(SESSION_FEED "Z\t0\t0\t0\n", m) && m->session_count == 0);
+    assert(!load(SESSION_FEED SESSION_ENDED "Z\t0\t0\t0\n", m));
+    assert(!load(SESSION_FEED SESSION_ENDED SESSION_ENDED "Z\t0\t0\t2\n", m));
+    assert(!load(SESSION_FEED "H\t../escape\tinstance_a1\ta\t-\tinteractive\tended\t-\t-\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tremote\tended\t-\t-\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tpaused\t-\t-\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\t-\t-\tmaybe\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+}
+
+static void session_malformed_fields(struct hs_model *m) {
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\topen\t10\t20\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\t10\t20\t-\tlong\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\tsoon\t20\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\t\t-\tinteractive\tended\t10\t20\t-\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+    assert(!load(SESSION_FEED "H\thead_a\tinstance_a1\ta\t-\tinteractive\tended\t10\t20\t-\t-\t-\t-\nZ\t0\t0\t1\n", m));
+}
+
+static void session_limit(struct hs_model *m) {
+    char many[HS_SESSIONS * 96 + 256], *p = many;
+    size_t i;
+    p += sprintf(p, "%s", SESSION_FEED);
+    for (i = 0; i <= HS_SESSIONS; i++) p += sprintf(p, "H\thead_a\tinstance_%zx\ta\t-\tinteractive\tended\t-\t-\t-\t-\t-\t-\t-\n", i);
+    sprintf(p, "Z\t0\t0\t%d\n", HS_SESSIONS + 1);
+    assert(!load(many, m));
+}
+
+/* Feeds of schemas 2 to 5 load as before and carry no sessions. */
+static void earlier_schema(const struct hs_model *m) {
+    assert(m->schema_version == 2);
+    assert(m->session_count == 0);
 }
 
 /* Schema 5 T rows attach remote task evidence to listed steps. Measurements
@@ -171,6 +313,11 @@ static void remote_malformed(struct hs_model *m) {
     assert(!load(REMOTE_HEAD "T\trun_a\twork\talpha\tssh\tpinned\t1\tsucceeded\t1\t2\t3\t4\t5\nZ\t1\t1\n", m));
     assert(!load("HYDRA_STATISTICS\t4\t1788789600\nR\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\n"
                  "S\trun_a\twork\ttask\tsucceeded\t1\t-\t-\t-\t-\nT\trun_a\twork\talpha\tssh\tpinned\t1\tsucceeded\t1\t2\t3\t4\t5\t-\nZ\t1\t1\n", m));
+    /* Schema 6 carries both: remote evidence (T) and head sessions (H). */
+    assert(load("HYDRA_STATISTICS\t6\t1788789600\nR\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\n"
+                "S\trun_a\twork\ttask\tsucceeded\t1\t1788789000\t1788789600\t-\t-\n"
+                "T\trun_a\twork\talpha\tssh\tpinned\t1\tsucceeded\t1\t2\t3\t4\t5\t-\n" SESSION_OPEN "Z\t1\t1\t1\n", m));
+    assert(m->schema_version == 6 && m->steps[0].remote.recorded && m->session_count == 1);
 }
 
 int main(int argc, char **argv) {
@@ -180,6 +327,7 @@ int main(int argc, char **argv) {
     FILE *fixture=fopen("tests/fixtures/tui/statistics-v2.tsv","r");
     uint64_t duration;
     assert(m && fixture && hs_load(fixture,m)); fclose(fixture);
+    earlier_schema(m);
     metrics(m);
     hs_summarize(m,&f,&s);
     assert(s.runs==8 && s.steps==11 && s.run_states[HS_SUCCEEDED]==3 && s.run_states[HS_FAILED]==1);
@@ -204,9 +352,18 @@ int main(int argc, char **argv) {
     usage_rows(m);
     usage_malformed(m);
     invalid_metrics(m);
+    session_rows(m);
+    session_mixed_rows(m);
+    session_summaries(m);
+    session_filters(m);
+    session_queries(m);
+    session_locations(m);
+    session_malformed(m);
+    session_malformed_fields(m);
+    session_limit(m);
     remote_rows(m);
     remote_malformed(m);
     free(m);
-    puts("Statistics: cohort reconciliation, dates, durations, unknowns, filters, remote cohorts and malformed framing passed");
+    puts("Statistics: cohort reconciliation, dates, durations, unknowns, filters, head sessions, remote cohorts and malformed framing passed");
     return 0;
 }

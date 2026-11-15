@@ -6,6 +6,9 @@
 # confirmed receiver cancellation can reconcile only that task's reservations.
 admission_binding() {
     ADMISSION_ID="$1" ADMISSION_PROJECT="$2"
+    # This owner's admission operations (request, claim, release) wait for a
+    # busy admission lock up to its queue deadline, not the default 2 s.
+    _ad_lock_seconds="${HYDRA_ADMISSION_QUEUE_SECONDS:-60}"
     _ab_common="$(hydra_git_common_dir 2>/dev/null)" || return 1
     _ab_context="$_ab_common/hydra/admission-context"
     [ -e "$_ab_context" ] || [ -L "$_ab_context" ] || return 0
@@ -18,6 +21,7 @@ admission_binding() {
     ADMISSION_ID="$_ab_task.$1" ADMISSION_PROJECT="$_ab_project"
     admission_token "$ADMISSION_ID" || return 1
     HYDRA_ADMISSION_QUEUE_SECONDS="$_ab_seconds" HYDRA_ADMISSION_LABELS="$_ab_labels"
+    _ad_lock_seconds="$_ab_seconds"
 }
 
 admission_wait_cleanup() {

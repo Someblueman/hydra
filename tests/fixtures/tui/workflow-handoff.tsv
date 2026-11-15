@@ -1,0 +1,5 @@
+HYDRA_WORKFLOW_TUI	2
+W	run_cccccccccccccccccccc	handoff	waiting-approval	run	-	-	2026-11-14T10:00:00Z	-	-
+N	run_cccccccccccccccccccc	produce	exec	succeeded	1	-	work	feature-stale	-	1790416870	1790416875
+N	run_cccccccccccccccccccc	approval	approval-wait	waiting-approval	1	produce	work	feature-stale	-	1790416876	-
+N	run_cccccccccccccccccccc	handoff	exec	queued	0	approval	work	feature-live	-	-	-

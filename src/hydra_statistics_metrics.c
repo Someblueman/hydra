@@ -78,3 +78,33 @@ void hs_metric_summarize(const struct hs_model *m, const struct hs_filter *filte
     out->p50 = values[(out->known + 1) / 2 - 1];
     out->p95 = values[(out->known * 95 + 99) / 100 - 1];
 }
+
+/* One matched session: its place in the daily buckets, its length and the
+ * times that are known. */
+static void add_session(const struct hs_model *m, const struct hs_session *s, struct hs_session_summary *out) {
+    uint64_t length;
+    out->sessions++;
+    if (s->state == HS_SESSION_OPEN) out->open++;
+    if (!s->started_known) out->undated++;
+    else if (m->observed - s->started < 7 * 86400) out->daily[6 - (size_t)((m->observed - s->started) / 86400)]++;
+    if (hs_session_length(m, s, &length)) {
+        out->length_known++; out->length_sum += length;
+        if (length > out->length_max) out->length_max = length;
+    }
+    if (s->active_known && s->quiet_known) {
+        out->activity_known++; out->active_sum += s->active; out->quiet_sum += s->quiet;
+    }
+    if (s->unobserved_known) { out->coverage_known++; out->unobserved_sum += s->unobserved; }
+    if (s->reported_known) out->reported_sum += s->reported;
+}
+
+void hs_session_summarize(const struct hs_model *m, const struct hs_filter *filter, struct hs_session_summary *out) {
+    struct hs_filter undated = *filter;
+    size_t i;
+    memset(out, 0, sizeof(*out));
+    undated.days = 0;
+    for (i = 0; i < m->session_count; i++) {
+        if (hs_session_matches(m, i, filter)) add_session(m, &m->sessions[i], out);
+        else if (filter->days && !m->sessions[i].started_known && hs_session_matches(m, i, &undated)) out->excluded_undated++;
+    }
+}

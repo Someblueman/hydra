@@ -3,7 +3,9 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "wake.h"
 #include <limits.h>
+#include <poll.h>
 #ifdef __APPLE__
 #include <libproc.h>
 #elif defined(__linux__)
@@ -12,6 +14,7 @@
 /* Bounded read-only subprocess capture. The caller owns the stream and process;
  * step never waits for a child, so terminal I/O can continue during observations. */
 #define CAPTURE_STOP_GRACE_MS 750L
+static void capture_wake(const struct native_capture *p);
 
 /* Captures own a private session, including helpers with separate process
  * groups. Keep its leader unreaped until actual pipe EOF to reserve the ID.
@@ -95,6 +98,7 @@ bool native_capture_start(struct native_capture *p, char *const argv[], long bud
     close(pipes[1]);
     if (p->pid<0) { p->pid=0; goto fail; }
     (void)clock_gettime(CLOCK_MONOTONIC,&p->started);
+    capture_wake(p);
     return true;
 fail:
     native_capture_destroy(p); return false;
@@ -116,6 +120,16 @@ static void drain_capture(struct native_capture *p) {
     }
 }
 
+/* What would make stepping this capture again worthwhile: more output or its
+ * end, its deadline, or the end of the grace given to a stopped producer.
+ * The producer's exit arrives as a signal. */
+static void capture_wake(const struct native_capture *p) {
+    if (!p->eof) wake_fd(p->fd, POLLIN);
+    if (!p->stopping) { wake_at(&p->started, p->budget_ms); return; }
+    if (elapsed_ms(&p->stop_started) < CAPTURE_STOP_GRACE_MS) wake_at(&p->stop_started, CAPTURE_STOP_GRACE_MS);
+    else wake_after(40);
+}
+
 bool native_capture_step(struct native_capture *p) {
     if (!p->pid) return true;
     if (elapsed_ms(&p->started)>=p->budget_ms || terminal_stopped()) { p->timed_out=true; p->failed=true; }
@@ -127,6 +141,7 @@ bool native_capture_step(struct native_capture *p) {
         if (result==p->pid) p->reaped=true;
         else if (result<0 && errno!=EINTR) { p->failed=true; p->reaped=true; }
     }
+    if (!p->reaped || !p->eof) capture_wake(p);
     return p->reaped && p->eof;
 }
 

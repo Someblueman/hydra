@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work  2 Inbox 11  3 Hosts  4 Stats            3 heads / 1 running  
+ Heads --------------- 3  Conversation  Details  Run ------------------------  
+  ~ feature-live          * running / step 2 of 4 / run visualization-proof    
+  ! feature-stale                                                              
+  ? feature-unavailable   +--------------------+     +--------------------+    
+ >> * run visualizati...  | prepare            |--+->| build              |-   
+  > + run second-run      | succeeded          |  |  | running            |    
+                          +--------------------+  |  +--------------------+    
+                                                  |                            
+                                                                               
+                           STEP          STATE               TIME              
+                          >prepare       + succeeded         -                 
+                           build         * running           -                 
+                           tests         x failed            -                 
+                           review        - queued            -                 
+                                                                               
+                          prepare -------------------------------- pgdn more   
+                          Head    none                                         
+                          Kind    spawn, attempt 1                             
+                          Needs   -                                            
+                                                                               
+  3 heads / 3 need you    Next    Running step build; its output is in the     
+  * live   run visualization-proof / running                                   
+ ^/v select | enter expand | Y approve | N reject | R resume | ? help | q quit 

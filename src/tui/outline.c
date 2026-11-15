@@ -219,12 +219,6 @@ static void outline_run(struct outline_build *b, size_t run, int depth, bool own
     outline_members(b, run, depth + 1);
 }
 
-static bool run_has_heads(const struct outline_build *b, size_t run) {
-    const struct workflow_model *m = b->app->workflows;
-    size_t i;
-    for (i = 0; i < m->head_count; i++) if (m->heads[i].run == run) return true;
-    return false;
-}
 
 static bool head_runs_match(const struct outline_build *b, size_t head) {
     const struct app *app = b->app;
@@ -255,7 +249,7 @@ size_t outline_build(struct app *app, struct outline_row *rows, size_t capacity)
     for (i = 0; i < app->model.task_count; i++)
         if (task_visible(app, &app->model.tasks[i])) outline_add(&b, OUTLINE_TASK, SIZE_MAX, SIZE_MAX, i, 0);
     for (i = 0; app->workflows && i < app->workflows->run_count; i++)
-        if (b.run_owner[i] == SIZE_MAX && run_has_heads(&b, i)) outline_run(&b, i, 0, false);
+        if (b.run_owner[i] == SIZE_MAX && !location_remote_only(app)) outline_run(&b, i, 0, false);
     return b.count;
 }
 
@@ -283,13 +277,6 @@ void outline_select(struct app *app, const struct outline_row *row) {
 
 static bool outline_skip(const struct outline_row *row, bool heads_only) {
     return row->kind == OUTLINE_RETIRED || (heads_only && row->kind != OUTLINE_HEAD);
-}
-
-/* Leaving for a view about one head: a selected remote task is released. */
-void outline_release_task(struct app *app) {
-    if (!app->task_row) return;
-    app->task_row = false;
-    retarget_selection(app);
 }
 
 /* The next selectable row from position in direction, or count. */
@@ -330,17 +317,4 @@ bool outline_toggle(struct app *app, int direction) {
     run_set_expanded(app, run, false);
     app->run_row = true; app->workflow_run = run;
     return true;
-}
-
-/* Leaving Work or Overview on a run row: views about one head show the run's
- * first head, or the planning head that launched it. */
-void outline_release_run(struct app *app) {
-    size_t i, owner;
-    if (!app->run_row) return;
-    app->run_row = false;
-    if (!app->workflows || app->workflow_run >= app->workflows->run_count) return;
-    for (i = 0; i < app->model.head_count; i++)
-        if (head_owner_run(app, &app->model.heads[i], NULL) == app->workflow_run) { app->selected = i; return; }
-    owner = run_owner_head(app, app->workflow_run);
-    if (owner != SIZE_MAX) app->selected = owner;
 }

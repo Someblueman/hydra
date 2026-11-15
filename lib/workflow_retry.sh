@@ -51,10 +51,25 @@ workflow_attempt_result() {
 
 workflow_retry_ready() {
     _wry_dir="$1"
-    for _wry_sd in "$_wry_dir"/steps/*; do
-        [ "$(sed -n '1p' "$_wry_sd/state")" = retrying ] || continue
-        _wry_attempt="$(sed -n '1p' "$_wry_sd/attempts")"
-        _wry_at="$(sed -n '1p' "$_wry_sd/attempt-$_wry_attempt/retry-at" 2>/dev/null || true)"
+    # One pass lists each retrying step with the retry time of its latest
+    # attempt ("-" when none is recorded).
+    _wry_retrying="$(WORKFLOW_RUN_DIR="$_wry_dir" awk -F '\t' '
+        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
+        $1 == "step" {
+            step = dir "/steps/" $2
+            state = ""; file = step "/state"
+            getline state < file; close(file)
+            if (state != "retrying") next
+            attempt = ""; file = step "/attempts"
+            getline attempt < file; close(file)
+            at = ""; file = step "/attempt-" attempt "/retry-at"
+            getline at < file; close(file)
+            if (at == "") at = "-"
+            print $2 "\t" at
+        }' "$_wry_dir/graph.tsv")" || return 1
+    [ -n "$_wry_retrying" ] || return 0
+    while IFS="$(printf '\t')" read -r _wry_id _wry_at; do
+        _wry_sd="$_wry_dir/steps/$_wry_id"
         case "$_wry_at" in ''|*[!0-9]*)
             workflow_atomic_scalar "$_wry_sd/state" recovery-required
             continue ;;
@@ -62,5 +77,7 @@ workflow_retry_ready() {
         if [ "$(date +%s)" -ge "$_wry_at" ]; then
             workflow_atomic_scalar "$_wry_sd/state" ready || return 1
         fi
-    done
+    done <<EOF
+$_wry_retrying
+EOF
 }

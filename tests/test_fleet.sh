@@ -112,14 +112,25 @@ awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 {empty=1}
     END {exit !(empty && delayed && failed)}' "$fixture/tui-v2"
 awk -F '\t' '$1=="F" && $2=="slowgood" && $3=="/srv/slowgood" && $4=="delayed" && $5=="head_delayed" && $6=="instance_delayed" {found=1}
     END {exit !found}' "$fixture/tui-v2"
+# `hydra tui` reads the same stream through the shell (--remote-data): with
+# hosts registered it is the helper's own, not an error envelope.
+"$root/bin/hydra" tui --remote-data > "$fixture/tui-remote"
+[ "$(head -n 1 "$fixture/tui-remote")" = "$(printf 'HYDRA_FLEET_TUI\t3')" ] || { echo 'hydra tui --remote-data is not the fleet stream'; exit 1; }
+awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" {good=1} $1=="F" && $2=="slowgood" && $4=="delayed" {delayed=1}
+    END {exit !(good && delayed)}' "$fixture/tui-remote"
 # The fleet case passes the native TUI it built; a missing binary is a failure.
 if [ -n "${HYDRA_TUI_BIN:-}" ]; then
     "$HYDRA_TUI_BIN" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
-    # The Hosts list words a responded host as connected and a failed one as
-    # disconnected with its recorded reason.
-    grep -q 'good  *connected  *0 heads' "$fixture/hosts.out"
-    grep -q 'offline  *disconnected  *-- heads  *offline' "$fixture/hosts.out"
+    # The Hosts list gives a responded host its head count and freshness and
+    # a failed one no head count; the failed host's detail names its
+    # recorded reason.
+    grep -Eq '^ +\* good +0 heads / fresh' "$fixture/hosts.out"
+    grep -Eq '^ +! offline +disconnected / -- heads' "$fixture/hosts.out"
     grep -q 'CPU / memory / load: unavailable' "$fixture/hosts.out"
+    "$HYDRA_TUI_BIN" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 \
+        --keys jjjj > "$fixture/hosts-offline.out"
+    grep -Eq '^ +>! offline +disconnected' "$fixture/hosts-offline.out"
+    grep -q 'Connection: disconnected; offline / never observed' "$fixture/hosts-offline.out"
 fi
 for host in key auth offline malformed skew good slowgood; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
 HYDRA_TEST_SSH_PID="$fixture/ssh-pid"

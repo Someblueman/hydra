@@ -166,12 +166,16 @@ void model_accept(struct app *app, struct model *next) {
     struct head previous;
     struct task_observation task;
     bool had_head = app->selected < app->model.head_count, had_task = app->task_selected < app->model.task_count;
+    bool first_local = next->protocol != MODEL_FLEET && !app->local;
     if (had_head) previous = app->model.heads[app->selected];
     if (had_task) task = app->model.tasks[app->task_selected];
     if (next->protocol == MODEL_FLEET) remote_accept(app, next);
     else local_accept(app, next);
     compose_model(app);
     retarget_after_accept(app, &previous, had_head, &task, had_task);
+    /* Whichever observation answers first, the control centre opens on the
+     * first local head, as it does without remote hosts. */
+    if (first_local && app->model.head_count && !app->task_row) app->selected = 0;
 }
 
 void model_release(struct app *app) {

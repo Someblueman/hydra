@@ -25,7 +25,7 @@ bool native_plan_converse(struct app *app, const struct head *h, const char *tex
     if (!t || !native_terminal_deliver(app,t,text,submit)) return false;
     if (focus) {
         app->terminals->selected=(size_t)(t-app->terminals->slots);
-        if (app->workspace->mode!=0) native_workspace_mode(app,0);
+        app->run_row=app->task_row=false; app->selected=(size_t)(h-app->model.heads);
         app->view=7;
         native_workspace_show_terminal(app,true);
     }

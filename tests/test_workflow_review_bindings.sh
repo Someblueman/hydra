@@ -70,4 +70,11 @@ if GIT_DIR="$repo/.git" "$native" workflow-review "$project" "$run" produce atte
 jq -e '.ok == false and .error.code == "git_environment_redirect"' "$fixture/git-redirect" >/dev/null
 shasum -a 256 "$repo/.git/HEAD" "$repo/.git/config" > "$fixture/git.after"
 cmp "$fixture/git.before" "$fixture/git.after"
+# Configuration injected through the environment is not a redirect: review
+# drops it, and the result is the one a clean environment gets.
+"$native" workflow-review "$project" "$run" produce attempt-1 "$digest" > "$fixture/git-clean"
+GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.bare GIT_CONFIG_VALUE_0=true GIT_CONFIG_KEY_1=diff.noprefix GIT_CONFIG_VALUE_1=true \
+    GIT_CONFIG_PARAMETERS="'core.bare'='true'" "$native" workflow-review "$project" "$run" produce attempt-1 "$digest" > "$fixture/git-injected"
+jq -e '.ok' "$fixture/git-injected" >/dev/null
+cmp "$fixture/git-clean" "$fixture/git-injected"
 printf '%s\n' "workflow review $object_format historical bindings passed"

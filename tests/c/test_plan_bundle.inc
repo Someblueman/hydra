@@ -2,7 +2,7 @@
  * Included by test_plan.c, which provides fixture() and expect(). */
 #include <sys/stat.h>
 
-static const char *bundle_prompt = "Write the report.\nDo not commit.";
+static const char *bundle_prompt = "Write the report.\nHydra commits your changes when you finish.";
 static json_object *agent_plan(void) {
     json_object *plan = fixture(), *compose = json_object_array_get_idx(f_field(plan, "steps"), 1);
     json_object *outputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), "compose"), "outputs");
@@ -133,6 +133,30 @@ static void materialized_bundle(json_object *compiled, const char *root) {
     assert(!f_path(path, sizeof(path), directory, "bundle/prompts/compose") && (text = f_read(path, 1024)) && !strcmp(text, bundle_prompt)); free(text);
     assert(!f_path(path, sizeof(path), directory, "bundle/assets/verifier") && (text = f_read(path, 1024)) && !strcmp(text, "echo one\n")); free(text);
 }
+/* Runs admit through the CLI and checks the error code it reports ("ok" on success). */
+static void expect_admit(const char *artifact, const char *repo, const char *accepted, const char *stage, const char *code) {
+    char *argv[] = {"admit", (char *)artifact, (char *)repo, (char *)accepted, (char *)stage, NULL};
+    json_object *result = plan_cli(5, argv);
+    const char *actual = json_object_get_boolean(f_field(result, "ok")) ? "ok" : f_string(f_field(result, "error"), "code");
+    if (!actual || strcmp(actual, code)) fprintf(stderr, "%s\n", json_object_to_json_string(result));
+    assert(actual && !strcmp(actual, code) && (!strcmp(code, "ok") || f_string(f_field(result, "error"), "recovery")));
+    json_object_put(result);
+}
+/* Each admission refusal reports its own cause. */
+static void admission_cases(const char *root, const char *repo, json_object *compiled, const char *digest, const char *other) {
+    char artifact[F_PATH], stage[F_PATH], used[F_PATH], missing[F_PATH], command[2 * F_PATH];
+    assert(!f_path(artifact, sizeof(artifact), root, "admit.json") && !json_object_to_file(artifact, compiled));
+    assert(!f_path(stage, sizeof(stage), root, "admit-stage") && !mkdir(stage, 0700) && !f_path(used, sizeof(used), root, "stage"));
+    assert(!f_path(missing, sizeof(missing), root, "absent.json"));
+    expect_admit(missing, repo, digest, stage, "invalid_or_stale_plan");
+    expect_admit(artifact, repo, other, stage, "digest_mismatch");
+    expect_admit(artifact, repo, "abc", stage, "digest_mismatch");
+    expect_admit(artifact, repo, digest, used, "materialize_failed");
+    snprintf(command, sizeof(command), "git -C '%s' branch plan-smoke", repo); assert(!system(command));
+    expect_admit(artifact, repo, digest, stage, "branch_exists");
+    snprintf(command, sizeof(command), "git -C '%s' branch -D -q plan-smoke", repo); assert(!system(command));
+    expect_admit(artifact, repo, digest, stage, "ok");
+}
 static void digest_cases(const char *root) {
     char repo[F_PATH], one[65], again[65], two[65], prompt[65], legacy_digest[65];
     json_object *plan = agent_plan(), *policy = agent_policy(), *first = f_parse("{\"verifier\":\"echo one\\n\"}"), *second = f_parse("{\"verifier\":\"echo two\\n\"}");
@@ -144,7 +168,7 @@ static void digest_cases(const char *root) {
     f_string_add(compose_args(plan), "prompt", "Write a different report.");
     d = bundle_compile(plan, policy, repo, first, prompt); assert(strcmp(one, prompt) && strcmp(two, prompt));
     assert(!plan_admit(a, repo, one) && plan_admit(c, repo, one) && !plan_admit(c, repo, two));
-    materialized_bundle(a, root);
+    materialized_bundle(a, root); admission_cases(root, repo, a, one, two);
     legacy = bundle_compile(legacy_plan, legacy_policy, repo, NULL, legacy_digest); assert(!f_field(legacy, "assets"));
     json_object_put(a); json_object_put(b); json_object_put(c); json_object_put(d); json_object_put(legacy);
     json_object_put(first); json_object_put(second); json_object_put(plan); json_object_put(policy); json_object_put(legacy_plan); json_object_put(legacy_policy);

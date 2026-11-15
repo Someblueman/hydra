@@ -1,20 +1,6 @@
 #include "fleet/plan/plan_inspect.h"
 #include <string.h>
 
-void pi_reach(json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS]) {
-    size_t count = json_object_array_length(steps);
-    for (size_t i = 0; i < count; i++) {
-        json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs");
-        for (size_t j = 0; j < json_object_array_length(needs); j++) {
-            int before = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-            if (before >= 0) reach[i][before] = true;
-        }
-    }
-    for (size_t k = 0; k < count; k++)
-        for (size_t i = 0; i < count; i++)
-            for (size_t j = 0; j < count; j++)
-                reach[i][j] = reach[i][j] || (reach[i][k] && reach[k][j]);
-}
 static json_object *affected(json_object *steps, json_object *records, size_t node,
                               bool reach[PLAN_STEPS][PLAN_STEPS]) {
     json_object *out = json_object_new_array();
@@ -92,7 +78,7 @@ json_object *pi_explain(json_object *compiled, const char *digest) {
     json_object *out = json_object_new_object(), *plan = f_field(compiled, "plan");
     json_object *steps = f_field(plan, "steps"), *nodes = json_object_new_array();
     bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
-    pi_reach(steps, reach);
+    plan_reachability(steps, reach, NULL);
     json_object_object_add(out, "schema_version", json_object_new_int(1));
     f_string_add(out, "plan_sha256", digest); f_string_add(out, "compiler", PLAN_COMPILER);
     f_string_add(out, "analysis", "offline structural inspection; source freshness, semantic adequacy and execution acceptance are not established");

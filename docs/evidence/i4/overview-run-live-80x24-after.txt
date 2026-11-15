@@ -1,25 +1,25 @@
 FRAME 1 80x24
- HYDRA / OVERVIEW                                                              
- Work Details [Overview] Attention Recovery Flows Stats Workspace Hosts        
-╭─ Overview ──────────────────────────────────────────────────────────────────╮
-│  2 running / 1 need attention / 1 active run / 1 to repair / 0 remote       │
-│                                                                             │
-│ ╭─ WORK / what you started, local and remote ─────────────────────────────╮ │
-│ │                                                                         │ │
-│ │ > add-kill                                             running          │ │
-│ │     ▸ plan run kill-dry-run                            running          │ │
-│ │   notes-cleanup                                        terminal gone    │ │
-│ │ 2 heads you started / Enter opens or expands                            │ │
-│ ╰─────────────────────────────────────────────────────────────────────────╯ │
-│ ╭─ RUN / plan run kill-dry-run · running · 2 heads · from add-kill ───────╮ │
-│ │ STEP            STATE         TIME          HEAD                        │ │
-│ │ spawn-worker    succeeded     5s            kill-dry-run-worker         │ │
-│ │ implement       running       511h28m       kill-dry-run-worker         │ │
-│ │ spawn-check     ready         -             kill-dry-run-check (pendin… │ │
-│ │ verify          queued        -             kill-dry-run-check (pendin… │ │
-│ │ Next  Running step implement on kill-dry-run-worker (codex); p on that  │ │
-│ │       head shows its output                                             │ │
-│ ╰─────────────────────────────────────────────────────────────────────────╯ │
-╰─────────────────────────────────────────────────────────────────────────────╯
- Live                                                                          
- j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit  
+ ◆ hydra  1 Work  2 Inbox ·  3 Hosts  4 Stats             2 heads · 1 running  
+ Heads ─────────────── 3  Conversation  Details  Run ────────────────────────  
+  ● add-kill              ● running · step 2 of 4 · plan run kill-dry-run      
+ ▌  ▸ ● plan run kill-d…                                                       
+  ▲ notes-cleanup         ╭────────────────────╮     ╭────────────────────╮    
+                          │ spawn-worker       │──┬─>│ implement          │─   
+                          │ succeeded          │  │  │ running            │    
+                          ╰────────────────────╯  │  ╰────────────────────╯    
+                                                  │                            
+                                                                               
+                           STEP          STATE               TIME              
+                          ▌spawn-worker  ✓ succeeded         5s                
+                           implement     ● running           1180h00m so far   
+                           spawn-check   ○ ready             -                 
+                           verify        ○ queued            -                 
+                                                                               
+                          spawn-worker ──────────────────────────── evidence   
+                          Head    kill-dry-run-worker                          
+                          Kind    spawn/work, attempt 1                        
+                          Needs   -                                            
+                                                                               
+  2 heads · 1 needs you   Next    Running step implement on                    
+  ● live   plan run kill-dry-run · running · 2 heads                           
+ ↑/↓ select • enter expand • Y approve • N reject • R resume • ? help • q quit 

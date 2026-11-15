@@ -27,7 +27,7 @@ static json_object *sum_selected(json_object *steps, json_object *estimates, con
     return range(totals[0], totals[1]);
 }
 struct graph {
-    size_t count;
+    size_t count, ordered, order[PLAN_STEPS];
     bool reach[PLAN_STEPS][PLAN_STEPS], required[PLAN_STEPS], check[PLAN_STEPS];
     unsigned level[PLAN_STEPS];
 };
@@ -50,16 +50,16 @@ static unsigned level_of(json_object *steps, size_t i, const unsigned *level) {
     }
     return best + 1;
 }
+/* In dependency order every step's needs have their final levels; steps on or
+ * behind a cycle are never ordered and keep level 0. */
 static void levels(json_object *steps, struct graph *g) {
-    size_t done = 0;
-    for (size_t pass = 0; pass < g->count && done < g->count; pass++)
-        for (size_t i = 0; i < g->count; i++)
-            if (!g->level[i] && (g->level[i] = level_of(steps, i, g->level))) done++;
+    g->ordered = plan_order(steps, g->order);
+    for (size_t at = 0; at < g->ordered; at++) g->level[g->order[at]] = level_of(steps, g->order[at], g->level);
 }
 static void analyse(json_object *plan, struct graph *g) {
     json_object *steps = f_field(plan, "steps");
     memset(g, 0, sizeof(*g)); g->count = json_object_array_length(steps);
-    pi_reach(steps, g->reach);
+    plan_reachability(steps, g->reach, NULL);
     mark_targets(steps, f_field(plan, "checks"), g, true);
     mark_targets(steps, f_field(plan, "deliverables"), g, false);
     levels(steps, g);
@@ -88,12 +88,12 @@ static bool visit(json_object *steps, json_object *estimates, const struct graph
 static json_object *verified_path(json_object *steps, json_object *estimates, const struct graph *g) {
     int64_t longest[PLAN_STEPS][2] = {{0}}, best[2] = {0, 0}; bool any = false;
     if (!estimates) return NULL;
-    for (unsigned level = 1; level <= g->count; level++)
-        for (size_t i = 0; i < g->count; i++) {
-            if (g->level[i] != level || !g->required[i]) continue;
-            if (!visit(steps, estimates, g, i, longest, best)) return NULL;
-            any = any || g->check[i];
-        }
+    for (size_t at = 0; at < g->ordered; at++) {
+        size_t i = g->order[at];
+        if (!g->level[i] || !g->required[i]) continue;
+        if (!visit(steps, estimates, g, i, longest, best)) return NULL;
+        any = any || g->check[i];
+    }
     return any ? range(best[0], best[1]) : NULL;
 }
 static const char *step_head(json_object *step) {

@@ -1,41 +1,41 @@
 FRAME 1 140x40
- HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
- Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
-╭─ Details: add-kill ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ add-kill                                                                                                                                │
-│ Agent       codex                                                  Session     running (the live terminal)                              │
-│ Reported    nothing yet; declared when done: done or blocked       Group       none                                                     │
-│                                                                                                                                         │
-│ PLAN                                                                                                                                    │
-│ Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC · run run_aaaaaaaaaaaaaaaaaaaa · succeeded                                  │
-│ Next        Worker branch kill-dry-run-worker holds the result: review (: diff) · land (hydra land kill-dry-run-worker) · dismiss (x    │
-│             removes the worker head, keeps the branch)                                                                                  │
-│                                                                                                                                         │
-│ CHANGES                                                                                                                                 │
-│ Changed     0 files in the worktree, not yet committed                                                                                  │
-│ Full diff   everything since the branch base: press : and choose diff                                                                   │
-│                                                                                                                                         │
-│ CHECKS                                                                                                                                  │
-│ Approval requests  none                                                                                                                 │
-│ Messages           2 exchanged with other heads                                                                                         │
-│                                                                                                                                         │
-│ NEXT                                                                                                                                    │
-│ a  talk to the agent in the workspace     p  show recent terminal output                                                                │
-│ c  coordination  x  remove this head  :  more actions  d  technical details                                                             │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-│                                                                                                                                         │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- Live                                                                                                                                      
- a agent  p output  Esc back  ? help  q quit                                                                                               
+ ◆ hydra  1 Work   2 Inbox ·   3 Hosts   4 Stats                                          this machine · 2 heads · +1 in runs · 1 running  
+                                                                                                                                           
+ Heads ─────────────────────── 3  add-kill ──────────────────────── latest output · enter to talk  Details  Plan ────────────────────────  
+ ▌● add-kill           codex      ● running · codex                                                Agent       codex                       
+    ▸ ✓ plan run kill… 4/4                                                                         Session     running (the live           
+  ▲ notes-cleanup      claude     No terminal output yet.                                                      terminal)                   
+                                                                                                   Reported    nothing yet; declared when  
+                                                                                                               done: done or blocked       
+                                                                                                   Where       this machine                
+                                                                                                                                           
+                                                                                                   PLAN                                    
+                                                                                                   Plan        plan 60c5133478a6 approved  
+                                                                                                               2026-09-26 10:21 UTC ·      
+                                                                                                               run run_aaaaaaaaaaaaaaaaaa  
+                                                                                                               aa · succeeded              
+                                                                                                   Next        Worker branch kill-dry-run  
+                                                                                                               -worker holds the result:   
+                                                                                                               review (: diff) · land      
+                                                                                                               (hydra land kill-dry-run-w  
+                                                                                                               orker) · dismiss (x         
+                                                                                                               removes the worker head,    
+                                                                                                               keeps the branch)           
+                                                                                                                                           
+                                                                                                   CHANGES                                 
+                                                                                                   Changed     0 files in the worktree,    
+                                                                                                               not yet committed           
+                                                                                                   Full diff   : diff (everything since    
+                                                                                                               the branch base)            
+                                                                                                                                           
+                                                                                                   CHECKS                                  
+                                                                                                   Approvals   none                        
+                                                                                                   Messages    2 exchanged with other      
+                                                                                                               heads                       
+                                                                                                   Coordinate  0 claims · 0 scopes · 0     
+                                                                                                               queued · 0 resources        
+                                                                                                   Claims are files a head means to        
+                                                                                                   change and scopes the areas it stays    
+  2 heads · 1 needs you                                                                            within; Hydra flags overlap between     
+  ● live   add-kill · running                                                                                                              
+ ↑/↓ select • enter/a talk • x remove • n new task • / filter • L location • tab/shift+tab pane • [/] page • : commands • ? help • q quit  

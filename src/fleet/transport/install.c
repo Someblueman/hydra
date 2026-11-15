@@ -110,16 +110,10 @@ static bool platform_allowed(json_object *package) {
     return !f_platform_local(&local) && f_platform_equal(&wanted, &local);
 }
 static bool input_digest(const char *text, const char *digest) {
-    struct f_capture cap = {0}; char *argv[] = {"shasum", "-a", "256", NULL}; bool matches = false;
+    char actual[65];
     if (!text || !digest || strlen(digest) != 64) return false;
-    if (f_run(argv, text, strlen(text), 5, &cap)) goto done;
-    if (cap.status == 127) {
-        char *fallback[] = {"sha256sum", NULL}; f_capture_free(&cap);
-        if (f_run(fallback, text, strlen(text), 5, &cap)) goto done;
-    }
-    matches = !cap.status && strlen(cap.out) >= 65 && cap.out[64] == ' ' && !strncmp(cap.out, digest, 64);
-done:
-    f_capture_free(&cap); return matches;
+    f_sha256_text(text, strlen(text), actual);
+    return !strcmp(actual, digest);
 }
 json_object *f_install_cli(int argc, char **argv) {
     const char *prefix = argc == 4 ? argv[3] : NULL; char *text; json_object *package, *result;

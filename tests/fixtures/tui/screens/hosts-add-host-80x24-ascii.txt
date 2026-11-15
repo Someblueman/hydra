@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ # hydra  1 Work  2 Inbox .  3 Hosts  4 Stats                       1 running  
+                                                                               
+ Hosts+- Add a host ---------------------------------------------------+- 4 -- 
+ >* Th|                                                                | heads 
+  Obse|  Hydra connects with your own SSH setup. It checks the         |       
+  * bu|  machine and asks before every change; nothing changes on the  | fresh 
+  ! ar|  remote until you approve it. Next: Hydra reads the machine's  |e 300s 
+  ! of|  SSH host key and shows it for you to confirm.                 | heads 
+  + Ad|                                                                |er SSH 
+      |  SSH destination                                               |       
+ This |  |                                                             |------ 
+ Heads|  user@host, or a Host from ~/.ssh/config                       |       
+ tmux |                                                                |       
+ Hydra|  Name in Hydra                                                 |       
+      |  |                                                             |       
+ Agent|  empty: the host name is used                                  |       
+      |                                                                |       
+      |  SSH config file                                               |       
+ Hydra|  |                                                             |x with 
+ more |  absolute path or ~/...; empty: your usual SSH config          |sk     
+ needs|                                                                |key    
+ and r+-------------------------- tab next | enter check | esc cancel -+ and   
+  * live   Remote live / 3 remote hosts                                        
+ ^/v select | enter open | A add host | r observe again | ? help | q quit      
