@@ -16,6 +16,7 @@ jobs:
   fleet-static:
     name: Rebuild static fleet helper (linux-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
     strategy:
       fail-fast: true
       matrix:
@@ -56,6 +57,7 @@ jobs:
     name: Draft GitHub release
     needs: fleet-static
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     # The only job in this repository with write access to contents.
     permissions:
       contents: write
