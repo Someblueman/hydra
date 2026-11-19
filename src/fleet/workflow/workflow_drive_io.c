@@ -79,10 +79,21 @@ static int write_all(int fd, const char *data, size_t size) {
     return 0;
 }
 
-/* One line written to an adjacent temporary file, made private and renamed
- * over the destination. */
+static int sync_dir(const char *dir) {
+    int fd = open(dir, O_RDONLY | O_DIRECTORY), status;
+    if (fd < 0) return -1;
+    status = fsync(fd);
+    close(fd);
+    return status ? -1 : 0;
+}
+
+/* One line written to an adjacent temporary file, made private, synced and
+ * renamed over the destination, whose directory is then synced as
+ * task_write_json syncs its own. A line that could not be written whole,
+ * synced and closed is never published: the temporary file is removed and
+ * the destination keeps its previous value. */
 int wdr_scalar(const char *path, const char *value) {
-    char dir[F_PATH], tmp[F_PATH]; char *slash; int fd;
+    char dir[F_PATH], tmp[F_PATH]; char *slash; int fd; bool written;
     if (strpbrk(value, "\n\r")) { fputs("Error: scalar state values cannot contain newlines\n", stderr); return -1; }
     if (f_copy(dir, sizeof(dir), path)) return -1;
     slash = strrchr(dir, '/');
@@ -91,11 +102,12 @@ int wdr_scalar(const char *path, const char *value) {
     if (wdr_private_mkdirs(dir) || wdr_join(tmp, dir, ".hydra-tmp.XXXXXX")) return -1;
     fd = mkstemp(tmp);
     if (fd < 0) return -1;
-    (void)(write_all(fd, value, strlen(value)) || write_all(fd, "\n", 1));
+    written = !write_all(fd, value, strlen(value)) && !write_all(fd, "\n", 1);
     (void)fchmod(fd, 0600);
-    close(fd);
-    if (rename(tmp, path)) { unlink(tmp); return -1; }
-    return 0;
+    if (written && fsync(fd)) written = false;
+    if (close(fd)) written = false;
+    if (!written || rename(tmp, path)) { unlink(tmp); return -1; }
+    return sync_dir(dir);
 }
 
 int wdr_scalar_long(const char *path, long value) {

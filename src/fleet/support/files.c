@@ -97,6 +97,10 @@ char *f_read(const char *path, size_t limit) {
     if (path) fclose(fp);
     return data;
 }
+/* Written to an adjacent temporary file, synced and closed before it is
+ * renamed (replace) or linked (never over an existing file) into place, so a
+ * failed write publishes nothing. Callers that need the entry itself to be
+ * durable sync the directory afterwards (task_write_json, enrollment_write). */
 int f_write(const char *path, const char *data, size_t size, bool replace) {
     char tmp[F_PATH]; int fd, status = -1;
     if (snprintf(tmp, sizeof(tmp), "%s.XXXXXX", path) >= (int)sizeof(tmp)) return -1;
@@ -109,9 +113,12 @@ int f_write(const char *path, const char *data, size_t size, bool replace) {
         size -= (size_t)n; data += n;
     }
     if (fsync(fd)) goto done;
+    if (close(fd)) { fd = -1; goto done; }
+    fd = -1;
     if (replace ? rename(tmp, path) == 0 : link(tmp, path) == 0) status = 0;
 done:
-    close(fd); unlink(tmp); return status;
+    if (fd >= 0) close(fd);
+    unlink(tmp); return status;
 }
 bool f_name(const char *s) {
     if (!s || !isalnum((unsigned char)*s)) return false;

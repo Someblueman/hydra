@@ -4,10 +4,14 @@
 #include "fleet/transport/remote.h"
 #include "fleet/transport/server.h"
 #include "fleet/transport/bundle.h"
+#include "fleet/workflow/workflow_drive.h"
 #include "fleet/fleet.h"
 #include <assert.h>
+#include <dirent.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -93,6 +97,7 @@ static void json_utf8(void) {
 #include "test_fleet_discovery.inc"
 #include "test_fleet_sha256.inc"
 #include "test_fleet_capture.inc"
+#include "test_fleet_durable.inc"
 /* Hydra 2.x, 3.x and 4.x share fleet protocol 1; other majors are refused. */
 static void handshake_versions(void) {
     const char *accepted[] = {"2.1.0", "3.0.0", "4.0.0"}, *refused[] = {"1.9.0", "5.0.0", "40.0.0"};
@@ -117,6 +122,7 @@ int main(void) {
     capture_streams();
     sha256_vectors(dir);
     capture_growth(dir);
+    durable_writes(dir);
     handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
