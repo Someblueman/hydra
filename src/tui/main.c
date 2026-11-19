@@ -139,8 +139,8 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     return ferror(stdout) ? 3 : 0;
 }
 
+/* app is main's static object and starts zeroed. */
 static void initialize_app(struct app *app) {
-    memset(app, 0, sizeof(*app));
     terminal_pipe_signal();
     setlocale(LC_CTYPE, "");
     app->hydra = getenv("HYDRA_BIN_CMD") == NULL ? "hydra" : getenv("HYDRA_BIN_CMD");
@@ -205,7 +205,9 @@ static bool theme_option(struct app *app, const char *theme) {
 }
 
 int main(int argc, char **argv) {
-    struct app app;
+    /* Static, not automatic: the model is several megabytes, more than a
+     * lowered stack limit (ulimit -s) leaves room for. */
+    static struct app app;
     const char *fixture = NULL, *remote_fixture = NULL;
     const char *workflow_fixture = NULL;
     const char *statistics_fixture = NULL;

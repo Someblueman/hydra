@@ -242,7 +242,7 @@ static void execute_test_tui(const char *tui_path, const char *hydra_path) {
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
     char path[4096];
     const char *old_path = getenv("PATH");
-    const char *fixture_repo;
+    const char *fixture_repo, *stack_kb;
     char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
     if (!tui_path || !hydra_path) _exit(119);
     snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
@@ -263,6 +263,13 @@ static void child_session(const struct session *session, const char *tui, const 
     /* As under nohup or as a background job of a shell without job control. */
     if (getenv("HYDRA_TEST_SIGNALS_IGNORED") != NULL) {
         (void)signal(SIGINT, SIG_IGN); (void)signal(SIGHUP, SIG_IGN);
+    }
+    /* As after `ulimit -s`: a stack limit in kilobytes. */
+    stack_kb = getenv("HYDRA_TEST_STACK_KB");
+    if (stack_kb != NULL) {
+        struct rlimit stack;
+        stack.rlim_cur = stack.rlim_max = (rlim_t)strtoul(stack_kb, NULL, 10) * 1024U;
+        if (setrlimit(RLIMIT_STACK, &stack) != 0) _exit(123);
     }
     execute_test_tui(tui_path, hydra_path);
     _exit(127);
@@ -644,6 +651,22 @@ static bool file_has(const char *path, const char *text) {
     buffer[length] = '\0';
     fclose(file);
     return !strcmp(buffer, text);
+}
+
+/* The model is several megabytes and is not kept on the stack: the control
+ * centre starts, shows its heads and quits under a stack limit far below the
+ * usual 8 MB. */
+static void test_small_stack(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    bool opened;
+    (void)setenv("HYDRA_TEST_STACK_KB", "1024", 1);
+    opened = result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open terminal with a 1 MB stack limit");
+    (void)unsetenv("HYDRA_TEST_STACK_KB");
+    if (!opened) return;
+    result(wait_for_raw(&session) && wait_for_model(&session), "the control centre starts and shows its heads with a 1 MB stack limit");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "small stack session exits with terminal restoration");
+    close_session(&session);
 }
 
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
@@ -1307,6 +1330,7 @@ static int selected_tests(const char *only, char **argv) {
         {"details", {test_details_agent_exited, NULL, NULL}},
         {"attention", {test_attention, test_inbox_decisions, NULL}},
         {"interaction", {test_small_list, test_interaction, NULL}},
+        {"stack", {test_small_stack, NULL, NULL}},
         {"themes", {test_themes, NULL, NULL}},
         {"signals", {test_child_signals, NULL, NULL}},
         {"held-output", {test_quit_with_held_output, NULL, NULL}},
@@ -1376,6 +1400,7 @@ int main(int argc, char **argv) {
     test_inbox_remote_decision(argv[1], argv[2], argv[3]);
     test_workspace_layout(argv[1], argv[2], argv[3]);
     test_workspace_enter(argv[1], argv[2], argv[3]);
+    test_small_stack(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);
