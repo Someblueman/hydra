@@ -175,13 +175,10 @@ test-workspace-pty: test-program-pty example-workspace build-tui $(BUILD_DIR)/te
 $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.h $(TUI_DATA_OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c $(TUI_DATA_OBJECTS) -o $@
 
-.PHONY: test-statistics sanitize-statistics
+.PHONY: test-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
 	$(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-statistics-pty"
-
-sanitize-statistics:
-	@$(MAKE) BUILD_DIR=build/statistics-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-statistics
 
 example-workspace: $(BUILD_DIR)/kettle-workspace
 
@@ -317,19 +314,46 @@ test-parity: build-core build-tui
 
 test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
-sanitize-core:
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
+# Sanitizer lanes. Every lane compiles with the same flags, so they share one
+# tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
+# ordinary test goals below run by a sub-make with that BUILD_DIR and CFLAGS.
+# `make sanitize` runs the lanes in SANITIZE_LANES, in order, in one sub-make;
+# `make sanitize-<lane>` runs one. Because the tree is shared, do not run
+# several sanitize-<lane> goals under one `make -j`; use
+# `make sanitize SANITIZE_LANES="core tui"` instead.
+SANITIZE_DIR = $(BUILD_DIR)/sanitize
+SANITIZE_CFLAGS = -O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer
+SANITIZE_ARGS = BUILD_DIR="$(SANITIZE_DIR)" CFLAGS="$(SANITIZE_CFLAGS)"
+SANITIZE_LANES ?= core tui fleet workspace attached plan-workspace statistics
+SANITIZE_GOALS_core = test-c
+SANITIZE_GOALS_tui = test-tui-smoke
+SANITIZE_GOALS_fleet = test-fleet
+SANITIZE_GOALS_workspace = test-kettle test-workspace-pty
+SANITIZE_GOALS_attached = test-attached-pty
+SANITIZE_GOALS_plan-workspace = test-plan-workspace
+SANITIZE_GOALS_statistics = test-statistics
+# Fleet cases package the deployable helper from the ordinary build: sanitizer
+# debug data exceeds the wire limit. Only fleet cases read this variable.
+SANITIZE_FLEET_ENV = HYDRA_TEST_PACKAGE_BINARY="$(abspath $(BUILD_DIR))/hydra-fleet"
 
-sanitize-tui:
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build-tui
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build/sanitize/test-tui-input build/sanitize/test-tui-actions
-	@build/sanitize/test-tui-input
-	@build/sanitize/test-tui-actions
-	@build/sanitize/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
+# The TUI subset the sanitizer lane runs: two unit suites and a headless render.
+.PHONY: test-tui-smoke
+test-tui-smoke: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions
+	@$(BUILD_DIR)/test-tui-input
+	@$(BUILD_DIR)/test-tui-actions
+	@$(BUILD_DIR)/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
+
+.PHONY: sanitize-fleet sanitize-attached sanitize-plan-workspace sanitize-statistics
+sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics: sanitize-%:
+	@$(MAKE) $(SANITIZE_ARGS) $(SANITIZE_GOALS_$*)
+
+sanitize-fleet: build-fleet
+	$(SANITIZE_FLEET_ENV) $(MAKE) $(SANITIZE_ARGS) test-fleet
 
 sanitizer: sanitize-core
 
-sanitize: sanitize-core sanitize-tui sanitize-fleet sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics
+sanitize: $(if $(filter fleet,$(SANITIZE_LANES)),build-fleet)
+	@$(if $(filter fleet,$(SANITIZE_LANES)),$(SANITIZE_FLEET_ENV)) $(MAKE) $(SANITIZE_ARGS) $(foreach lane,$(SANITIZE_LANES),$(if $(SANITIZE_GOALS_$(lane)),$(SANITIZE_GOALS_$(lane)),$(error unknown sanitizer lane '$(lane)')))
 
 bench-core: build-core
 	@sh scripts/bench-core.sh
@@ -372,7 +396,11 @@ bench:
 clean:
 	@echo "Cleaning temporary files..."
 	@find . -name "*~" -o -name "*.swp" -o -name ".*.swp" | xargs rm -f
-	@rm -rf build
+	@dir="$(abspath $(BUILD_DIR))"; \
+	case "$(CURDIR)/" in "$${dir%/}/"*) \
+		echo "Error: refusing to remove BUILD_DIR='$(BUILD_DIR)': it is or contains this checkout" >&2; exit 1 ;; \
+	esac; \
+	rm -rf "$$dir"
 	@echo "Clean complete"
 
 # Install hydra to $(PREFIX)/bin and $(PREFIX)/lib/hydra
@@ -584,11 +612,6 @@ test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-evaluate"
 
 
-.PHONY: sanitize-fleet
-sanitize-fleet: build-fleet
-	# Exercise packaging with the deployable binary; sanitizer debug data exceeds the wire limit.
-	HYDRA_TEST_PACKAGE_BINARY="$(abspath $(BUILD_DIR))/hydra-fleet" $(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
-
 # C analysis and reviewed complexity ceiling; use the native build flags.
 CLANG_TIDY ?= scripts/clang-tidy.sh
 QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
@@ -605,21 +628,19 @@ quality-c:
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
 
-.PHONY: test-attached-pty sanitize-attached
+.PHONY: test-attached-pty
 test-attached-pty: build-tui
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attached-pty"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-terminal-restore"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-interactive-loop"
-sanitize-attached:
-	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 
 .PHONY: test-kettle-export
 test-kettle-export:
 	sh tests/kettle/test_export.sh
 
-.PHONY: test-plan-workspace sanitize-plan-workspace
+.PHONY: test-plan-workspace
 test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-workspace"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-launch"
@@ -627,12 +648,6 @@ test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-assets"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-runs-heads"
-sanitize-plan-workspace:
-	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace
-
-sanitize-workspace:
-	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
-
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery
