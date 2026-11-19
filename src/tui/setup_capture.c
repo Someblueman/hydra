@@ -170,8 +170,7 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
         (void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         printf("\nHydra: the step ended with exit status %d. Press Enter to return to Hydra.", status);
         fflush(stdout);
-        while (getchar() != '\n' && !feof(stdin)) { }
-        clearerr(stdin);
+        terminal_await_enter();
     }
     (void)terminal_return(app, &loan);
     return status;

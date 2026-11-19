@@ -636,6 +636,7 @@ void modal_pop(struct app *app);
 enum modal_event modal_wait(struct app *app, struct kt_msg *msg);
 struct terminal_loan { struct sigaction stop, interrupt, quit; bool lent, shield, stop_changed; };
 bool terminal_lend(struct app *app, struct terminal_loan *loan, bool shield);
+void terminal_await_enter(void);
 bool terminal_return(struct app *app, struct terminal_loan *loan);
 void copy_text(char *dst, size_t size, const char *src);
 bool parse_unsigned(const char *value, unsigned *result);

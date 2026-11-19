@@ -31,8 +31,7 @@ static int run_argv(struct app *app, char *const argv[]) {
     }
     printf("\nPress Enter to return to Hydra...");
     fflush(stdout);
-    while (getchar() != '\n' && !feof(stdin)) { }
-    clearerr(stdin);
+    terminal_await_enter();
     if (!terminal_return(app, &loan)) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }

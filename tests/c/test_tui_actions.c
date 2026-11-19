@@ -236,6 +236,22 @@ static int notice_cases(struct app *app) {
     return failed;
 }
 
+/* Waiting for Enter ends on a read error instead of reading again for ever.
+ * Standard input is a directory here, whose every read fails; the alarm ends
+ * a wait that spins. */
+static int enter_case(void) {
+    int saved = dup(STDIN_FILENO), directory = open(".", O_RDONLY);
+    bool ready = saved >= 0 && directory >= 0 && dup2(directory, STDIN_FILENO) == STDIN_FILENO;
+    if (directory >= 0) close(directory);
+    if (ready) {
+        (void)alarm(10U);
+        terminal_await_enter();
+        (void)alarm(0U);
+    }
+    if (saved >= 0) { (void)dup2(saved, STDIN_FILENO); close(saved); }
+    return check(ready && !ferror(stdin), "waiting for Enter ends on a read error and clears it");
+}
+
 int main(int argc, char **argv) {
     struct app *app;
     char output[128], *ok[] = {"sh", "-c", "printf complete; exit 7", NULL};
@@ -257,6 +273,7 @@ int main(int argc, char **argv) {
     failed += hold_case(argv[0], false, "a capture past its budget ends although its output is held outside its session");
     failed += shared_grace_case();
     failed += notice_cases(app);
+    failed += enter_case();
     r.count = 1;
     app->model.head_count = 1;
     copy_text(app->model.heads[0].branch, TEXT, targets[0]);
