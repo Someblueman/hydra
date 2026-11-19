@@ -62,8 +62,8 @@ static bool scope_present(const char *scope) {
 }
 json_object *revocation_find(const char *scope, const char *id) {
     char canonical[REVOCATION_ID], path[F_PATH], directory[F_PATH]; struct stat st; json_object *record;
-    /* Hashing the identity runs a digest process; skip it while no decision
-     * of this scope exists, which is the common case on every alias load. */
+    /* No decision of this scope exists on most alias loads, and then there
+     * is no record to name or read. */
     if (!revocation_normalize(scope, id, canonical) || !scope_present(scope) || record_path(scope, canonical, path, directory)) return NULL;
     if (lstat(path, &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0077)) return NULL;
     record = f_read_json(path, 65536);

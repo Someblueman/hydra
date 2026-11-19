@@ -61,7 +61,7 @@ static void exact_source(const char *dir) {
     f_string_add(package, "bundle_hex", "626164");
     assert(!f_write(bundle, "bad", 3, true)); assert(!f_hash(bundle, commit));
     f_string_add(f_field(f_field(package, "spec"), "source"), "bundle_sha256", commit);
-    assert(!task_json_hash(f_field(package, "spec"), dir, commit)); f_string_add(package, "spec_sha256", commit);
+    assert(!task_json_hash(f_field(package, "spec"), commit)); f_string_add(package, "spec_sha256", commit);
     inspected = task_inspect(package); assert(!json_object_get_boolean(f_field(inspected, "ok"))); json_object_put(inspected);
     json_object_put(response); json_object_put(spec);
 }

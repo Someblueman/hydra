@@ -120,7 +120,7 @@ json_object *task_accept(json_object *package, const char *key, int generation) 
     if (task_store_root(root) || snprintf(stage, sizeof(stage), "%s/.accept.XXXXXX", root) >= (int)sizeof(stage) || !mkdtemp(stage)) goto io;
     staged = true; binding = json_object_new_object();
     f_string_add(binding, "submission_key", key);
-    if (task_json_hash(binding, stage, hash)) goto io;
+    if (task_json_hash(binding, hash)) goto io;
     snprintf(id, sizeof(id), "task_%s", hash);
     if (f_path(destination, sizeof(destination), root, id)) goto io;
     if (!lstat(destination, &st)) {

@@ -1,6 +1,7 @@
 /* Live-source parsers, snapshot diffs and revocation identities: pure
  * functions over fixture text, no files beyond the private test home. */
 #include "fleet/discovery/discovery.h"
+#include "fleet/enrollment/enrollment.h"
 #include "fleet/revocation/revocation.h"
 static json_object *record_named(json_object *report, const char *name) {
     json_object *records = f_field(report, "records"); size_t i;
@@ -83,6 +84,36 @@ static void test_revocation_identity(void) {
     assert(json_object_array_length(result) == 1); json_object_put(result);
     assert(!revocation_find_key("SHA256:none"));
 }
+/* enrollment_hash is the digest of the file enrollment_write stores. Records
+ * carry it, other hosts compare it and revocation records are named by it,
+ * so it may never change. The expected digests were recorded from the
+ * earlier implementation, which wrote that file and hashed it, and checked
+ * with sha256sum over the serialised bytes. Takes ownership of value. */
+static void enrollment_digest_is(json_object *value, const char *expected) {
+    char digest[65], stored[65], path[F_PATH];
+    assert(!enrollment_hash(value, digest));
+    if (strcmp(digest, expected)) fprintf(stderr, "enrollment digest %s (want %s) of %s\n", digest, expected, json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN));
+    assert(!strcmp(digest, expected));
+    assert(!f_path(path, sizeof(path), f_home, "enrollment-digest.json") && !enrollment_write(path, value));
+    assert(!f_hash(path, stored) && !strcmp(stored, digest) && enrollment_file_matches(path, digest));
+    assert(!unlink(path));
+    json_object_put(value);
+}
+static void test_enrollment_digests(void) {
+    json_object *intent = f_parse("{\"schema_version\":1,\"kind\":\"enrollment_intent\",\"project\":\"/srv/app\",\"remote_hydra\":\"hydra\","
+        "\"hosts\":[{\"name\":\"build-01\",\"target\":\"ubuntu@build-01.example.test\",\"port\":22,"
+        "\"host_key\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGp\",\"jump\":[],\"labels\":{\"role\":\"builder\"}}],\"created_at\":1795000000}");
+    assert(intent);
+    enrollment_digest_is(json_object_new_string("transport:build-01.example.test"), "dd9e547abe257836818480f8bfefc7b5a233793a7db7d7e88ae590a5bc73b4a4");
+    enrollment_digest_is(json_object_new_string("caf\xc3\xa9 \xe2\x9a\xa0 \xf0\x9f\x98\x80 /path\\with \"quotes\"\n\t\x01"),
+                         "aeed2abaea654f8e56e4eff7d0b689728d93164155760045f538c031cde87cd4");
+    enrollment_digest_is(f_parse("{\"path\":\"/home/user/project\",\"url\":\"ssh://u@h:22/x\"}"), "ba3b71b364e3fc1287ade321d4cbf06e872e70a4a630e2ae76843c687f817e50");
+    enrollment_digest_is(intent, "68357b8095fb1b38a49ff4b23fd8f5d80390c5530cda53cd4d87f7e064dcef48");
+    enrollment_digest_is(f_parse("{}"), "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a");
+    enrollment_digest_is(json_object_new_array(), "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945");
+    enrollment_digest_is(NULL, "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b");
+}
 static void test_discovery_units(void) {
     test_ansible_parser(); test_avahi_parser(); test_ssh_scanner(); test_diff(); test_revocation_identity();
+    test_enrollment_digests();
 }

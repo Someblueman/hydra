@@ -93,11 +93,7 @@ json_object *agent_capabilities(json_object *profile) {
     for (i = 0; names[i]; i++) json_object_object_add(caps, names[i], json_object_new_boolean(agent_capability(profile, names[i])));
     return caps;
 }
-int agent_profile_hash(json_object *profile, char digest[65]) {
-    char scratch[] = "/tmp/hydra-agent-profile.XXXXXX"; int status;
-    if (!mkdtemp(scratch)) return -1;
-    status = task_json_hash(profile, scratch, digest); f_remove_tree(scratch); return status;
-}
+int agent_profile_hash(json_object *profile, char digest[65]) { return task_json_hash(profile, digest); }
 json_object *agent_arguments(json_object *profile, const char *mode, json_object *values) {
     json_object *definition = f_field(profile, mode), *args = json_object_new_array(); size_t i;
     if (!definition) goto bad;

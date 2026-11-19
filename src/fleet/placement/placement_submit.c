@@ -13,13 +13,11 @@
 /* A host-bound copy of a prepared package: only spec.host and the derived
  * spec digest change; bundle, inputs and limits stay byte-identical. */
 static json_object *rebind(json_object *package, const char *host) {
-    char scratch[F_PATH], hash[65]; json_object *copy = f_parse(json_object_to_json_string_ext(package, JSON_C_TO_STRING_PLAIN)), *spec = f_field(copy, "spec");
+    char hash[65]; json_object *copy = f_parse(json_object_to_json_string_ext(package, JSON_C_TO_STRING_PLAIN)), *spec = f_field(copy, "spec");
     if (!copy || !spec) { json_object_put(copy); return NULL; }
     if (!strcmp(f_string(spec, "host"), host)) return copy;
     f_string_add(spec, "host", host);
-    if (snprintf(scratch, sizeof(scratch), "%s/hydra-placement-bind.XXXXXX", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") >= (int)sizeof(scratch) || !mkdtemp(scratch)) { json_object_put(copy); return NULL; }
-    if (task_json_hash(spec, scratch, hash)) { f_remove_tree(scratch); json_object_put(copy); return NULL; }
-    f_remove_tree(scratch);
+    if (task_json_hash(spec, hash)) { json_object_put(copy); return NULL; }
     f_string_add(copy, "spec_sha256", hash);
     return copy;
 }

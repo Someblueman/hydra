@@ -86,12 +86,12 @@ static json_object *reference(const char *locator, const char *preview)
 static int rehash(const char *path)
 {
     json_object *envelope = f_read_json(path, TASK_PACKAGE_LIMIT + 1024U);
-    char scratch[] = "/tmp/hydra-review-hash.XXXXXX", hash[65];
-    assert(envelope && mkdtemp(scratch));
-    assert(!task_json_hash(f_field(envelope, "result"), scratch, hash));
+    char hash[65];
+    assert(envelope);
+    assert(!task_json_hash(f_field(envelope, "result"), hash));
     f_string_add(envelope, "result_sha256", hash);
     assert(puts(json_object_to_json_string_ext(envelope, JSON_C_TO_STRING_PLAIN)) != EOF);
-    json_object_put(envelope); assert(!f_remove_tree(scratch)); return 0;
+    json_object_put(envelope); return 0;
 }
 int main(int argc, char **argv)
 {

@@ -25,11 +25,15 @@ int enrollment_write(const char *path, json_object *value) {
     fd = open(directory, O_RDONLY); if (fd < 0) return -1;
     status = fsync(fd); close(fd); return status;
 }
+/* The digest of exactly the bytes enrollment_write stores for value: its
+ * plain serialisation, no trailing newline. Records carry this digest and
+ * hosts compare it (enrollment_file_matches reads it back from the file),
+ * so the two functions must keep serialising alike. */
 int enrollment_hash(json_object *value, char hash[65]) {
-    char path[] = "/tmp/hydra-enrollment.XXXXXX"; int fd = mkstemp(path), status;
-    if (fd < 0) return -1;
-    close(fd); status = enrollment_write(path, value) || f_hash(path, hash);
-    unlink(path); return status ? -1 : 0;
+    const char *text = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
+    if (!text) return -1;
+    f_sha256_text(text, strlen(text), hash);
+    return 0;
 }
 bool enrollment_file_matches(const char *path, const char *hash) {
     char actual[65];
