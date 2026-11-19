@@ -1,7 +1,7 @@
 # Native independent PTY observers and fixtures.
 $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	@mkdir -p "$(@D)"
-	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
+	$(CC) -std=c99 -Wall -Wextra $(WERROR) -pedantic $< -o $@
 
 # Support shared by many cases is compiled once into $(BUILD_DIR)/test-support
 # and linked as objects; each case still compiles its own source.

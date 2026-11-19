@@ -3,7 +3,9 @@ CC = cc
 AR = ar
 CFLAGS = -O2
 CPPFLAGS =
-WARN = -std=c99 -Wall -Wextra -Werror -pedantic
+# Warnings are errors by default; pass WERROR= for a compiler that warns.
+WERROR = -Werror
+WARN = -std=c99 -Wall -Wextra $(WERROR) -pedantic
 INCLUDES = -Isrc -Isrc/kettle
 CORE = canvas color theme draw layout plot graph present workspace unicode output input keymap tree terminal_screen terminal_csi terminal_sgr terminal_parser
 # The optional POSIX runtime (program.h) and its headless test driver (testing.h).

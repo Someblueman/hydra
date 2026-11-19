@@ -8,7 +8,10 @@
 CC ?= cc
 AR ?= ar
 CFLAGS ?= -O2
-CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra -Werror -pedantic -Isrc
+# Warnings are errors for developers and CI. A build on a user's machine
+# (install.sh) passes WERROR= so a newer compiler's new warning cannot break it.
+WERROR ?= -Werror
+CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra $(WERROR) -pedantic -Isrc
 BUILD_DIR ?= build
 # Build and analysis share recursive discovery so domain directories cannot
 # silently omit native sources from the quality gate.
@@ -627,6 +630,51 @@ quality-c:
 
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
+
+# Compile-only check of every native source at each optimisation level. Some
+# warnings (uninitialised use, truncation, bounds) depend on the optimiser, and
+# sanitizer, debug and packager builds do not use the default -O2. Warnings are
+# always errors here. Nothing is linked or kept: a unit leaves only the
+# diagnostics of a failed compile under $(BUILD_DIR)/opt-levels, and every
+# failure is reported before the target fails. Run it with -j.
+OPT_LEVELS ?= O0 Og O1 O2 O3 Os
+OPT_CHECK_DIR = $(BUILD_DIR)/opt-levels
+OPT_CHECK_UNITS = $(foreach level,$(OPT_LEVELS),$(addprefix opt-check/$(level)/,$(NATIVE_SOURCES)))
+# A unit is opt-check/<level>/<source>.
+OPT_CHECK_LEVEL = $(word 2,$(subst /, ,$@))
+OPT_CHECK_SOURCE = $(patsubst opt-check/$(OPT_CHECK_LEVEL)/%,%,$@)
+.PHONY: check-opt-levels opt-check-reset $(OPT_CHECK_UNITS)
+# Diagnostics left by an earlier run must not be reported again.
+opt-check-reset:
+	@mkdir -p "$(OPT_CHECK_DIR)"
+	@find "$(OPT_CHECK_DIR)" -type f -name '*.err' -exec rm -f {} +
+
+$(OPT_CHECK_UNITS): | opt-check-reset
+	@out="$(OPT_CHECK_DIR)/$(OPT_CHECK_LEVEL)/$(OPT_CHECK_SOURCE)"; mkdir -p "$${out%/*}"; \
+	if $(CC) $(CORE_CFLAGS) -Werror $(FLEET_JSON_CFLAGS) -$(OPT_CHECK_LEVEL) -c $(OPT_CHECK_SOURCE) -o "$$out.o" 2>"$$out.err"; then \
+		rm -f "$$out.err"; \
+	fi; \
+	rm -f "$$out.o"
+
+check-opt-levels: $(OPT_CHECK_UNITS)
+	@failed="$$(find "$(OPT_CHECK_DIR)" -type f -name '*.err' | LC_ALL=C sort)"; \
+	if [ -z "$$failed" ]; then \
+		echo "check-opt-levels: $(words $(NATIVE_SOURCES)) sources compile without warnings at $(addprefix -,$(OPT_LEVELS))"; \
+		exit 0; \
+	fi; \
+	for log in $$failed; do \
+		unit="$${log#$(OPT_CHECK_DIR)/}"; unit="$${unit%.err}"; \
+		echo "== -$${unit%%/*} $${unit#*/}"; cat "$$log"; \
+	done; \
+	echo "check-opt-levels: failing sites ($(CC), warnings as errors):"; \
+	for log in $$failed; do \
+		unit="$${log#$(OPT_CHECK_DIR)/}"; unit="$${unit%.err}"; \
+		grep -E '^[^ :]+:[0-9]+:[0-9]+: (fatal error|error|warning):' "$$log" | \
+			awk -v level="$${unit%%/*}" -v source="$${unit#*/}" ' \
+				{ found = 1; printf "  -%s %s%s\n", level, (index($$0, source ":") == 1 ? "" : source ": in "), $$0 } \
+				END { if (!found) printf "  -%s %s: failed without a located diagnostic (see above)\n", level, source }'; \
+	done; \
+	exit 1
 
 .PHONY: test-attached-pty
 test-attached-pty: build-tui
