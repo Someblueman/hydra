@@ -658,7 +658,6 @@ void linef(struct app *app, const char *format, ...);
 const char *display_status(const struct head *head);
 const char *status_label(const struct head *head);
 struct kt_style status_tone(const struct head *head);
-size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
 struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
