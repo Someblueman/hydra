@@ -20,6 +20,7 @@ void native_observations_cancel(struct app *app, size_t source) {
 }
 
 void native_observations_destroy(struct app *app) {
+    struct native_capture *jobs[OBSERVE_SOURCES+1];
     size_t i;
     native_evidence_destroy(app);
     native_review_destroy(app);
@@ -27,8 +28,9 @@ void native_observations_destroy(struct app *app) {
     free(app->links); app->links=NULL;
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
-    for (i=0;i<OBSERVE_SOURCES;i++) native_capture_destroy(&app->observations->jobs[i]);
-    native_capture_destroy(&app->observations->preview);
+    for (i=0;i<OBSERVE_SOURCES;i++) jobs[i]=&app->observations->jobs[i];
+    jobs[OBSERVE_SOURCES]=&app->observations->preview;
+    native_captures_destroy(jobs,OBSERVE_SOURCES+1);
     snapshot_free(app->snapshot); app->snapshot=NULL;
     free(app->observations); app->observations=NULL;
 }

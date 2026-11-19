@@ -602,7 +602,12 @@ int accept_workflows(struct app *app, FILE *input);
 int load_workflow_fixture(struct app *app, const char *fixture);
 void workflow_move(struct app *app, int direction);
 bool workflow_key(struct app *app, char key);
+/* Bounded captures of read-only children (capture.c). destroy stops one that
+ * is still running and waits for it, for a bounded time; stop only asks, so
+ * that several can be stopped together and then destroyed (captures_destroy). */
 void native_capture_destroy(struct native_capture *p);
+void native_capture_stop(struct native_capture *p);
+void native_captures_destroy(struct native_capture *const captures[], size_t count);
 bool native_capture_start(struct native_capture *p, char *const argv[], long budget_ms);
 bool native_capture_step(struct native_capture *p);
 FILE *native_capture_result(struct native_capture *p, bool *success);

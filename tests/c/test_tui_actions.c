@@ -122,6 +122,97 @@ static int signal_cases(struct app *app, char *self) {
     return failed;
 }
 
+/* This program again, as `--hold FILE`: a descendant of a capture's producer
+ * that leaves the producer's session and keeps its output open, as a daemon
+ * started by a `hydra` command would. The producer itself exits at once. The
+ * descendant records its PID and lives for HOLD_MS at most, so nothing is
+ * left behind and a capture that waits for it fails its case instead of
+ * hanging it. */
+#define HOLD_MS 20000L
+#define HOLD_BOUND_MS 10000L
+static int hold_output(const char *path) {
+    const struct timespec life = {HOLD_MS / 1000L, 0};
+    pid_t child = fork();
+    FILE *file;
+    if (child) return child < 0 ? 2 : 0;
+    if (setsid() < 0 || !(file = fopen(path, "w"))) _exit(2);
+    fprintf(file, "%ld\n", (long)getpid());
+    if (fclose(file)) _exit(2);
+    (void)nanosleep(&life, NULL);
+    _exit(0);
+}
+
+/* The PID the holder recorded once it had left the session, or 0. */
+static pid_t hold_started(const char *path) {
+    const struct timespec pause = {0, 10000000L};
+    struct timespec started;
+    long pid = 0;
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    while (pid <= 0 && action_elapsed(&started) < HOLD_BOUND_MS) {
+        FILE *file = fopen(path, "r");
+        if (file && (fscanf(file, "%ld", &pid) != 1 || fgetc(file) != '\n')) pid = 0;
+        if (file) fclose(file);
+        if (pid <= 0) (void)nanosleep(&pause, NULL);
+    }
+    return (pid_t)pid;
+}
+
+/* A capture whose output a descendant outside its session keeps open ends
+ * within a bound: when it is destroyed while running (quit), and when it is
+ * left to run into its budget. The descendant is not signalled. */
+static int hold_case(char *self, bool destroy, const char *name) {
+    char path[] = "/tmp/hydra-tui-actions-hold-XXXXXX";
+    char *argv[] = {self, "--hold", path, NULL};
+    const struct timespec pause = {0, 10000000L};
+    struct native_capture capture;
+    struct timespec started;
+    int fd = mkstemp(path), failed;
+    pid_t holder = 0;
+    bool ended = false;
+    if (fd >= 0) close(fd);
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    if (fd >= 0 && native_capture_start(&capture, argv, destroy ? 60000L : 100L)) {
+        holder = hold_started(path);
+        (void)clock_gettime(CLOCK_MONOTONIC, &started);
+        while (!destroy && !native_capture_step(&capture) && action_elapsed(&started) < HOLD_MS + 5000L)
+            (void)nanosleep(&pause, NULL);
+        ended = destroy || (capture.reaped && capture.failed);
+        native_capture_destroy(&capture);
+    }
+    failed = check(holder > 0 && ended && action_elapsed(&started) < HOLD_BOUND_MS, name);
+    failed += check(holder > 0 && kill(holder, 0) == 0, "the descendant that left the session is not signalled");
+    if (holder > 0) (void)kill(holder, SIGKILL);
+    if (fd >= 0) (void)unlink(path);
+    return failed;
+}
+
+/* Captures that resist SIGTERM, destroyed together, share one grace period:
+ * the time is that of one escalation to SIGKILL, not of four in a row. */
+#define RESISTANT 4U
+static int shared_grace_case(void) {
+    char *argv[] = {"sh", "-c", "trap '' TERM; printf ready; exec sleep 20", NULL};
+    const struct timespec pause = {0, 10000000L};
+    struct native_capture captures[RESISTANT], *all[RESISTANT];
+    struct timespec started;
+    size_t i, ready = 0;
+    long elapsed;
+    for (i = 0; i < RESISTANT; i++) {
+        all[i] = &captures[i];
+        if (!native_capture_start(all[i], argv, 60000L)) return check(false, "resistant captures start");
+    }
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    while (ready < RESISTANT && action_elapsed(&started) < HOLD_BOUND_MS) {
+        for (i = ready = 0; i < RESISTANT; i++) { (void)native_capture_step(all[i]); ready += captures[i].bytes > 0; }
+        (void)nanosleep(&pause, NULL);
+    }
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    native_captures_destroy(all, RESISTANT);
+    elapsed = action_elapsed(&started);
+    if (ready < RESISTANT || elapsed < 700 || elapsed >= 2400) printf("  %zu ready, destroyed in %ld ms\n", ready, elapsed);
+    return check(ready == RESISTANT && elapsed >= 700 && elapsed < 2400,
+                 "captures destroyed together share one grace period");
+}
+
 int main(int argc, char **argv) {
     struct app *app;
     char output[128], *ok[] = {"sh", "-c", "printf complete; exit 7", NULL};
@@ -129,6 +220,7 @@ int main(int argc, char **argv) {
     char targets[1][TEXT] = {"current-head"};
     int failed = 0;
     if (argc >= 2 && !strcmp(argv[1], "--signals")) return signal_report(argc > 2 ? argv[2] : NULL);
+    if (argc == 3 && !strcmp(argv[1], "--hold")) return hold_output(argv[2]);
     app = calloc(1U, sizeof(*app));
     if (!app) return 1;
     failed += check(run_captured(app, ok, output, sizeof(output), 1000L) == 7 && !strcmp(output, "complete"),
@@ -138,6 +230,9 @@ int main(int argc, char **argv) {
     failed += timeout_case(app, "trap '' TERM; exec sleep 20", "TERM resistance reaches bounded KILL escalation");
     failed += timeout_case(app, "sleep 20 & exit 0", "inherited output does not bypass action deadline");
     failed += signal_cases(app, argv[0]);
+    failed += hold_case(argv[0], true, "destroying a capture does not wait for output held outside its session");
+    failed += hold_case(argv[0], false, "a capture past its budget ends although its output is held outside its session");
+    failed += shared_grace_case();
     r.count = 1;
     app->model.head_count = 1;
     copy_text(app->model.heads[0].branch, TEXT, targets[0]);

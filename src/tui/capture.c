@@ -14,6 +14,13 @@
 /* Bounded read-only subprocess capture. The caller owns the stream and process;
  * step never waits for a child, so terminal I/O can continue during observations. */
 #define CAPTURE_STOP_GRACE_MS 750L
+/* After the session was killed: how long its output may stay open, and then
+ * how long the killed leader may take to end, before the capture stops
+ * waiting for each. Stopping a capture therefore takes at most their sum. */
+#define CAPTURE_EOF_GRACE_MS 250L
+#define CAPTURE_REAP_GRACE_MS 1000L
+#define CAPTURE_EOF_GIVEN_UP_MS (CAPTURE_STOP_GRACE_MS + CAPTURE_EOF_GRACE_MS)
+#define CAPTURE_REAP_GIVEN_UP_MS (CAPTURE_EOF_GIVEN_UP_MS + CAPTURE_REAP_GRACE_MS)
 static void capture_wake(const struct native_capture *p);
 
 /* Captures own a private session, including helpers with separate process
@@ -53,19 +60,48 @@ static long elapsed_ms(const struct timespec *started) {
     return (long)(now.tv_sec-started->tv_sec)*1000L+(long)(now.tv_nsec-started->tv_nsec)/1000000L;
 }
 
+/* SIGTERM first, then SIGKILL for the whole session once the grace has passed.
+ * Nothing in the session survives that, so output still open
+ * CAPTURE_EOF_GRACE_MS later is held by a descendant that left the session (a
+ * daemon the producer started): not this capture's to signal, and not to be
+ * waited for. Closing the read end then ends the wait for EOF; the capture
+ * has already failed. */
 static void stop_capture(struct native_capture *p) {
+    long waited;
     if (!p->stopping) {
         p->stopping=true; p->failed=true;
         (void)clock_gettime(CLOCK_MONOTONIC,&p->stop_started);
         /* The producer owns any nested process groups and temporary files. */
         (void)kill(-p->pid,SIGTERM); (void)kill(p->pid,SIGTERM);
     }
-    if (elapsed_ms(&p->stop_started)>=CAPTURE_STOP_GRACE_MS) {
-        kill_capture_session(p->pid);
-        (void)kill(-p->pid,SIGKILL); (void)kill(p->pid,SIGKILL);
-    }
+    waited=elapsed_ms(&p->stop_started);
+    if (waited<CAPTURE_STOP_GRACE_MS) return;
+    kill_capture_session(p->pid);
+    (void)kill(-p->pid,SIGKILL); (void)kill(p->pid,SIGKILL);
+    if (!p->eof && waited>=CAPTURE_EOF_GIVEN_UP_MS) { close(p->fd); p->fd=-1; p->eof=true; }
 }
 
+/* The leader stays unreaped for as long as its group may be signalled, so that
+ * the group's ID cannot be reused meanwhile: until its output closed, or until
+ * the session was killed and the wait for its output given up. Either way
+ * nothing here signals the group once the leader is reaped. A leader that
+ * SIGKILL has not ended within CAPTURE_REAP_GRACE_MS is left to the system
+ * and never signalled again. */
+static void reap_capture(struct native_capture *p) {
+    pid_t result=waitpid(p->pid,&p->status,WNOHANG);
+    if (result==p->pid) p->reaped=true;
+    else if (result<0 && errno!=EINTR) { p->failed=true; p->reaped=true; }
+    else if (p->stopping && elapsed_ms(&p->stop_started)>=CAPTURE_REAP_GIVEN_UP_MS) { p->status=0; p->reaped=true; }
+}
+
+/* Asks a running capture to stop without waiting for it. */
+void native_capture_stop(struct native_capture *p) {
+    if (p->pid>0 && !p->reaped) stop_capture(p);
+}
+
+/* Stops a running capture and waits for it to end. The wait is bounded by
+ * the graces above whatever the producer or its descendants do, so quitting
+ * cannot hang on a child that keeps its output open. */
 void native_capture_destroy(struct native_capture *p) {
     if (p->pid>0 && !p->reaped) {
         const struct timespec pause={0,10000000L};
@@ -75,6 +111,14 @@ void native_capture_destroy(struct native_capture *p) {
     if (p->fd>=0) close(p->fd);
     if (p->output) fclose(p->output);
     memset(p,0,sizeof(*p)); p->fd=-1;
+}
+
+/* Several at once: all are asked to stop before any is waited for, so their
+ * graces run together and the whole takes one, not one each. */
+void native_captures_destroy(struct native_capture *const captures[], size_t count) {
+    size_t i;
+    for (i=0;i<count;i++) native_capture_stop(captures[i]);
+    for (i=0;i<count;i++) native_capture_destroy(captures[i]);
 }
 
 bool native_capture_start(struct native_capture *p, char *const argv[], long budget_ms) {
@@ -137,11 +181,7 @@ bool native_capture_step(struct native_capture *p) {
     if (!p->eof) drain_capture(p);
     if (p->failed && !p->reaped) stop_capture(p);
     /* Retain the leader until EOF so its process-group ID cannot be reused. */
-    if (!p->reaped && p->eof) {
-        pid_t result=waitpid(p->pid,&p->status,WNOHANG);
-        if (result==p->pid) p->reaped=true;
-        else if (result<0 && errno!=EINTR) { p->failed=true; p->reaped=true; }
-    }
+    if (!p->reaped && p->eof) reap_capture(p);
     if (!p->reaped || !p->eof) capture_wake(p);
     return p->reaped && p->eof;
 }

@@ -350,13 +350,15 @@ bool snapshot_step(struct native_snapshot *s, FILE **rows, bool *timed_out) {
     return true;
 }
 
+/* Every read of the refresh is stopped before any is waited for: cancelling
+ * (a quit included) takes one grace period at worst, not one per read. */
 void snapshot_cancel(struct native_snapshot *s) {
+    struct native_capture *jobs[3 + SNAPSHOT_PROBES];
     size_t slot;
     if (!s || !s->active) return;
-    native_capture_destroy(&s->locate);
-    native_capture_destroy(&s->sessions);
-    native_capture_destroy(&s->leftovers);
-    for (slot = 0; slot < SNAPSHOT_PROBES; slot++) native_capture_destroy(&s->probes[slot].job);
+    jobs[0] = &s->locate; jobs[1] = &s->sessions; jobs[2] = &s->leftovers;
+    for (slot = 0; slot < SNAPSHOT_PROBES; slot++) jobs[3 + slot] = &s->probes[slot].job;
+    native_captures_destroy(jobs, 3 + SNAPSHOT_PROBES);
     refresh_end(s);
 }
 

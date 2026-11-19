@@ -34,6 +34,8 @@ struct session {
 };
 
 static int tests;
+/* This program's own path: fixtures start it again as their child. */
+static const char *test_program;
 static int failures;
 static long long monotonic_ms(void);
 static int open_session(struct session *, const char *, const char *, const char *, unsigned short, unsigned short);
@@ -557,6 +559,25 @@ static int wait_for_exit(struct session *session) {
     return 254;
 }
 
+/* Like wait_for_exit with a bound of its own: 254 when the session had to be
+ * killed because it was still running after timeout_ms. */
+static int wait_for_exit_within(struct session *session, long timeout_ms) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    int status = 0;
+    for (;;) {
+        drain_output(session);
+        if (waitpid(session->pid, &status, WNOHANG) == session->pid) break;
+        if (monotonic_ms() >= deadline) {
+            kill(session->pid, SIGKILL);
+            (void)waitpid(session->pid, &status, 0);
+            return 254;
+        }
+        sleep_ms(20);
+    }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 255;
+}
+
 static bool terminal_restored(struct session *session) {
     struct termios current;
     if (tcgetattr(session->slave, &current) != 0 && tcgetattr(session->master, &current) != 0) {
@@ -937,6 +958,79 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
     close_session(&session);
 }
 
+/* `--pipe-holder FILE`, started by holder-hydra.sh: a descendant of a
+ * capture's producer that leaves the producer's session and keeps its output
+ * open. It records its PID and lives for HOLDER_LIFE_MS at most, so nothing
+ * is left behind on any path and a quit that waits for it fails the case
+ * instead of hanging it. */
+#define HOLDER_LIFE_MS 20000L
+#define HOLDER_QUIT_BOUND_MS 10000L
+static int pipe_holder(const char *path) {
+    pid_t child = fork();
+    FILE *file;
+    if (child) return child < 0 ? 2 : 0;
+    if (setsid() < 0 || !(file = fopen(path, "w"))) _exit(2);
+    fprintf(file, "%ld\n", (long)getpid());
+    if (fclose(file)) _exit(2);
+    sleep_ms(HOLDER_LIFE_MS);
+    _exit(0);
+}
+
+/* The PID the holder recorded once it had left the session, or 0. */
+static pid_t pipe_holder_started(const char *path, long timeout_ms) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    long pid = 0;
+    while (pid <= 0 && monotonic_ms() < deadline) {
+        FILE *file = fopen(path, "r");
+        if (file && (fscanf(file, "%ld", &pid) != 1 || fgetc(file) != '\n')) pid = 0;
+        if (file) fclose(file);
+        if (pid <= 0) sleep_ms(10);
+    }
+    return (pid_t)pid;
+}
+
+static bool pipe_holder_session(struct session *session, const char *tui, const char *hydra, const char *fake_bin,
+                                const char *pids) {
+    char script[4096], helper[PATH_MAX];
+    const char *slash = strrchr(hydra, '/');
+    bool opened;
+    if (!slash || !test_program || !realpath(test_program, helper) ||
+        snprintf(script, sizeof(script), "%.*s/holder-hydra.sh", (int)(slash - hydra), hydra) >= (int)sizeof(script)) return false;
+    (void)setenv("HYDRA_TEST_HOLDER", helper, 1);
+    (void)setenv("HYDRA_TEST_HOLDER_PIDS", pids, 1);
+    opened = open_session(session, tui, script, fake_bin, 80, 24) == 0;
+    (void)unsetenv("HYDRA_TEST_HOLDER");
+    (void)unsetenv("HYDRA_TEST_HOLDER_PIDS");
+    return opened;
+}
+
+/* Quitting stops the reads in flight and waits for them. A read whose output
+ * is still held by a process outside its session (never signalled: it is not
+ * the read's) must not hold up the quit: the wait is bounded. */
+static void test_quit_with_held_output(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char pids[128];
+    long long asked;
+    pid_t holder;
+    int status;
+    snprintf(pids, sizeof(pids), "/tmp/hydra-holder-pid-%ld", (long)getpid());
+    (void)unlink(pids);
+    if (!result(pipe_holder_session(&session, tui, hydra, fake_bin, pids), "open held-output terminal")) return;
+    result(wait_for_raw(&session), "held output reaches raw mode");
+    holder = pipe_holder_started(pids, 5000);
+    result(holder > 0, "a descendant outside the read's session holds its output");
+    write_input(session.master, "q", 1U);
+    asked = monotonic_ms();
+    status = wait_for_exit_within(&session, HOLDER_QUIT_BOUND_MS);
+    if (!result(status == 0, "quit does not wait for output held outside the read's session"))
+        printf("  exit status %d after %lld ms\n", status, monotonic_ms() - asked);
+    result(holder > 0 && kill(holder, 0) == 0, "the process outside the session is not signalled");
+    if (holder > 0) (void)kill(holder, SIGKILL);
+    result(terminal_restored(&session), "held output quit restores terminal state");
+    close_session(&session);
+    (void)unlink(pids);
+}
+
 static void test_delayed_initial_snapshot(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     char output[65536] = "";
@@ -1177,10 +1271,19 @@ static bool wait_for_attention_order(struct session *session) {
     return false;
 }
 
+/* Started by a fixture as its child, not as the test: the child's exit
+ * status, or -1. */
+static int fixture_child_mode(int argc, char **argv) {
+    if (argc == 6 && !strcmp(argv[1], "--review-cancel-owner")) return review_cancel_owner(argv[2], argv[3], argv[4], argv[5]);
+    if (argc == 3 && !strcmp(argv[1], "--pipe-holder")) return pipe_holder(argv[2]);
+    return -1;
+}
+
 static int special_test_mode(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--item10-semantic-controls")) return measure_semantic_controls();
     if (argc == 7 && !strcmp(argv[1], "--item10-session")) return measure_session(argv[2], argv[3], argv[4], argv[5], argv[6]);
-    if (argc == 6 && !strcmp(argv[1], "--review-cancel-owner")) return review_cancel_owner(argv[2], argv[3], argv[4], argv[5]);
+    int child = fixture_child_mode(argc, argv);
+    if (child >= 0) return child;
     if (argc == 4 && strcmp(argv[1], "--i1-measure") == 0) {
         unsigned heads;
         if (!measure_unsigned(argv[2], &heads) || heads == 0U || heads > 10U) return 2;
@@ -1204,6 +1307,7 @@ static int selected_tests(const char *only, char **argv) {
         {"interaction", {test_small_list, test_interaction, NULL}},
         {"themes", {test_themes, NULL, NULL}},
         {"signals", {test_child_signals, NULL, NULL}},
+        {"held-output", {test_quit_with_held_output, NULL, NULL}},
         {"land", {test_inbox_land, NULL, NULL}},
         {"remote", {test_remote_side_by_side, test_remote_actions, test_remote_stale_and_disconnected}},
     };
@@ -1219,6 +1323,7 @@ static int selected_tests(const char *only, char **argv) {
 int main(int argc, char **argv) {
     char timeout_pids[128]; int special;
     (void)setvbuf(stdout, NULL, _IOLBF, 0U);
+    test_program = argv[0];
     special = special_test_mode(argc, argv);
     if (special >= 0) return special;
     if (argc != 4) {
@@ -1304,6 +1409,7 @@ int main(int argc, char **argv) {
     }
     (void)unsetenv("HYDRA_TEST_PID_FILE");
     (void)unlink(timeout_pids);
+    test_quit_with_held_output(argv[1], argv[2], argv[3]);
     test_delayed_initial_snapshot(argv[1], argv[2], argv[3]);
     test_crash_report(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);
