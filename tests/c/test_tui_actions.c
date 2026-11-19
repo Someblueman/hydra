@@ -213,6 +213,29 @@ static int shared_grace_case(void) {
                  "captures destroyed together share one grace period");
 }
 
+/* A notice too long for the status line's buffer is cut on a character: the
+ * three-byte character that would straddle the end is dropped whole, at each
+ * of its three alignments. */
+static bool notice_cut(struct app *app, const char *prefix) {
+    char text[2U * sizeof(app->notice)];
+    size_t capacity = sizeof(app->notice) - 1U, lead = strlen(prefix), length, i;
+    for (i = 0; i + 3U < sizeof(text); i += 3U) memcpy(text + i, "\xe2\x97\x86", 3U);
+    text[i] = '\0';
+    notice_set(app, "%s%s", prefix, text);
+    length = strlen(app->notice);
+    return length == lead + (capacity - lead) / 3U * 3U && !strncmp(app->notice, prefix, lead) &&
+           !strncmp(app->notice + lead, text, length - lead);
+}
+
+static int notice_cases(struct app *app) {
+    int failed = check(notice_cut(app, "") && notice_cut(app, "x") && notice_cut(app, "xy"),
+                       "a notice too long for the status line is cut on a character");
+    notice_set(app, "Check failed (exit %d): %s", 7, "a recorded check");
+    failed += check(!strcmp(app->notice, "Check failed (exit 7): a recorded check"), "a notice that fits is kept whole");
+    app->notice[0] = '\0';
+    return failed;
+}
+
 int main(int argc, char **argv) {
     struct app *app;
     char output[128], *ok[] = {"sh", "-c", "printf complete; exit 7", NULL};
@@ -233,6 +256,7 @@ int main(int argc, char **argv) {
     failed += hold_case(argv[0], true, "destroying a capture does not wait for output held outside its session");
     failed += hold_case(argv[0], false, "a capture past its budget ends although its output is held outside its session");
     failed += shared_grace_case();
+    failed += notice_cases(app);
     r.count = 1;
     app->model.head_count = 1;
     copy_text(app->model.heads[0].branch, TEXT, targets[0]);

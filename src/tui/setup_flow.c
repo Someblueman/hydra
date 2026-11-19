@@ -281,7 +281,7 @@ static void removed_result(struct app *app, struct native_setup *s) {
         return;
     }
     close_flow(app, s);
-    snprintf(app->notice, sizeof(app->notice), "Removed the setup record for %.100s; nothing on the remote changed", s->name);
+    notice_set(app, "Removed the setup record for %.100s; nothing on the remote changed", s->name);
 }
 
 static void job_result(struct app *app, struct native_setup *s, enum setup_job kind) {
@@ -339,7 +339,7 @@ static void job_finish(struct app *app, struct native_setup *s) {
     if (s->screen == SETUP_SCREEN_DONE) app->remote_next = 0;
     if (!s->job.active) native_setup_hosts_refresh(app);
     if (!s->open && !s->job.active && kind != SETUP_JOB_REMOVE)
-        snprintf(app->notice, sizeof(app->notice), s->screen == SETUP_SCREEN_DONE ? "Remote host %.100s is set up" :
+        notice_set(app, s->screen == SETUP_SCREEN_DONE ? "Remote host %.100s is set up" :
                  "Remote setup for %.100s needs you: open Hosts (3) to continue", s->name);
 }
 
@@ -377,7 +377,7 @@ void native_setup_edit(struct app *app, size_t record) {
     r = &s->records[record];
     if (s->job.active) { copy_text(app->notice, sizeof(app->notice), "A setup step is still running; wait for its result"); return; }
     if (r->remote_changed) {
-        snprintf(app->notice, sizeof(app->notice), "%.100s already changed the remote, so it cannot be edited; x removes its record "
+        notice_set(app, "%.100s already changed the remote, so it cannot be edited; x removes its record "
                  "and lists what stays there", r->name);
         setup_notice(s, app->notice);
         return;
@@ -424,7 +424,7 @@ void native_setup_resume(struct app *app, const char *name) {
 static void close_flow(struct app *app, struct native_setup *s) {
     s->open = false;
     hosts_focus_detail(app, false);
-    if (s->job.active) snprintf(app->notice, sizeof(app->notice), "Setup for %.100s keeps running; Hosts shows its progress", s->name);
+    if (s->job.active) notice_set(app, "Setup for %.100s keeps running; Hosts shows its progress", s->name);
     native_setup_hosts_refresh(app);
 }
 
@@ -513,7 +513,7 @@ static void decline_removal(struct app *app, struct native_setup *s) {
         return;
     }
     close_flow(app, s);
-    snprintf(app->notice, sizeof(app->notice), "Kept the setup record for %.100s; nothing was changed", s->name);
+    notice_set(app, "Kept the setup record for %.100s; nothing was changed", s->name);
 }
 
 static void decline(struct app *app, struct native_setup *s) {

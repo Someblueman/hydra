@@ -174,7 +174,7 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
         r->skipped++;
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
+    notice_set(app, "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
     status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
     text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
     if (status == 0) { r->removed++; r->gone[index] = true; return; }
@@ -185,16 +185,16 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
 static void removal_single_notice(struct app *app, const char *target, const struct removal *r) {
     char line[TEXT];
     if (r->skipped) {
-        snprintf(app->notice, sizeof(app->notice), "Skipped %.120s: this is the terminal you are using", target);
+        notice_set(app, "Skipped %.120s: this is the terminal you are using", target);
         return;
     }
     first_line(r->output, line, sizeof(line));
-    snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", target, line[0] ? ": " : "", line);
+    notice_set(app, "Removed %.120s%s%.100s", target, line[0] ? ": " : "", line);
 }
 
 static void removal_notice(struct app *app, char targets[][TEXT], const struct removal *r) {
     if (r->failed) {
-        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu unsuccessful; %zu skipped%s", r->removed, r->count, r->failed, r->skipped,
+        notice_set(app, "Removed %zu of %zu; %zu unsuccessful; %zu skipped%s", r->removed, r->count, r->failed, r->skipped,
                  r->dirty ? " (uncommitted changes; see output)" : " (see output)");
         return;
     }
@@ -202,7 +202,7 @@ static void removal_notice(struct app *app, char targets[][TEXT], const struct r
         removal_single_notice(app, targets[0], r);
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",
+    notice_set(app, "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",
              r->skipped ? "; skipped the current session" : "", r->skipped ? "" : "");
 }
 
@@ -302,7 +302,7 @@ static void palette_theme(struct app *app) {
 static void palette_capture(struct app *app, const struct palette_command *chosen, char *const argv[]) {
     char output[8192], title[TEXT];
     int status;
-    snprintf(app->notice, sizeof(app->notice), "Running %s...", chosen->name);
+    notice_set(app, "Running %s...", chosen->name);
     status = run_captured(app, argv, output, sizeof(output), 30000L);
     app->notice[0] = '\0';
     snprintf(title, sizeof(title), status ? "%s (exit %d)" : "%s", chosen->label, status);

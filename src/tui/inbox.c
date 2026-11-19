@@ -822,10 +822,10 @@ void recovery_check_action(struct app *app, size_t index) {
     while ((word = strtok_r(NULL, " ", &save)) != NULL && count < 15U) argv[count++] = word;
     argv[count] = NULL;
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    snprintf(app->notice, sizeof(app->notice), "Running %s...", item->action);
+    notice_set(app, "Running %s...", item->action);
     status = run_captured(app, argv, output, sizeof(output), 30000L);
-    if (status == 0) snprintf(app->notice, sizeof(app->notice), "Check finished: %s", item->action);
-    else snprintf(app->notice, sizeof(app->notice), "Check failed (exit %d): %s", status, item->action);
+    if (status == 0) notice_set(app, "Check finished: %s", item->action);
+    else notice_set(app, "Check failed (exit %d): %s", status, item->action);
     show_result(app, title, output[0] ? output : "The check produced no output.");
 }
 
@@ -856,9 +856,9 @@ void recovery_remove_action(struct app *app, size_t index) {
     }
     if (!orphan_removal_confirmed(app, item)) return;
     copy_text(path, sizeof(path), item->source);
-    snprintf(app->notice, sizeof(app->notice), "Removing leftover worktree %.200s...", path);
+    notice_set(app, "Removing leftover worktree %.200s...", path);
     if (run_captured(app, argv, output, sizeof(output), 60000L) == 0 && strstr(output, "removed-orphan\t") != NULL) {
-        snprintf(app->notice, sizeof(app->notice), "Removed leftover worktree %.200s; the branch is kept", path);
+        notice_set(app, "Removed leftover worktree %.200s; the branch is kept", path);
     } else {
         copy_text(app->notice, sizeof(app->notice), "The worktree was not removed; see output");
         action_failed(app, "Removing a leftover worktree did not finish", output);

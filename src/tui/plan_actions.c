@@ -51,7 +51,7 @@ void plan_action_approve(struct app *app) {
         return;
     }
     app->plan->approved_revision = app->plan->revision;
-    snprintf(app->notice, sizeof(app->notice), "Approved revision %u; validating it, then it runs", app->plan->revision);
+    notice_set(app, "Approved revision %u; validating it, then it runs", app->plan->revision);
 }
 
 /* An approved revision runs once its validation is ready; any other outcome
@@ -63,10 +63,10 @@ void plan_actions_tick(struct app *app) {
     revision = p->approved_revision;
     p->approved_revision = 0;
     if (p->state == PLAN_READY && p->revision == revision && native_plan_launch(app, p->digest)) {
-        snprintf(app->notice, sizeof(app->notice), "Revision %u validated and submitted", revision);
+        notice_set(app, "Revision %u validated and submitted", revision);
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Revision %u did not run: %s", revision,
+    notice_set(app, "Revision %u did not run: %s", revision,
              p->revision != revision ? "the draft changed after approval" :
              p->state == PLAN_INVALID ? "validation found problems (F sends them to the agent)" : "validation did not complete");
 }
@@ -162,6 +162,6 @@ void plan_action_return_failure(struct app *app, const char *branch, const char 
              "hydra workflow plan propose <draft.json>.", what, run, feedback);
     h = native_plan_head(app, branch);
     if (h && native_plan_converse(app, h, text, false, true))
-        snprintf(app->notice, sizeof(app->notice), "Typed into %.100s's conversation; review it and press Enter to send.", branch);
-    else snprintf(app->notice, sizeof(app->notice), "%.100s's conversation could not be opened; nothing was sent.", branch);
+        notice_set(app, "Typed into %.100s's conversation; review it and press Enter to send.", branch);
+    else notice_set(app, "%.100s's conversation could not be opened; nothing was sent.", branch);
 }

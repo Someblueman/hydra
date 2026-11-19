@@ -662,14 +662,20 @@ const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
 struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 /* Formatting through a function, not snprintf at each call site: with
- * fortify on, macOS makes every snprintf a macro with a branch of its own. */
+ * fortify on, macOS makes every snprintf a macro with a branch of its own,
+ * and GCC warns, at some optimisation levels only, about a snprintf whose
+ * arguments could be longer than its buffer. Text that does not fit is cut
+ * on a character boundary. notice_set formats the status-line notice. */
 #if defined(__GNUC__) || defined(__clang__)
 #define TEXT_FORMAT __attribute__((format(printf, 3, 4)))
+#define NOTICE_FORMAT __attribute__((format(printf, 2, 3)))
 #else
 #define TEXT_FORMAT
+#define NOTICE_FORMAT
 #endif
 void text_set(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
 void text_append(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
+void notice_set(struct app *app, const char *format, ...) NOTICE_FORMAT;
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);

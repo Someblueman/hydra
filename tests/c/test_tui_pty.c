@@ -1064,7 +1064,9 @@ static int capture_exit(struct session *session, char *captured, size_t *used) {
         char buffer[4096];
         ssize_t length;
         waited = waitpid(session->pid, &status, WNOHANG);
-        while ((length = read_marker_output(session, buffer, sizeof(buffer))) > 0)
+        /* A read returns no more than it was given room for; saying so lets
+         * GCC -O3 see that capture_bytes stays inside this buffer. */
+        while ((length = read_marker_output(session, buffer, sizeof(buffer))) > 0 && (size_t)length <= sizeof(buffer))
             capture_bytes(captured, used, buffer, (size_t)length);
         if (waited != session->pid) sleep_ms(20);
     }

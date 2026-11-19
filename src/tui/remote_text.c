@@ -116,7 +116,7 @@ bool remote_footer_text(const struct app *app, char *out, size_t size, struct kt
 void remote_retry(struct app *app, const char *host) {
     native_observations_cancel(app, 5);
     app->remote_next = 0;
-    if (host && host[0]) snprintf(app->notice, sizeof(app->notice), "Reconnecting to %.100s: requesting a fresh observation", host);
+    if (host && host[0]) notice_set(app, "Reconnecting to %.100s: requesting a fresh observation", host);
     else copy_text(app->notice, sizeof(app->notice), "Requesting a fresh remote observation");
     native_observations_tick(app, true);
 }

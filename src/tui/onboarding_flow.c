@@ -244,7 +244,7 @@ void native_onboarding_open(struct app *app) {
 
 static void close_view(struct app *app, struct native_onboarding *s) {
     s->open = false;
-    if (s->job.active) snprintf(app->notice, sizeof(app->notice), "%s keeps running; O shows its result", s->job_label);
+    if (s->job.active) notice_set(app, "%s keeps running; O shows its result", s->job_label);
 }
 
 /* ---- Actions ---- */

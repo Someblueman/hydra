@@ -58,7 +58,7 @@ void location_set(struct app *app, const char *value) {
     app->run_row = false;
     if (app->task_row && !selected_task(app)) app->task_row = false;
     retarget_selection(app);
-    snprintf(app->notice, sizeof(app->notice), "Showing %s%sL cycles the location, Esc shows all", location_label(app, label, sizeof(label)), dot(app));
+    notice_set(app, "Showing %s%sL cycles the location, Esc shows all", location_label(app, label, sizeof(label)), dot(app));
 }
 
 /* all -> local -> remote -> each observed host -> all. */
