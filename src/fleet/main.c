@@ -15,6 +15,7 @@
 #include "fleet/review.h"
 #include "fleet/review_task.h"
 #include "fleet/setup/setup.h"
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -61,7 +62,7 @@ static bool early_command(int argc, char **argv, int *status) {
     *status = wdr_main(argc - 2, argv + 2);
     return true;
 }
-int main(int argc, char **argv) {
+static int dispatch(int argc, char **argv) {
     static char home[F_PATH]; json_object *result = NULL; int status;
     f_home = getenv("HYDRA_HOME"); f_hydra = getenv("HYDRA_BIN_CMD");
     if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return 1; f_home = home; }
@@ -91,3 +92,17 @@ int main(int argc, char **argv) {
     status = command_status(argc, argv, result, status);
     json_object_put(result); return status;
 }
+/* Standard output that could not be written is a failure of every command,
+ * whatever it decided and however it printed: a JSON envelope, raw TSV, a
+ * guided setup's own text or the run driver's capability line. A status that
+ * already says failure is kept; success becomes 1, the status f_emit gives a
+ * failed write. The reason is named unless the reader closed the pipe
+ * (EPIPE): that is the reader's choice and needs no message. An error left
+ * by an earlier write, with nothing more to flush, has no reason to name. */
+static int output_status(int status) {
+    int failed = fflush(stdout), reason = errno;
+    if (!failed && !ferror(stdout)) return status;
+    if (failed && reason != EPIPE) fprintf(stderr, "Error: cannot write output: %s\n", strerror(reason));
+    return status ? status : 1;
+}
+int main(int argc, char **argv) { return output_status(dispatch(argc, argv)); }
