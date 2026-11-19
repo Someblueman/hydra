@@ -17,6 +17,15 @@ NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
 # src/kettle/tools holds standalone programs with their own main(); they
 # link the library but are never part of it.
 KETTLE_SOURCES = $(filter-out src/kettle/tools/%,$(filter src/kettle/%.c,$(NATIVE_SOURCES)))
+# Shared code is compiled once per BUILD_DIR. Tests and examples link these
+# objects (kettle through its archive) instead of recompiling the sources.
+KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
+KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
+KETTLE_LIB = $(BUILD_DIR)/libkettle.a
+CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics_cli.c
+CORE_STATS_OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(CORE_STATS_SOURCES))
+TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
+STATS_EXPORT_OBJECTS = $(TUI_DATA_OBJECTS) $(BUILD_DIR)/hydra_statistics_export.o $(BUILD_DIR)/hydra_statistics_export_cohorts.o
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Sanitizer diagnostics must fail a case even when its output is captured.
@@ -53,7 +62,7 @@ FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust d
 FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
 .PHONY: test-fast
 test-fast:
-	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS)
+	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS) $(BUILD_DIR)/test-libhydra $(TUI_TEST_BINS) $(KETTLE_TEST_BINS)
 	@$(MAKE) lint
 	@echo "Running fast shell tests..."
 	@for name in $(FAST_SHELL_TESTS); do \
@@ -95,55 +104,49 @@ build-tui: $(BUILD_DIR)/hydra-tui
 .PHONY: test-kettle example-kettle example-workspace example-counter example-themes example-components test-workspace-pty test-program-pty test-visualization sanitize-workspace
 test-visualization: build-tui test-kettle $(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
-$(BUILD_DIR)/test-kettle: tests/c/test_kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle.c $(KETTLE_SOURCES) -o $@
+# Kettle is compiled once (the $(BUILD_DIR)/kettle/%.o rule below) and archived.
+# Its tests and examples link the archive, so each takes only the members it
+# references; hydra-tui does the same.
+$(KETTLE_LIB): $(KETTLE_OBJECTS)
+	rm -f $@
+	$(AR) rcs $@ $(KETTLE_OBJECTS)
 
-$(BUILD_DIR)/test-kettle-present: tests/c/test_kettle_present.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_present.c $(KETTLE_SOURCES) -o $@
+# One translation unit per binary (an example's test #includes its example).
+# The compiler writes $@.d, so every header, .inc and included .c is tracked;
+# the recipe therefore compiles only the first .c prerequisite, the source named
+# on the lines below (the $@.d files are read after them).
+KETTLE_UNIT_TESTS = kettle kettle-present kettle-style kettle-draw kettle-unicode kettle-terminal kettle-input kettle-keymap kettle-program kettle-components kettle-widgets
+KETTLE_EXAMPLE_TESTS = $(addprefix $(BUILD_DIR)/test-kettle-,counter themes components-example)
+KETTLE_EXAMPLE_BINS = $(addprefix $(BUILD_DIR)/kettle-,example counter themes components)
+KETTLE_LINKED_BINS = $(addprefix $(BUILD_DIR)/test-,$(KETTLE_UNIT_TESTS)) $(KETTLE_EXAMPLE_TESTS) $(KETTLE_EXAMPLE_BINS) $(BUILD_DIR)/kettle-program-fixture
+KETTLE_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,$(KETTLE_UNIT_TESTS)) $(BUILD_DIR)/test-kettle-workspace $(KETTLE_EXAMPLE_TESTS)
 
-$(BUILD_DIR)/test-kettle-style: tests/c/test_kettle_style.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_style.c $(KETTLE_SOURCES) -o $@
+$(foreach n,$(KETTLE_UNIT_TESTS),$(eval $(BUILD_DIR)/test-$(n): tests/c/test_$(subst -,_,$(n)).c))
+# The counter, themes and components examples' own tests, written with the headless driver.
+$(BUILD_DIR)/test-kettle-counter: examples/counter_test.c
+$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c
+$(BUILD_DIR)/test-kettle-components-example: examples/components_test.c
+$(BUILD_DIR)/kettle-example: examples/kettle.c
+$(BUILD_DIR)/kettle-counter: examples/counter.c
+$(BUILD_DIR)/kettle-themes: examples/themes.c
+$(BUILD_DIR)/kettle-components: examples/components.c
+# A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
+$(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c
+$(KETTLE_EXAMPLE_TESTS) $(KETTLE_EXAMPLE_BINS): KETTLE_INCLUDES = -Isrc/kettle
 
-$(BUILD_DIR)/test-kettle-draw: tests/c/test_kettle_draw.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_draw.c $(KETTLE_SOURCES) -o $@
+$(KETTLE_LINKED_BINS): $(KETTLE_LIB) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(KETTLE_INCLUDES) -MMD -MP -MF $@.d -MT $@ $(firstword $(filter %.c,$^)) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/test-kettle-workspace: tests/c/test_kettle_workspace.c src/kettle/workspace.c src/kettle/workspace.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_workspace.c src/kettle/workspace.c -o $@
+# workspace.c stands alone: this case links that one object, not the archive.
+$(BUILD_DIR)/test-kettle-workspace: tests/c/test_kettle_workspace.c $(BUILD_DIR)/kettle/workspace.o
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_kettle_workspace.c $(BUILD_DIR)/kettle/workspace.o -o $@
 
-$(BUILD_DIR)/test-kettle-unicode: tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) src/kettle/kettle.h src/kettle/unicode_tables.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) -o $@
+$(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c examples/workspace_demo.h $(KETTLE_HEADERS) $(KETTLE_LIB)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle $(filter %.c,$^) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/test-kettle-terminal: tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) src/kettle/terminal.h src/kettle/terminal_internal.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) -o $@
+-include $(KETTLE_LINKED_BINS:%=%.d) $(BUILD_DIR)/test-kettle-workspace.d
 
-$(BUILD_DIR)/test-kettle-input: tests/c/test_kettle_input.c $(KETTLE_SOURCES) src/kettle/input.h src/kettle/tree.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_input.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-keymap: tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) src/kettle/keymap.h src/kettle/input.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) -o $@
-
-# The runtime: headless driver cases, then real child processes on a private PTY.
-$(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_program.c $(KETTLE_SOURCES) -o $@
-
-# The counter example's own test, written with the headless driver.
-$(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter_test.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes_test.c $(KETTLE_SOURCES) -o $@
-
-# Components: pure parts drawn into a canvas, then interaction under the headless driver.
-$(BUILD_DIR)/test-kettle-components: tests/c/test_kettle_components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_components.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-widgets: tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-components-example: examples/components_test.c examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components_test.c $(KETTLE_SOURCES) -o $@
-
-test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example
+test-kettle: $(KETTLE_TEST_BINS)
 	$(BUILD_DIR)/test-kettle
 	$(BUILD_DIR)/test-kettle-present
 	$(BUILD_DIR)/test-kettle-style
@@ -160,25 +163,6 @@ test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_D
 	$(BUILD_DIR)/test-kettle-widgets
 	$(BUILD_DIR)/test-kettle-components-example
 
-$(BUILD_DIR)/kettle-example: examples/kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/kettle.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) examples/workspace_demo.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-counter: examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-themes: examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-components: examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components.c $(KETTLE_SOURCES) -o $@
-
-# A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
-$(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/kettle/program_fixture.c $(KETTLE_SOURCES) -o $@
-
 test-program-pty: $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/kettle-components
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-program-pty"
 
@@ -188,8 +172,8 @@ $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 test-workspace-pty: test-program-pty example-workspace build-tui $(BUILD_DIR)/test-workspace-child
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
 
-$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c -o $@
+$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.h $(TUI_DATA_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c $(TUI_DATA_OBJECTS) -o $@
 
 .PHONY: test-statistics sanitize-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
@@ -218,13 +202,16 @@ $(BUILD_DIR)/libhydra.o: src/libhydra.c src/libhydra.h | $(BUILD_DIR)
 $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 	$(AR) rcs $@ $<
 
-CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics_cli.c
+# The statistics sources are compiled once and shared by hydra-core, hydra-tui
+# and both statistics tests.
+$(CORE_STATS_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a $(CORE_STATS_SOURCES) src/hydra_statistics.h
-	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_SOURCES) $(BUILD_DIR)/libhydra.a -o $@
+$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h src/hydra_statistics.h $(CORE_STATS_OBJECTS) $(BUILD_DIR)/libhydra.a
+	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_OBJECTS) $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c -o $@
+$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.h $(STATS_EXPORT_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c $(STATS_EXPORT_OBJECTS) -o $@
 
 .PHONY: test-statistics-export
 test-statistics-export: build-core $(BUILD_DIR)/test-statistics-export
@@ -238,21 +225,16 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
-KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
-TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
-
 $(BUILD_DIR)/kettle/%.o: src/kettle/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(TUI_DATA_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
+# Linking the archive rather than every object leaves out kettle code the app
+# never references (unused components, the headless test driver).
+$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TUI_DATA_OBJECTS) $(KETTLE_LIB)
+	$(CC) $(CORE_CFLAGS) $(TUI_OBJECTS) $(TUI_DATA_OBJECTS) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS)
-	$(CC) $(CORE_CFLAGS) $^ -o $@
-
--include $(TUI_OBJECTS:.o=.d) $(KETTLE_OBJECTS:.o=.d) $(TUI_DATA_OBJECTS:.o=.d)
+-include $(TUI_OBJECTS:.o=.d) $(KETTLE_OBJECTS:.o=.d) $(CORE_STATS_OBJECTS:.o=.d)
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
@@ -273,11 +255,15 @@ $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/
 test-tui-actions: $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-actions
 
-$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h src/tui/plan_draft.c src/tui/plan_draft.h src/tui/setup_json.c src/tui/setup_json.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
+# These two link only the named app objects, already compiled for hydra-tui.
+TUI_PLANNING_OBJECTS = $(addprefix $(BUILD_DIR)/tui/,task_name.o plan_diagnostics.o plan_summary.o plan_draft.o setup_json.o)
+$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c $(TUI_PLANNING_OBJECTS)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_tui_planning.c $(TUI_PLANNING_OBJECTS) -o $@
 
-$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(KETTLE_OBJECTS)
-	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(KETTLE_OBJECTS) -o $@
+$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c $(BUILD_DIR)/tui/transcript.o $(KETTLE_OBJECTS)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_tui_transcript.c $(BUILD_DIR)/tui/transcript.o $(KETTLE_OBJECTS) -o $@
+
+-include $(BUILD_DIR)/test-tui-planning.d $(BUILD_DIR)/test-tui-transcript.d
 
 $(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
@@ -291,7 +277,8 @@ $(BUILD_DIR)/test-tui-setup-upgrade: tests/c/test_tui_setup_upgrade.c $(KETTLE_O
 $(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-keymap $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-setup-upgrade $(BUILD_DIR)/test-tui-onboarding
+TUI_TEST_BINS = $(addprefix $(BUILD_DIR)/test-tui-,input keymap actions planning transcript setup setup-upgrade onboarding)
+test-tui: build-tui $(TUI_TEST_BINS)
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-keymap
 	$(BUILD_DIR)/test-tui-actions
@@ -645,8 +632,6 @@ sanitize-plan-workspace:
 
 sanitize-workspace:
 	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
-
-$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example $(BUILD_DIR)/kettle-components: $(KETTLE_HEADERS)
 
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.

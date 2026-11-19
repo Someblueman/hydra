@@ -19,6 +19,7 @@ TESTS = test_kettle test_kettle_present test_kettle_style test_kettle_draw test_
 TEST_BINS = $(addprefix build/,$(TESTS))
 HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
+PTY_SUPPORT_OBJECTS = $(patsubst tests/kettle/%.c,build/pty-%.o,$(PTY_SUPPORT))
 
 .PHONY: all runtime examples test test-pty clean
 all: build/libkettle.a
@@ -64,10 +65,13 @@ build/kettle-program-fixture: tests/kettle/program_fixture.c $(LIBRARIES)
 examples: build/kettle-example build/kettle-counter build/kettle-themes build/kettle-components build/kettle-workspace
 test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
-build/test-pty: tests/kettle/test_pty.c $(PTY_SUPPORT) tests/kettle/pty_support.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(filter %.c,$^) -o $@
-build/test-program-pty: tests/kettle/test_program_pty.c $(PTY_SUPPORT) tests/kettle/pty_support.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(filter %.c,$^) -o $@
+# The PTY observers' shared support is compiled once for both.
+build/pty-%.o: tests/kettle/%.c tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -c $< -o $@
+build/test-pty: tests/kettle/test_pty.c $(PTY_SUPPORT_OBJECTS) tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $< $(PTY_SUPPORT_OBJECTS) -o $@
+build/test-program-pty: tests/kettle/test_program_pty.c $(PTY_SUPPORT_OBJECTS) tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $< $(PTY_SUPPORT_OBJECTS) -o $@
 test-pty: examples build/test-workspace-child build/test-pty build/kettle-program-fixture build/test-program-pty
 	build/test-program-pty
 	build/test-pty --standalone
