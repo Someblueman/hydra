@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+## Working in this repository
 
 Hydra has a POSIX shell CLI (`bin/hydra`) that orchestrates one tmux
 session + one git worktree per branch ("head"). Library code lives in `lib/*.sh`;
@@ -11,16 +11,24 @@ fleet additionally needs JSON-C development files and pkg-config at build time.
 get one and exits 1 (`hydra list` and `hydra switch` work without it).
 
 ### Toolchain
-- Required to run/lint/test: `git`, `tmux` (>= 3.0), `dash`, `shellcheck`, GNU `make`.
-  `/bin/sh` is `dash` on this VM, which is exactly what the POSIX-compliance checks
-  assume, so tests run under dash by default.
+- Required to run/lint/test: `git`, `tmux` (>= 3.0), `dash`, `shellcheck`, GNU `make`,
+  a C99 compiler (`cc`), JSON-C development files (`libjson-c-dev`) and `pkg-config`:
+  `make test` and `make test-fast` build all three native helpers first.
+  Tests run with `sh`; where `/bin/sh` is `dash` (Debian, Ubuntu) that is exactly
+  what the POSIX-compliance checks assume.
 - Optional (improve UX, not required for tests): `fzf` (interactive `switch`),
   `gh` (GitHub issue/PR features), and an AI CLI such as `claude`/`aider`/`gemini`.
+  `python3` is needed only by the bench-i1, perf-matrix, plan-eval, usability,
+  acceptance and visual-review targets.
 
 ### Lint / Test / Run (standard commands, see `Makefile` and `README.md`)
+- First check for a pull request: `make test-fast` — lint, a fixed selection of shell
+  cases and the native unit tests (`CONTRIBUTING.md`).
 - Lint: `make lint` — runs ShellCheck (`--shell=sh --severity=style`) plus `dash -n`
   syntax checks on every shell file.
-- Test: `make test` — runs each `tests/test_*.sh` with `sh`. Passing runs still print
+- Test: `make test` — runs with `sh` every `tests/test_*.sh` that is not listed in
+  `SHELL_TEST_EXCLUDES` in `scripts/shell-tests.mk`; other targets such as
+  `test-fleet`, `test-parity` and `test-tui` run the excluded files. Passing runs still print
   `Error: ...` lines: those are expected error-path assertions, not failures. Judge
   success by the exit code and the `Failed: 0` summaries.
 - One test file: `make test-one T=<name>` runs `tests/test_<name>.sh` (also accepts
@@ -39,11 +47,17 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   running whose arguments name its private `TMPDIR` fails with a `LEAK` report
   (the processes are then stopped); stop what a case starts on every exit path,
   for example with `test_stop_processes_naming` from `tests/helpers.sh`.
+- Native warnings: `make -j4 check-opt-levels` compiles every `src/**/*.c` at `-O0`,
+  `-Og`, `-O1`, `-O2`, `-O3` and `-Os` with warnings as errors and lists every
+  failing site; the ordinary build only shows what `-O2` warns about.
+- Sanitizers: `make sanitize` (or `make sanitize-<lane>`) builds and tests in
+  `$BUILD_DIR/sanitize`, one tree shared by every lane, so pass the same `BUILD_DIR`
+  as your other make runs. `make clean` removes `$BUILD_DIR`.
 
 ### Running the app from source (non-obvious caveats)
 - Run it directly as `bin/hydra <command>`; it auto-detects `lib/` relative to the
-  binary, so no install is needed. `HYDRA_ROOT=/workspace` forces library discovery
-  if you invoke it from elsewhere.
+  binary, so no install is needed. `HYDRA_ROOT=<path to this checkout>` forces library
+  discovery if you invoke it from elsewhere.
 - `hydra spawn` creates a real tmux session and an identity-scoped git worktree.
   Use `hydra path <branch>` to locate it.
   To avoid creating worktrees/branches inside this repo, run spawn/kill demos inside a
