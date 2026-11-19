@@ -63,7 +63,6 @@ test: $(SHELL_TEST_PREREQS)
 # heuristics. Shared prerequisites are built before any stateful test starts.
 FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust deps tmux lifecycle
 FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
-.PHONY: test-fast
 test-fast:
 	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS) $(BUILD_DIR)/test-libhydra $(TUI_TEST_BINS) $(KETTLE_TEST_BINS)
 	@$(MAKE) lint
@@ -438,10 +437,10 @@ dev-setup:
 
 # Display help
 help:
-	@echo "Hydra Makefile targets:"
+	@echo "Hydra Makefile targets (outputs go to BUILD_DIR, default ./build):"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
-	@echo "  make test      - Run the shell-only test suite"
-	@echo "  make test-fast - Run the fixed PR feedback test selection"
+	@echo "  make test      - Build the three native helpers and test fixtures, then run the shell test suite"
+	@echo "  make test-fast - Run the fixed PR feedback test selection (lint, fast shell cases, native unit tests)"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
 	@echo "  make test-native-driver - Workflow, plan and DAG cases with HYDRA_NATIVE_DRIVER=1, then test-driver-differential"
@@ -450,19 +449,25 @@ help:
 	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
+	@echo "  make build-fleet - Build the optional fleet coordinator (needs JSON-C development files and pkg-config)"
 	@echo "  make test-c    - Run native library unit tests"
+	@echo "  make test-kettle - Run the kettle terminal library unit tests"
+	@echo "  make test-fleet - Run fleet acceptance (TEST_JOBS workers, FLEET_SHARD=all|odd|even)"
 	@echo "  make build-plan-precompile - Build native finite-example planner"
 	@echo "  make test-tui  - Run deterministic native TUI acceptance"
 	@echo "  make test-tui-pty - Run real pseudo-terminal safety and input acceptance"
 	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
-	@echo "  make test-all  - Run shell/native, install, parity, and onboarding acceptance"
-	@echo "  make sanitize  - Run supported native sanitizer tests"
+	@echo "  make test-all  - Run shell/native, fleet, install, parity, and onboarding acceptance"
+	@echo "  make sanitize  - Run the sanitizer lanes in BUILD_DIR/sanitize (SANITIZE_LANES=\"core tui ...\" selects)"
+	@echo "  make sanitize-<lane> - One lane: core, tui, fleet, workspace, attached, plan-workspace or statistics"
+	@echo "  make check-opt-levels - Compile every native source at -O0, -Og, -O1, -O2, -O3 and -Os with warnings as errors"
+	@echo "  make quality-c - Run clang-tidy analysis and the complexity ceiling (test-quality-c checks the policy)"
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
 	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
 	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
 	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
-	@echo "  make clean     - Remove temporary files"
+	@echo "  make clean     - Remove editor temporary files and BUILD_DIR"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"
 	@echo "  make test-install - Fresh-prefix install/uninstall tests"

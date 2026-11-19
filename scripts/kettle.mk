@@ -7,6 +7,9 @@ CPPFLAGS =
 WERROR = -Werror
 WARN = -std=c99 -Wall -Wextra $(WERROR) -pedantic
 INCLUDES = -Isrc -Isrc/kettle
+# The optional OS adapters pty_posix.c and terminal_posix.c are in no library on
+# purpose: an application compiles the one it uses, as kettle-workspace does
+# with pty_posix.c. Nothing built here calls terminal_posix.c (posix.h).
 CORE = canvas color theme draw layout plot graph present workspace unicode output input keymap tree terminal_screen terminal_csi terminal_sgr terminal_parser
 # The optional POSIX runtime (program.h) and its headless test driver (testing.h).
 RUNTIME = program program_frame program_child program_posix testing
