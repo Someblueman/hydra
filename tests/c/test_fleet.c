@@ -133,6 +133,8 @@ int main(void) {
     assert(cap.status == 0 && cap.in_bytes == 13 && cap.input_complete && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
     capture_partial_input();
     capture_exited_leader();
+    capture_prompt_reap();
+    capture_closed_guarantees();
     ssh_reasons();
     assert(!f_run(hang, NULL, 0, 1, &cap) && cap.timeout && cap.status == 124); f_capture_free(&cap);
     bundle = json_object_new_object(); files = json_object_new_array(); file = json_object_new_object();

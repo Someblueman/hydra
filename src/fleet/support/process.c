@@ -114,11 +114,29 @@ static void exited_grace(pid_t pid, struct capture_stream streams[2], long *exit
     if (*exited_at < 0 && leader_exited(pid)) *exited_at = milliseconds();
     if (*exited_at >= 0 && milliseconds() - *exited_at >= EXITED_GRACE_MS) close_streams(streams);
 }
+/* One turn of run's loop waits for output for at most TICK_MS, so that the
+ * deadline, a stop request and a signal are noticed in time. With both
+ * streams closed there is no output left to wait for, only the child's
+ * exit, and that usually follows the close within microseconds: the wait
+ * then starts at REAP_FIRST_US and doubles up to the same tick. A child is
+ * reaped within about twice the time it took to exit after closing its
+ * streams, instead of a whole tick later, and nothing is checked less often
+ * than before. A cancellation keeps the plain tick: its child is not reaped
+ * before the grace period has run. */
+#define TICK_MS 50
+#define REAP_FIRST_US 100L
+static void reap_pause(long *wait_us) {
+    struct timespec pause;
+    pause.tv_sec = 0; pause.tv_nsec = *wait_us * 1000L;
+    (void)nanosleep(&pause, NULL);
+    *wait_us = *wait_us * 2 < TICK_MS * 1000L ? *wait_us * 2 : TICK_MS * 1000L;
+}
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     struct capture_stream streams[2] = {{{-1, -1}, NULL, 0, 0, NULL, false}, {{-1, -1}, NULL, 0, 0, NULL, false}};
     int status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL;
     long deadline, exited_at = -1, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
+    long reap_wait = REAP_FIRST_US;
     memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
     if (!stream_init(&streams[0], &cap->out) || !stream_init(&streams[1], &cap->err) || !(in = tmpfile())) goto done;
     if (control && control->stop && control->stop(control->context)) { cap->cancelled = true; cap->status = 130; result = 0; goto done; }
@@ -148,7 +166,8 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
             (void)kill(-pid, SIGTERM); deadline = milliseconds() + (cap->cancelled ? cancel_grace : 500);
         }
         if (stopped && milliseconds() >= deadline - (cap->cancelled ? 200 : 0)) (void)kill(-pid, SIGKILL);
-        (void)poll(polls, 2, 50);
+        if (polls[0].fd < 0 && polls[1].fd < 0 && !cap->cancelled) reap_pause(&reap_wait);
+        else (void)poll(polls, 2, TICK_MS);
         for (i = 0; i < 2; i++) {
             if (drain_stream(&streams[i], i, control)) {
                 (void)kill(-pid, SIGKILL);
