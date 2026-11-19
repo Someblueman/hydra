@@ -315,4 +315,20 @@ bool kt_program_release(struct kt_program *program);
  * stops with status -1. */
 bool kt_program_reclaim(struct kt_program *program);
 
+/* ---- children the application starts itself ---------------------------- */
+
+/* While it runs, the program handles the signals of KT_MSG_SIGNAL, SIGWINCH,
+ * SIGCONT, SIGTSTP and the fatal ones, and ignores SIGPIPE so that a vanished
+ * terminal is a failed write. A handler ends at exec; an ignored signal and
+ * the signal mask are inherited, and a POSIX shell cannot stop ignoring a
+ * signal it was started ignoring: its pipelines then report EPIPE instead of
+ * ending quietly. kt_cmd_spawn and kt_cmd_exec children are started with the
+ * default disposition for each of these signals and an empty mask. An
+ * application that forks or spawns children of its own gives them the same
+ * (sigaction in the forked child, or posix_spawnattr_setsigdefault and
+ * posix_spawnattr_setsigmask).
+ *
+ * The signals, one by one: the index-th, or 0 past the last. */
+int kt_child_signal(size_t index);
+
 #endif

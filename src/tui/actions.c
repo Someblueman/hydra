@@ -14,13 +14,17 @@ extern char **environ;
  * Only switch and dashboard still do this; everything else is captured. */
 static int run_argv(struct app *app, char *const argv[]) {
     struct terminal_loan loan;
+    posix_spawnattr_t attributes;
     pid_t pid;
-    int status = 0;
+    int status = 0, error;
     if (!terminal_lend(app, &loan, false)) return -1;
     printf("\033[H\033[2J");
     fflush(stdout);
-    if (posix_spawnp(&pid, app->hydra, NULL, NULL, argv, environ) != 0) {
-        perror("hydra action");
+    child_spawn_attributes(&attributes, 0);
+    error = posix_spawnp(&pid, app->hydra, NULL, &attributes, argv, environ);
+    posix_spawnattr_destroy(&attributes);
+    if (error != 0) {
+        fprintf(stderr, "hydra action: %s\n", strerror(error));
         status = 1;
     } else if (waitpid(pid, &status, 0) < 0) {
         status = 1;

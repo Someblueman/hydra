@@ -2,6 +2,15 @@
 
 if [ -n "${HYDRA_REVIEW_CALLS:-}" ]; then printf '%s\n' "$@" '---' >> "$HYDRA_REVIEW_CALLS"; fi
 
+# How this command was started, one line per invocation. A shell that sends
+# itself SIGPIPE ends by it (status 141) only when it was started with the
+# default disposition: an ignored signal is inherited, and a POSIX shell
+# cannot stop ignoring it. Needs no /proc.
+if [ -n "${HYDRA_TEST_SIGNAL_REPORT:-}" ]; then
+    sh -c 'kill -s PIPE $$; exit 0'
+    printf '%s:%s pipe=%s\n' "${1:-}" "${2:-}" "$?" >> "$HYDRA_TEST_SIGNAL_REPORT"
+fi
+
 case "${1:-}:${2:-}" in
     workflow:review-data|fleet:review-data)
         if [ -n "${HYDRA_REVIEW_STARTED:-}" ]; then : > "$HYDRA_REVIEW_STARTED"; fi

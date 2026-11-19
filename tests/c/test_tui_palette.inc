@@ -99,6 +99,66 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     close_session(&session);
 }
 
+/* What the fixture CLI reported for the invocations of `command` (its first
+ * two arguments, "tui:--data"), or for all of them: how many there were, and
+ * how many were started with SIGPIPE at its default (status 141). */
+static void signal_report_count(const char *path, const char *command, unsigned *started, unsigned *standard) {
+    char line[256];
+    size_t length = command ? strlen(command) : 0U;
+    FILE *file = fopen(path, "r");
+    *started = *standard = 0U;
+    if (!file) return;
+    while (fgets(line, sizeof(line), file)) {
+        if (command && (strncmp(line, command, length) || line[length] != ' ')) continue;
+        (*started)++;
+        if (strstr(line, " pipe=141\n")) (*standard)++;
+    }
+    fclose(file);
+}
+
+static void signal_report_check(const char *path, const char *command, const char *message) {
+    unsigned started, standard;
+    signal_report_count(path, command, &started, &standard);
+    if (!result(started > 0U && standard == started, message))
+        printf("  %u of %u %s invocations had SIGPIPE at its default\n", standard, started, command ? command : "CLI");
+}
+
+/* The loop ignores SIGPIPE; nothing it starts may inherit that. An ignored
+ * signal survives exec and a POSIX shell cannot restore it, so a `hydra`
+ * command would see EPIPE in its pipelines instead of ending quietly. One
+ * case per way of starting a child: a read in the background, an action with
+ * its output captured, and an action that is lent the terminal. */
+static void test_child_signals(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char report[128];
+    bool opened;
+    snprintf(report, sizeof(report), "/tmp/hydra-pty-signals-%ld", (long)getpid());
+    (void)unlink(report);
+    (void)signal(SIGPIPE, SIG_DFL);
+    (void)setenv("HYDRA_TEST_SIGNAL_REPORT", report, 1);
+    opened = result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open child signal terminal");
+    (void)unsetenv("HYDRA_TEST_SIGNAL_REPORT");
+    if (!opened) return;
+    (void)wait_for_raw(&session);
+    (void)wait_for_model(&session);
+    palette_query(&session, "status");
+    (void)wait_for_marker(&session, "FAKE ACTION <status>", 5000);
+    write_input(session.master, "\n", 1U);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 3000);
+    palette_query(&session, "dashboard");
+    (void)wait_for_marker(&session, "FAKE DASHBOARD", 5000);
+    write_input(session.master, "\n", 1U);
+    (void)wait_for_marker(&session, "\xe2\x97\x86 hydra", 3000);
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "child signal test exits cleanly");
+    close_session(&session);
+    signal_report_check(report, "tui:--data", "a background read starts with SIGPIPE at its default");
+    signal_report_check(report, "status:", "a captured action starts with SIGPIPE at its default");
+    signal_report_check(report, "dashboard:", "an action lent the terminal starts with SIGPIPE at its default");
+    signal_report_check(report, NULL, "every CLI invocation starts with SIGPIPE at its default");
+    (void)unlink(report);
+}
+
 /* Recovery reviews a leftover worktree read-only and removes only that path
  * through the shell gc authority after an in-app confirmation. */
 static void test_recovery_actions(const char *tui, const char *hydra, const char *fake_bin) {

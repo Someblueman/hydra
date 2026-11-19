@@ -111,6 +111,10 @@ What the runtime guarantees, so applications cannot get it wrong:
 * A spawned child that outlives its budget, a `kt_cmd_cancel` or the program
   gets SIGTERM for its process group, then SIGKILL for its session after a grace
   period, and is reaped.
+* The runtime ignores SIGPIPE while it runs. Its own children start with the
+  default disposition for every signal it handles or ignores and with an empty
+  signal mask; `kt_child_signal` lists those signals for an application that
+  forks or spawns children itself.
 
 Things to keep in mind: `update` should return quickly, because nothing else
 runs meanwhile. Pointers inside a message (paste bytes, process output) are

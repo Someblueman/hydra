@@ -608,6 +608,10 @@ bool native_capture_step(struct native_capture *p);
 FILE *native_capture_result(struct native_capture *p, bool *success);
 FILE *native_capture_take(struct native_capture *p);
 bool native_detached_start(pid_t *pid, char *const argv[], int input_fd);
+/* Default signal dispositions and an empty mask for every child started here
+ * (child.c): in a forked child before exec, or as posix_spawn attributes. */
+void child_signals(void);
+void child_spawn_attributes(posix_spawnattr_t *attributes, short flags);
 /* The interactive loop (loop.c) and what handlers use of it. */
 extern const struct kt_app tui_app;
 void tui_options(const struct app *app, struct kt_options *options);

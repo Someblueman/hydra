@@ -3,6 +3,7 @@
  * as it does once the control centre is shutting down. */
 #include "../../src/tui/actions.c"
 #include "../../src/tui/action_capture.c"
+#include "../../src/tui/setup_flow.h"
 
 static int check(bool ok, const char *name) {
     printf("[%s] %s\n", ok ? "PASS" : "FAIL", name);
@@ -23,12 +24,112 @@ static int timeout_case(struct app *app, const char *script, const char *name) {
     return failures;
 }
 
-int main(void) {
-    struct app *app = calloc(1U, sizeof(*app));
+/* How a child was started, as its own report: this program again, as
+ * `--signals [FILE]`. Dispositions and the mask are read directly, since a
+ * shell may clear the mask it was started with. */
+#define SIGNAL_EXPECTED "pipe=default term=open stop=ignored"
+static int signal_report(const char *path) {
+    struct sigaction broken, stop;
+    sigset_t mask;
+    FILE *out = path ? fopen(path, "w") : stdout;
+    if (!out || sigaction(SIGPIPE, NULL, &broken) || sigaction(SIGTSTP, NULL, &stop) ||
+        sigprocmask(SIG_SETMASK, NULL, &mask)) return 2;
+    fprintf(out, "pipe=%s term=%s stop=%s", broken.sa_handler == SIG_IGN ? "ignored" : "default",
+            sigismember(&mask, SIGTERM) ? "blocked" : "open", stop.sa_handler == SIG_IGN ? "ignored" : "default");
+    return fclose(out) ? 2 : 0;
+}
+
+/* The state a child must not inherit: SIGPIPE ignored, as the loop leaves it,
+ * and a blocked signal; and the one it must: an ignored stop signal. */
+static void signal_state(bool set, struct sigaction previous[2], sigset_t *mask) {
+    struct sigaction ignore;
+    sigset_t blocked;
+    if (!set) {
+        (void)sigaction(SIGPIPE, &previous[0], NULL); (void)sigaction(SIGTSTP, &previous[1], NULL);
+        (void)sigprocmask(SIG_SETMASK, mask, NULL);
+        return;
+    }
+    memset(&ignore, 0, sizeof(ignore));
+    ignore.sa_handler = SIG_IGN;
+    (void)sigemptyset(&ignore.sa_mask);
+    (void)sigaction(SIGPIPE, &ignore, &previous[0]); (void)sigaction(SIGTSTP, &ignore, &previous[1]);
+    (void)sigemptyset(&blocked); (void)sigaddset(&blocked, SIGTERM);
+    (void)sigprocmask(SIG_BLOCK, &blocked, mask);
+}
+
+static void signal_read(FILE *file, char *report, size_t size) {
+    size_t length = file ? fread(report, 1U, size - 1U, file) : 0U;
+    report[length] = '\0';
+    if (file) fclose(file);
+}
+
+static void signal_observed(char *const argv[], char *report, size_t size) {
+    struct native_capture capture;
+    const struct timespec pause = {0, 10000000L};
+    report[0] = '\0';
+    if (!native_capture_start(&capture, argv, 5000L)) return;
+    while (!native_capture_step(&capture)) (void)nanosleep(&pause, NULL);
+    signal_read(native_capture_take(&capture), report, size);
+}
+
+static void signal_setup(char *const argv[], char *report, size_t size) {
+    struct setup_capture capture;
+    const struct timespec pause = {0, 10000000L};
+    size_t length = 0;
+    int status;
+    char *text;
+    report[0] = '\0';
+    if (!setup_capture_start(&capture, argv, 5000L)) return;
+    while (!setup_capture_step(&capture)) (void)nanosleep(&pause, NULL);
+    text = setup_capture_finish(&capture, &length, &status);
+    if (text) copy_text(report, size, text);
+    free(text);
+}
+
+/* A detached child has no output: it reports into the file it is given. */
+static void signal_detached(char *self, char *report, size_t size) {
+    char path[] = "/tmp/hydra-tui-actions-signals-XXXXXX";
+    char *argv[] = {self, "--signals", path, NULL};
+    int fd = mkstemp(path), status;
+    pid_t pid = 0;
+    report[0] = '\0';
+    if (fd < 0) return;
+    close(fd);
+    if (native_detached_start(&pid, argv, -1)) {
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { }
+        signal_read(fopen(path, "r"), report, size);
+    }
+    (void)unlink(path);
+}
+
+static int signal_cases(struct app *app, char *self) {
+    char *argv[] = {self, "--signals", NULL};
+    struct sigaction previous[2];
+    sigset_t mask;
+    char report[4][128];
+    int failed = 0;
+    signal_state(true, previous, &mask);
+    (void)run_captured(app, argv, report[0], sizeof(report[0]), 5000L);
+    signal_observed(argv, report[1], sizeof(report[1]));
+    signal_detached(self, report[2], sizeof(report[2]));
+    signal_setup(argv, report[3], sizeof(report[3]));
+    signal_state(false, previous, &mask);
+    failed += check(!strcmp(report[0], SIGNAL_EXPECTED), "a captured action starts with default signals and an empty mask");
+    failed += check(!strcmp(report[1], SIGNAL_EXPECTED), "a captured observation starts with default signals and an empty mask");
+    failed += check(!strcmp(report[2], SIGNAL_EXPECTED), "a detached owner starts with default signals and an empty mask");
+    failed += check(!strcmp(report[3], SIGNAL_EXPECTED), "a setup command starts with default signals and an empty mask");
+    if (failed) printf("  expected \"" SIGNAL_EXPECTED "\"; got \"%s\", \"%s\", \"%s\", \"%s\"\n", report[0], report[1], report[2], report[3]);
+    return failed;
+}
+
+int main(int argc, char **argv) {
+    struct app *app;
     char output[128], *ok[] = {"sh", "-c", "printf complete; exit 7", NULL};
     struct removal r = {0};
     char targets[1][TEXT] = {"current-head"};
     int failed = 0;
+    if (argc >= 2 && !strcmp(argv[1], "--signals")) return signal_report(argc > 2 ? argv[2] : NULL);
+    app = calloc(1U, sizeof(*app));
     if (!app) return 1;
     failed += check(run_captured(app, ok, output, sizeof(output), 1000L) == 7 && !strcmp(output, "complete"),
                     "normal action preserves output and nonzero status");
@@ -36,6 +137,7 @@ int main(void) {
     failed += timeout_case(app, "while :; do printf flood; done", "continuous output does not bypass action deadline");
     failed += timeout_case(app, "trap '' TERM; exec sleep 20", "TERM resistance reaches bounded KILL escalation");
     failed += timeout_case(app, "sleep 20 & exit 0", "inherited output does not bypass action deadline");
+    failed += signal_cases(app, argv[0]);
     r.count = 1;
     app->model.head_count = 1;
     copy_text(app->model.heads[0].branch, TEXT, targets[0]);

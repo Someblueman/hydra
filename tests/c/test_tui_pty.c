@@ -1203,6 +1203,7 @@ static int selected_tests(const char *only, char **argv) {
         {"attention", {test_attention, test_inbox_decisions, NULL}},
         {"interaction", {test_small_list, test_interaction, NULL}},
         {"themes", {test_themes, NULL, NULL}},
+        {"signals", {test_child_signals, NULL, NULL}},
         {"land", {test_inbox_land, NULL, NULL}},
         {"remote", {test_remote_side_by_side, test_remote_actions, test_remote_stale_and_disconnected}},
     };
@@ -1271,6 +1272,7 @@ int main(int argc, char **argv) {
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);
+    test_child_signals(argv[1], argv[2], argv[3]);
     test_recovery_actions(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");

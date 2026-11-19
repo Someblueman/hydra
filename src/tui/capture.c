@@ -93,6 +93,7 @@ bool native_capture_start(struct native_capture *p, char *const argv[], long bud
         if (dup2(pipes[1],STDOUT_FILENO)<0 || dup2(null_fd,STDIN_FILENO)<0 ||
             dup2(null_fd,STDERR_FILENO)<0) _exit(126);
         close(null_fd); close(pipes[0]); close(pipes[1]);
+        child_signals();
         execvp(argv[0],argv); _exit(127);
     }
     close(pipes[1]);
@@ -169,8 +170,8 @@ bool native_detached_start(pid_t *pid, char *const argv[], int input_fd) {
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
     int result;
-    posix_spawn_file_actions_init(&actions); posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes,POSIX_SPAWN_SETPGROUP); posix_spawnattr_setpgroup(&attributes,0);
+    posix_spawn_file_actions_init(&actions);
+    child_spawn_attributes(&attributes,POSIX_SPAWN_SETPGROUP); posix_spawnattr_setpgroup(&attributes,0);
     if (input_fd>=0) {
         posix_spawn_file_actions_adddup2(&actions,input_fd,STDIN_FILENO);
         posix_spawn_file_actions_addclose(&actions,input_fd);
