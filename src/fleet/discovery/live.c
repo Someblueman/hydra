@@ -33,11 +33,14 @@ static bool parse_selector(const char *spec, struct selector *s) {
     return false;
 }
 bool hd_source_valid(const char *selector) { struct selector s; return parse_selector(selector, &s); }
+/* Every part is bounded where it is accepted: a dns-sd locator is under 64
+ * bytes (parse_selector), a user name under 128 and a node name under 256,
+ * so either form fits. The precisions state those bounds in the format. */
 static void scope_of(const struct selector *s, char scope[512]) {
     struct passwd *pw = getpwuid(geteuid()); struct utsname host; const char *user = pw && pw->pw_name && hd_text(pw->pw_name, 128) ? pw->pw_name : "uid";
     const char *node = !uname(&host) && hd_text(host.nodename, 256) ? host.nodename : "localhost";
-    if (!strcmp(s->kind, "dns-sd")) snprintf(scope, 512, "network:%s via %s", s->locator, node);
-    else snprintf(scope, 512, "account:%s@%s", user, node);
+    if (!strcmp(s->kind, "dns-sd")) (void)f_format(scope, 512, "network:%.63s via %.255s", s->locator, node);
+    else (void)f_format(scope, 512, "account:%.127s@%.255s", user, node);
 }
 static void mark_revoked(json_object *report) {
     json_object *records = f_field(report, "records"), *revoked = json_object_new_array(); size_t i;
