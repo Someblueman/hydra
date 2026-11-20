@@ -100,20 +100,7 @@ get_terminal_mode_for_branch() {
     # State v2 records written before optional-terminal support are interactive.
     case "$_stm_mode" in headless|interactive) printf '%s\n' "$_stm_mode" ;; *) printf 'interactive\n' ;; esac
 }
-get_terminal_mode_for_session() {
-    [ -n "${1:-}" ] || return 1
-    while IFS=' ' read -r _gtfs_branch _gtfs_session _gtfs_rest; do
-        [ "$_gtfs_session" = "$1" ] || continue
-        get_terminal_mode_for_branch "$_gtfs_branch"
-        return $?
-    done <<EOF
-$(state_list_heads)
-EOF
-    return 1
-}
-get_ai_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" profile; }
 get_group_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" group; }
-get_timestamp_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" created-at; }
 get_deps_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" dependencies; }
 get_pr_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" pr; }
 
@@ -172,41 +159,7 @@ state_update_field() {
 }
 
 set_group() { state_update_field "$1" group "${2:--}"; }
-set_deps() { state_update_field "$1" dependencies "${2:--}"; }
 set_pr_for_branch() { state_update_field "$1" pr "${2:--}"; }
-
-validate_head_state() {
-    _vhs_errors=0
-    while IFS=' ' read -r _vhs_branch _vhs_session _vhs_rest; do
-        [ -n "$_vhs_branch" ] || continue
-        if ! git_branch_exists "$_vhs_branch"; then
-            echo "Warning: Branch '$_vhs_branch' no longer exists" >&2
-            _vhs_errors=1
-        fi
-        _vhs_mode="$(get_terminal_mode_for_branch "$_vhs_branch" 2>/dev/null || echo interactive)"
-        if [ "$_vhs_mode" != headless ] && ! tmux_session_exists "$_vhs_session"; then
-            echo "Warning: Session '$_vhs_session' no longer exists" >&2
-            _vhs_errors=1
-        fi
-    done <<EOF
-$(state_list_heads)
-EOF
-    return "$_vhs_errors"
-}
-
-cleanup_head_state() {
-    _chs_failed=0
-    while IFS=' ' read -r _chs_branch _chs_session _chs_rest; do
-        [ -n "$_chs_branch" ] || continue
-        _chs_mode="$(get_terminal_mode_for_branch "$_chs_branch" 2>/dev/null || echo interactive)"
-        if ! git_branch_exists "$_chs_branch" || { [ "$_chs_mode" != headless ] && ! tmux_session_exists "$_chs_session"; }; then
-            state_update_field "$_chs_branch" desired-state stopped || _chs_failed=1
-        fi
-    done <<EOF
-$(state_list_heads)
-EOF
-    return "$_chs_failed"
-}
 
 generate_session_name() {
     _gsn_branch="$1"

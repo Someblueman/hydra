@@ -55,20 +55,18 @@ rows="$(state_list_heads)"
 assert_equal 2 "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "active records are listed"
 assert_equal session-one "$(get_session_for_branch feature-one)" "session lookup uses durable state"
 assert_equal feature-two "$(get_branch_for_session session-two)" "branch lookup uses durable state"
-assert_equal claude "$(get_ai_for_branch feature-one)" "profile lookup uses durable state"
+assert_equal "feature-one session-one claude backend 100 dep-a 7" \
+    "$(printf '%s\n' "$rows" | awk '$1 == "feature-one"')" \
+    "a listed row carries profile, group, creation time, dependencies and PR"
 assert_equal backend "$(get_group_for_branch feature-one)" "group lookup uses durable state"
-assert_equal 100 "$(get_timestamp_for_branch feature-one)" "timestamp lookup uses durable state"
 assert_equal dep-a "$(get_deps_for_branch feature-one)" "dependency lookup uses durable state"
 assert_equal 7 "$(get_pr_for_branch feature-one)" "PR lookup uses durable state"
 
 set_group feature-two frontend
 assert_success $? "group mutation succeeds"
-set_deps feature-two feature-one
-assert_success $? "dependency mutation succeeds"
 set_pr_for_branch feature-two 12
 assert_success $? "PR mutation succeeds"
 assert_equal frontend "$(get_group_for_branch feature-two)" "group mutation persists"
-assert_equal feature-one "$(get_deps_for_branch feature-two)" "dependency mutation persists"
 assert_equal 12 "$(get_pr_for_branch feature-two)" "PR mutation persists"
 
 assert_equal backend "$(list_groups | sed -n '1p')" "groups are sorted"
