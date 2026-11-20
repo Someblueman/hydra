@@ -6,9 +6,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 char *f_hex_read(const char *path) {
@@ -97,28 +99,71 @@ char *f_read(const char *path, size_t limit) {
     if (path) fclose(fp);
     return data;
 }
-/* Written to an adjacent temporary file, synced and closed before it is
- * renamed (replace) or linked (never over an existing file) into place, so a
- * failed write publishes nothing. Callers that need the entry itself to be
- * durable sync the directory afterwards (task_write_json, enrollment_write). */
-int f_write(const char *path, const char *data, size_t size, bool replace) {
-    char tmp[F_PATH]; int fd, status = -1;
-    if (snprintf(tmp, sizeof(tmp), "%s.XXXXXX", path) >= (int)sizeof(tmp)) return -1;
-    fd = mkstemp(tmp);
-    if (fd < 0) return -1;
+/* The temporary file: NAME, a dot and six characters, as mkstemp names it,
+ * created new and private (0600) in the open directory. The characters only
+ * have to differ between writers; O_EXCL decides. */
+static int temp_create(int dir, const char *name, char temp[F_TEMP_NAME]) {
+    static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    static uint64_t sequence;
+    size_t length = strlen(name); int attempt;
+    if (!length || length + 8 > F_TEMP_NAME) { errno = ENAMETOOLONG; return -1; }
+    memcpy(temp, name, length); temp[length] = '.'; temp[length + 7] = '\0';
+    for (attempt = 0; attempt < 128; attempt++) {
+        struct timespec now = {0, 0}; uint64_t value; int i, fd;
+        (void)clock_gettime(CLOCK_REALTIME, &now);
+        value = ((uint64_t)now.tv_sec << 30) ^ (uint64_t)now.tv_nsec ^ ((uint64_t)getpid() << 44);
+        value = (value + ++sequence) * UINT64_C(0x9E3779B97F4A7C15);
+        value ^= value >> 31;
+        for (i = 0; i < 6; i++, value /= 62) temp[length + 1 + i] = letters[value % 62];
+        fd = openat(dir, temp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        if (fd >= 0 || errno != EEXIST) return fd;
+    }
+    return -1;
+}
+int f_stage_at(int dir, const char *name, const char *data, size_t size, char temp[F_TEMP_NAME]) {
+    int fd = temp_create(dir, name, temp), saved;
+    if (fd < 0) { temp[0] = '\0'; return -1; }
     while (size) {
         ssize_t n = write(fd, data, size);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) goto done;
+        if (n <= 0) { if (!n) errno = EIO; goto failed; }
         size -= (size_t)n; data += n;
     }
-    if (fsync(fd)) goto done;
-    if (close(fd)) { fd = -1; goto done; }
-    fd = -1;
-    if (replace ? rename(tmp, path) == 0 : link(tmp, path) == 0) status = 0;
-done:
+    if (fsync(fd)) goto failed;
+    if (close(fd)) { fd = -1; goto failed; }
+    return 0;
+failed:
+    saved = errno;
     if (fd >= 0) close(fd);
-    unlink(tmp); return status;
+    (void)unlinkat(dir, temp, 0); temp[0] = '\0';
+    errno = saved; return -1;
+}
+int f_publish_at(int dir, const char *temp, const char *name, bool replace) {
+    int status = replace ? renameat(dir, temp, dir, name) : linkat(dir, temp, dir, name, 0), saved = errno;
+    /* A renamed file has left its temporary name; a linked one still has it,
+     * and a failed publication leaves only it. */
+    if ((status || !replace) && unlinkat(dir, temp, 0) && !status) return -1;
+    if (status) { errno = saved; return -1; }
+    /* EINVAL: this file system has no directory sync to offer. */
+    return fsync(dir) && errno != EINVAL ? -1 : 0;
+}
+int f_write_at(int dir, const char *name, const char *data, size_t size, bool replace) {
+    char temp[F_TEMP_NAME];
+    return f_stage_at(dir, name, data, size, temp) || f_publish_at(dir, temp, name, replace) ? -1 : 0;
+}
+int f_write(const char *path, const char *data, size_t size, bool replace) {
+    char directory[F_PATH]; const char *name = strrchr(path, '/'); int dir, status, saved;
+    size_t length = name ? (size_t)(name - path) : 0;
+    if (length >= sizeof(directory)) { errno = ENAMETOOLONG; return -1; }
+    /* "name" lives in ".", "/name" in "/". */
+    memcpy(directory, name ? path : ".", name ? length : 1);
+    if (name && !length) directory[length++] = '/';
+    directory[name ? length : 1] = '\0';
+    dir = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dir < 0) return -1;
+    status = f_write_at(dir, name ? name + 1 : path, data, size, replace);
+    saved = errno; close(dir); errno = saved;
+    return status;
 }
 bool f_name(const char *s) {
     if (!s || !isalnum((unsigned char)*s)) return false;
