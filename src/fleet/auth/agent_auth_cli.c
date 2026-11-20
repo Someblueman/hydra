@@ -7,27 +7,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+static json_object *failure_answer(json_object *raw) {
+    const char *code = f_string(f_field(raw, "error"), "code");
+    if (code && !strcmp(code, "unsafe_store"))
+        return f_error("fleet-auth", "unsafe_store", "host credential store is unavailable, invalid, or has unsafe ownership or permissions");
+    return f_error("fleet-auth", code && !strcmp(code, "stale_preview") ? "stale_preview" : "auth_request_failed", "authentication request failed; inspect host status before retrying");
+}
+static bool digest_valid(const char *before) {
+    return before && (!strcmp(before, "absent") || (strlen(before) == 64 && strspn(before, "0123456789abcdef") == 64));
+}
+static bool present_or_absent(const char *state) {
+    return !strcmp(state, "present") || !strcmp(state, "absent");
+}
+/* The status metadata, copied field by field, or NULL when any is not as a
+ * receiver reports it. Accepted only on status, before any secret is sent. */
+static json_object *status_metadata(json_object *data, json_object *request) {
+    const char *destination = f_string(data, "destination"), *before = f_string(data, "before"), *state = f_string(data, "credential_state"), *provider = f_string(data, "provider_state");
+    json_object *clean;
+    if (!(destination && destination[0] == '/' && strlen(destination) < F_PATH && digest_valid(before) &&
+          state && present_or_absent(state) && (!f_string(request, "provider") || provider) &&
+          (!provider || present_or_absent(provider)))) return NULL;
+    clean = json_object_new_object(); f_string_add(clean, "destination", destination); f_string_add(clean, "before", before); f_string_add(clean, "credential_state", state);
+    if (provider) f_string_add(clean, "provider_state", provider);
+    return clean;
+}
 /* Never forward remote errors or arbitrary response fields: a failed transport
  * may echo its stdin, which contains credentials during the copy request.
  * Takes over raw, the status answer; request is borrowed. */
 static json_object *answer_safe(json_object *raw, json_object *request) {
-    json_object *data = f_field(raw, "data"), *result = NULL, *clean;
-    const char *destination = f_string(data, "destination"), *before = f_string(data, "before"), *state = f_string(data, "credential_state"), *provider = f_string(data, "provider_state");
-    if (!json_object_get_boolean(f_field(raw, "ok"))) {
-        const char *code = f_string(f_field(raw, "error"), "code");
-        if (code && !strcmp(code, "unsafe_store"))
-            result = f_error("fleet-auth", "unsafe_store", "host credential store is unavailable, invalid, or has unsafe ownership or permissions");
-        else result = f_error("fleet-auth", code && !strcmp(code, "stale_preview") ? "stale_preview" : "auth_request_failed", "authentication request failed; inspect host status before retrying");
-    } else if (destination && destination[0] == '/' && strlen(destination) < F_PATH && before &&
-               (!strcmp(before, "absent") || (strlen(before) == 64 && strspn(before, "0123456789abcdef") == 64)) &&
-               state && (!strcmp(state, "present") || !strcmp(state, "absent")) &&
-               (!f_string(request, "provider") || provider) &&
-               (!provider || !strcmp(provider, "present") || !strcmp(provider, "absent"))) {
-        /* This metadata is accepted only on status, before any secret is sent. */
-        clean = json_object_new_object(); f_string_add(clean, "destination", destination); f_string_add(clean, "before", before); f_string_add(clean, "credential_state", state);
-        if (provider) f_string_add(clean, "provider_state", provider);
-        result = f_success("fleet-auth", clean);
-    } else result = f_error("fleet-auth", "invalid_response", "invalid authentication response");
+    json_object *result, *clean;
+    if (!json_object_get_boolean(f_field(raw, "ok"))) result = failure_answer(raw);
+    else if ((clean = status_metadata(f_field(raw, "data"), request))) result = f_success("fleet-auth", clean);
+    else result = f_error("fleet-auth", "invalid_response", "invalid authentication response");
     json_object_put(raw); return result;
 }
 /* Without --executable, a receiver with agent-inventory resolves the absolute
