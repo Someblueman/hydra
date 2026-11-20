@@ -446,6 +446,58 @@ assert_equal "HYDRA_WORKFLOW_TUI	2" "$(cat "$test_root/workflow.tsv")" "an empty
 assert_failure $? "outside a project the workspace links reader fails"
 assert_equal "" "$(cat "$test_root/links.tsv")" "and prints nothing"
 
+# ---- the stores of the interactive fixtures --------------------------------------
+
+# The interactive (pseudo-terminal) tests run the control centre in the state
+# store that tests/fixtures/tui/rows-store.sh builds from a rows fixture, with
+# the fixture tmux and the fixture CLI. What the store reader reads from such a
+# store is recorded here, and it keeps every name, state and count of the rows
+# the store was built from.
+
+# Usage: head_values <rows-file> -> of every H row, the fields a store decides
+# from its records alone: names, states, counts, the adapter and the
+# notification count (not paths, identities or the liveness of a dead session)
+head_values() {
+    awk -F '\t' '$1 == "H" {
+        line = ""
+        for (i = 2; i <= 29; i++) if (i != 8 && i != 12 && (i < 23 || i > 25) && i != 28) line = line "\t" $i
+        print line
+    }' "$1"
+}
+
+# Usage: fixture_store <rows-fixture-name>
+fixture_store() {
+    _fs_rows="$repo_root/tests/fixtures/tui/$1.tsv"
+    _fs_store="$test_root/fixture-store-$1"
+    sh "$repo_root/tests/fixtures/tui/rows-store.sh" "$_fs_rows" "$_fs_store"
+    assert_success $? "rows-store.sh builds the store of $1.tsv"
+    (cd "$_fs_store/repo" && HYDRA_HOME="$_fs_store/home" HYDRA_TEST_STORE="$_fs_store" \
+        "$tui" --hydra "$repo_root/tests/fixtures/tui/fake-hydra.sh" --data) > "$test_root/native.tsv" 2> "$test_root/native.err"
+    _fs_status=$?
+    recorded_form "$test_root/native.tsv" > "$test_root/native.recorded"
+    if [ -n "${HYDRA_STORE_ROWS_RECORD:-}" ]; then cp "$test_root/native.recorded" "$recorded_rows/fixture-$1.tsv"; fi
+    if [ "$_fs_status" -eq 0 ] && cmp -s "$recorded_rows/fixture-$1.tsv" "$test_root/native.recorded"; then
+        assert_success 0 "the store of $1.tsv reads as the rows recorded as fixture-$1"
+    else
+        assert_success 1 "the store of $1.tsv reads as the rows recorded as fixture-$1"
+        echo "  store reader status $_fs_status; recorded rows (<) against the store reader's (>):"
+        diff "$recorded_rows/fixture-$1.tsv" "$test_root/native.recorded" | sed -n '1,20p'
+        sed -n '1,5p' "$test_root/native.err"
+    fi
+    assert_equal "$(head_values "$_fs_rows")" "$(head_values "$test_root/native.tsv")" \
+        "the store of $1.tsv keeps every name, state and count of its rows"
+}
+
+fixture_store native-v2
+assert_equal "2 1 1" "$(rows_of dead-session) $(rows_of stale-lock) $(rows_of orphan-worktree)" \
+    "its findings are the reader's own: both dead sessions, the stale lock, and the leftover worktree the CLI describes"
+assert_equal "0" "$(rows_of teardown-failure)" "a finding the store does not hold is not invented from the fixture's R rows"
+fixture_store native-runs
+assert_equal "active unavailable headless headless" "$(row_fields kill-dry-run-worker 7 8 23 31)" \
+    "a headless row is a headless record"
+fixture_store native-agent-exit
+assert_equal "1" "$(row_fields feature-live 32)" "an agent exit status is the instance's exit record"
+
 # ---- the control centre starts its helper on the store --------------------------
 
 cat > "$test_root/helper" <<'HELPER'

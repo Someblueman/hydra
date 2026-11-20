@@ -145,6 +145,24 @@ case "${1:-}:${2:-}" in
             cat "$fixture_dir/native-v2.tsv"
         fi
         ;;
+    tui:--orphan-rows)
+        # The one part of the head snapshot the control centre asks the CLI
+        # for: the leftover worktrees of the fixture store (rows-store.sh). It
+        # is asked at every refresh of a store that could hold one, so holding
+        # it back holds the snapshot back, and not answering while the hang
+        # file exists makes the snapshot run out of time.
+        if [ -n "${HYDRA_TEST_TUI_HANG_FILE:-}" ] && [ -f "$HYDRA_TEST_TUI_HANG_FILE" ]; then exec sleep 30; fi
+        if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi
+        # A case that must see other data first holds the heads back until it
+        # creates this file (at most 10 s).
+        if [ -n "${HYDRA_TEST_TUI_GATE:-}" ]; then
+            gate_wait=0
+            until [ -f "$HYDRA_TEST_TUI_GATE" ] || [ "$gate_wait" -ge 200 ]; do
+                sleep 0.05; gate_wait=$((gate_wait + 1))
+            done
+        fi
+        [ ! -f "${HYDRA_TEST_STORE:-}/leftovers.tsv" ] || cat "$HYDRA_TEST_STORE/leftovers.tsv"
+        ;;
     dashboard:)
         printf '%s\n' "FAKE DASHBOARD"
         ;;
