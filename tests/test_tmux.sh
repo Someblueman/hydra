@@ -155,37 +155,6 @@ test_switch_to_session_validation() {
     assert_failure $? "switch_to_session should fail for non-existent session"
 }
 
-# Test rename_session parameter validation
-test_rename_session_validation() {
-    echo "Testing rename_session parameter validation..."
-    
-    # Test empty parameters
-    rename_session "" "" 2>/dev/null
-    assert_failure $? "rename_session should fail with empty old and new names"
-    
-    rename_session "old" "" 2>/dev/null
-    assert_failure $? "rename_session should fail with empty new name"
-    
-    rename_session "" "new" 2>/dev/null
-    assert_failure $? "rename_session should fail with empty old name"
-    
-    # Test non-existent session
-    rename_session "hydra-test-definitely-does-not-exist-$(date +%s)" "new-name" 2>/dev/null
-    assert_failure $? "rename_session should fail for non-existent session"
-}
-
-# Test list_sessions (basic functionality)
-test_list_sessions() {
-    echo "Testing list_sessions..."
-    
-    # This should not fail even if no sessions exist
-    if list_sessions >/dev/null 2>&1; then
-        assert_success 0 "list_sessions should always succeed"
-    else
-        assert_failure 1 "list_sessions failed unexpectedly"
-    fi
-}
-
 # Test get_current_session (outside tmux)
 test_get_current_session() {
     echo "Testing get_current_session..."
@@ -456,8 +425,6 @@ test_write_session_launcher
 test_kill_session_validation
 test_send_keys_validation
 test_switch_to_session_validation
-test_rename_session_validation
-test_list_sessions
 test_get_current_session
 test_validate_ai_command
 

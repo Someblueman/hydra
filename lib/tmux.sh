@@ -134,13 +134,11 @@ tmux_snapshot_has_session() {
     tmux_session_exists "$session"
 }
 
-# Load a one-shot snapshot of sessions and panes for batch observation.
+# Load a one-shot snapshot of session names for batch observation.
 # Usage: tmux_load_snapshot
-# Sets: _TMUX_SNAPSHOT_LOADED, _TMUX_SNAPSHOT_SESSIONS, _TMUX_SNAPSHOT_PANES
-# Pane lines: session<TAB>window_index<TAB>pane_index<TAB>window_activity<TAB>pane_current_command<TAB>pane_dead
+# Sets: _TMUX_SNAPSHOT_LOADED, _TMUX_SNAPSHOT_SESSIONS (one name per line)
 tmux_load_snapshot() {
     _TMUX_SNAPSHOT_SESSIONS="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
-    _TMUX_SNAPSHOT_PANES="$(tmux list-panes -a -F '#{session_name}	#{window_index}	#{pane_index}	#{window_activity}	#{pane_current_command}	#{pane_dead}' 2>/dev/null || true)"
     _TMUX_SNAPSHOT_LOADED=1
 }
 
@@ -149,21 +147,6 @@ tmux_load_snapshot() {
 tmux_clear_snapshot() {
     _TMUX_SNAPSHOT_LOADED=""
     _TMUX_SNAPSHOT_SESSIONS=""
-    _TMUX_SNAPSHOT_PANES=""
-}
-
-# True if every pane in the session is marked pane_dead.
-# Usage: tmux_snapshot_session_dead <session>
-# Returns: 0 if all panes dead, 1 otherwise
-tmux_snapshot_session_dead() {
-    _sd_session="$1"
-    if [ -z "${_TMUX_SNAPSHOT_PANES:-}" ]; then
-        return 1
-    fi
-    printf '%s\n' "$_TMUX_SNAPSHOT_PANES" | awk -F '	' -v s="$_sd_session" '
-        $1 == s { seen = 1; if ($6 != "1") live = 1 }
-        END { if (seen && !live) exit 0; exit 1 }
-    '
 }
 
 # WARNING: SECURITY SENSITIVE
@@ -546,13 +529,6 @@ kill_session() {
     return 0
 }
 
-# List all tmux sessions
-# Usage: list_sessions
-# Returns: Session names on stdout
-list_sessions() {
-    tmux list-sessions -F '#{session_name}' 2>/dev/null || true
-}
-
 # Switch to a tmux session
 # Usage: switch_to_session <session_name>
 # Returns: 0 on success, 1 on failure
@@ -590,31 +566,4 @@ get_current_session() {
     fi
     
     tmux display-message -p '#{session_name}' 2>/dev/null || true
-}
-
-# Rename a tmux session
-# Usage: rename_session <old_name> <new_name>
-# Returns: 0 on success, 1 on failure
-rename_session() {
-    old_name="$1"
-    new_name="$2"
-    
-    if [ -z "$old_name" ] || [ -z "$new_name" ]; then
-        echo "Error: Both old and new session names are required" >&2
-        return 1
-    fi
-    
-    if ! tmux_session_exists "$old_name"; then
-        echo "Error: Session does not exist: $old_name" >&2
-        return 1
-    fi
-    
-    if tmux_session_exists "$new_name"; then
-        echo "Error: Target session name already exists: $new_name" >&2
-        return 1
-    fi
-    
-    tmux rename-session -t "$(tmux_exact_target "$old_name")" "$new_name" || return 1
-    
-    return 0
 }
