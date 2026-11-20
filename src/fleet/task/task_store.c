@@ -40,10 +40,17 @@ int task_sync_dir(const char *path) {
     if (fd < 0) return -1;
     status = fsync(fd); close(fd); return status;
 }
+/* The directory is opened as task_sync_dir opens it, never through a link,
+ * and f_write_at stages, publishes and syncs through that descriptor. */
+int task_write_file(const char *directory, const char *name, const char *data, size_t size, bool replace) {
+    int dir = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC), status;
+    if (dir < 0) return -1;
+    status = f_write_at(dir, name, data, size, replace);
+    close(dir); return status;
+}
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace) {
-    char path[F_PATH]; const char *text = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
-    if (f_path(path, sizeof(path), directory, name) || f_write(path, text, strlen(text), replace)) return -1;
-    return task_sync_dir(directory);
+    const char *text = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
+    return task_write_file(directory, name, text, strlen(text), replace);
 }
 json_object *task_read_record(const char *directory, const char *name) {
     int dir = open(directory, O_RDONLY | O_DIRECTORY | O_NOFOLLOW), fd = -1;

@@ -29,8 +29,8 @@ done:
 static int write_dispatch(const char *directory, json_object *record) {
     char path[F_PATH], hash[65];
     if (task_write_json(directory, "dispatch.json", record, false) || f_path(path, sizeof(path), directory, "dispatch.json") ||
-        f_hash(path, hash) || f_path(path, sizeof(path), directory, "dispatch-sha256") || f_write(path, hash, 64, false)) return -1;
-    return task_sync_dir(directory);
+        f_hash(path, hash) || task_write_file(directory, "dispatch-sha256", hash, 64, false)) return -1;
+    return 0;
 }
 static int dispatch_key(const char *run, const char *step, const char *attempt, char digest[65]) {
     char path[F_PATH], *id; json_object *identity; int status;

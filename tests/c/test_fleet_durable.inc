@@ -175,3 +175,69 @@ static void durable_enrollment(const char *home) {
     json_object_put(refused); json_object_put(done); json_object_put(again);
     json_object_put(first); json_object_put(second); json_object_put(request);
 }
+/* Records in a task directory (task_write_json and task_write_file: task,
+ * retention, workflow-task and plan-repair state) and the placement record
+ * built on them, whose stored digest must still verify after a failed
+ * replacement. The directory is never reached through a symbolic link. */
+static void durable_task_records(const char *home) {
+    char dir[F_PATH], state[F_PATH], link[F_PATH], id[70], host[128];
+    json_object *accepted = f_parse("{\"state\":\"accepted\"}"), *running = f_parse("{\"state\":\"running\"}");
+    json_object *placement = f_parse("{\"schema_version\":1,\"submission_key\":\"durable-key\",\"generation\":1,\"assigned_host\":\"alpha\",\"generations\":[]}");
+    json_object *read;
+    struct durable_limit limit; int replaced, created, text, placed; size_t before;
+    assert(accepted && running && placement && !placement_task_id("durable-key", id));
+    f_string_add(placement, "task_id", id);
+    assert(!f_path(dir, sizeof(dir), home, "durable-task") && !mkdir(dir, 0700) && !f_path(state, sizeof(state), dir, "state.json"));
+    assert(!task_write_json(dir, "state.json", accepted, false) && !placement_record_write(placement));
+    before = durable_entries(dir);
+    json_object_object_add(placement, "generation", json_object_new_int(2)); f_string_add(placement, "assigned_host", "bravo");
+
+    durable_limit_on(&limit);
+    replaced = task_write_json(dir, "state.json", running, true);
+    created = task_write_json(dir, "cancel.json", running, false);
+    text = task_write_file(dir, "tasks-sha256", "abc", 3, false);
+    placed = placement_record_write(placement);
+    durable_limit_off(&limit);
+
+    assert(replaced && created && text && placed && durable_entries(dir) == before);
+    durable_expect(state, "{\"state\":\"accepted\"}");
+    read = placement_record_read(id);
+    assert(read && placement_generation(id, host) == 1 && !strcmp(host, "alpha"));
+    json_object_put(read);
+
+    assert(!f_path(link, sizeof(link), home, "durable-task-link") && !symlink(dir, link));
+    assert(task_write_json(link, "linked.json", running, false) && durable_entries(dir) == before);
+    assert(!unlink(link));
+    assert(task_write_json(dir, "state.json", running, false));
+    assert(!task_write_json(dir, "state.json", running, true) && !task_write_file(dir, "tasks-sha256", "abc", 3, false));
+    durable_expect(state, "{\"state\":\"running\"}");
+    assert(!placement_record_write(placement) && placement_generation(id, host) == 2 && !strcmp(host, "bravo"));
+    assert(durable_entries(dir) == before + 1);
+    json_object_put(accepted); json_object_put(running); json_object_put(placement);
+}
+/* Records created once and never replaced: a revocation, and the marker
+ * that drains a host from placement. A failed write must not leave either
+ * half in force. */
+static void durable_markers(const char *home) {
+    char drained[F_PATH], private[F_PATH]; char *drain[] = {(char *)"drain", (char *)"alias-a"};
+    struct durable_limit limit; json_object *revoked, *marked;
+    /* A home of its own: other cases count the revocations in the shared one. */
+    assert(!f_path(private, sizeof(private), home, "durable-home") && !mkdir(private, 0700));
+    f_home = private;
+    durable_limit_on(&limit);
+    revoked = revocation_record("package", "0000000000000000000000000000000000000000000000000000000000000000", "durable", NULL);
+    marked = placement_cli(2, drain);
+    durable_limit_off(&limit);
+    assert(!json_object_get_boolean(f_field(revoked, "ok")) && !strcmp(f_string(f_field(revoked, "error"), "code"), "state_unavailable"));
+    assert(!revocation_blocked("package", "0000000000000000000000000000000000000000000000000000000000000000"));
+    assert(!json_object_get_boolean(f_field(marked, "ok")) && !strcmp(f_string(f_field(marked, "error"), "code"), "io_failed"));
+    assert(!placement_drained("alias-a"));
+    assert(!f_path(drained, sizeof(drained), f_home, "fleet/placement-drained") && durable_entries(drained) == 2);
+    json_object_put(revoked); json_object_put(marked);
+    revoked = revocation_record("package", "0000000000000000000000000000000000000000000000000000000000000000", "durable", NULL);
+    marked = placement_cli(2, drain);
+    assert(json_object_get_boolean(f_field(revoked, "ok")) && json_object_get_boolean(f_field(marked, "ok")));
+    assert(revocation_blocked("package", "0000000000000000000000000000000000000000000000000000000000000000") && placement_drained("alias-a"));
+    json_object_put(revoked); json_object_put(marked);
+    f_home = home;
+}

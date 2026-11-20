@@ -37,6 +37,10 @@ json_object *task_observation(const char *id, json_object *request);
 json_object *task_overview(void);
 int task_store_root(char root[F_PATH]);
 int task_sync_dir(const char *path);
+/* One durable record in a task directory (f_write_at): NAME is replaced or
+ * created whole, or the call fails and NAME keeps what it held. The
+ * directory itself may not be a symbolic link. */
+int task_write_file(const char *directory, const char *name, const char *data, size_t size, bool replace);
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace);
 json_object *task_read_record(const char *directory, const char *name);
 json_object *task_start(const char *id, const char *trust);
