@@ -458,6 +458,14 @@ static const char *retired_now(const char *line, size_t length, const char **nam
     return NULL;
 }
 
+/* Says in reason which line was the first retired action and what does its
+ * job now, and how many more there were. */
+static void retired_reason(char *reason, size_t size, unsigned count, unsigned line, const char *name, const char *now) {
+    if (now[0]) snprintf(reason, size, "line %u: %s was removed; use %s", line, name, now);
+    else snprintf(reason, size, "line %u: %s was removed and nothing replaces it", line, name);
+    if (count > 1U) text_append(reason, size, " (and %u more removed actions; --print-keys lists the current ones)", count - 1U);
+}
+
 /* Takes the lines that name a retired action out of the text (blanked, so
  * that line numbers stay) and says in reason, for the first of them, which
  * line it is and what does its job now. Returns how many there were. */
@@ -477,10 +485,7 @@ static unsigned retired_lines(char *text, size_t length, char *reason, size_t si
         }
         at += n + 1U;
     }
-    if (!count) return 0;
-    if (first_now[0]) snprintf(reason, size, "line %u: %s was removed; use %s", first_line, first, first_now);
-    else snprintf(reason, size, "line %u: %s was removed and nothing replaces it", first_line, first);
-    if (count > 1U) text_append(reason, size, " (and %u more removed actions; --print-keys lists the current ones)", count - 1U);
+    if (count) retired_reason(reason, size, count, first_line, first, first_now);
     return count;
 }
 

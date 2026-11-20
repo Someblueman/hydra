@@ -309,14 +309,34 @@ static bool line_get(struct cached_line *c, const char *path, char *out, size_t 
     return c->state == 1;
 }
 
+/* What one line of a terminal-mode file says; the first line is also kept. */
+static void mode_note_line(struct mode_file *m, const char *line, size_t stop, bool first) {
+    size_t used = 0, i;
+    if (stop == 11U && !memcmp(line, "interactive", 11U)) m->interactive = true;
+    if (stop == 8U && !memcmp(line, "headless", 8U)) m->headless = true;
+    if (!first) return;
+    for (i = 0; i < stop && i < STORE_PATH; i++)
+        if (line[i] && used + 1U < sizeof(m->first)) m->first[used++] = line[i];
+    m->first[used] = '\0';
+}
+
+static void mode_scan(FILE *file, struct mode_file *m) {
+    char *line = NULL;
+    size_t capacity = 0, count = 0;
+    ssize_t length;
+    while ((length = getline(&line, &capacity, file)) >= 0) {
+        size_t stop = (size_t)length;
+        if (stop > 0 && line[stop - 1] == '\n') stop--;
+        mode_note_line(m, line, stop, !count++);
+    }
+    free(line);
+}
+
 /* One read gives what has_bytes, is_file, first_line and lines_equal each
  * asked of a terminal-mode file. */
 static void mode_load(const char *path, struct mode_file *m) {
     struct stat info;
     FILE *file;
-    char *line = NULL;
-    size_t capacity = 0, count = 0;
-    ssize_t length;
     int fd = path[0] ? open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC) : -1;
     memset(m, 0, sizeof(*m));
     m->read = true;
@@ -334,17 +354,7 @@ static void mode_load(const char *path, struct mode_file *m) {
         return;
     }
     m->first_ok = true;
-    while ((length = getline(&line, &capacity, file)) >= 0) {
-        size_t used = 0, i, stop = (size_t)length;
-        if (stop > 0 && line[stop - 1] == '\n') stop--;
-        if (stop == 11U && !memcmp(line, "interactive", 11U)) m->interactive = true;
-        if (stop == 8U && !memcmp(line, "headless", 8U)) m->headless = true;
-        if (count++) continue;
-        for (i = 0; i < stop && i < STORE_PATH; i++)
-            if (line[i] && used + 1U < sizeof(m->first)) m->first[used++] = line[i];
-        m->first[used] = '\0';
-    }
-    free(line);
+    mode_scan(file, m);
     fclose(file);
 }
 
