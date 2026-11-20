@@ -19,6 +19,20 @@ static int retain_publish(const char *root, const char *run, const char *stage, 
            f_path(destination, sizeof(destination), root, run) || rename(stage, destination);
 }
 
+/* The path of a retained run entry, which must be a directory. */
+static int retain_entry(const char *root, const char *name, char *path, size_t size, struct stat *st) {
+    return f_path(path, size, root, name) || lstat(path, st) || !S_ISDIR(st->st_mode);
+}
+
+/* Remembers path as the oldest run other than run, when it is. */
+static int retain_note_oldest(const char *name, const char *run, const char *path, time_t mtime,
+                              char *oldest, size_t size, time_t *oldest_time) {
+    if (!strcmp(name, run) || (*oldest && mtime >= *oldest_time)) return 0;
+    if (f_copy(oldest, size, path)) return -1;
+    *oldest_time = mtime;
+    return 0;
+}
+
 /* Counts the retained runs and names the oldest one other than run. */
 static int retain_scan(const char *root, const char *run, size_t *count, char *oldest, size_t size) {
     DIR *dir = opendir(root); struct dirent *entry; struct stat st; char path[F_PATH]; time_t oldest_time = 0;
@@ -26,12 +40,9 @@ static int retain_scan(const char *root, const char *run, size_t *count, char *o
     *count = 0; oldest[0] = '\0';
     while ((entry = readdir(dir))) {
         if (strncmp(entry->d_name, "run_", 4) || !f_name(entry->d_name)) continue;
-        if (f_path(path, sizeof(path), root, entry->d_name) || lstat(path, &st) || !S_ISDIR(st.st_mode)) { closedir(dir); return -1; }
+        if (retain_entry(root, entry->d_name, path, sizeof(path), &st) ||
+            retain_note_oldest(entry->d_name, run, path, st.st_mtime, oldest, size, &oldest_time)) { closedir(dir); return -1; }
         (*count)++;
-        if (strcmp(entry->d_name, run) && (!*oldest || st.st_mtime < oldest_time)) {
-            if (f_copy(oldest, size, path)) { closedir(dir); return -1; }
-            oldest_time = st.st_mtime;
-        }
     }
     closedir(dir);
     return 0;

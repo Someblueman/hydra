@@ -286,20 +286,22 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
  * last command. A line that was ended is the whole answer of a command the
  * session got past, so it is judged on its own; one that was not ended is
  * judged with the status of the session, as a session of its own would be. */
+/* The between answer, from the line after the handshake's; *line moves to
+ * the next one. False when that command failed: the request was not asked. */
+static bool between_replied(const struct f_remote *remote, const struct f_capture *cap, char **line, json_object **answer) {
+    char *last = *line ? strchr(*line, '\n') : NULL;
+    if (last) *last++ = '\0';
+    *answer = session_answer(remote, cap, *line ? *line : "", last ? 0 : cap->status);
+    *line = last;
+    return json_object_get_boolean(f_field(*answer, "ok"));
+}
 static json_object *session_replies(const struct f_remote *remote, const struct f_capture *cap, char *out, bool has_between,
                                     json_object **handshake, json_object **between_answer) {
-    char *line = strchr(out, '\n'), *last;
+    char *line = strchr(out, '\n');
     if (line) *line++ = '\0';
     *handshake = session_answer(remote, cap, out, line ? 0 : cap->status);
     if (!json_object_get_boolean(f_field(*handshake, "ok"))) return NULL;
-    if (has_between) {
-        last = line ? strchr(line, '\n') : NULL;
-        if (last) *last++ = '\0';
-        *between_answer = session_answer(remote, cap, line ? line : "", last ? 0 : cap->status);
-        /* A command that failed ends the session: the request was not asked. */
-        if (!json_object_get_boolean(f_field(*between_answer, "ok"))) return NULL;
-        line = last;
-    }
+    if (has_between && !between_replied(remote, cap, &line, between_answer)) return NULL;
     return session_answer(remote, cap, line ? line : "", cap->status);
 }
 static json_object *observed_session(const struct f_remote *remote, json_object *between, json_object *request,
