@@ -15,6 +15,9 @@ static bool member(uint32_t cp, const struct interval *set, size_t count) {
 }
 
 int kt_codepoint_width(uint32_t cp) {
+    /* Printable ASCII, most of what is ever measured, is in none of the
+     * tables: the lowest entry of any of them is U+00AD. */
+    if (cp >= 32 && cp < 0x7f) return 1;
     if (cp < 32 || (cp >= 0x7f && cp <= 0x9f) || cp > 0x10ffff ||
         (cp >= 0xd800 && cp <= 0xdfff) || (cp & 0xffffU) >= 0xfffeU ||
         member(cp, format, sizeof(format) / sizeof(*format))) return -1;

@@ -42,6 +42,9 @@ int main(void) {
     assert(kt_codepoint_width(0x754c) == 2);
     assert(kt_codepoint_width(0x301) == 0);
     assert(kt_codepoint_width(0x202e) == -1); /* bidi control */
+    /* Printable ASCII is narrow without a table lookup; its neighbours are not. */
+    for (cp = 0; cp < 0xa0; cp++) assert(kt_codepoint_width(cp) == (cp >= 32 && cp < 0x7f ? 1 : -1));
+    assert(kt_codepoint_width(0xa0) == 1 && kt_codepoint_width(0xad) == -1); /* soft hyphen */
     kt_text(&c, (struct kt_rect){0,0,8,1}, "caf\xc3\xa9 \xe7\x95\x8c", KT_BASE);
     assert(cells[3].glyph == 0xe9 && cells[5].width == 2 && cells[6].width == 0);
     kt_text(&c, (struct kt_rect){7,0,1,1}, "e\xcc\x81", KT_BASE);
