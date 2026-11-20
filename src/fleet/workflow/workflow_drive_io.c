@@ -340,8 +340,16 @@ static int take_event_lock(struct wdr_run *run, const char *lock) {
     }
     (void)chmod(lock, 0700);
     snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
+    /* A holder that cannot record itself would be read as a dead one (a
+     * torn PID) or wait out OWNERLESS_POLLS: it lets the lock go instead. */
     fd = open(owner_file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (fd >= 0) { (void)fchmod(fd, 0600); (void)write_all(fd, pid, strlen(pid)); close(fd); }
+    if (fd >= 0) (void)fchmod(fd, 0600);
+    if (fd < 0 || write_all(fd, pid, strlen(pid))) {
+        if (fd >= 0) close(fd);
+        (void)wdr_remove_tree(lock);
+        return -1;
+    }
+    if (close(fd)) { (void)wdr_remove_tree(lock); return -1; }
     return 0;
 }
 

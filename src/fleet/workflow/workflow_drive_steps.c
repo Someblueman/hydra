@@ -333,39 +333,44 @@ static void step_dirs(const struct wdr_run *run, struct names *names) {
     if (names->count) qsort(names->items, names->count, sizeof(char *), by_name);
 }
 
-static void cancel_running(struct wdr_run *run, const char *id, const char *sd, int residual) {
+static int cancel_running(struct wdr_run *run, const char *id, const char *sd, int residual) {
     char path[F_PATH], worker[64], command[64], line[256]; long pid;
     if (!wdr_join(path, sd, "worker-pid")) (void)wdr_first_line(path, worker, sizeof(worker));
     if (!wdr_join(path, sd, "command-pid")) (void)wdr_first_line(path, command, sizeof(command));
     if (wdr_pid_alive(run, command) && wdr_number(command, &pid)) wdr_signal_tree((pid_t)pid, SIGTERM);
     wdr_reap(run);
-    if (!wdr_pid_alive(run, worker)) return;
+    if (!wdr_pid_alive(run, worker)) return 0;
     snprintf(line, sizeof(line), "%s\t%s\t%s\n", id, worker, command);
-    (void)!write(residual, line, strlen(line));
+    /* A line that cannot be written whole is cut off again: the file lists
+     * whole lines or fewer, and the caller is told it is short. */
+    return f_append(residual, line, strlen(line), false);
 }
 
-static void cancel_one(struct wdr_run *run, const char *id, int residual) {
+static int cancel_one(struct wdr_run *run, const char *id, int residual) {
     char sd[F_PATH], path[F_PATH], state[64];
-    if (snprintf(sd, sizeof(sd), "%s/steps/%s", run->dir, id) >= (int)sizeof(sd) || wdr_join(path, sd, "state")) return;
+    if (snprintf(sd, sizeof(sd), "%s/steps/%s", run->dir, id) >= (int)sizeof(sd) || wdr_join(path, sd, "state")) return 0;
     (void)wdr_first_line(path, state, sizeof(state));
-    if (task_cancel(run, id, sd, state)) return;
+    if (task_cancel(run, id, sd, state)) return 0;
     if (same(state, "queued") || same(state, "ready") || same(state, "retrying") || same(state, "waiting-approval")) {
         (void)wdr_scalar(path, "cancelled");
         (void)wdr_event(run, id, "step.cancelled", "request");
-    } else if (same(state, "running")) cancel_running(run, id, sd, residual);
+    } else if (same(state, "running")) return cancel_running(run, id, sd, residual);
+    return 0;
 }
 
 /* workflow_cancel_steps: every step directory in name order; running steps
- * whose worker outlives the request are listed in residual-children.tsv. */
+ * whose worker outlives the request are listed in residual-children.tsv.
+ * 1 when the list could not be opened or a line of it could not be written;
+ * the driver cancels again on its next poll and rewrites the list. */
 int wdr_cancel_steps(struct wdr_run *run) {
-    char path[F_PATH]; struct names names; size_t i; int residual;
+    char path[F_PATH]; struct names names; size_t i; int residual, status = 0;
     if (wdr_join(path, run->dir, "residual-children.tsv") || wdr_private_touch(path)) return 1;
     if ((residual = open(path, O_WRONLY | O_TRUNC | O_APPEND)) < 0) return 1;
     step_dirs(run, &names);
-    for (i = 0; i < names.count; i++) { cancel_one(run, names.items[i], residual); free(names.items[i]); }
+    for (i = 0; i < names.count; i++) { if (cancel_one(run, names.items[i], residual)) status = 1; free(names.items[i]); }
     free(names.items);
-    close(residual);
-    return 0;
+    if (close(residual)) status = 1;
+    return status;
 }
 
 /* workflow_waiting_state: the run waits for approval or remote work when

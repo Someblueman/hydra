@@ -372,6 +372,51 @@ static void torn_append(void) {
     free(before); free(after);
 }
 
+/* Whatever fails after the lock directory is made leaves the lock to nobody:
+ * a holder that cannot record itself in owner-pid lets go of the lock, as one
+ * that cannot append does, instead of leaving a torn or missing record. The
+ * file size limit of zero makes the PID write fail. */
+static void owner_record_failed(void) {
+    struct wdr_run run; char dir[F_PATH]; struct rlimit saved, none; int status; double started;
+    new_run(&run, dir, "owner-record-failed");
+    CHECK(!getrlimit(RLIMIT_FSIZE, &saved) && signal(SIGXFSZ, SIG_IGN) != SIG_ERR, "file size limit");
+    none = saved; none.rlim_cur = 0;
+    CHECK(!setrlimit(RLIMIT_FSIZE, &none), "set the file size limit");
+    status = wdr_event(&run, NULL, "run.created", "");
+    if (setrlimit(RLIMIT_FSIZE, &saved)) _exit(2);
+    CHECK(status != 0, "an event whose lock could not record its holder is reported");
+    CHECK(!present(dir, ".events.lock"), "the lock is not left held without a usable owner record");
+    started = seconds();
+    CHECK(!wdr_event(&run, NULL, "run.created", "") && seconds() - started < 1.0, "the next event takes the lock at once");
+    expect_trace(dir, "1 run.created ", "the one event that was recorded");
+}
+
+/* A running step whose worker outlives the cancellation is listed in
+ * residual-children.tsv: a line that cannot be written is reported, and the
+ * next cancellation writes the list whole. */
+static void residual_write_failed(void) {
+    struct wdr_run run; char dir[F_PATH], step[F_PATH], list[F_PATH], pid[32], *text;
+    struct rlimit saved, none; int status;
+    new_run(&run, dir, "residual-write-failed");
+    CHECK(!f_path(step, sizeof(step), dir, "steps") && !mkdir(step, 0700) && !f_path(step, sizeof(step), dir, "steps/build") && !mkdir(step, 0700), "step directory");
+    (void)snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
+    put(step, "state", "running\n"); put(step, "worker-pid", pid); put(step, "command-pid", "4194304\n");
+    CHECK(!f_path(list, sizeof(list), dir, "residual-children.tsv"), "list path");
+    CHECK(!getrlimit(RLIMIT_FSIZE, &saved) && signal(SIGXFSZ, SIG_IGN) != SIG_ERR, "file size limit");
+    none = saved; none.rlim_cur = 0;
+    CHECK(!setrlimit(RLIMIT_FSIZE, &none), "set the file size limit");
+    status = wdr_cancel_steps(&run);
+    if (setrlimit(RLIMIT_FSIZE, &saved)) _exit(2);
+    CHECK(status == 1, "a residual line that could not be written is reported (%d)", status);
+    CHECK((text = f_read(list, 4096)) != NULL && !text[0], "no torn line is left");
+    free(text);
+    CHECK(!wdr_cancel_steps(&run), "the cancellation succeeds once writes work");
+    CHECK((text = f_read(list, 4096)) != NULL, "read the list");
+    (void)snprintf(step, sizeof(step), "build\t%ld\t4194304\n", (long)getpid());
+    CHECK(!strcmp(text, step), "the list names the worker: '%s'", text);
+    free(text);
+}
+
 static void run_ownerless_claimed(void) { ownerless("ownerless-claimed", true, NULL); }
 static void run_ownerless_unclaimed(void) { ownerless("ownerless-unclaimed", false, NULL); }
 static void run_ownerless_empty(void) { ownerless("ownerless-empty-record", true, ""); }
@@ -390,7 +435,8 @@ int main(int argc, char **argv) {
         {"sequences", sequences}, {"torn-append", torn_append}, {"dead-owner", dead_owner}, {"live-owner", live_owner},
         {"ownerless-claimed", run_ownerless_claimed}, {"ownerless-unclaimed", run_ownerless_unclaimed},
         {"ownerless-empty-record", run_ownerless_empty}, {"late-owner", late_owner}, {"announced-breaker", announced_breaker}, {"stale-view", stale_view},
-        {"contention-dead-owner", run_contention_dead}, {"contention-ownerless", run_contention_ownerless}};
+        {"contention-dead-owner", run_contention_dead}, {"contention-ownerless", run_contention_ownerless},
+        {"owner-record-failed", owner_record_failed}, {"residual-write-failed", residual_write_failed}};
     enum { COUNT = sizeof(cases) / sizeof(cases[0]) };
     pid_t pids[COUNT]; size_t i; int failed = 0;
     const char *tmp = getenv("TMPDIR");
