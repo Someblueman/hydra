@@ -59,15 +59,17 @@ static void sync_helper(const char *home) {
     assert(!f_path(absent, sizeof(absent), dir, "absent") && f_sync_dir(absent) && task_sync_dir(absent));
     assert(!f_remove_tree(dir));
 }
-/* An install is in place once its parent is synced. A parent that cannot be
- * synced leaves the install where it is and answers outcome_unknown; running
- * the install again finds it, syncs and succeeds. */
-static void sync_install(const char *home) {
-    char dir[F_PATH], prefix[F_PATH], other[F_PATH], *version, *protocol, *saved = getenv("HYDRA_HOME") ? strdup(getenv("HYDRA_HOME")) : NULL;
-    const char *names[] = {"bin/hydra", "libexec/hydra/hydra-fleet"}, *zero = "0000000000000000000000000000000000000000000000000000000000000000";
-    json_object *package = json_object_new_object(), *files = json_object_new_array(), *result; size_t i, before;
-    assert(!f_path(dir, sizeof(dir), home, "sync-install") && !mkdir(dir, 0700));
-    assert(!f_path(prefix, sizeof(prefix), dir, "one") && !f_path(other, sizeof(other), dir, "two"));
+static const char sync_zero_digest[] = "0000000000000000000000000000000000000000000000000000000000000000";
+static void sync_install_try(json_object *package, const char *prefix, bool ok, const char *code) {
+    json_object *result = f_install(package, sync_zero_digest, prefix);
+    sync_code(result, ok, code);
+    json_object_put(result);
+}
+/* The install package: a stub shell and a helper that answers --version. */
+static json_object *sync_install_package(void) {
+    const char *names[] = {"bin/hydra", "libexec/hydra/hydra-fleet"};
+    json_object *package = json_object_new_object(), *files = json_object_new_array();
+    char *version, *protocol; size_t i;
     version = sync_hex("#!/bin/sh\ncase \"$1\" in\n--version) echo 'Hydra version " F_VERSION "' ;;\n"
         "fleet) echo '{\"ok\":true,\"data\":{\"hydra_version\":\"" F_VERSION "\",\"fleet_protocol\":1,\"state_schema\":2,\"event_schema\":1,\"json_schema\":1,\"capabilities\":[]}}' ;;\nesac\n");
     protocol = sync_hex("#!/bin/sh\necho 'Hydra fleet protocol 1'\n");
@@ -78,31 +80,47 @@ static void sync_install(const char *home) {
         json_object_array_add(files, file);
     }
     json_object_object_add(package, "files", files);
-
-    before = synced(dir);
-    result = f_install(package, zero, prefix); sync_code(result, true, NULL); json_object_put(result);
+    free(version); free(protocol);
+    return package;
+}
+static void sync_install_synced(json_object *package, const char *dir, const char *prefix) {
+    size_t before = synced(dir);
+    sync_install_try(package, prefix, true, NULL);
     assert(synced(dir) > before);
     /* The same install again finds the directory and syncs it once more. */
     before = synced(dir);
-    result = f_install(package, zero, prefix); sync_code(result, true, NULL); json_object_put(result);
+    sync_install_try(package, prefix, true, NULL);
     assert(synced(dir) == before + 1);
-
+}
+static void sync_install_unsynced(json_object *package, const char *dir, const char *other) {
+    size_t before;
     sync_fail_in(dir, EIO);
-    result = f_install(package, zero, other); sync_code(result, false, "outcome_unknown"); json_object_put(result);
+    sync_install_try(package, other, false, "outcome_unknown");
     assert(!access(other, F_OK));
-    result = f_install(package, zero, other); sync_code(result, false, "outcome_unknown"); json_object_put(result);
+    sync_install_try(package, other, false, "outcome_unknown");
     sync_fail_off();
     before = synced(dir);
-    result = f_install(package, zero, other); sync_code(result, true, NULL); json_object_put(result);
+    sync_install_try(package, other, true, NULL);
     assert(synced(dir) == before + 1);
     assert(!f_remove_tree(other));
     sync_fail_in(dir, EINVAL);
-    result = f_install(package, zero, other); sync_code(result, true, NULL); json_object_put(result);
+    sync_install_try(package, other, true, NULL);
     sync_fail_off();
+}
+/* An install is in place once its parent is synced. A parent that cannot be
+ * synced leaves the install where it is and answers outcome_unknown; running
+ * the install again finds it, syncs and succeeds. */
+static void sync_install(const char *home) {
+    char dir[F_PATH], prefix[F_PATH], other[F_PATH], *saved = getenv("HYDRA_HOME") ? strdup(getenv("HYDRA_HOME")) : NULL;
+    json_object *package = sync_install_package();
+    assert(!f_path(dir, sizeof(dir), home, "sync-install") && !mkdir(dir, 0700));
+    assert(!f_path(prefix, sizeof(prefix), dir, "one") && !f_path(other, sizeof(other), dir, "two"));
+    sync_install_synced(package, dir, prefix);
+    sync_install_unsynced(package, dir, other);
 
     /* The qualification of the staged shell sets HYDRA_HOME for itself. */
     if (saved) { assert(!setenv("HYDRA_HOME", saved, 1)); free(saved); } else unsetenv("HYDRA_HOME");
-    json_object_put(package); free(version); free(protocol);
+    json_object_put(package);
     assert(!f_remove_tree(dir));
 }
 /* An import is in place once the directory it was renamed into is synced: a
@@ -143,35 +161,42 @@ static void sync_import(const char *home) {
     sync_fail_off();
     json_object_put(bundle);
 }
+static void sync_retain_pruned(const char *head, const char *root, struct f_capture *cap) {
+    char kept[F_PATH]; size_t before_head = synced(head), before_root;
+    assert(!agent_retain(head, "run_one", cap));
+    assert(synced(head) == before_head + 1 && synced(root) >= 1);
+    before_head = synced(head); before_root = synced(root);
+    assert(!agent_retain(head, "run_two", cap));
+    assert(synced(head) == before_head && synced(root) == before_root + 1);
+    sync_fail_in(root, EIO);
+    assert(agent_retain(head, "run_three", cap) == -1);
+    sync_fail_off();
+    assert(!f_path(kept, sizeof(kept), root, "run_three/stdout") && !access(kept, F_OK));
+    sync_fail_in(root, EINVAL);
+    assert(!agent_retain(head, "run_four", cap));
+    sync_fail_off();
+}
+/* A payload directory made by this call has its own entry in head. */
+static void sync_retain_fresh(const char *home, struct f_capture *cap) {
+    char head[F_PATH], kept[F_PATH];
+    assert(!f_path(head, sizeof(head), home, "sync-retain-fresh") && !mkdir(head, 0700));
+    sync_fail_in(head, EIO);
+    assert(agent_retain(head, "run_one", cap) == -1);
+    sync_fail_off();
+    assert(!f_path(kept, sizeof(kept), head, "agent-payloads/run_one/stdout") && !access(kept, F_OK));
+    assert(!f_remove_tree(head));
+}
 /* A retained provider payload is published into agent-payloads, which is
  * synced after pruning; a directory this call made is also synced in its
  * parent. A failure is reported as before: the caller records the payload as
  * not retained. */
 static void sync_retain(const char *home) {
-    char head[F_PATH], root[F_PATH], kept[F_PATH]; struct f_capture cap; size_t before_head, before_root;
+    char head[F_PATH], root[F_PATH]; struct f_capture cap;
     memset(&cap, 0, sizeof(cap)); cap.out = (char *)"out"; cap.out_bytes = 3; cap.err = (char *)""; cap.err_bytes = 0;
     assert(!f_path(head, sizeof(head), home, "sync-retain") && !mkdir(head, 0700));
     assert(!f_path(root, sizeof(root), head, "agent-payloads"));
-    before_head = synced(head);
-    assert(!agent_retain(head, "run_one", &cap));
-    assert(synced(head) == before_head + 1 && synced(root) >= 1);
-    before_head = synced(head); before_root = synced(root);
-    assert(!agent_retain(head, "run_two", &cap));
-    assert(synced(head) == before_head && synced(root) == before_root + 1);
-    sync_fail_in(root, EIO);
-    assert(agent_retain(head, "run_three", &cap) == -1);
-    sync_fail_off();
-    assert(!f_path(kept, sizeof(kept), root, "run_three/stdout") && !access(kept, F_OK));
-    sync_fail_in(root, EINVAL);
-    assert(!agent_retain(head, "run_four", &cap));
-    sync_fail_off();
-    /* A payload directory made by this call has its own entry in head. */
-    assert(!f_path(head, sizeof(head), home, "sync-retain-fresh") && !mkdir(head, 0700));
-    sync_fail_in(head, EIO);
-    assert(agent_retain(head, "run_one", &cap) == -1);
-    sync_fail_off();
-    assert(!f_path(kept, sizeof(kept), head, "agent-payloads/run_one/stdout") && !access(kept, F_OK));
-    assert(!f_remove_tree(head));
+    sync_retain_pruned(head, root, &cap);
+    sync_retain_fresh(home, &cap);
 }
 /* Removing a record is a directory change too: the alias file of remote
  * remove and the marker of placement undrain are gone for good only once
