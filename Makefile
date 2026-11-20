@@ -34,6 +34,18 @@ SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fs
 # Sanitizer diagnostics must fail a case even when its output is captured.
 export UBSAN_OPTIONS ?= halt_on_error=1
 
+# hydra-tui draws Unicode only when the locale's character set is UTF-8 and
+# falls back to ASCII glyphs otherwise; the TUI and PTY suites compare the
+# Unicode frames. A caller's UTF-8 locale is kept. Under any other locale these
+# targets run with LC_ALL set to the first installed of C.UTF-8 and en_US.UTF-8
+# (macOS releases without C.UTF-8); with neither installed nothing changes.
+TUI_TEST_LOCALE := $(shell if [ "$$(locale charmap 2>/dev/null)" != UTF-8 ]; then locale -a 2>/dev/null | awk '{ name = tolower($$0); sub(/utf-8$$/, "utf8", name) } name == "c.utf8" { c = $$0 } name == "en_us.utf8" { e = $$0 } END { print (c != "" ? c : e) }'; fi)
+TUI_TEST_TARGETS = test-tui test-tui-pty test-tui-smoke test-statistics test-program-pty test-workspace-pty \
+	test-attached-pty test-plan-workspace test-fleet-controls test-fleet-recovery test-visualization
+ifneq ($(TUI_TEST_LOCALE),)
+$(TUI_TEST_TARGETS): export LC_ALL := $(TUI_TEST_LOCALE)
+endif
+
 # Installation prefix (no root required when writable)
 PREFIX ?= /usr/local
 DESTDIR ?=
