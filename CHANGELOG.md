@@ -33,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stall for 50 ms after the command has finished.
 
 ### Changed
+- **`hydra snapshot` answers from `hydra-core` by default** when the helper is
+  installed, and from the shell otherwise, with the same output either way
+  (60 heads: about 50 ms instead of several seconds). The fleet host listing
+  uses the same path. The helper now refuses every state the shell verifier
+  refuses, so a store the shell rejects is rejected by both. `--native`
+  reports on stderr why the helper was not used; the new `--shell` never runs
+  it.
+- `hydra state verify` finds duplicate branches in one pass per project
+  instead of comparing every head with every other.
 - The native helpers compile without warnings at every GCC optimisation level
   (`-O0` to `-O3`, `-Os`, `-Og`); `make check-opt-levels` checks this.
   `install.sh` no longer treats compiler warnings as errors when it builds on
@@ -48,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: every job has a timeout; pull requests also run a macOS native lane, a
   sanitizer lane and the optimisation-level check; a release branch without a
   pinned helper digest prints a notice instead of failing.
+- `make bench-core` runs again and reports 5, 20 and 60 heads; `make
+  bench-tui` measures stores that contain heads (its fixture had none).
+
+### Removed
+- `hydra-core capabilities`, `hydra-core json-string` and `hydra-core
+  validate-state`, which nothing called.
 
 ## [4.0.0] - 2026-11-15
 

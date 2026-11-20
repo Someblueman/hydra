@@ -124,7 +124,8 @@ Commands:
   du                Report per-head worktree and durable-state disk usage
   gc                Apply explicit orphaned, stopped, or archive cleanup policies
   worktree doctor   Inspect, lock, unlock, move, repair, or prune Git worktrees
-  snapshot          Emit canonical state JSON; --native tries the optional core
+  snapshot          Emit canonical state JSON; --native says why the core was
+                    not used, --shell never runs it
   list              List all active Hydra heads (branch, agent, session state, reported outcome, age)
                     Options:
                       -g, --group <name>       Filter by group
