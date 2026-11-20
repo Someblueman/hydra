@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Head names that begin another head's name:** `hydra kill`, `hydra
+  lifecycle`, the control centre's pane preview and every other tmux call now
+  match a head's session by its exact name. Before, with heads `zed` and
+  `zed-two` and `zed`'s terminal gone, `hydra kill zed` ended `zed-two`'s
+  session and `hydra lifecycle zed` reported it live.
+- **State writes that fail:** a state record that cannot be written (full
+  disk, quota, I/O error) now reports failure and keeps its previous value, in
+  the shell writers and in the native workflow driver. Before, the record was
+  replaced by an empty file and the write reported success.
+- **Locks left by a dead process:** commands take over a lock whose owner died
+  on this host instead of failing until `hydra cleanup`. Locks held by a live
+  process or by another host are never broken.
+- **Commands started from the control centre** no longer run with SIGPIPE
+  ignored, so their pipelines end quietly instead of reporting broken pipes.
+- **Quitting the control centre** no longer hangs when a command it started
+  left a background process holding its output open; stopping is bounded at
+  about two seconds.
+- `hydra-tui` no longer crashes at startup under a low stack limit, and waiting
+  for Enter after a command that took the terminal no longer spins when
+  terminal reads fail.
+- `hydra-fleet` exits non-zero when its output cannot be written.
+- Short Git and remote commands run by `hydra-fleet` no longer occasionally
+  stall for 50 ms after the command has finished.
+
+### Changed
+- The native helpers compile without warnings at every GCC optimisation level
+  (`-O0` to `-O3`, `-Os`, `-Og`); `make check-opt-levels` checks this.
+  `install.sh` no longer treats compiler warnings as errors when it builds on
+  your machine.
+- `hydra-tui` links kettle as a static library, so components it does not use
+  and the test driver are no longer in the installed binary. Building it now
+  needs `ar`.
+- Enrollment and placement digests are computed in memory, without temporary
+  files; the digests are unchanged.
+- Build: kettle and shared test support are compiled once, sanitizer lanes
+  share `$(BUILD_DIR)/sanitize`, `make clean` removes `$(BUILD_DIR)`, and the
+  TUI test targets set a UTF-8 locale themselves.
+- CI: every job has a timeout; pull requests also run a macOS native lane, a
+  sanitizer lane and the optimisation-level check; a release branch without a
+  pinned helper digest prints a notice instead of failing.
+
 ## [4.0.0] - 2026-11-15
 
 Hydra 4.0.0 rebuilds the control centre on kettle, a C runtime for terminal
