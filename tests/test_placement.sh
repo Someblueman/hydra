@@ -53,6 +53,7 @@ cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 set -eu
 while [ "$#" -gt 2 ]; do shift; done
+printf '%s\n' "$1" >> "$HYDRA_TEST_TRANSPORT/sessions"
 if [ -f "$HYDRA_TEST_TRANSPORT/offline-$1" ]; then echo 'Connection refused' >&2; exit 255; fi
 request="$(mktemp "$HYDRA_TEST_TRANSPORT/request.XXXXXX")"
 trap 'rm -f "$request"' 0
@@ -138,9 +139,17 @@ placement replay "$explicit_id" | grep -q '"identical":true'
 # Automatic placement: alpha already holds one of two slots, delta is stale,
 # charlie and bravo are idle; bravo wins the alias-order tie-break.
 admission alpha request occupied project_fixture 600 - > /dev/null
+: > "$fixture/transport/sessions"
 task submit --placement auto --input "$fixture/package" --key auto-one > "$fixture/auto-one"
 has "$fixture/auto-one" '"state":"accepted"'
 has "$fixture/auto-one" '"assigned_host":"bravo"'
+# Each candidate is observed in one SSH session (handshake and admission
+# status together); the chosen host then gets its handshake and, only after
+# that was judged, the submission.
+for observed in alpha charlie delta; do
+    [ "$(grep -c "^$observed-host\$" "$fixture/transport/sessions")" -eq 1 ] || { echo "placement observed $observed in more than one SSH session"; cat "$fixture/transport/sessions"; exit 1; }
+done
+[ "$(grep -c '^bravo-host$' "$fixture/transport/sessions")" -eq 3 ] || { echo 'the chosen host did not get one observation, one handshake and one submission'; cat "$fixture/transport/sessions"; exit 1; }
 auto_one="$(field "$fixture/auto-one" task_id)"
 [ -d "$fixture/host-bravo/fleet/tasks/$auto_one" ]
 [ ! -d "$fixture/host-alpha/fleet/tasks/$auto_one" ]
