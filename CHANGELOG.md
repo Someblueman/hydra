@@ -34,6 +34,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   causes every later event of that run to be dropped; it is recovered after
   five seconds without change. Two writers can no longer both break one stale
   lock and write the same sequence number.
+- **Fleet records that cannot be written:** `hydra remote add`, enrollment,
+  revocations, placement drain markers, guided setup state and task records
+  are written through one path that also syncs the directory. A record
+  reported as saved survives a crash, and one that cannot be written (full
+  disk, quota, I/O error) reports failure and keeps its previous value.
+- `hydra fleet auth copy` no longer reports success when the credential could
+  not be completely written and closed.
+- A collected task result that could not be written no longer leaves a partial
+  file that made every later collection of that result fail.
+- A workflow event or schedule entry that cannot be written whole is no longer
+  left as a torn line in `events.jsonl` or `schedule.jsonl`.
+- A pinned fleet helper download that could not be moved into the cache no
+  longer leaves its `.partial` file behind.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
@@ -53,6 +66,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line of `workflow status` changes and its JSON gains a `driver` member.
 - The native driver numbers a new event from the bytes appended since its last
   one instead of re-reading `events.jsonl` each time.
+- **Fewer SSH connections for remote operations.** `hydra fleet list`,
+  `overview`, `attention`, `doctor` and `watch` open one connection per host
+  instead of two, and the control centre's remote views one per host per
+  refresh instead of four. `hydra fleet list|doctor|admission HOST`, `hydra
+  fleet task status|observe|logs|requests|result` and `hydra fleet auth
+  status|preview` open one instead of two; `hydra fleet auth copy` two instead
+  of three; automatic placement one per candidate host instead of two.
+  Operations that change a host still check it first in a connection of their
+  own. For the combined operations `--timeout` bounds the single connection,
+  and the host's login shell must run a `A | B && C` command line.
+- Multi-host fleet commands no longer wait up to 20 ms after the last host
+  has answered.
 - `hydra state verify` finds duplicate branches in one pass per project
   instead of comparing every head with every other.
 - **`hydra list`, `status` and `switch` are much faster:** with five heads,
