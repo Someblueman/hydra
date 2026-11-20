@@ -59,7 +59,10 @@ hydra_ensure_project_id() {
     chmod 700 "$_hepi_dir" 2>/dev/null || true
     _hepi_id="$(hydra_new_id project "$_hepi_root|$_hepi_common")" || return 1
     _hepi_tmp="$(mktemp "$_hepi_dir/.project-id.XXXXXX")" || return 1
-    printf '%s\n' "$_hepi_id" > "$_hepi_tmp"
+    if ! printf '%s\n' "$_hepi_id" > "$_hepi_tmp"; then
+        rm -f "$_hepi_tmp"
+        return 1
+    fi
     chmod 600 "$_hepi_tmp" 2>/dev/null || true
     if ! mv "$_hepi_tmp" "$_hepi_dir/project-id"; then
         rm -f "$_hepi_tmp"

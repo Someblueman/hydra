@@ -258,7 +258,7 @@ _event_repair_file_locked() {
             _erf_expected="$_erf_sequence"
         fi
         [ "$_erf_sequence" = "$_erf_expected" ] || break
-        printf '%s\n' "$_erf_line" >> "$_erf_tmp"
+        printf '%s\n' "$_erf_line" >> "$_erf_tmp" || { rm -f "$_erf_tmp"; return 1; }
         _erf_expected=$((_erf_expected + 1))
     done < "$_erf_file"
     _erf_backup="$_erf_file.corrupt.$(date +%s)"

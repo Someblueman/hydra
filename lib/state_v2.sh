@@ -34,7 +34,13 @@ state_v2_write_scalar() {
 '*|*''*) echo "Error: scalar state values cannot contain newlines" >&2; return 1 ;;
     esac
     _sv2ws_tmp="$(mktemp_adjacent "$_sv2ws_path")" || return 1
-    printf '%s\n' "$_sv2ws_value" > "$_sv2ws_tmp"
+    # A write that fails (full disk, quota, file size limit) leaves an empty
+    # or short temporary file; replacing the record with it would publish that
+    # as the new value and report success.
+    if ! printf '%s\n' "$_sv2ws_value" > "$_sv2ws_tmp"; then
+        rm -f "$_sv2ws_tmp"
+        return 1
+    fi
     chmod 600 "$_sv2ws_tmp" 2>/dev/null || true
     if ! atomic_replace "$_sv2ws_path" "$_sv2ws_tmp"; then
         rm -f "$_sv2ws_tmp"
@@ -46,7 +52,10 @@ state_v2_write_text() {
     _sv2wt_path="$1"
     _sv2wt_value="$2"
     _sv2wt_tmp="$(mktemp_adjacent "$_sv2wt_path")" || return 1
-    printf '%s' "$_sv2wt_value" > "$_sv2wt_tmp"
+    if ! printf '%s' "$_sv2wt_value" > "$_sv2wt_tmp"; then
+        rm -f "$_sv2wt_tmp"
+        return 1
+    fi
     chmod 600 "$_sv2wt_tmp" 2>/dev/null || true
     if ! atomic_replace "$_sv2wt_path" "$_sv2wt_tmp"; then
         rm -f "$_sv2wt_tmp"

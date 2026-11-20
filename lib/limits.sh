@@ -195,7 +195,7 @@ queue_spawn() {
         release_lock "$_queue_lock"
         return 1
     }
-    cat > "$_queue_tmp" <<EOF
+    if ! cat > "$_queue_tmp" <<EOF
 branch=$_branch
 ai_tool=$_ai_tool
 group=$_group
@@ -203,6 +203,11 @@ layout=$_layout
 priority=$_priority
 requested_at=$_timestamp
 EOF
+    then
+        rm -f "$_queue_tmp"
+        release_lock "$_queue_lock"
+        return 1
+    fi
     chmod 600 "$_queue_tmp" 2>/dev/null || true
     if ! atomic_replace "$_filepath" "$_queue_tmp"; then
         rm -f "$_queue_tmp"

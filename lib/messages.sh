@@ -107,20 +107,25 @@ send_message() {
             _sm_body_tmp="$(mktemp_adjacent "$msg_file")" || { release_lock "$msg_lock"; return 1; }
             _sm_meta_tmp="$(mktemp_adjacent "$meta_file")" || { rm -f "$_sm_body_tmp"; release_lock "$msg_lock"; return 1; }
             _sm_receipt_tmp="$(mktemp_adjacent "$receipt_file")" || { rm -f "$_sm_body_tmp" "$_sm_meta_tmp"; release_lock "$msg_lock"; return 1; }
-            printf '%s\n' "$message" > "$_sm_body_tmp"
-            {
-                printf 'type=%s\n' "$msg_type"
-                printf 'delivery=%s\n' "$delivery"
-                printf 'sender=%s\n' "$sender"
-                printf 'target=%s\n' "$target"
-                printf 'target_instance=%s\n' "$target_instance"
-                printf 'queued_at=%s\n' "$timestamp"
-            } > "$_sm_meta_tmp"
-            {
-                printf 'status=queued\n'
-                printf 'updated_at=%s\n' "$timestamp"
-                printf 'target_instance=%s\n' "$target_instance"
-            } > "$_sm_receipt_tmp"
+            # A failed write must not queue an empty or truncated message.
+            if ! printf '%s\n' "$message" > "$_sm_body_tmp" ||
+                ! {
+                    printf 'type=%s\n' "$msg_type" &&
+                    printf 'delivery=%s\n' "$delivery" &&
+                    printf 'sender=%s\n' "$sender" &&
+                    printf 'target=%s\n' "$target" &&
+                    printf 'target_instance=%s\n' "$target_instance" &&
+                    printf 'queued_at=%s\n' "$timestamp"
+                } > "$_sm_meta_tmp" ||
+                ! {
+                    printf 'status=queued\n' &&
+                    printf 'updated_at=%s\n' "$timestamp" &&
+                    printf 'target_instance=%s\n' "$target_instance"
+                } > "$_sm_receipt_tmp"; then
+                rm -f "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp"
+                release_lock "$msg_lock"
+                return 1
+            fi
             chmod 600 "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp" 2>/dev/null || true
             if ! atomic_replace "$meta_file" "$_sm_meta_tmp" || \
                ! atomic_replace "$receipt_file" "$_sm_receipt_tmp" || \
@@ -159,8 +164,11 @@ _message_write_receipt_locked() {
     case "$_mwr_status" in queued|delivered|stale) ;; *) return 1 ;; esac
     _mwr_path="$_mwr_dir/receipts/$_mwr_id"
     _mwr_tmp="$(mktemp_adjacent "$_mwr_path")" || return 1
-    printf 'status=%s\nupdated_at=%s\ntarget_instance=%s\n' \
-        "$_mwr_status" "$(date +%s)" "$_mwr_instance" > "$_mwr_tmp"
+    if ! printf 'status=%s\nupdated_at=%s\ntarget_instance=%s\n' \
+        "$_mwr_status" "$(date +%s)" "$_mwr_instance" > "$_mwr_tmp"; then
+        rm -f "$_mwr_tmp"
+        return 1
+    fi
     chmod 600 "$_mwr_tmp" 2>/dev/null || true
     if ! atomic_replace "$_mwr_path" "$_mwr_tmp"; then
         rm -f "$_mwr_tmp"

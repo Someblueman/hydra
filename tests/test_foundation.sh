@@ -98,6 +98,49 @@ state_v2_write_scalar "$spaced_dir/task" "line one
 line two" >/dev/null 2>&1
 assert_failure $? "scalar layout rejects embedded newlines"
 
+# A record write that fails must report failure and keep the previous value.
+# The failure injected here is a real one: with the file size limit at zero
+# and SIGXFSZ ignored, write(2) into the temporary file returns EFBIG, the way
+# a full disk returns ENOSPC. The subshell keeps the limit away from the rest
+# of this file; stderr goes to /dev/null because a log file is limited too.
+failing_write() (
+    trap '' XFSZ
+    ulimit -f 0 || exit 99
+    "$@" 2>/dev/null
+)
+write_probe="$test_root/write-probe"
+write_probe_run() { printf 'probe\n' > "$write_probe"; }
+failing_write write_probe_run
+write_probe_status=$?
+if [ "$write_probe_status" -gt 0 ] && [ "$write_probe_status" -lt 99 ] && [ ! -s "$write_probe" ]; then
+    echo "write failure injection: file size limit"
+else
+    # No clean EFBIG on this platform (status $write_probe_status): stand in
+    # for the failed write itself. The redirection still creates the empty
+    # temporary file, as a failed write leaves it.
+    failing_write() (
+        # shellcheck disable=SC2317,SC2329 # Called by the library under test.
+        printf() { return 1; }
+        "$@" 2>/dev/null
+    )
+    echo "write failure injection: printf stub"
+fi
+rm -f "$write_probe"
+failing_write state_v2_write_scalar "$head_dir/desired-state" stopped
+assert_failure $? "a scalar write that cannot be written reports failure"
+assert_equal running "$(cat "$head_dir/desired-state")" "a failed scalar write keeps the previous value"
+assert_equal "" "$(find "$head_dir" -name '.hydra-tmp.*' -print)" "a failed scalar write leaves no temporary file"
+state_v2_write_text "$test_root/text-record" 'first text'
+assert_success $? "a text record is written"
+failing_write state_v2_write_text "$test_root/text-record" 'second text'
+assert_failure $? "a text write that cannot be written reports failure"
+assert_equal 'first text' "$(cat "$test_root/text-record")" "a failed text write keeps the previous value"
+assert_equal "" "$(find "$test_root" -maxdepth 1 -name '.hydra-tmp.*' -print)" "a failed text write leaves no temporary file"
+state_v2_write_scalar "$head_dir/desired-state" stopped
+assert_success $? "the scalar is writable again once writes succeed"
+assert_equal stopped "$(cat "$head_dir/desired-state")" "a later scalar write replaces the value"
+state_v2_write_scalar "$head_dir/desired-state" running
+
 other_project="$(hydra_new_id project other-repository)"
 other_head="$(state_v2_create_head "$other_project" feature-x other-session - - 101 - - "$test_root/other")"
 if [ "$other_head" != "$head_id" ] && [ -d "$(state_v2_head_dir "$other_project" "$other_head")" ]; then
