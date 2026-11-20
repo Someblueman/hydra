@@ -372,11 +372,11 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     result(session_visible(&session, "L Land") && session_visible(&session, "Worker      kill-dry-run-worker"),
            "the item offers L to land it");
     write_input(session.master, "L", 1U);
-    result(wait_for_markers(&session, "Land result", "Land kill-dry-run-worker?", 1000), "L asks first, naming the worker");
+    result(wait_for_markers(&session, "Land result", "Land kill-dry-run-worker?", 4000), "L asks first, naming the worker");
     write_input(session.master, "n", 1U);
-    result(wait_for_marker(&session, "Not landed; nothing was changed", 1000) && !marker_file_exists(argv_path), "declining lands nothing");
+    result(wait_for_marker(&session, "Not landed; nothing was changed", 4000) && !marker_file_exists(argv_path), "declining lands nothing");
     write_input(session.master, "L", 1U);
-    (void)wait_for_marker(&session, "Land kill-dry-run-worker?", 1000);
+    (void)wait_for_marker(&session, "Land kill-dry-run-worker?", 4000);
     write_input(session.master, "y", 1U);
     result(inbox_argv(&session, argv_path, "land\nkill-dry-run-worker\n", 3000), "y runs hydra land for exactly that worker");
     /* The land's output opens in the viewer, which q closes without

@@ -360,6 +360,12 @@ static bool append_limit_enforced(const char *dir, size_t have, size_t more, rli
     fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0600);
     CHECK(fd >= 0, "probe file");
     CHECK(have == 0 || write(fd, bytes, have) == (ssize_t)have, "probe content");
+    /* A fresh descriptor, as wdr_event opens one per event: macOS applies
+     * the limit to an append through a descriptor already at the end of the
+     * file but not through one just opened, whose offset is still 0. */
+    close(fd);
+    fd = open(path, O_WRONLY | O_APPEND, 0600);
+    CHECK(fd >= 0, "reopen the probe file");
     CHECK(!getrlimit(RLIMIT_FSIZE, &saved), "file size limit");
     previous = signal(SIGXFSZ, SIG_IGN);
     CHECK(previous != SIG_ERR, "ignore SIGXFSZ");
