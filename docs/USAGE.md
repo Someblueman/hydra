@@ -803,7 +803,7 @@ One interaction model applies everywhere Hydra has the keys:
 | `Up` / `Down`, `j` / `k` | Select, or scroll a pane that scrolls; PgUp/PgDn page |
 | `Enter` | Open or activate the selection; it never approves, removes or runs anything |
 | `Esc` | One step back: close the top dialog, clear the filter, give focus back to the list, return to the screen a jump came from; it never quits |
-| `:` | Command palette: every action and CLI command (diff, claims, queue, approvals...), searchable, output shown in place |
+| `:` | Command palette: every action and CLI command (diff, claims, approvals...), searchable, output shown in place |
 | `ctrl+r` | Read everything again now |
 | `?`, `q` | Help for where you are, quit (agents keep running) |
 | `t` | Theme |
@@ -991,7 +991,7 @@ is always beside the list, and the details, the plan and the run are pages of
 the pane next to it. Approvals, failed checks, results to review, stopped
 terminals and leftover worktrees are all in Inbox, and you act on them there
 without typing a request ID. Read-only commands from `:` (diff, claims,
-queue...) open inside Hydra.
+scopes...) open inside Hydra.
 
 | Key | Was | Now |
 |-----|-----|-----|

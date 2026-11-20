@@ -23,7 +23,6 @@
 #include <langinfo.h>
 #include "../kettle/kettle.h"
 #include "../kettle/workspace.h"
-#include "../kettle/tree.h"
 #include "../kettle/terminal.h"
 #include "../kettle/pty_posix.h"
 #include "../kettle/input.h"

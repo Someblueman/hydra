@@ -16,7 +16,6 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
         {"status", "FAKE ACTION <status>"},
         {"claims", "FAKE ACTION <claim> <list>"},
         {"scopes", "FAKE ACTION <scope> <show> <feature-live>"},
-        {"queue", "FAKE ACTION <queue>"},
         {"resources", "FAKE ACTION <resource> <status> <feature-live>"},
         {"diff", "FAKE ACTION <diff> <feature-live>"},
         {"approvals", "FAKE ACTION <gate> <status> <feature-live>"},

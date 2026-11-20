@@ -179,7 +179,7 @@ case "${1:-}:${2:-}" in
         printf '\n'
         case "$*" in 'gc --policy orphaned --apply --path '*) [ $# -eq 6 ] && printf 'removed-orphan\t%s\n' "$6" ;; esac
         ;;
-    switch:*|regenerate:*|status:*|claim:list|collision:*|scope:show|queue:*|resource:status|diff:*|gate:status|doctor:*)
+    switch:*|regenerate:*|status:*|claim:list|collision:*|scope:show|resource:status|diff:*|gate:status|doctor:*)
         printf 'FAKE ACTION'
         printf ' <%s>' "$@"
         printf '\n'

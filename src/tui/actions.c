@@ -270,7 +270,6 @@ static const struct palette_command palette_commands[] = {
     {"diff", "Show diff of the selected head", "diff", NULL, ACTION_HEAD},
     {"claims", "Claims", "claim", "list", ACTION_GLOBAL},
     {"scopes", "Scopes of the selected head", "scope", "show", ACTION_HEAD},
-    {"queue", "Queue", "queue", NULL, ACTION_GLOBAL},
     {"resources", "Resources of the selected head", "resource", "status", ACTION_HEAD},
     {"approvals", "Approval gates of the selected head", "gate", "status", ACTION_HEAD},
     {"collisions", "Collisions with another head", "collision", NULL, ACTION_COMPARE},
