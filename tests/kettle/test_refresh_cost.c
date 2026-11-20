@@ -393,6 +393,12 @@ static void window_activity(const char *first, long long others) {
     kt_write(activity, text);
 }
 
+static void activity_opening(struct kt_session *s, double *waited) {
+    while (*waited < 20 && !logged("hydra ", "adapter activity")) { kt_pump(s, 0.2); *waited += 0.2; }
+    CHECK(logged("hydra ", "adapter activity") >= 1 && logged("hydra ", "adapter activity") <= logged("tmux ", "list-sessions"),
+          "opening on heads nobody recorded starts one recorder per refresh, not one per head");
+}
+
 /* Three silent heads nobody recorded yet are each recorded as quiet once,
  * one per refresh rather than all at once; after that refreshes go on and the
  * CLI is asked only to note that someone is watching. */
@@ -400,9 +406,7 @@ static void activity_steady(struct kt_session *s, const char *project, long long
     char since[64];
     double waited = 0;
     kt_format(since, sizeof(since), "\"state\":\"quiet\",\"since\":%lld,", silent_since);
-    while (waited < 20 && !logged("hydra ", "adapter activity")) { kt_pump(s, 0.2); waited += 0.2; }
-    CHECK(logged("hydra ", "adapter activity") >= 1 && logged("hydra ", "adapter activity") <= logged("tmux ", "list-sessions"),
-          "opening on heads nobody recorded starts one recorder per refresh, not one per head");
+    activity_opening(s, &waited);
     while (waited < 20 && logged("recorded ", " 0") < 3) { kt_pump(s, 0.5); waited += 0.5; }
     kt_pump(s, 2.5);
     CHECK(logged("recorded ", " 0") == 3, "the first state of every head is recorded once");
