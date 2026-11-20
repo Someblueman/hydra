@@ -193,45 +193,46 @@ test_is_dep_complete_without_lifecycle_evidence() {
 }
 
 # =============================================================================
-# Unit Tests for check_deps_complete
+# Unit Tests for wait_for_deps
 # =============================================================================
 
-test_check_deps_complete_empty() {
+test_wait_for_deps_empty() {
     echo ""
-    echo "Testing check_deps_complete with empty deps..."
+    echo "Testing wait_for_deps with empty deps..."
 
     setup_test_env
     test_dir="$TEST_DIR"
 
-    check_deps_complete "" 2>/dev/null
-    assert_success $? "check_deps_complete should succeed with empty deps"
+    wait_for_deps "" 1 1 2>/dev/null
+    assert_success $? "wait_for_deps should succeed with empty deps"
 
     cleanup_test_env "$test_dir"
 }
 
-test_check_deps_complete_dash() {
+test_wait_for_deps_dash() {
     echo ""
-    echo "Testing check_deps_complete with dash (no deps)..."
+    echo "Testing wait_for_deps with dash (no deps)..."
 
     setup_test_env
     test_dir="$TEST_DIR"
 
-    check_deps_complete "-" 2>/dev/null
-    assert_success $? "check_deps_complete should succeed with dash"
+    wait_for_deps "-" 1 1 2>/dev/null
+    assert_success $? "wait_for_deps should succeed with dash"
 
     cleanup_test_env "$test_dir"
 }
 
-test_check_deps_complete_nonexistent() {
+test_wait_for_deps_nonexistent() {
     echo ""
-    echo "Testing check_deps_complete with non-existent branches..."
+    echo "Testing wait_for_deps with non-existent branches..."
 
     setup_test_env
     test_dir="$TEST_DIR"
 
-    # Non-existent branches have no sessions, so they're complete
-    check_deps_complete "nonexistent1,nonexistent2" 2>/dev/null
-    assert_failure $? "check_deps_complete should keep non-existent branches pending"
+    # A branch without durable lifecycle evidence stays pending until the
+    # (one second) timeout; it is never treated as complete.
+    wait_for_deps "nonexistent1,nonexistent2" 1 1 2>/dev/null
+    assert_failure $? "wait_for_deps should keep non-existent branches pending"
 
     cleanup_test_env "$test_dir"
 }
@@ -253,9 +254,9 @@ test_check_circular_deps_self_reference
 test_check_circular_deps_no_cycle
 test_is_dep_complete_no_session
 test_is_dep_complete_without_lifecycle_evidence
-test_check_deps_complete_empty
-test_check_deps_complete_dash
-test_check_deps_complete_nonexistent
+test_wait_for_deps_empty
+test_wait_for_deps_dash
+test_wait_for_deps_nonexistent
 
 echo ""
 echo "================================"

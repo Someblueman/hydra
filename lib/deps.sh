@@ -133,35 +133,6 @@ is_dep_complete() {
     lifecycle_condition_met "$dep_branch" "$dep_condition" >/dev/null 2>&1
 }
 
-# Check if all dependencies are complete
-# Usage: check_deps_complete <deps_spec>
-# Returns: 0 if all complete, 1 if any pending
-check_deps_complete() {
-    deps_spec="$1"
-
-    if [ -z "$deps_spec" ] || [ "$deps_spec" = "-" ]; then
-        return 0
-    fi
-
-    remaining="$deps_spec"
-    while [ -n "$remaining" ]; do
-        dep="${remaining%%,*}"
-        if [ "$dep" = "$remaining" ]; then
-            remaining=""
-        else
-            remaining="${remaining#*,}"
-        fi
-
-        [ -z "$dep" ] && continue
-
-        if ! is_dep_complete "$dep"; then
-            return 1
-        fi
-    done
-
-    return 0
-}
-
 # Wait for all dependencies to complete
 # Usage: wait_for_deps <deps_spec> [timeout_seconds] [poll_interval]
 # Returns: 0 on success, 1 on timeout/failure
@@ -223,47 +194,6 @@ wait_for_deps() {
 # =============================================================================
 # Dependency Tree Display
 # =============================================================================
-
-# Get all branches that depend on a given branch
-# Usage: get_dependents <branch>
-# Returns: Space-separated list of dependent branches on stdout
-get_dependents() {
-    target="$1"
-    dependents=""
-
-    if ! state_has_heads; then
-        return 0
-    fi
-
-    while IFS=' ' read -r map_branch _session _ai _group _timestamp map_deps _pr; do
-        [ -z "$map_deps" ] || [ "$map_deps" = "-" ] && continue
-
-        # Check if target is in this branch's dependencies
-        remaining="$map_deps"
-        while [ -n "$remaining" ]; do
-            dep="${remaining%%,*}"
-            if [ "$dep" = "$remaining" ]; then
-                remaining=""
-            else
-                remaining="${remaining#*,}"
-            fi
-
-            dep_branch="${dep%%:*}"
-            if [ "$dep_branch" = "$target" ]; then
-                if [ -n "$dependents" ]; then
-                    dependents="$dependents $map_branch"
-                else
-                    dependents="$map_branch"
-                fi
-                break
-            fi
-        done
-    done <<EOF
-$(state_list_heads)
-EOF
-
-    echo "$dependents"
-}
 
 # Build a simple dependency tree for a branch
 # Usage: build_dep_tree <branch> [indent]
@@ -334,35 +264,4 @@ EOF
             echo ""
         done
     fi
-}
-
-# Count pending dependencies for a branch
-# Usage: count_pending_deps <deps_spec>
-# Returns: Number of pending dependencies on stdout
-count_pending_deps() {
-    deps_spec="$1"
-    count=0
-
-    if [ -z "$deps_spec" ] || [ "$deps_spec" = "-" ]; then
-        echo "0"
-        return
-    fi
-
-    remaining="$deps_spec"
-    while [ -n "$remaining" ]; do
-        dep="${remaining%%,*}"
-        if [ "$dep" = "$remaining" ]; then
-            remaining=""
-        else
-            remaining="${remaining#*,}"
-        fi
-
-        [ -z "$dep" ] && continue
-
-        if ! is_dep_complete "$dep"; then
-            count=$((count + 1))
-        fi
-    done
-
-    echo "$count"
 }
