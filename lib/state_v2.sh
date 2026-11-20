@@ -246,6 +246,8 @@ state_v2_verify() {
         return 1
     fi
     _sv2v_errors=0
+    _sv2v_newline='
+'
     for _sv2v_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
         [ -d "$_sv2v_project" ] || continue
         _sv2v_project_id="$(basename "$_sv2v_project")"
@@ -257,6 +259,20 @@ state_v2_verify() {
             echo "state v2: invalid project record $_sv2v_project" >&2
             _sv2v_errors=1
         fi
+        # The branches that more than one head of this project records, each
+        # between newlines: one read per head, where comparing every head with
+        # every other read each branch once per head. A branch is one line, so
+        # a newline cannot be part of it.
+        _sv2v_seen="$_sv2v_newline"
+        _sv2v_shared="$_sv2v_newline"
+        for _sv2v_head in "$_sv2v_project"/heads/head_*; do
+            [ -d "$_sv2v_head" ] || continue
+            _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
+            case "$_sv2v_seen" in
+                *"$_sv2v_newline$_sv2v_branch$_sv2v_newline"*) _sv2v_shared="$_sv2v_shared$_sv2v_branch$_sv2v_newline" ;;
+                *) _sv2v_seen="$_sv2v_seen$_sv2v_branch$_sv2v_newline" ;;
+            esac
+        done
         for _sv2v_head in "$_sv2v_project"/heads/head_*; do
             [ -d "$_sv2v_head" ] || continue
             _sv2v_head_id="$(basename "$_sv2v_head")"
@@ -309,15 +325,12 @@ state_v2_verify() {
                 fi
             done
             _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
-            for _sv2v_other in "$_sv2v_project"/heads/head_*; do
-                [ -d "$_sv2v_other" ] || continue
-                [ "$_sv2v_other" = "$_sv2v_head" ] && continue
-                if [ "$(sed -n '1p' "$_sv2v_other/branch" 2>/dev/null || true)" = "$_sv2v_branch" ]; then
+            case "$_sv2v_shared" in
+                *"$_sv2v_newline$_sv2v_branch$_sv2v_newline"*)
                     echo "state v2: duplicate branch identity '$_sv2v_branch' in $_sv2v_project" >&2
                     _sv2v_errors=1
-                    break
-                fi
-            done
+                    ;;
+            esac
         done
     done
     return "$_sv2v_errors"

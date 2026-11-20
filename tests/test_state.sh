@@ -103,6 +103,30 @@ printf 'observed-exit-zero\n' > "$head_two_dir/completion-policy"
 state_v2_verify
 assert_success $? "repaired required state verifies"
 
+# Two heads of one project on one branch: each is reported, by branch and
+# project. A branch that only begins like another is not a duplicate.
+head_one_dir="$(state_v2_head_dir "$project_id" "$head_one")"
+project_dir="$(state_v2_project_dir "$project_id")"
+printf 'feature-two\n' > "$head_one_dir/branch"
+duplicate_output="$(state_v2_verify 2>&1)"
+assert_failure $? "verification rejects two heads on one branch"
+duplicate_line="state v2: duplicate branch identity 'feature-two' in $project_dir"
+assert_equal "$duplicate_line
+$duplicate_line" "$duplicate_output" "verification names the shared branch and its project once per head"
+third_head="$(state_v2_create_head "$project_id" feature-three session-three - - 300 - - "$repo")"
+assert_equal "$duplicate_line
+$duplicate_line" "$(state_v2_verify 2>&1)" "a head on its own branch is not reported with the shared one"
+printf 'feature-tw\n' > "$head_one_dir/branch"
+state_v2_verify
+assert_success $? "a branch that begins like another is not a duplicate"
+rm "$head_one_dir/branch" "$(state_v2_head_dir "$project_id" "$third_head")/branch"
+assert_equal 2 "$(state_v2_verify 2>&1 | grep -c "^state v2: duplicate branch identity '' in $project_dir\$")" \
+    "heads without a branch record are reported as sharing the empty branch"
+printf 'feature-one\n' > "$head_one_dir/branch"
+printf 'feature-three\n' > "$(state_v2_head_dir "$project_id" "$third_head")/branch"
+state_v2_verify
+assert_success $? "distinct branches verify again"
+
 echo "===================================="
 echo "Test Results:"
 echo "Total:  $test_count"
