@@ -346,11 +346,6 @@ main() {
     test_json_escape_matches_bytewise
 
     # Unit tests for JSON helpers
-    test_json_kv
-    test_json_kv_with_quotes
-    test_json_kv_num
-    test_json_kv_bool
-    test_json_kv_null
     test_json_envelopes
 
     # Integration tests

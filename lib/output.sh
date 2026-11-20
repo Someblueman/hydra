@@ -11,12 +11,6 @@ print_success() {
     echo "  [OK] $1"
 }
 
-# Print failure message with [FAIL] prefix
-# Usage: print_failure <message>
-print_failure() {
-    echo "  [FAIL] $1"
-}
-
 # Print warning message with [WARN] prefix
 # Usage: print_warning <message>
 print_warning() {
@@ -27,18 +21,6 @@ print_warning() {
 # Usage: print_info <message>
 print_info() {
     echo "  [INFO] $1"
-}
-
-# Print a summary success line (no indent)
-# Usage: print_summary_success <message>
-print_summary_success() {
-    echo "[OK] $1"
-}
-
-# Print a summary failure line (no indent)
-# Usage: print_summary_failure <message>
-print_summary_failure() {
-    echo "[FAIL] $1"
 }
 
 # =============================================================================
@@ -84,34 +66,6 @@ json_escape() {
             done
         done
     }
-}
-
-# Output a JSON string key-value pair
-# Usage: json_kv <key> <value>
-# Returns: "key": "value" on stdout (no trailing comma)
-json_kv() {
-    printf '"%s": "%s"' "$1" "$(json_escape "$2")"
-}
-
-# Output a JSON numeric key-value pair
-# Usage: json_kv_num <key> <value>
-# Returns: "key": value on stdout (no trailing comma)
-json_kv_num() {
-    printf '"%s": %s' "$1" "$2"
-}
-
-# Output a JSON boolean key-value pair
-# Usage: json_kv_bool <key> <true|false>
-# Returns: "key": true/false on stdout (no trailing comma)
-json_kv_bool() {
-    printf '"%s": %s' "$1" "$2"
-}
-
-# Output a JSON null key-value pair
-# Usage: json_kv_null <key>
-# Returns: "key": null on stdout (no trailing comma)
-json_kv_null() {
-    printf '"%s": null' "$1"
 }
 
 json_string_or_null() {
