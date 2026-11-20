@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hydra-tui` no longer crashes at startup under a low stack limit, and waiting
   for Enter after a command that took the terminal no longer spins when
   terminal reads fail.
+- `hydra template create` run inside a head's session copies that head's
+  `.hydra/config.yml`. Before, it always wrote the generic template.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
@@ -42,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it.
 - `hydra state verify` finds duplicate branches in one pass per project
   instead of comparing every head with every other.
+- **`hydra list`, `status` and `switch` are much faster:** with five heads,
+  `hydra list` takes about 25 ms instead of about 670 ms and starts about 10
+  processes instead of about 380. State records are read by the shell itself,
+  the project id is resolved once per process, and each row loads its head
+  once. Output is unchanged.
+- State record writes start two processes instead of four; admission scans no
+  longer run `wc` and `tr` per record.
+- An unknown command fails without loading any library.
 - The native helpers compile without warnings at every GCC optimisation level
   (`-O0` to `-O3`, `-Os`, `-Og`); `make check-opt-levels` checks this.
   `install.sh` no longer treats compiler warnings as errors when it builds on
@@ -63,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `hydra-core capabilities`, `hydra-core json-string` and `hydra-core
   validate-state`, which nothing called.
+- 39 shell functions nothing called, `scripts/bench-tmux-control.sh`, and four
+  unreferenced screenshots under `assets/`.
 
 ## [4.0.0] - 2026-11-15
 
