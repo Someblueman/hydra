@@ -584,6 +584,7 @@ with host/provider status before another explicit copy.
 
 ```sh
 hydra fleet handshake --json              # this installation
+hydra fleet handshake HOST --json         # a registered host's own answer
 hydra fleet attention --json               # read-only exact task attention rollup
 hydra fleet review KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
 hydra fleet review-data KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
@@ -596,6 +597,10 @@ hydra fleet watch --interval 5 --timeout 5 --jobs 4
 The handshake exposes Hydra version, fleet/state/event/JSON protocols, native
 protocol expectations and executable presence, project mappings, capabilities,
 and supported signals. Native presence does not certify helper compatibility.
+`fleet handshake HOST` prints that answer (a `fleet-handshake` envelope plus
+`host`) and exits 0 for a compatible host; no capability gates it. A host that
+cannot be reached is `offline`, one without Hydra is `remote_failed`, and an
+incompatible one is `version_mismatch`.
 The coordinator requires Hydra 2.x or 3.x, fleet protocol 1, state 2, event 1, JSON 1,
 and the requested capability. A 2.x coordinator accepts only 2.x receivers, so a
 3.x receiver answers it with `version_mismatch`: upgrade the coordinator with or

@@ -65,6 +65,11 @@ case "$1" in
         printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
         printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-snapshot","data":{"heads":[]}}'
         exit 0 ;;
+    nocapsolo)
+        # A compatible receiver that advertises nothing, for the handshake alone.
+        cat > /dev/null
+        printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
+        exit 0 ;;
     refusing)
         # A compatible receiver whose command fails with its own error.
         cat > /dev/null
@@ -177,7 +182,25 @@ if "$root/bin/hydra" fleet list offline --json > "$fixture/specific" 2>&1; then 
 grep -q '"code":"offline"' "$fixture/specific"
 if "$root/bin/hydra" fleet task status nocap --id "$absent_task" > "$fixture/specific" 2>&1; then echo 'a host without the task protocol answered'; exit 1; fi
 grep -q '"code":"capability_unavailable"' "$fixture/specific"
-for host in nohydra nocap refusing; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
+# The handshake of a named host is the receiver's own answer: the capability
+# list it returns cannot be required to contain the handshake itself.
+"$root/bin/hydra" fleet handshake good --json > "$fixture/specific" || { echo 'fleet handshake HOST failed for a reachable host'; cat "$fixture/specific"; exit 1; }
+grep -q '"ok":true' "$fixture/specific"
+grep -q '"command":"fleet-handshake"' "$fixture/specific"
+grep -q '"fleet_protocol":1' "$fixture/specific"
+grep -q '"capabilities":\[' "$fixture/specific"
+grep -q '"host":"good"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake offline --json > "$fixture/specific" 2>&1; then echo 'an unreachable host shook hands'; exit 1; fi
+grep -q '"code":"offline"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake nohydra --json > "$fixture/specific" 2>&1; then echo 'a host without Hydra shook hands'; exit 1; fi
+grep -q '"code":"remote_failed"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake skew --json > "$fixture/specific" 2>&1; then echo 'an incompatible host shook hands'; exit 1; fi
+grep -q '"code":"version_mismatch"' "$fixture/specific"
+# A receiver whose handshake lists no capabilities still answers it.
+"$root/bin/hydra" remote add nocapsolo nocapsolo >/dev/null
+"$root/bin/hydra" fleet handshake nocapsolo --json > "$fixture/specific" || { echo 'fleet handshake HOST needs an advertised capability'; exit 1; }
+grep -q '"capabilities":\[\]' "$fixture/specific"
+for host in nohydra nocap nocapsolo refusing; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
 "$root/bin/hydra" fleet tui-data > "$fixture/tui-v1"
 [ "$(head -n 1 "$fixture/tui-v1")" = "$(printf 'HYDRA_FLEET_TUI\t1')" ]
 if grep -q '^T' "$fixture/tui-v1"; then echo 'legacy fleet data changed'; exit 1; fi

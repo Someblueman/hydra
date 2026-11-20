@@ -224,6 +224,10 @@ json_object *f_cli(int argc, char **argv) {
      * action is sent only to a receiver whose handshake has been judged. */
     observation = !strcmp(action, "list") || !strcmp(action, "doctor") || !strcmp(action, "admission");
     seconds = options.explicit_timeout ? options.seconds : ((!strcmp(action, "list") || !strcmp(action, "doctor")) ? 5 : 300);
+    /* The handshake is the receiver's capability list, so no capability gates
+     * it: its answer, judged, is the result (offline, remote_failed and
+     * version_mismatch stay distinct). */
+    if (!strcmp(action, "handshake")) return f_observe(&remote, "handshake", options.seconds);
     if (!observation) {
         result = f_observe(&remote, "handshake", options.seconds);
         if (!json_object_get_boolean(f_field(result, "ok"))) return result;
