@@ -159,11 +159,13 @@ timeout_code=$?
 assert_failure "$timeout_code" "timed-out exec returns failure"
 case "$timeout_json" in *'"exit_code":124'*) assert_success 0 "timed-out exec records status 124" ;; *) assert_success 1 "timed-out exec records status 124" ;; esac
 child_pid="$(sed -n '1p' "$child_pid_file")"
-if kill -0 "$child_pid" 2>/dev/null; then
-    assert_success 1 "timeout terminates command descendants"
-else
-    assert_success 0 "timeout terminates command descendants"
-fi
+# The descendant was terminated and then orphaned, so it stays visible to
+# `kill -0` until init reaps it, which some inits do on a schedule rather than
+# at once. The bound is far below the 20 seconds an unsignalled sleep would run.
+# shellcheck disable=SC2016 # $1 is expanded by the polling shell.
+WAIT_FOR_TIMEOUT=5 wait_for 'the timed-out descendant to be gone' \
+    sh -c '! kill -0 "$1" 2>/dev/null' sh "$child_pid"
+assert_success $? "timeout terminates command descendants"
 
 # A command can exit while its reparented child retains stdout and stderr.
 drain_started="$(date +%s)"
