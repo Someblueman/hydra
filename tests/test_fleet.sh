@@ -221,6 +221,9 @@ ssh_pid="$(cat "$HYDRA_TEST_SSH_PID")"
 kill -TERM "$coordinator"
 if wait "$coordinator"; then exit 1; fi
 coordinator=""
+# The cancelled ssh is orphaned, so it stays visible to kill -0 until init reaps it.
+attempt=0
+while kill -0 "$ssh_pid" 2>/dev/null && [ "$attempt" -lt 100 ]; do sleep 0.1; attempt=$((attempt + 1)); done
 if kill -0 "$ssh_pid" 2>/dev/null; then kill "$ssh_pid" 2>/dev/null || :; echo 'SSH survived cancellation'; exit 1; fi
 ssh_pid=""
 printf 'Fleet CLI transport, partial failures, and cancellation passed\n'
