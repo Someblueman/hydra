@@ -216,7 +216,7 @@ mktemp_adjacent() {
     if [ ! -d "$_ma_dir" ]; then
         hydra_private_mkdir "$_ma_dir" || return 1
     fi
-    (umask 077; exec mktemp "$_ma_dir/.hydra-tmp.XXXXXX")
+    (umask 077; mktemp "$_ma_dir/.hydra-tmp.XXXXXX")
 }
 
 # Atomically replace dest with tmpfile via rename. tmpfile must be same-FS.
