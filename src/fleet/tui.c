@@ -156,8 +156,9 @@ static int fleet_tui_v1(unsigned seconds, unsigned jobs) {
 }
 
 static int fleet_tui_v3(unsigned seconds, unsigned jobs) {
-    json_object *listed = f_aggregate("list", seconds, jobs), *observed = f_observation_aggregate(seconds, jobs);
-    json_object *list_hosts = f_field(f_field(listed, "data"), "hosts"), *observed_hosts = f_field(f_field(observed, "data"), "hosts"); size_t i;
+    /* One SSH session per host answers both the listing and the overview. */
+    json_object *list_hosts = NULL, *observed = f_observation_aggregate_listed(seconds, jobs, &list_hosts);
+    json_object *observed_hosts = f_field(f_field(observed, "data"), "hosts"); size_t i;
     puts("HYDRA_FLEET_TUI\t3");
     if (!json_object_is_type(list_hosts, json_type_array) && !json_object_is_type(observed_hosts, json_type_array))
         puts("R\tfleet\tall\tlimit or adapter failure\tobserved\tinspect CLI");
@@ -173,7 +174,7 @@ static int fleet_tui_v3(unsigned seconds, unsigned jobs) {
         if (!name || host_seen(list_hosts, name)) continue;
         host_record_v3(NULL, observed_host, NULL, name); task_records(observed_host, name); recovery_record(name, observed_host);
     }
-    json_object_put(listed); json_object_put(observed); return ferror(stdout) ? 1 : 0;
+    json_object_put(list_hosts); json_object_put(observed); return ferror(stdout) ? 1 : 0;
 }
 
 int f_tui_data(unsigned seconds, unsigned jobs, bool include_hosts) {

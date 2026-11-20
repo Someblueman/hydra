@@ -45,6 +45,10 @@ case "$1" in
         # An observation asks for the handshake on the command line and for
         # its action on standard input: one session, two answers.
         case "$2" in *'"action":"handshake"'*) printf '%s\n' "$handshake" ;; esac
+        # The control centre asks for the listing on the command line as well.
+        case "$2" in *'"action":"list"'*)
+            printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-snapshot","data":{"heads":[{"project_path":"/srv/slowgood","branch":"delayed","head_id":"head_delayed","current_instance":"instance_delayed","desired_state":"running"}]}}' ;;
+        esac
         case "$request" in
             *'"action":"handshake"'*)
                 printf '%s\n' "$handshake" ;;
@@ -102,6 +106,11 @@ grep -q '"command":"admission"' "$fixture/sessions-out"
 [ "$(sessions "$root/bin/hydra" fleet task status good --id "$absent_task")" -eq 1 ] || { echo 'fleet task status is not one SSH session'; exit 1; }
 grep -q '"ok":false' "$fixture/sessions-out"
 [ "$(sessions "$root/bin/hydra" fleet task cancel good --id "$absent_task")" -eq 2 ] || { echo 'fleet task cancel was not sent after a judged handshake'; exit 1; }
+# The control centre's remote data needs a host's listing and its overview:
+# both come from one session.
+[ "$(sessions "$root/bin/hydra" fleet tui-visual-data)" -eq 1 ] || { echo 'the control centre data is not one SSH session per host'; exit 1; }
+awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 && $6=="reachable" {found=1} END {exit !found}' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet tui-data)" -eq 1 ] || { echo 'the legacy remote data is not one SSH session per host'; exit 1; }
 "$root/bin/hydra" remote add muxed good --hydra "$root/bin/hydra" --multiplex
 : > "$fixture/ssh-argv"
 "$root/bin/hydra" fleet list muxed --json > "$fixture/muxed-result"

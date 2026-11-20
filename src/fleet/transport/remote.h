@@ -76,7 +76,17 @@ json_object *f_request_if_capable(const struct f_remote *remote, const char *cap
 /* Borrowed handshake data; shares the fleet observation compatibility gate. */
 bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);
+/* Two observations of one host in one SSH session: the return value is what
+ * f_observe(remote, action, seconds) returns and *first_result what
+ * f_observe(remote, first, seconds) returns, each the caller's. Neither is
+ * "handshake". */
+json_object *f_observe_pair(const struct f_remote *remote, const char *first, const char *action, unsigned seconds, json_object **first_result);
 json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs);
 /* Bounded remote observation aggregation with host-local stale-cache projection. */
 json_object *f_observation_aggregate(unsigned seconds, unsigned jobs);
+/* f_observation_aggregate, with each host's listing fetched in the same SSH
+ * session as its overview: *listed receives the rows of
+ * f_aggregate("list", ...)'s data.hosts as a caller-owned array, or NULL
+ * when the aggregate is refused for its size. */
+json_object *f_observation_aggregate_listed(unsigned seconds, unsigned jobs, json_object **listed);
 #endif

@@ -334,22 +334,42 @@ struct observation_worker {
     char path[F_PATH];
 };
 
-static int launch_observation_worker(struct observation_worker *worker, const char *directory, json_object *names, unsigned seconds) {
+/* With listed, the worker also fetches the host's listing in the same SSH
+ * session and writes both rows, {"listed":...,"observed":...}. */
+static int launch_observation_worker(struct observation_worker *worker, const char *directory, json_object *names, unsigned seconds, bool listed) {
     struct f_remote remote; json_object *row; const char *text, *name; pid_t pid;
     if (snprintf(worker->path, sizeof(worker->path), "%s/%zu", directory, worker->index) >= (int)sizeof(worker->path)) return -1;
     pid = worker_fork(&worker->done);
     if (pid != 0) { worker->pid = pid < 0 ? 0 : pid; return pid < 0 ? -1 : 0; }
     name = json_object_get_string(json_object_array_get_idx(names, worker->index));
-    row = f_remote_load(name, &remote) ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe(&remote, "overview", seconds);
-    f_string_add(row, "host", name); text = json_object_to_json_string_ext(row, JSON_C_TO_STRING_PLAIN);
+    if (listed) {
+        json_object *both = json_object_new_object(), *first = NULL;
+        if (revocation_blocked("transport", name)) first = revocation_error("fleet", "transport", name);
+        else if (f_remote_load(name, &remote)) first = f_error("fleet", "invalid_alias", name);
+        row = first ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe_pair(&remote, "list", "overview", seconds, &first);
+        f_string_add(first, "host", name); f_string_add(row, "host", name);
+        json_object_object_add(both, "listed", first); json_object_object_add(both, "observed", row);
+        row = both;
+    } else {
+        row = f_remote_load(name, &remote) ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe(&remote, "overview", seconds);
+        f_string_add(row, "host", name);
+    }
+    text = json_object_to_json_string_ext(row, JSON_C_TO_STRING_PLAIN);
     _exit(f_write(worker->path, text, strlen(text), false) ? 1 : 0);
 }
 
-static bool collect_observation_worker(struct observation_worker *worker, json_object *names, json_object *hosts, int64_t now, bool *partial) {
+static bool collect_observation_worker(struct observation_worker *worker, json_object *names, json_object *hosts, json_object *listed,
+                                       int64_t now, bool *partial) {
     int status; char *text; json_object *row; struct f_remote remote; const char *name;
     if (!worker->pid || !worker_reaped(worker->pid, &worker->done, &status)) return false;
     worker->pid = 0; name = json_object_get_string(json_object_array_get_idx(names, worker->index));
-    text = f_read(worker->path, OBSERVATION_CACHE_LIMIT); row = text ? f_parse(text) : NULL; free(text);
+    text = f_read(worker->path, listed ? F_LIMIT : OBSERVATION_CACHE_LIMIT); row = text ? f_parse(text) : NULL; free(text);
+    if (listed) {
+        json_object *both = row, *first = json_object_get(f_field(both, "listed"));
+        row = json_object_get(f_field(both, "observed")); json_object_put(both);
+        if (!first) { first = f_error("fleet", "worker_failed", "host worker did not return a result"); f_string_add(first, "host", name); }
+        json_object_array_add(listed, first);
+    }
     if (!row || f_remote_load(name, &remote)) {
         json_object_put(row); row = f_error("fleet-overview", "invalid_response", "host worker did not return a valid observation"); f_string_add(row, "host", name);
     } else row = decorate(row, &remote, now);
@@ -368,30 +388,30 @@ static void stop_observation_workers(struct observation_worker *workers, unsigne
 }
 
 static void launch_ready_workers(struct observation_worker *workers, json_object *names, size_t count, unsigned jobs,
-                                 unsigned seconds, const char *directory, size_t *next, unsigned *active) {
+                                 unsigned seconds, const char *directory, size_t *next, unsigned *active, bool listed) {
     unsigned i;
     for (i = 0; i < jobs && *next < count; i++) {
         if (workers[i].pid) continue;
         workers[i].index = (*next)++;
-        if (launch_observation_worker(&workers[i], directory, names, seconds)) { f_stopped = SIGTERM; break; }
+        if (launch_observation_worker(&workers[i], directory, names, seconds, listed)) { f_stopped = SIGTERM; break; }
         (*active)++;
     }
 }
 
-static void collect_ready_workers(struct observation_worker *workers, json_object *names, json_object *hosts,
+static void collect_ready_workers(struct observation_worker *workers, json_object *names, json_object *hosts, json_object *listed,
                                   unsigned jobs, int64_t now, bool *partial, unsigned *active, size_t *finished) {
     unsigned i;
-    for (i = 0; i < jobs; i++) if (collect_observation_worker(&workers[i], names, hosts, now, partial)) {
+    for (i = 0; i < jobs; i++) if (collect_observation_worker(&workers[i], names, hosts, listed, now, partial)) {
         (*active)--; (*finished)++;
     }
 }
 
-static void run_observation_workers(json_object *names, json_object *hosts, struct observation_worker *workers,
+static void run_observation_workers(json_object *names, json_object *hosts, json_object *listed, struct observation_worker *workers,
                                     size_t count, unsigned jobs, unsigned seconds, const char *directory, int64_t now, bool *partial) {
     size_t next = 0, finished = 0; unsigned active = 0;
     while (finished < count && !f_stopped) {
-        launch_ready_workers(workers, names, count, jobs, seconds, directory, &next, &active);
-        collect_ready_workers(workers, names, hosts, jobs, now, partial, &active, &finished);
+        launch_ready_workers(workers, names, count, jobs, seconds, directory, &next, &active, listed != NULL);
+        collect_ready_workers(workers, names, hosts, listed, jobs, now, partial, &active, &finished);
         if (active) {
             int ends[16]; unsigned waiting = 0, i;
             for (i = 0; i < jobs; i++) if (workers[i].pid) ends[waiting++] = workers[i].done;
@@ -402,15 +422,21 @@ static void run_observation_workers(json_object *names, json_object *hosts, stru
 }
 
 json_object *f_observation_aggregate(unsigned seconds, unsigned jobs) {
+    return f_observation_aggregate_listed(seconds, jobs, NULL);
+}
+json_object *f_observation_aggregate_listed(unsigned seconds, unsigned jobs, json_object **listed) {
     json_object *names = f_remotes(), *hosts = json_object_new_array(), *result, *data = json_object_new_object();
     size_t count = json_object_array_length(names); struct observation_worker workers[16] = {{0}};
     char directory[] = "/tmp/hydra-fleet-observe.XXXXXX"; bool partial = false; int64_t now = (int64_t)time(NULL);
+    if (listed) *listed = NULL;
     if (count > 16 || !jobs || jobs > 16 || !mkdtemp(directory)) {
         json_object_put(names); json_object_put(hosts); json_object_put(data);
         return f_error("fleet-overview", "limit", "fleet observation supports at most 16 hosts and 16 workers");
     }
-    run_observation_workers(names, hosts, workers, count, jobs, seconds, directory, now, &partial);
+    if (listed) *listed = json_object_new_array();
+    run_observation_workers(names, hosts, listed ? *listed : NULL, workers, count, jobs, seconds, directory, now, &partial);
     rmdir(directory); json_object_put(names); json_object_array_sort(hosts, host_order);
+    if (listed) json_object_array_sort(*listed, host_order);
     json_object_object_add(data, "hosts", hosts); json_object_object_add(data, "partial", json_object_new_boolean(partial));
     if (f_stopped) { json_object_put(data); return f_error("fleet-overview", "cancelled", "observation was interrupted; cached snapshots remain available"); }
     result = f_success("fleet-overview", data); return result;
