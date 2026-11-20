@@ -49,6 +49,7 @@ observe() {
         "$HYDRA_BIN" $_ob_command > "$_ob_file.out" 2> "$_ob_file.err"
         printf '%s\n' "$?" > "$_ob_file.status"
         sed -e 's/[0-9][0-9]*[smhd]\( [0-9][0-9]*[smhd]\)*$/AGE/' \
+            -e 's/([0-9][0-9]*[smhd]\( [0-9][0-9]*[smhd]\)*)/(AGE)/g' \
             -e 's/"duration_seconds": *[0-9]*/"duration_seconds": AGE/g' \
             -e 's/"duration_human": *"[^"]*"/"duration_human": "AGE"/g' \
             "$_ob_file.out" > "$_ob_file.out.normal"
