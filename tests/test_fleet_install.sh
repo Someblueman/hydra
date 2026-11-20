@@ -117,8 +117,8 @@ install_fleet "$fixture/disabled" never
 assert_success $? "never mode installs the shell with a fleet binary available"
 grep -q 'Workflows are unavailable' "$fixture/install.log"
 assert_success $? "never mode says that workflows are unavailable"
-test ! -e "$fixture/disabled/libexec/hydra/hydra-fleet"
-assert_success $? "never mode omits the fleet helper from a fresh prefix"
+if [ -e "$fixture/disabled/libexec/hydra/hydra-fleet" ]; then omitted=1; else omitted=0; fi
+assert_success "$omitted" "never mode omits the fleet helper from a fresh prefix"
 
 rm "$source_tree/build/hydra-fleet"
 install_fleet "$fixture/missing" required

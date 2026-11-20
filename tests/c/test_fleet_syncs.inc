@@ -1,7 +1,9 @@
 /* Directory syncs after a rename or a removal. RLIMIT_FSIZE cannot make a
  * directory sync fail, so this test binary carries its own fsync: it records
  * which directories were synced (by device and inode) and, while sync_fail
- * is set, fails those syncs with that errno. Files go to fdatasync, which is as good for a test. The
+ * is set, fails those syncs with that errno. A file sync succeeds without
+ * reaching the disk: no case here needs file durability, and macOS declares
+ * no fdatasync to pass it to. The
  * code under test reaches it because the helper library is linked into the
  * test statically. A case asserts that its directory was synced exactly once
  * more, that a failed sync is reported as the caller promises, and that a
@@ -16,7 +18,7 @@ int fsync(int fd) {
         if (sync_target.error && sync_target.dev == st.st_dev && sync_target.ino == st.st_ino) { errno = sync_target.error; return -1; }
         return 0;
     }
-    return fdatasync(fd);
+    return 0;
 }
 /* From now on the directory at path fails its syncs with error (0: none).
  * Only that directory: staging directories are synced by the writes that
