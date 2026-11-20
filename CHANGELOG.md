@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal reads fail.
 - `hydra template create` run inside a head's session copies that head's
   `.hydra/config.yml`. Before, it always wrote the generic template.
+- **Workflow event locks:** a lock left without an owner record no longer
+  causes every later event of that run to be dropped; it is recovered after
+  five seconds without change. Two writers can no longer both break one stale
+  lock and write the same sequence number.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
@@ -42,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses, so a store the shell rejects is rejected by both. `--native`
   reports on stderr why the helper was not used; the new `--shell` never runs
   it.
+- **The native workflow run driver is the default** when the installed
+  `hydra-fleet` supports it. The shell driver remains the fallback when there
+  is no helper, and `HYDRA_NATIVE_DRIVER=0` selects it. `hydra workflow
+  status` and each `run.running` event name the driver that ran: the first
+  line of `workflow status` changes and its JSON gains a `driver` member.
+- The native driver numbers a new event from the bytes appended since its last
+  one instead of re-reading `events.jsonl` each time.
 - `hydra state verify` finds duplicate branches in one pass per project
   instead of comparing every head with every other.
 - **`hydra list`, `status` and `switch` are much faster:** with five heads,
@@ -67,6 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: every job has a timeout; pull requests also run a macOS native lane, a
   sanitizer lane and the optimisation-level check; a release branch without a
   pinned helper digest prints a notice instead of failing.
+- CI: both run drivers are tested. `make test` and `make test-fleet` use the
+  native driver; `make test-shell-driver` forces the shell driver and compares
+  the two; pull requests run the short comparison
+  (`make test-driver-differential-fast`).
 - `make bench-core` runs again and reports 5, 20 and 60 heads; `make
   bench-tui` measures stores that contain heads (its fixture had none).
 
