@@ -47,6 +47,6 @@ cmd_fleet_local() (
     case "$_fl_signal" in INT) _fl_key=C-c ;; *)
         cli_error fleet-local unsupported_signal 'only foreground interrupt (INT) is supported' 'use workflow cancel for workflow cancellation'; exit 1 ;;
     esac
-    tmux send-keys -t "$_fl_session:0.0" "$_fl_key" || exit 1
+    tmux send-keys -t "=$_fl_session:0.0" "$_fl_key" || exit 1
     json_success fleet-local "{\"instance\":\"$LIFECYCLE_INSTANCE_ID\",\"signal\":\"INT\",\"delivered\":true}"
 )

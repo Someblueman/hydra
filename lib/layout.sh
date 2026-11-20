@@ -131,7 +131,7 @@ save_layout() {
     (umask 077; mkdir -p "$HYDRA_HOME/layouts" && { [ -e "$layout_file" ] || : > "$layout_file"; }) || return 1
 
     # Save layout string
-    tmux list-windows -t "$session" -F '#{window_layout}' > "$layout_file" || return 1
+    tmux list-windows -t "$(tmux_exact_target "$session")" -F '#{window_layout}' > "$layout_file" || return 1
     
     return 0
 }
@@ -162,7 +162,7 @@ restore_layout() {
     # Read and apply layout
     layout="$(cat "$layout_file")"
     if [ -n "$layout" ]; then
-        tmux select-layout -t "$session" "$layout" 2>/dev/null || true
+        tmux select-layout -t "$(tmux_exact_target "$session")" "$layout" 2>/dev/null || true
     fi
     
     return 0

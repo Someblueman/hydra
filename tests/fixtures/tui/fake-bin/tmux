@@ -35,6 +35,9 @@ case "${1:-}" in
             if [ "$1" = -t ] && [ $# -ge 2 ]; then wanted="$2"; break; fi
             shift
         done
+        # Accept tmux's exact-match form "=<session>:" as well as a bare name.
+        wanted="${wanted#=}"
+        wanted="${wanted%%:*}"
         printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | grep -Fqx "$wanted"
         ;;
     capture-pane)

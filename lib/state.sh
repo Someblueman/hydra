@@ -212,8 +212,11 @@ generate_session_name() {
     _gsn_branch="$1"
     [ -n "$_gsn_branch" ] || { echo "Error: Branch is required" >&2; return 1; }
     _gsn_base="$(printf '%s' "$_gsn_branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
+    # "=name:" is tmux's exact session match; a bare name would also report a
+    # longer session it is a prefix of. (Inline: this file loads without
+    # lib/tmux.sh and its tmux_exact_target for some commands.)
     if try_lock "$_gsn_base"; then
-        if ! tmux has-session -t "$_gsn_base" 2>/dev/null; then
+        if ! tmux has-session -t "=$_gsn_base:" 2>/dev/null; then
             printf '%s\n' "$_gsn_base"
             return 0
         fi
@@ -223,7 +226,7 @@ generate_session_name() {
     while [ "$_gsn_number" -le 100 ]; do
         _gsn_candidate="${_gsn_base}_${_gsn_number}"
         if try_lock "$_gsn_candidate"; then
-            if ! tmux has-session -t "$_gsn_candidate" 2>/dev/null; then
+            if ! tmux has-session -t "=$_gsn_candidate:" 2>/dev/null; then
                 printf '%s\n' "$_gsn_candidate"
                 return 0
             fi

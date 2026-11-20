@@ -54,6 +54,23 @@ test_tmux_session_exists_validation() {
     assert_failure $? "tmux_session_exists should fail for non-existent session"
 }
 
+# The exact-match target form every tmux call site uses for a named session.
+test_tmux_exact_target() {
+    echo "Testing tmux_exact_target..."
+
+    assert_equal '=zed:' "$(tmux_exact_target zed)" "a session name becomes an exact session target"
+    assert_equal '=zed:0.0' "$(tmux_exact_target zed:0.0)" "a session:window.pane target keeps its window and pane"
+    assert_equal '=zed:' "$(tmux_exact_target zed:)" "a session: target stays a session target"
+    assert_equal '=zed:@4' "$(tmux_exact_target zed:@4)" "a session:window-id target keeps the window id"
+    # shellcheck disable=SC2016 # A literal tmux session id, not an expansion.
+    assert_equal '=$3:' "$(tmux_exact_target '$3')" "a session id stays an id"
+    assert_equal '=-:' "$(tmux_exact_target -)" "the headless placeholder names no session"
+    assert_equal '=zed:' "$(tmux_exact_target '=zed:')" "an exact target is left alone"
+    assert_equal '@4' "$(tmux_exact_target @4)" "a window id is left alone"
+    assert_equal '%7' "$(tmux_exact_target %7)" "a pane id is left alone"
+    assert_equal '' "$(tmux_exact_target '')" "an empty target stays empty"
+}
+
 # Test create_session parameter validation
 test_create_session_validation() {
     echo "Testing create_session parameter validation..."
@@ -406,6 +423,18 @@ EOF
     done
     assert_equal "first-pane" "$(cat "$_cse_dir/split" 2>/dev/null)" "panes created later inherit the session environment"
 
+    # tmux itself resolves a bare prefix to the one session that starts with it.
+    tmux_session_exists "hydra-env-pl"
+    assert_failure $? "a prefix of a running session's name is not an existing session"
+    kill_session "hydra-env-pl" 2>/dev/null
+    assert_failure $? "kill_session refuses a prefix of a running session's name"
+    send_keys_to_session "hydra-env-pl" "true" 2>/dev/null
+    assert_failure $? "send_keys_to_session refuses a prefix of a running session's name"
+    tmux has-session -t '=hydra-env-plain' 2>/dev/null
+    assert_success $? "the session whose name was only prefixed is still running"
+    kill_session "hydra-env-plain" 2>/dev/null
+    assert_success $? "kill_session removes the session it names"
+
     tmux kill-server 2>/dev/null || true
     PATH="$_cse_path"
     export PATH
@@ -418,6 +447,7 @@ echo "=============================================="
 
 test_check_tmux_version
 test_tmux_version_at_least
+test_tmux_exact_target
 test_tmux_session_exists_validation
 test_create_session_validation
 test_create_session_normalizes_pane_target

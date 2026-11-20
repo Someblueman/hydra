@@ -63,6 +63,30 @@ if git show-ref --verify --quiet refs/heads/kill-dead; then assert_success 0 "ki
 if [ ! -d "$dead_path" ]; then assert_success 0 "dead-session worktree is removed"; else assert_success 1 "dead-session worktree is removed"; fi
 assert_equal stopped "$(sed -n '1p' "$(head_dir kill-dead)/desired-state")" "dead head is marked stopped"
 
+# tmux resolves a bare `-t zed` by prefix once session "zed" is gone, so a head
+# whose name is a prefix of another head's must never reach that head's session.
+"$HYDRA_BIN" spawn zed --no-agent >/dev/null
+"$HYDRA_BIN" spawn zed-two --no-agent >/dev/null
+tmux kill-session -t '=zed'
+if tmux has-session -t '=zed-two' 2>/dev/null; then assert_success 0 "prefix fixture: the longer head's session is running"; else assert_success 1 "prefix fixture: the longer head's session is running"; fi
+prefix_lifecycle="$("$HYDRA_BIN" lifecycle zed 2>&1)"
+case "$prefix_lifecycle" in
+    *"liveness: live"*) assert_success 1 "a head whose session is gone is not live because a longer-named session exists"; echo "  Actual: $prefix_lifecycle" ;;
+    *"liveness: "*) assert_success 0 "a head whose session is gone is not live because a longer-named session exists" ;;
+    *) assert_success 1 "lifecycle reports the liveness of the shorter head"; echo "  Actual: $prefix_lifecycle" ;;
+esac
+prefix_kill="$("$HYDRA_BIN" kill zed --force 2>&1)"
+assert_success $? "the shorter head is torn down without its session"
+case "$prefix_kill" in
+    *"Killing tmux session"*) assert_success 1 "kill finds no session to kill for the shorter head"; echo "  Actual: $prefix_kill" ;;
+    *) assert_success 0 "kill finds no session to kill for the shorter head" ;;
+esac
+if tmux has-session -t '=zed-two' 2>/dev/null; then assert_success 0 "kill of the shorter head leaves the longer head's session running"; else assert_success 1 "kill of the shorter head leaves the longer head's session running"; fi
+assert_equal running "$(sed -n '1p' "$(head_dir zed-two)/desired-state")" "the longer head stays desired running"
+"$HYDRA_BIN" kill zed-two --force >/dev/null
+assert_success $? "the longer head is still killable by its own name"
+if tmux has-session -t '=zed-two' 2>/dev/null; then assert_success 1 "the longer head's own kill removes its session"; else assert_success 0 "the longer head's own kill removes its session"; fi
+
 "$HYDRA_BIN" spawn kill-dirty --no-agent >/dev/null
 dirty_path="$("$HYDRA_BIN" path kill-dirty)"
 printf 'dirty\n' > "$dirty_path/tracked"

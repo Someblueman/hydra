@@ -216,7 +216,10 @@ lifecycle_liveness() {
         esac
         return 0
     fi
-    if [ -n "$_ll_session" ] && tmux has-session -t "$_ll_session" 2>/dev/null; then
+    # "=name:" is tmux's exact session match: a bare name also selects another
+    # head's session that it is a prefix of. (Inline: fleet-local loads this
+    # file without lib/tmux.sh and its tmux_exact_target.)
+    if [ -n "$_ll_session" ] && tmux has-session -t "=$_ll_session:" 2>/dev/null; then
         printf 'live\n'
     else
         printf 'stopped\n'
@@ -436,14 +439,14 @@ lifecycle_archive_transcript() {
     chmod 700 "$_lat_dir" 2>/dev/null || true
     _lat_tmp="$(mktemp_adjacent "$_lat_dir/$LIFECYCLE_INSTANCE_ID.txt")" || return 1
     if [ "$_lat_policy" = redacted ]; then
-        tmux capture-pane -p -S -2000 -t "$_lat_session:0.0" 2>/dev/null | \
+        tmux capture-pane -p -S -2000 -t "=$_lat_session:0.0" 2>/dev/null | \
             sed -e 's/\([A-Za-z_][A-Za-z0-9_]*TOKEN=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*SECRET=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*PASSWORD=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*KEY=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/sk-[A-Za-z0-9_-][A-Za-z0-9_-]*/[REDACTED]/g' | tail -c "$_lat_max" > "$_lat_tmp"
     else
-        tmux capture-pane -p -S -2000 -t "$_lat_session:0.0" 2>/dev/null | tail -c "$_lat_max" > "$_lat_tmp"
+        tmux capture-pane -p -S -2000 -t "=$_lat_session:0.0" 2>/dev/null | tail -c "$_lat_max" > "$_lat_tmp"
     fi
     chmod 600 "$_lat_tmp" 2>/dev/null || true
     atomic_replace "$_lat_dir/$LIFECYCLE_INSTANCE_ID.txt" "$_lat_tmp" || return 1

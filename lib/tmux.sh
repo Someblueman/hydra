@@ -84,6 +84,26 @@ tmux_shell_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+# Exact-match form of a tmux target that names a session.
+# Usage: tmux_exact_target <session>[:<window>[.<pane>]]
+# tmux resolves a bare `-t name` by exact name, then by unique prefix, then as
+# an fnmatch pattern, so once session "zed" is gone `-t zed` selects "zed-two".
+# A leading "=" forces an exact session match. The ":" keeps the name in the
+# session position for commands whose target is a window or a pane (tmux reads
+# "=zed" there as a pane called "=zed"); "=zed:" is accepted by every
+# session, window and pane command. Session ids keep working ("=$3:" is the
+# exact id). Window ids (@N), pane ids (%N), {tokens}, the empty string and
+# targets that are already exact pass through unchanged.
+# Libraries that are also loaded without this file (lifecycle.sh, state.sh,
+# cmd_fleet_local.sh, tui_attach.sh) write the same "=<session>:" form inline.
+tmux_exact_target() {
+    case "$1" in
+        ''|=*|@*|%*|'{'*) printf '%s\n' "$1" ;;
+        *:*) printf '=%s\n' "$1" ;;
+        *) printf '=%s:\n' "$1" ;;
+    esac
+}
+
 # Check if a tmux session exists
 # Usage: tmux_session_exists <session_name>
 # Returns: 0 if exists, 1 if not
@@ -96,7 +116,7 @@ tmux_session_exists() {
     # Always live-probe. A loaded snapshot is for batch list/status/TUI
     # observation only; mutation paths (spawn, send-keys, kill) must not
     # miss a session created after the snapshot was taken.
-    tmux has-session -t "$session" 2>/dev/null
+    tmux has-session -t "$(tmux_exact_target "$session")" 2>/dev/null
 }
 
 # Snapshot lookup for observation loops that just called tmux_load_snapshot.
@@ -169,7 +189,7 @@ send_keys_to_target() {
         return 1
     fi
 
-    tmux send-keys -t "$pane_target" "$keys" Enter || return 1
+    tmux send-keys -t "$(tmux_exact_target "$pane_target")" "$keys" Enter || return 1
 
     return 0
 }
@@ -200,7 +220,7 @@ find_broadcast_pane() {
         return 1
     fi
 
-    _fb_panes="$(tmux list-panes -t "$_fb_session" -F '#{window_index}.#{pane_index} #{pane_current_command}' 2>/dev/null || true)"
+    _fb_panes="$(tmux list-panes -t "$(tmux_exact_target "$_fb_session")" -F '#{window_index}.#{pane_index} #{pane_current_command}' 2>/dev/null || true)"
     if [ -z "$_fb_panes" ]; then
         return 1
     fi
@@ -303,6 +323,7 @@ create_session() {
             shift
         done
     fi
+    _cs_target="$(tmux_exact_target "$session")"
     # Create detached session with specified working directory
     if [ "$_cs_env_flags" -eq 1 ]; then
         if [ -n "$_cs_command" ]; then
@@ -317,8 +338,8 @@ create_session() {
             tmux new-session -d -s "$session" -c "$start_dir" || return 1
         fi
         for _cs_pair in "$@"; do
-            tmux set-environment -t "$session" "${_cs_pair%%=*}" "${_cs_pair#*=}" || {
-                tmux kill-session -t "$session" 2>/dev/null || true
+            tmux set-environment -t "$_cs_target" "${_cs_pair%%=*}" "${_cs_pair#*=}" || {
+                tmux kill-session -t "$_cs_target" 2>/dev/null || true
                 return 1
             }
         done
@@ -326,21 +347,21 @@ create_session() {
 
     # Hydra's public pane-target contract is session:0.0. Normalize indexes even
     # when the user's global tmux configuration starts windows or panes at 1.
-    _created_window="$(tmux display-message -p -t "$session" '#{window_index}' 2>/dev/null)" || {
-        tmux kill-session -t "$session" 2>/dev/null || true
+    _created_window="$(tmux display-message -p -t "$_cs_target" '#{window_index}' 2>/dev/null)" || {
+        tmux kill-session -t "$_cs_target" 2>/dev/null || true
         return 1
     }
-    tmux set-option -t "$session" base-index 0 >/dev/null || {
-        tmux kill-session -t "$session" 2>/dev/null || true
+    tmux set-option -t "$_cs_target" base-index 0 >/dev/null || {
+        tmux kill-session -t "$_cs_target" 2>/dev/null || true
         return 1
     }
-    tmux set-window-option -t "$session" pane-base-index 0 >/dev/null || {
-        tmux kill-session -t "$session" 2>/dev/null || true
+    tmux set-window-option -t "$_cs_target" pane-base-index 0 >/dev/null || {
+        tmux kill-session -t "$_cs_target" 2>/dev/null || true
         return 1
     }
     if [ "$_created_window" != "0" ]; then
-        tmux move-window -s "$session:$_created_window" -t "$session:0" || {
-            tmux kill-session -t "$session" 2>/dev/null || true
+        tmux move-window -s "$(tmux_exact_target "$session:$_created_window")" -t "$(tmux_exact_target "$session:0")" || {
+            tmux kill-session -t "$_cs_target" 2>/dev/null || true
             return 1
         }
     fi
@@ -520,7 +541,7 @@ kill_session() {
         return 1
     fi
     
-    tmux kill-session -t "$session" || return 1
+    tmux kill-session -t "$(tmux_exact_target "$session")" || return 1
     tmux_clear_snapshot
     return 0
 }
@@ -551,10 +572,10 @@ switch_to_session() {
     # Check if we're inside tmux
     if [ -n "${TMUX:-}" ]; then
         # Inside tmux, use switch-client
-        tmux switch-client -t "$session" || return 1
+        tmux switch-client -t "$(tmux_exact_target "$session")" || return 1
     else
         # Outside tmux, attach to session
-        tmux attach-session -t "$session" || return 1
+        tmux attach-session -t "$(tmux_exact_target "$session")" || return 1
     fi
     
     return 0
@@ -593,7 +614,7 @@ rename_session() {
         return 1
     fi
     
-    tmux rename-session -t "$old_name" "$new_name" || return 1
+    tmux rename-session -t "$(tmux_exact_target "$old_name")" "$new_name" || return 1
     
     return 0
 }

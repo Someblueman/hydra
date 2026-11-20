@@ -16,8 +16,15 @@ fi
 cmd="$1"
 [ -n "$cmd" ] && shift
 
+# Session named by a target. Hydra passes tmux's exact-match form
+# "=<session>:[window[.pane]]"; a bare "<session>[:...]" is read the same way.
+_target_session() {
+    _ts="${1#=}"
+    printf '%s\n' "${_ts%%:*}"
+}
+
 _has_session() {
-    _name="$1"
+    _name="$(_target_session "$1")"
     [ -n "$_name" ] || return 1
     printf '%s\n' "${HYDRA_TEST_TMUX_SESSIONS:-}" | grep -Fqx "$_name"
 }
@@ -49,7 +56,7 @@ case "$cmd" in
         _fmt=""
         while [ $# -gt 0 ]; do
             case "$1" in
-                -t) shift; _filter="$1"; shift ;;
+                -t) shift; _filter="$(_target_session "$1")"; shift ;;
                 -F) shift; _fmt="$1"; shift ;;
                 -a) shift ;;
                 *) shift ;;
