@@ -99,217 +99,222 @@ $(error FLEET_SHARD must be all, odd or even)
 endif
 test-fleet-cases: $(addprefix fleet-case-,$(FLEET_SELECTED_CASES))
 
+# A case logs and reports under its target name. A lane that runs the same
+# cases again in another configuration (test-native-driver) sets
+# FLEET_CASE_PREFIX, so the two never write one log file.
+FLEET_CASE_PREFIX ?=
+
 fleet-case-native-plan:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-plan
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-plan
 
 fleet-case-native-plan-expansion:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-plan-expansion
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-plan-expansion
 
 fleet-case-native-workflow-schedule:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-workflow-schedule
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-workflow-schedule
 
 fleet-case-native-agent-auth:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-agent-auth
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-agent-auth
 
 fleet-case-native-agent-profile:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-agent-profile
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-agent-profile
 
 fleet-case-shell-agent-auth:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_agent_auth.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_agent_auth.sh
 
 fleet-case-shell-agent-locate:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_agent_locate.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_agent_locate.sh
 
 fleet-case-shell-remote-agents:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_agents.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_remote_agents.sh
 
 fleet-case-native-agent-recipes:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-agent-recipes
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-agent-recipes
 
 fleet-case-shell-agent-execution:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_agent_execution.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_agent_execution.sh
 
 fleet-case-native-workflow-data:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-workflow-data
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-workflow-data
 
 fleet-case-shell-workflow-data:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_data.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_data.sh
 
 fleet-case-native-workflow-contract-cases:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
 
 fleet-case-dag-replay-1:
-	@HYDRA_TEST_DAG_REPLAY=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_REPLAY=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1:
-	@HYDRA_TEST_DAG_LOST_ACK=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-result-lost-1:
-	@HYDRA_TEST_DAG_RESULT_LOST=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_RESULT_LOST=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-result-bad-1:
-	@HYDRA_TEST_DAG_RESULT_BAD=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_RESULT_BAD=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-parallelism-1:
-	@HYDRA_TEST_DAG_PARALLELISM=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_PARALLELISM=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-crash-2:
-	@HYDRA_TEST_DAG_CRASH=2 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_CRASH=2 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-source-1-dag-source-tamper-1:
-	@HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-plan-source-1:
-	@HYDRA_TEST_PLAN_SOURCE=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_SOURCE=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-source-dirty:
-	@HYDRA_TEST_PLAN_SOURCE=dirty BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_SOURCE=dirty BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-dispatch:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="dispatch" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="dispatch" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-key:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="key" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="key" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-attempt:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="attempt" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="attempt" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-placement:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="placement" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="placement" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-cancel:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="cancel" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="cancel" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-dag-lost-ack-1-dag-fault-cancel-offline:
-	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="cancel-offline" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_task.sh
+	@HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="cancel-offline" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_task.sh
 
 fleet-case-headless-1:
-	@HYDRA_TEST_HEADLESS=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan.sh
+	@HYDRA_TEST_HEADLESS=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan.sh
 
 fleet-case-shell-headless-plan-adapter:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_headless_plan_adapter.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_headless_plan_adapter.sh
 
 fleet-case-shell-workflow-plan:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan.sh
 
 fleet-case-shell-workflow-plan-expansion:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_expansion.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_expansion.sh
 
 fleet-case-shell-workflow-plan-v3:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_v3.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_v3.sh
 
 fleet-case-plan-task-verdict-pass:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="pass" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="pass" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-fail:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="fail" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="fail" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-inconclusive:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="inconclusive" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="inconclusive" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-stale-subject:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="stale-subject" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="stale-subject" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-stale-validator:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="stale-validator" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="stale-validator" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-missing-coverage:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="missing-coverage" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="missing-coverage" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-crash:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="crash" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="crash" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-bad-artifact:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="bad-artifact" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="bad-artifact" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-task-verdict-changed-harness:
-	@HYDRA_TEST_PLAN_TASK_VERDICT="changed-harness" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_TASK_VERDICT="changed-harness" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-pass-plan-repair-budget-1:
-	@HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_REPAIR_BUDGET=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_REPAIR_BUDGET=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-pass:
-	@HYDRA_TEST_PLAN_REPAIR="pass" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR="pass" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-exhaust:
-	@HYDRA_TEST_PLAN_REPAIR="exhaust" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR="exhaust" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-same:
-	@HYDRA_TEST_PLAN_REPAIR="same" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR="same" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-crash:
-	@HYDRA_TEST_PLAN_REPAIR="crash" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR="crash" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-combine:
-	@HYDRA_TEST_PLAN_REPAIR="combine" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR="combine" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-plan-repair-pass-plan-source-1-plan-repair-fault-1:
-	@HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_SOURCE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_task.sh
+	@HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_SOURCE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan_task.sh
 
 fleet-case-report-v2-1:
-	@HYDRA_TEST_REPORT_V2=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan.sh
+	@HYDRA_TEST_REPORT_V2=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_plan.sh
 
 fleet-case-shell-workflow-approval:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_approval.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_workflow_approval.sh
 
 fleet-case-native-fleet:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-fleet
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-fleet
 
 fleet-case-native-task-package:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-task-package
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-task-package
 
 fleet-case-shell-fleet:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_fleet.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_fleet.sh
 
 fleet-case-shell-fleet-install:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_fleet_install.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_fleet_install.sh
 
 fleet-case-shell-task-package:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_task_package.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_task_package.sh
 
 fleet-case-shell-task-acceptance:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_task_acceptance.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_task_acceptance.sh
 
 # tmux absent on the execution hosts; the loopback SSH variant is a separate
 # make target (test-t3-distributed-ssh) because it needs an OpenSSH server.
 fleet-case-t2-headless:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_t2_headless.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_t2_headless.sh
 
 fleet-case-t3-distributed:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_t3_distributed.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_t3_distributed.sh
 
 fleet-case-discovery:
-	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-discovery
+	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" $(MAKE) test-discovery
 
 fleet-case-enrollment:
-	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-enrollment
+	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" $(MAKE) test-enrollment
 
 fleet-case-retention:
-	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-retention
+	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" $(MAKE) test-retention
 
 fleet-case-workflow-metrics:
-	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-workflow-metrics
+	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" $(MAKE) test-workflow-metrics
 
 fleet-case-plan-staged:
-	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-plan-staged
+	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" $(MAKE) test-plan-staged
 
 fleet-case-native-remote-setup:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-remote-setup
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-remote-setup
 
 fleet-case-shell-remote-setup:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_setup.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_remote_setup.sh
 
 fleet-case-native-fleet-assets:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-fleet-assets
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-fleet-assets
 
 fleet-case-shell-remote-provision:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_provision.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_remote_provision.sh
 
 fleet-case-native-placement:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-placement
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-placement
 
 fleet-case-shell-placement:
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_placement.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" tests/test_placement.sh
 
 # The experimental native run driver (HYDRA_NATIVE_DRIVER=1). The workflow
 # shell cases and the workflow, plan and remote task DAG fleet cases run again
@@ -318,12 +323,16 @@ fleet-case-shell-placement:
 NATIVE_DRIVER_SHELL_TESTS = workflow_runtime workflow_driver workflow_e2e workflow_statistics workflow_run_heads plan_cli plan_conversation
 NATIVE_DRIVER_FLEET_CASES = $(filter shell-workflow-% shell-headless-plan-adapter headless-1 report-v2-1 plan-source-% plan-task-verdict-% plan-repair-% dag-%,$(FLEET_CASES))
 .PHONY: test-native-driver native-driver-cases test-driver-differential
+# The differential check runs whether or not a case failed; the lane fails if
+# either did.
 test-native-driver: fleet-test-build
-	+@case "$(MAKEFLAGS)" in \
-		*jobserver*) $(MAKE) native-driver-cases ;; \
-		*) $(MAKE) -j$(TEST_JOBS) native-driver-cases ;; \
-	esac
-	+@$(MAKE) test-driver-differential
+	+@status=0; \
+	case "$(MAKEFLAGS)" in \
+		*jobserver*) $(MAKE) native-driver-cases || status=1 ;; \
+		*) $(MAKE) -j$(TEST_JOBS) native-driver-cases || status=1 ;; \
+	esac; \
+	$(MAKE) test-driver-differential || status=1; \
+	exit $$status
 
 native-driver-cases: $(addprefix native-driver-shell-,$(NATIVE_DRIVER_SHELL_TESTS)) $(addprefix native-driver-fleet-case-,$(NATIVE_DRIVER_FLEET_CASES))
 
@@ -331,9 +340,19 @@ native-driver-shell-%:
 	@HYDRA_NATIVE_DRIVER=1 BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" "tests/test_$*.sh"
 
 native-driver-fleet-case-%:
-	+@HYDRA_NATIVE_DRIVER=1 $(MAKE) --no-print-directory fleet-case-$*
+	+@HYDRA_NATIVE_DRIVER=1 $(MAKE) --no-print-directory FLEET_CASE_PREFIX=native-driver- fleet-case-$*
 
 # HYDRA_TEST_DIFF_SIZES and HYDRA_TEST_DIFF_CASES narrow the fixtures.
 test-driver-differential: fleet-test-build
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_driver_differential.sh && \
+		grep -E '^(DIFFERENTIAL|Total|Passed|Failed)' "$(BUILD_DIR)/test-logs/$@.log"
+
+# The pull-request selection (quick-check.yml): the smallest plans and one
+# fixture each for retries, a failure cascade, backoff, parallel steps, an
+# approval, a cancellation, a driver crash and a remote task handoff. It takes
+# about two minutes; the full check above takes about ten.
+DRIVER_DIFFERENTIAL_FAST = plan-chain-5 plan-wide-5 retry cascade backoff parallel approval-approve cancel crash dag-handoff
+.PHONY: test-driver-differential-fast
+test-driver-differential-fast: fleet-test-build
+	@HYDRA_TEST_DIFF_SIZES=5 HYDRA_TEST_DIFF_CASES="$(DRIVER_DIFFERENTIAL_FAST)" BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_driver_differential.sh && \
 		grep -E '^(DIFFERENTIAL|Total|Passed|Failed)' "$(BUILD_DIR)/test-logs/$@.log"

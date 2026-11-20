@@ -326,7 +326,7 @@ test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_parity.sh
 
-test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-native-driver test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 # Sanitizer lanes. Every lane compiles with the same flags, so they share one
 # tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
@@ -457,6 +457,7 @@ help:
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
 	@echo "  make test-native-driver - Workflow, plan and DAG cases with HYDRA_NATIVE_DRIVER=1, then test-driver-differential"
 	@echo "  make test-driver-differential - Run each driver fixture with both run drivers and compare the run records"
+	@echo "  make test-driver-differential-fast - The pull-request selection of those fixtures (about two minutes)"
 	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
 	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"
