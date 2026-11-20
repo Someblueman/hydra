@@ -84,8 +84,9 @@ beta=$!
 wait "$alpha"; alpha_code=$?
 wait "$beta"; beta_code=$?
 # A loop that fails says why only in its own output: show it.
-[ "$alpha_code" -eq 0 ] && [ "$beta_code" -eq 0 ] ||
+if [ "$alpha_code" -ne 0 ] || [ "$beta_code" -ne 0 ]; then
     { printf -- '--- alpha (exit %s)\n' "$alpha_code"; cat "$base/alpha.json"; printf -- '--- beta (exit %s)\n' "$beta_code"; cat "$base/beta.json"; } >&2
+fi
 assert_success "$alpha_code" "the first worker loop exits cleanly"
 assert_success "$beta_code" "the second worker loop exits cleanly"
 assert_equal 4 "$(cat "$base/alpha.json" "$base/beta.json" | grep -o '"outcome":"succeeded"' | wc -l | tr -d ' ')" "two workers execute every task exactly once"

@@ -76,7 +76,7 @@ cmd_plan_head() {
     _cph_dir="$(state_v2_project_dir "$_cph_project")" || return 1
     _cph_found=""
     for _cph_head in "$_cph_dir"/heads/head_*; do
-        [ -f "$_cph_head/planning/draft.json" ] && [ -f "$_cph_head/current-instance" ] || continue
+        if [ ! -f "$_cph_head/planning/draft.json" ] || [ ! -f "$_cph_head/current-instance" ]; then continue; fi
         _cph_found="$_cph_found$(sed -n '1p' "$_cph_head/branch")
 "
     done
@@ -261,9 +261,9 @@ cmd_plan_approve() {
 cmd_plan_run_dir() {
     _cprd_runs="$(workflow_runs_dir)" || return 1
     if [ -n "${1:-}" ]; then
-        hydra_valid_id "$1" && [ -f "$_cprd_runs/$1/compiled.json" ] || {
+        if ! hydra_valid_id "$1" || [ ! -f "$_cprd_runs/$1/compiled.json" ]; then
             cli_error plan run_not_found "no plan run $1" 'run hydra plan status for the most recent plan run'; return 1;
-        }
+        fi
         printf '%s\n' "$_cprd_runs/$1"; return 0
     fi
     # Creation times are UTC timestamps, so they sort as text.
