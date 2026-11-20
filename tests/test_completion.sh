@@ -259,7 +259,7 @@ test_completion_includes_shipped_commands() {
         workflow:json integrate:base integrate:target integrate:into integrate:dry-run \
         integrate:execute integrate:gate integrate:by integrate:apply \
         du:json gc:policy gc:apply gc:dry-run gc:include-dirty gc:older-than \
-        worktree:reason worktree:dry-run worktree:apply snapshot:native snapshot:json; do
+        worktree:reason worktree:dry-run worktree:apply snapshot:native snapshot:shell snapshot:json; do
         command="${mapping%%:*}"
         option="${mapping#*:}"
         printf '%s\n' "$bash_out" | awk -v start="=~ $command ]]" -v needle="--$option" '

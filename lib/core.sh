@@ -1,5 +1,6 @@
 #!/bin/sh
-# Canonical shell snapshot plus bounded dispatch to the optional read-only core.
+# The canonical snapshot: bounded dispatch to the read-only native core when a
+# helper qualifies, and the shell implementation it falls back to.
 
 HYDRA_CORE_PROTOCOL=1
 HYDRA_CORE_TIMEOUT_SECONDS="${HYDRA_CORE_TIMEOUT_SECONDS:-2}"
@@ -195,7 +196,9 @@ hydra_core_run_bounded() {
         hydra_core_stop_tree "$_hcr_pid"
     ) >/dev/null 2>&1 &
     _hcr_watchdog=$!
-    if wait "$_hcr_pid"; then _hcr_status=0; else _hcr_status=$?; fi
+    # The redirection keeps the shell's own report of a helper it reaps after a
+    # signal ("Terminated") off the caller's stderr.
+    if wait "$_hcr_pid" 2>/dev/null; then _hcr_status=0; else _hcr_status=$?; fi
     [ -f "$_hcr_dir/timed-out" ] || kill -USR1 "$_hcr_watchdog" 2>/dev/null || true
     wait "$_hcr_watchdog" 2>/dev/null || true
     if [ -f "$_hcr_dir/timed-out" ]; then return 124; fi
@@ -277,19 +280,34 @@ hydra_core_snapshot_valid() {
     ' "$_hcsv_file"
 }
 
-hydra_snapshot_native() {
+# The shell implementation, after the native helper could not be used. The
+# reason is named on stderr only for "explain" (hydra snapshot --native).
+hydra_snapshot_fallback() {
+    [ "$1" != explain ] || echo "hydra: native snapshot fallback: $2" >&2
+    LC_ALL=C hydra_snapshot_shell
+}
+
+# Usage: hydra_snapshot [explain]
+# Prints the snapshot from the native helper when one is installed, answers the
+# protocol and exact-version handshake and prints a well-formed snapshot, each
+# within HYDRA_CORE_TIMEOUT_SECONDS. In every other case, including a state the
+# helper refuses, the shell implementation decides: its output, diagnostics and
+# exit status are the command's.
+hydra_snapshot() {
+    _hsn_explain="${1:-}"
     _hsn_core="$(hydra_core_path 2>/dev/null || true)"
     if [ -z "$_hsn_core" ] || [ ! -e "$_hsn_core" ]; then
-        echo "hydra: native snapshot fallback: helper-unavailable" >&2
-        LC_ALL=C hydra_snapshot_shell
+        hydra_snapshot_fallback "$_hsn_explain" helper-unavailable
         return
     fi
     if [ ! -x "$_hsn_core" ]; then
-        echo "hydra: native snapshot fallback: helper-not-executable" >&2
-        LC_ALL=C hydra_snapshot_shell
+        hydra_snapshot_fallback "$_hsn_explain" helper-not-executable
         return
     fi
-    _hsn_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-core.XXXXXX")" || return 1
+    if ! _hsn_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-core.XXXXXX" 2>/dev/null)"; then
+        hydra_snapshot_fallback "$_hsn_explain" scratch-unavailable
+        return
+    fi
     if hydra_core_run_bounded "$_hsn_dir" "$_hsn_core" --protocol-version; then
         _hsn_status=0
     else
@@ -328,12 +346,12 @@ hydra_snapshot_native() {
                 _hsn_reason=malformed-output
             else
                 cat "$_hsn_dir/stdout"
+                _hsn_status=$?
                 rm -rf "$_hsn_dir"
-                return 0
+                return "$_hsn_status"
             fi
         fi
     fi
-    echo "hydra: native snapshot fallback: $_hsn_reason" >&2
     rm -rf "$_hsn_dir"
-    LC_ALL=C hydra_snapshot_shell
+    hydra_snapshot_fallback "$_hsn_explain" "$_hsn_reason"
 }

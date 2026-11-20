@@ -162,7 +162,7 @@ _hydra_completion() {
         schedule) COMPREPLY=($(compgen -W "add list remove run-now status --json" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
-        snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
+        snapshot) COMPREPLY=($(compgen -W "--native --shell --json" -- ${cur})); return 0 ;;
         tui) COMPREPLY=($(compgen -W "--capabilities" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or kill options
@@ -296,7 +296,7 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--reason --dry-run --apply" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ snapshot ]]; then
-        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --shell --json" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[1]}" == doctor ]]; then
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--fix --fix-permissions" -- ${cur})); return 0 ;; esac

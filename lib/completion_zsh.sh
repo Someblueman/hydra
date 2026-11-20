@@ -171,7 +171,7 @@ _hydra() {
                     _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'
                     ;;
                 snapshot)
-                    _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
+                    _arguments '--native[Say on stderr why the native helper was not used]' '--shell[Use the shell implementation, never the native helper]' '--json[Output canonical JSON]'
                     ;;
                 doctor)
                     _arguments '--fix[Auto-fix detected issues]' '--fix-permissions[Remove group/other write from your own Hydra state]'
