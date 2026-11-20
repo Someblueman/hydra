@@ -184,6 +184,73 @@ test_send_message() {
     cleanup_test_env
 }
 
+# A sender that was killed while it held a head's message lock must not block
+# every later send to that head: the lock then names a dead process on this
+# host, and the next sender takes it over. A lock whose owner is alive, is on
+# another host, or is not recorded stays held.
+test_send_message_lock_owner() {
+    echo "Testing send_message with a message lock left behind..."
+    setup_test_env
+    lock_load_host_name
+    lock_path="$HYDRA_HOME/locks/$(get_message_lock target-branch).lock"
+    msg_dir="$(get_message_dir target-branch)"
+    # Usage: plant_message_lock <pid|''> <host|''>
+    plant_message_lock() {
+        mkdir -p "$lock_path"
+        : > "$lock_path/.claim"
+        [ -z "$1" ] || printf '%s\n' "$1" > "$lock_path/pid"
+        [ -z "$2" ] || printf '%s\n' "$2" > "$lock_path/host"
+        printf 'message append\n' > "$lock_path/operation"
+    }
+    queued_messages() {
+        _qm_count=0
+        for _qm_file in "$msg_dir/queue"/*; do
+            [ ! -f "$_qm_file" ] || _qm_count=$((_qm_count + 1))
+        done
+        printf '%s\n' "$_qm_count"
+    }
+
+    # No process can have PID 99999999: it is above every system's limit, so
+    # this owner is dead whatever else runs on the machine.
+    plant_message_lock 99999999 "$_LOCK_HOST_NAME"
+    message_id="$(send_message target-branch "after a dead sender" sender-branch 2>/dev/null)" && result=0 || result=1
+    assert_success "$result" "send_message takes over the lock of a sender that died on this host"
+    assert_equal "after a dead sender" "$(cat "$msg_dir/queue/$message_id" 2>/dev/null || true)" "the message is queued"
+    [ ! -e "$lock_path" ] && result=0 || result=1
+    assert_success "$result" "the lock taken over is released"
+    leftovers=""
+    for entry in "$lock_path".*; do
+        [ ! -e "$entry" ] || leftovers="$leftovers ${entry##*/}"
+    done
+    assert_equal "" "$leftovers" "taking the lock over leaves nothing beside it"
+
+    # Read by acquire_lock: two tries are enough to see a lock stay held.
+    # shellcheck disable=SC2034
+    HYDRA_LOCK_RETRIES=2
+    plant_message_lock "$$" "$_LOCK_HOST_NAME"
+    send_message target-branch "while a sender is alive" sender-branch >/dev/null 2>&1 && result=0 || result=1
+    assert_failure "$result" "send_message does not break the lock of a live process"
+    assert_equal "$$" "$(sed -n '1p' "$lock_path/pid" 2>/dev/null || true)" "the live owner's lock is untouched"
+    rm -rf "$lock_path"
+
+    plant_message_lock 99999999 "another-host.invalid"
+    send_message target-branch "while another host sends" sender-branch >/dev/null 2>&1 && result=0 || result=1
+    assert_failure "$result" "send_message does not break a lock owned on another host"
+    assert_equal "another-host.invalid" "$(sed -n '1p' "$lock_path/host" 2>/dev/null || true)" "the other host's lock is untouched"
+    rm -rf "$lock_path"
+
+    plant_message_lock "" ""
+    send_message target-branch "while the owner is unknown" sender-branch >/dev/null 2>&1 && result=0 || result=1
+    assert_failure "$result" "send_message does not break a lock without an owner record"
+    [ -d "$lock_path" ] && result=0 || result=1
+    assert_success "$result" "the lock without an owner record is untouched"
+    rm -rf "$lock_path"
+    unset HYDRA_LOCK_RETRIES
+    assert_equal 1 "$(queued_messages)" "only the send that held the lock queued a message"
+
+    cleanup_test_env
+}
+
 test_recv_messages() {
     echo "Testing recv_messages..."
     setup_test_env
@@ -326,6 +393,7 @@ echo "--- Message Queue Unit Tests ---"
 test_get_message_dir
 test_ensure_message_dir
 test_send_message
+test_send_message_lock_owner
 test_recv_messages
 test_typed_message_receipts
 
