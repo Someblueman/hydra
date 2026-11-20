@@ -82,26 +82,20 @@ worktrees, including `hydra-<branch>` siblings, are never candidates.
 
 `hydra state backup` copies `$HYDRA_HOME/state` to
 `$HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>/state` and prints that
-directory. `hydra state rollback <that directory>` replaces the state tree with
-the copy while it holds the rollback, project, state and event locks, and fails
-without changing anything when a writer is active. Rollback restores records
-only; it does not replay commands or restore active owners. Run `hydra state
-verify` afterwards.
+directory. It also writes an empty `map.absent` there, which only Hydra 4.0.0
+looks for: 4.0.0 refuses to roll back a backup without it. `hydra state
+rollback <that directory>` replaces the state tree with the copy while it holds
+the rollback, project, state and event locks, and fails without changing
+anything when a writer is active or the backup has no `state` directory.
+Rollback restores records only; it does not replay commands or restore active
+owners. Run `hydra state verify` afterwards.
 
 Hydra 1.x kept sessions in `$HYDRA_HOME/map`, and 1.9 kept a `compat-map`
-projection in each project record. Releases 2.0 to 4.0.0 ignored both and
-removed them with `hydra state migrate`; this release has no reader and no
-such command. While either file exists, every command except `version`, `help`
-and `completion` exits 1 before it reads the store:
-
-```
-Error: <path> is a Hydra 1.x session map, which this release does not read
-Next: install Hydra 4.0.0 and run 'hydra state migrate' with it, or delete the file if nothing needs it
-```
-
-(`a Hydra 1.9 compatibility projection` for a `compat-map`.) `hydra state
-rollback` refuses, in the same terms, a backup that holds either file. A backup
-made by 4.0.0 without them is restored as before.
+projection in each project record. No release since 2.0 reads either, and they
+are ignored wherever they remain: beside or inside a store, and in a backup,
+whose `map` copy (4.0.0 made one) is not restored. `hydra state migrate`, which
+deleted them in 2.0 to 4.0.0, is removed; delete the files by hand to be rid of
+them.
 
 Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.

@@ -436,6 +436,10 @@ state_v2_backup() {
     hydra_private_mkdir "$HYDRA_HOME/backups" || return 1
     _sv2b_dir="$(mktemp -d "$HYDRA_HOME/backups/state-$_sv2b_stamp.XXXXXX")" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
+    # Nothing here reads this marker. Hydra 4.0.0 refuses to roll back a
+    # backup that holds neither "map" nor "map.absent", so it is written for
+    # a user who downgrades to 4.0.0 and restores a backup made by this release.
+    hydra_private_touch "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
     if [ ! -d "$HYDRA_HOME/state" ] || ! cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"; then
         rm -rf "$_sv2b_dir"
         return 1
@@ -462,28 +466,9 @@ state_v2_rollback() {
         echo "Error: backup is incomplete: $_sv2r_backup" >&2
         return 1
     fi
-    # A backup taken while a Hydra 1.x session map or a 1.9 compatibility
-    # projection was still present holds a copy of it. This release restores
-    # neither: leaving the map out would drop it unnoticed, and a restored
-    # projection would leave a store that every command refuses
-    # (refuse_pre4_store in bin/hydra).
-    _sv2r_old=""
-    if [ -f "$_sv2r_backup/map" ]; then
-        _sv2r_old="$_sv2r_backup/map"
-        _sv2r_kind="a Hydra 1.x session map"
-    else
-        for _sv2r_file in "$_sv2r_backup"/state/v2/projects/*/compat-map; do
-            [ -f "$_sv2r_file" ] || continue
-            _sv2r_old="$_sv2r_file"
-            _sv2r_kind="a Hydra 1.9 compatibility projection"
-            break
-        done
-    fi
-    if [ -n "$_sv2r_old" ]; then
-        echo "Error: the backup holds $_sv2r_kind, which this release cannot restore: $_sv2r_old" >&2
-        echo "Next: roll back with Hydra 4.0.0, or delete that file to restore the state without it" >&2
-        return 1
-    fi
+    # Only the state tree is restored. A backup made by 4.0.0 may also hold
+    # "map", a copy of the Hydra 1.x session map that no release since 2.0
+    # reads, or the marker "map.absent"; neither is used.
     _sv2r_guard="$HYDRA_HOME/state"
     if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
         return 1

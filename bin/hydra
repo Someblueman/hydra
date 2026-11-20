@@ -238,29 +238,6 @@ init_hydra_home() {
     export HYDRA_HOME
 }
 
-# A store that a release before 4.0.0 left unmigrated still holds a session
-# map (Hydra 1.x) or a compatibility projection (1.9). This release reads
-# neither, so a command stops here instead of working on a store that may
-# describe heads it cannot see. Both checks are shell tests: no process.
-refuse_pre4_store() {
-    _rps_old=""
-    if [ -f "$HYDRA_HOME/map" ]; then
-        _rps_old="$HYDRA_HOME/map"
-        _rps_kind="a Hydra 1.x session map"
-    else
-        for _rps_file in "${HYDRA_STATE_V2_ROOT:-$HYDRA_HOME/state/v2}"/projects/*/compat-map; do
-            [ -f "$_rps_file" ] || continue
-            _rps_old="$_rps_file"
-            _rps_kind="a Hydra 1.9 compatibility projection"
-            break
-        done
-    fi
-    [ -n "$_rps_old" ] || return 0
-    echo "Error: $_rps_old is $_rps_kind, which this release does not read" >&2
-    echo "Next: install Hydra 4.0.0 and run 'hydra state migrate' with it, or delete the file if nothing needs it" >&2
-    exit 1
-}
-
 # Load the top-level usage and dispatcher after library discovery is ready.
 _load_lib cli
 

@@ -541,9 +541,8 @@ keymaps, accessibility, and recovery are documented in
 the native helpers.
 
 Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
-An installation that still holds files from Hydra 1.x has to be upgraded through
-4.0.0 first; [Contracts](CONTRACTS.md#durable-state-v2) names the files and the
-error.
+Files that Hydra 1.x left in `$HYDRA_HOME` are ignored;
+[Contracts](CONTRACTS.md#durable-state-v2) names them.
 
 ### TUI keys
 

@@ -334,10 +334,6 @@ main() {
     esac
     export HYDRA_JSON_REQUESTED
     init_hydra_home
-    case "${1:-}" in
-        version|-v|--version|help|-h|--help|completion) ;;
-        *) refuse_pre4_store ;;
-    esac
 
     # Load only the libraries needed for this command
     _load_libs_for_cmd "${1:-}"
