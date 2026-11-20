@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **`hydra state migrate` is removed.** It only deleted the Hydra 1.x session
+  map (`~/.hydra/map`) and the 1.9 `compat-map` files, which no release since
+  2.0 reads. They are still ignored wherever they remain; delete them by hand
+  to be rid of them. The command now prints the `hydra state` usage and exits 1.
+- **`hydra state rollback` no longer restores a 1.x map** from a backup that
+  holds a copy of one; it restores the state tree only. Backups made by 4.0.0
+  restore, and 4.0.0 can roll back a backup made by this release.
+- **`hydra init` no longer imports `.hydra/local.yml`** (written by 2.5 and
+  earlier). Where this host has a worktree root recorded, or you pass
+  `--worktree-root`, the file is ignored. Otherwise init exits 1 with `Error:
+  .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this
+  release does not read`: run `hydra init` with 4.0.0 first, or delete the
+  file. The generated `.hydra/config.yml` stub is no longer deleted: approve it
+  with `hydra init --trust` or delete it.
+- **`hydra` no longer falls back to `/usr/local/lib/hydra`.** A binary copied
+  away from its libraries fails with `Cannot find hydra library directory`;
+  reinstall, or set `HYDRA_ROOT`. Installs made by `install.sh`, including the
+  default prefix, are unaffected.
+- `hydra tui --basic` reports `unknown TUI option '--basic'`; it still exits 2.
+
 ### Fixed
 - **Head names that begin another head's name:** `hydra kill`, `hydra
   lifecycle`, the control centre's pane preview and every other tmux call now
@@ -47,6 +68,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left as a torn line in `events.jsonl` or `schedule.jsonl`.
 - A pinned fleet helper download that could not be moved into the cache no
   longer leaves its `.partial` file behind.
+- `hydra send` no longer fails for a head after an earlier send to it was
+  killed part-way; before, every send failed until `hydra cleanup`.
+- An admission command that was killed no longer blocks the host: before,
+  `hydra admission status` failed after 2 s and every spawn, exec, gate and
+  resume waited out its queue deadline (60 s by default) and failed, until
+  `~/.hydra/admission/lock` was removed by hand.
+- A command killed while one of its background steps still held a lock no
+  longer lets the next command take that lock and write the same state beside
+  it. Locks, including the pool and schedule locks, now name the process that
+  holds them.
+- `hydra` started through a relative symbolic link finds its libraries on
+  systems whose `readlink` has no `-f`.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
