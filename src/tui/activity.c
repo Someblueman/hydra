@@ -4,6 +4,7 @@
 #endif
 #include "internal.h"
 #include "snapshot.h"
+#include "store.h"
 #include "wake.h"
 /* Observes whether each interactive head's terminal is producing output and
  * hands every change to the shell CLI, which appends it to the head's event
@@ -18,7 +19,16 @@
  * when a head's state changed, plus one every ACTIVITY_WATCH_SECONDS that
  * records that someone was watching: time without an observer is unobserved,
  * which is not the same as quiet. Headless, remote and fleet heads are left to
- * their owners, which report exact evidence. */
+ * their owners, which report exact evidence.
+ *
+ * A recorder is the shell CLI, a tenth of a second of processor time or more,
+ * so none is started to learn nothing, and opening the control centre does
+ * not start one per head. The recorder keeps the last state it recorded
+ * beside the instance and drops a report equal to it; that record is read
+ * here first, so a control centre that opens on heads another one watched
+ * starts a recorder only for those that changed meanwhile. Heads nobody has
+ * recorded yet are taken one per observation: what is recorded says since
+ * when the state holds, so the wait does not move it. */
 
 /* Silence that makes a head quiet: no output for this long. */
 #define ACTIVITY_QUIET_AFTER_SECONDS 10
@@ -44,13 +54,15 @@ struct activity_child { pid_t pid; struct timespec started; };
 
 struct activity_head {
     char instance[TEXT], branch[TEXT], session[TEXT];
+    /* The head's record directory in the store; empty when not known. */
+    char record[SOURCE_TEXT];
     /* seen: the newest activity time tmux reported. burst: the first output
      * after silence, until it has lasted long enough to count. */
     long long seen, burst, since, retry_at;
     enum activity_state state, recorded, sending;
     struct activity_child recorder;
     unsigned failures;
-    bool present;
+    bool present, seeded;
 };
 
 struct native_activity {
@@ -90,8 +102,28 @@ static struct activity_head *tracked(struct native_activity *a, const struct hea
     return entry;
 }
 
+/* A local head's row names its record directory as its source; anything
+ * else there (a project without the record, a name cut short) is not one. */
+static const char *record_directory(const struct head *h) {
+    size_t length = strlen(h->source), id = strlen(h->head_id);
+    bool named = id && length > id && h->source[length - id - 1U] == '/' && !strcmp(h->source + length - id, h->head_id);
+    return named ? h->source : "";
+}
+
+/* The state the recorder last recorded for the instance (activity-state in
+ * its record), which is the state it would drop a report of as unchanged. */
+static enum activity_state stored_state(const struct activity_head *entry) {
+    char path[STORE_PATH], text[16];
+    if (!entry->record[0]) return ACTIVITY_UNKNOWN;
+    store_path(path, sizeof(path), "%s/instances/%s/activity-state", entry->record, entry->instance);
+    if (!store_first_line(path, text, sizeof(text))) return ACTIVITY_UNKNOWN;
+    if (!strcmp(text, "active")) return ACTIVITY_ACTIVE;
+    return !strcmp(text, "quiet") ? ACTIVITY_QUIET : ACTIVITY_UNKNOWN;
+}
+
 /* Tracks the heads of the current snapshot; an instance that left it is
- * forgotten once no child of its is running. */
+ * forgotten once no child of its is running. An instance seen for the first
+ * time starts from what the store says was recorded for it. */
 static void track_heads(struct app *app, struct native_activity *a) {
     size_t i, kept = 0;
     for (i = 0; i < a->count; i++) a->heads[i].present = false;
@@ -102,6 +134,8 @@ static void track_heads(struct app *app, struct native_activity *a) {
         entry->present = true;
         copy_text(entry->branch, sizeof(entry->branch), h->branch);
         copy_text(entry->session, sizeof(entry->session), h->session);
+        copy_text(entry->record, sizeof(entry->record), record_directory(h));
+        if (!entry->seeded) { entry->recorded = stored_state(entry); entry->seeded = true; }
     }
     for (i = 0; i < a->count; i++) {
         if (!a->heads[i].present && !a->heads[i].recorder.pid) continue;
@@ -253,13 +287,22 @@ static bool wants_record(const struct activity_head *entry, long long now) {
 }
 
 /* Starts a recorder for each head whose state differs from what was last
- * recorded, a few at a time. */
-static void record_changes(struct app *app, struct native_activity *a) {
+ * recorded, a few at a time. A head nothing was ever recorded for has no
+ * change to lose: first states are recorded one per observation (fresh), so
+ * opening the control centre on many such heads does not start a recorder
+ * for each at once. A state another observer has recorded meanwhile is taken
+ * as recorded. */
+static void record_changes(struct app *app, struct native_activity *a, bool fresh) {
     long long now = (long long)time(NULL);
     size_t i, running = reap_recorders(a, now);
     for (i = 0; i < a->count && running < ACTIVITY_RECORDERS; i++) {
         struct activity_head *entry = &a->heads[i];
+        bool first;
         if (!wants_record(entry, now)) continue;
+        first = entry->recorded == ACTIVITY_UNKNOWN;
+        if (first && !fresh) continue;
+        if (stored_state(entry) == entry->state) { entry->recorded = entry->state; continue; }
+        if (first) fresh = false;
         if (record_start(app, entry)) running++;
         else record_failed(entry, now);
     }
@@ -280,14 +323,15 @@ static void watch_report(struct app *app, struct native_activity *a, bool observ
 void native_activity_tick(struct app *app) {
     struct native_activity *a = app->activity;
     char *text;
-    bool observed = false;
+    bool observed = false, fresh;
     if (!app->program || app->fleet || !app->store) return;
     text = snapshot_take_activity(app->snapshot);
+    fresh = text != NULL;
     if (!a && text && any_observable(app)) a = app->activity = calloc(1, sizeof(*a));
     if (a && text) observed = observe(app, a, text);
     free(text);
     if (!a) return;
-    record_changes(app, a);
+    record_changes(app, a, fresh);
     watch_report(app, a, observed);
 }
 

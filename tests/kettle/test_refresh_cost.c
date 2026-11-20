@@ -18,7 +18,10 @@
  * CLI only when their records changed or one has not ended. Observing head
  * activity rides on the refresh's one tmux command: the CLI is started once
  * per change of a head's activity and once in a while to say that someone is
- * watching, never per refresh or per head. */
+ * watching, never per refresh or per head. A state the store already records
+ * for a head starts no recorder at all, and heads nobody recorded yet are
+ * recorded one per refresh, so opening the control centre on many heads is
+ * not a burst of CLI processes. */
 
 static char root[4096], build[4096], tui[4096], base[4096], hydra[4096], calls[4096], slow[4096];
 static char slow_record[4096], activity[4096];
@@ -390,12 +393,18 @@ static void window_activity(const char *first, long long others) {
     kt_write(activity, text);
 }
 
-/* Three silent heads are each recorded as quiet once; after that refreshes
- * go on and the CLI is asked only to note that someone is watching. */
+/* Three silent heads nobody recorded yet are each recorded as quiet once,
+ * one per refresh rather than all at once; after that refreshes go on and the
+ * CLI is asked only to note that someone is watching. */
 static void activity_steady(struct kt_session *s, const char *project, long long silent_since) {
     char since[64];
+    double waited = 0;
     kt_format(since, sizeof(since), "\"state\":\"quiet\",\"since\":%lld,", silent_since);
-    kt_pump(s, 3.0);
+    while (waited < 20 && !logged("hydra ", "adapter activity")) { kt_pump(s, 0.2); waited += 0.2; }
+    CHECK(logged("hydra ", "adapter activity") >= 1 && logged("hydra ", "adapter activity") <= logged("tmux ", "list-sessions"),
+          "opening on heads nobody recorded starts one recorder per refresh, not one per head");
+    while (waited < 20 && logged("recorded ", " 0") < 3) { kt_pump(s, 0.5); waited += 0.5; }
+    kt_pump(s, 2.5);
     CHECK(logged("recorded ", " 0") == 3, "the first state of every head is recorded once");
     CHECK(recorded_events(project, 1, since) == 1, "a quiet head is recorded with the moment its output stopped");
     CHECK(recorded_events(project, 2, "\"source\":\"tmux\",\"confidence\":\"inferred\"") == 1, "the record says it is inferred from tmux");
@@ -461,16 +470,18 @@ static void activity_observed(void) {
     activity_change(&s, project, silent_since);
     activity_pause(&s, project, silent_since);
     kt_close(&s, "q", 0, 0);
-    /* A second observer finds two heads quiet as recorded and one whose
-     * output has stopped: the recorders it starts are still running when it
-     * is asked to quit. */
+    /* A second observer finds two heads quiet as recorded, which it reads
+     * from the store and starts nothing for, and one whose output has
+     * stopped: the recorder it starts is still running when it is asked to
+     * quit. */
     kt_format(first, sizeof(first), "%lld", silent_since + 200);
     window_activity(first, silent_since);
     kt_write(slow_record, "");
     open_session(&s, project);
     while (!logged("hydra ", "adapter activity")) kt_pump(&s, 0.2);
     kt_close(&s, "q", 0, 0);
-    CHECK(logged("hydra ", "adapter activity") >= 1, "recorders were running at quit");
+    CHECK(logged("hydra ", "adapter activity") == 1 && logged("hydra ", "adapter activity work-1") == 1,
+          "a recorder was running at quit, for the one head whose state is not the recorded one");
     CHECK(logged("hydra ", "adapter activity") == logged("recorded ", ""), "quitting waits for running recorders and leaves none behind");
     CHECK(recorded_events(project, 2, "\"state\":\"quiet\"") == 1, "a state another observer recorded is not recorded twice");
     CHECK(!unlink(slow_record) && !unlink(activity), "activity fixtures removed");

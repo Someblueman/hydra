@@ -237,7 +237,12 @@ cannot be combined.
   interactive head is quiet after 10 seconds without output and active once
   output has continued for 4 seconds. Only a change starts a recorder (at most
   two at a time, retried with backoff when refused), and `adapter watch` runs
-  every 10 seconds while it observes. A head therefore records at most two
+  every 10 seconds while it observes. A state equal to the instance's
+  `activity-state` is not a change: the observer reads that record itself, so
+  a control centre that opens on heads observed before starts a recorder only
+  for those whose state differs from the recorded one. A head with no recorded
+  state gets its first record at most one head per refresh; `since` says when
+  the state began, so the wait does not move it. A head therefore records at most two
   changes per 14 seconds (about 35 an hour for a working agent, 514 at worst).
   `adapter activity` and `adapter watch` also maintain the project's sessions
   at most once every 600 seconds (64 heads per pass, taken in turn), which keeps
