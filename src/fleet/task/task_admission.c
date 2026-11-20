@@ -73,11 +73,41 @@ int task_admission_context(const char *directory, json_object *state, json_objec
 done:
     free(existing); json_object_put(accepted); return status;
 }
+/* The wait between claims. A claim is a shell process tree (about 15
+ * programs, 30 ms), and the slot it is waiting for frees up when another
+ * task finishes, which takes seconds to minutes. The first retry comes soon,
+ * after ADMISSION_FIRST_MS, then the wait doubles up to ADMISSION_CAP_MS: a
+ * freed slot is found within the cap and a long wait costs about a claim a
+ * second. It is spent in slices of at most ADMISSION_SLICE_MS, so that a
+ * cancellation is seen as soon as it ever was, and it never runs past the
+ * queue deadline. */
+#define ADMISSION_FIRST_MS 20L
+#define ADMISSION_CAP_MS 1000L
+#define ADMISSION_SLICE_MS 100L
+static int64_t realtime_ms(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now)) return (int64_t)time(NULL) * 1000;
+    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+/* Returns after ms, at the deadline, or when a signal or a stop request ends it
+ * early: the caller looks at the deadline and the stop request again. */
+static void pause_until(struct task_control *control, long ms, int64_t deadline) {
+    while (ms > 0) {
+        int64_t left = deadline * 1000 - realtime_ms(); long slice = ms < ADMISSION_SLICE_MS ? ms : ADMISSION_SLICE_MS;
+        struct timespec pause;
+        if (left <= 0) return;
+        if (slice > left) slice = (long)left;
+        pause.tv_sec = 0; pause.tv_nsec = slice * 1000000L;
+        if (nanosleep(&pause, NULL)) return;
+        ms -= slice;
+        if (control->process.stop(control->process.context)) return;
+    }
+}
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control) {
     const char *id = f_string(state, "admission_id");
     char *argv[] = {(char *)f_hydra, "admission", "claim", (char *)id, NULL};
     int64_t deadline = json_object_get_int64(f_field(state, "admission_deadline"));
-    struct timespec pause = {0, 200000000};
+    long wait = ADMISSION_FIRST_MS;
     if (!id) return -1;
     for (;;) {
         const char *name = f_string(f_field(state, "admission"), "state");
@@ -89,7 +119,11 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
         }
         if (!strcmp(name, "reserved")) return 0;
         if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
-        nanosleep(&pause, NULL);
+        pause_until(control, wait, deadline);
+        wait = wait * 2 < ADMISSION_CAP_MS ? wait * 2 : ADMISSION_CAP_MS;
+        /* A pause that ended at the deadline or for a stop claims nothing:
+         * the checks above decide. */
+        if ((int64_t)time(NULL) >= deadline || control->process.stop(control->process.context)) continue;
         reply = invoke(argv); status = observe(directory, state, reply); json_object_put(reply);
         if (status) return -1;
     }
