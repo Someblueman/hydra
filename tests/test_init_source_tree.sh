@@ -1,7 +1,7 @@
 #!/bin/sh
 # hydra init keeps ordinary onboarding out of the source tree: registration is
-# host-local, shared config is an explicit opt-in, and generated leftovers from
-# earlier releases are migrated without touching real configuration.
+# host-local, shared config is an explicit opt-in, and the host-local record an
+# earlier release left in the tree is refused by name.
 set -u
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck disable=SC1091
@@ -108,44 +108,44 @@ assert_success $? "trusted committed config spawns"
 assert_cond "committed setup commands are still parsed and run" test -e "$fixture/setup-ran"
 "$HYDRA_BIN" kill parsed-head >/dev/null 2>&1 || true
 
-# --- generated leftovers from an earlier init are migrated ---
+# --- the host-local record of Hydra 2.5 or earlier is refused, never imported ---
 new_repo "$fixture/legacy"
-mkdir -p .hydra/workflows
-cp "$root/examples/workflows/local-review.yml" .hydra/workflows/local.yml
-printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
-# Record an approval whose hash covers the stub, as an earlier release did:
-# stage the stub so init keeps it, then unstage it to leave it untracked.
-git add .hydra/config.yml
-"$HYDRA_BIN" init --no-agent --trust >/dev/null 2>&1 || exit 1
-assert_cond "a staged stub is treated as tracked and kept" test -f .hydra/config.yml
-"$HYDRA_BIN" workflow validate local >/dev/null 2>&1
-assert_success $? "workflow validates with the stub still present"
-git rm -q --cached .hydra/config.yml
+"$HYDRA_BIN" init --no-agent >/dev/null 2>&1 || exit 1
+root_before="$(sed -n '1p' .git/hydra/worktree-root)"
+mkdir -p .hydra
 printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
-printf '.hydra/local.yml\n' >> .git/info/exclude
+cp .hydra/local.yml "$fixture/local-before"
 out="$("$HYDRA_BIN" init --no-agent 2>&1)"
-assert_success $? "init migrates an earlier layout"
-assert_contains "$out" "Removed generated .hydra/config.yml and .hydra/local.yml" "migration is reported"
-assert_contains "$out" "Imported worktree root $fixture/legacy-root" "worktree root import is reported"
-assert_cond "stub config.yml is removed" test ! -e .hydra/config.yml
-assert_cond "stub local.yml is removed" test ! -e .hydra/local.yml
-assert_cond "real repository files survive migration" test -f .hydra/workflows/local.yml
-grep -Fqx '.hydra/local.yml' .git/info/exclude
-assert_failure $? "the exclude rule is removed"
-assert_equal "$fixture/legacy-root" "$(sed -n '1p' .git/hydra/worktree-root)" "local.yml worktree_root is imported"
-"$HYDRA_BIN" workflow validate local >/dev/null 2>&1
-assert_success $? "a current approval is carried across the migration"
+assert_equal 1 "$?" "init stops on .hydra/local.yml"
+assert_equal "Error: .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read
+Next: run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file" "$out" "the refusal names the file and both ways out, and prints nothing else"
+assert_cond "the refused record is left as it was" cmp -s .hydra/local.yml "$fixture/local-before"
+assert_equal "$root_before" "$(sed -n '1p' .git/hydra/worktree-root)" "the registered worktree root is unchanged"
+json="$("$HYDRA_BIN" init --no-agent --trust --worktree-root "$fixture/other-root" --json 2>/dev/null)"
+assert_equal 1 "$?" "init --json stops on .hydra/local.yml whatever the options"
+case "$json" in
+    '{"schema_version":1,"ok":false,"command":"init","error":{"code":"unsupported_configuration","message":".hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read","recovery":'*) assert_success 0 "init --json reports the refusal as one error object" ;;
+    *) assert_success 1 "init --json reports the refusal as one error object"; echo "  Actual: $json" ;;
+esac
+assert_equal "$root_before" "$(sed -n '1p' .git/hydra/worktree-root)" "a refused init registers no other worktree root"
+rm .hydra/local.yml
 out="$("$HYDRA_BIN" init --no-agent 2>&1)"
-assert_not_contains "$out" "Removed generated" "migration is reported once"
-printf 'version: 1\nsetup:\n  - echo real\n' > .hydra/config.yml
+assert_success $? "init succeeds once the file is deleted"
+assert_contains "$out" "Worktrees go in $root_before." "the registered worktree root is still in use"
+new_repo "$fixture/legacy-unregistered"
+mkdir -p .hydra
+printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
 "$HYDRA_BIN" init --no-agent >/dev/null 2>&1
-assert_cond "a config.yml with real content is never removed" test -f .hydra/config.yml
+assert_equal 1 "$?" "init stops on .hydra/local.yml in a repository it never registered"
+assert_cond "a refused first init registers nothing" test ! -e .git/hydra
+# The config.yml stub the same releases generated is ordinary configuration:
+# it is kept, and it needs approval like any other.
+rm .hydra/local.yml
 printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
-git add .hydra
-git commit -qm tracked-stub
-"$HYDRA_BIN" init --no-agent >/dev/null 2>&1
-assert_cond "a tracked stub is never removed" test -f .hydra/config.yml
-assert_equal "" "$(git status --porcelain)" "migration leaves tracked files unchanged"
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_success $? "init accepts a repository with a generated config.yml stub"
+assert_cond "the stub is kept" test -f .hydra/config.yml
+assert_contains "$out" "Repository config not trusted." "the stub needs approval like any configuration"
 
 # --- shared configuration is an explicit opt-in ---
 new_repo "$fixture/shared"
