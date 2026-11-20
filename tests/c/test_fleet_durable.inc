@@ -215,6 +215,25 @@ static void durable_task_records(const char *home) {
     assert(durable_entries(dir) == before + 1);
     json_object_put(accepted); json_object_put(running); json_object_put(placement);
 }
+/* A collected result file appears under its name whole or not at all: a
+ * partial file would be taken as already collected by the next attempt and
+ * then fail its digest for good. An existing file is never rewritten. */
+static void durable_collection(const char *home) {
+    char root[F_PATH], file[F_PATH], dir[F_PATH]; struct durable_limit limit; struct stat st; int status;
+    assert(!f_path(root, sizeof(root), home, "durable-collection") && !mkdir(root, 0700));
+    assert(!f_path(file, sizeof(file), root, "artifacts/out.bin") && !f_path(dir, sizeof(dir), root, "artifacts"));
+    durable_limit_on(&limit);
+    status = task_collection_file(root, "artifacts/out.bin", "6162");
+    durable_limit_off(&limit);
+    assert(status && lstat(file, &st) && errno == ENOENT && durable_entries(dir) == 2);
+    assert(!task_collection_file(root, "artifacts/out.bin", "6162"));
+    durable_expect(file, "ab");
+    assert(!stat(file, &st) && (st.st_mode & 0777) == 0600 && durable_entries(dir) == 3);
+    assert(!task_collection_file(root, "artifacts/out.bin", "6364"));
+    durable_expect(file, "ab");
+    assert(!task_collection_file(root, "artifacts/empty", "") && durable_entries(dir) == 4);
+    assert(!f_remove_tree(root));
+}
 /* Records created once and never replaced: a revocation, and the marker
  * that drains a host from placement. A failed write must not leave either
  * half in force. */

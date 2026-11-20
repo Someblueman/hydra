@@ -133,6 +133,7 @@ int main(void) {
     durable_remote_alias(dir);
     durable_enrollment(dir);
     durable_task_records(dir);
+    durable_collection(dir);
     durable_markers(dir);
     handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
