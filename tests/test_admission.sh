@@ -100,6 +100,15 @@ printf 'partial\n' > "$HYDRA_HOME/admission/broken.request"
 if admit request blocked project_x 60 - > "$TEST_DIR/error"; then exit 1; fi
 has "$(cat "$TEST_DIR/error")" recovery_required
 rm "$HYDRA_HOME/admission/broken.request"
+# A record is one terminated line: a second line or a missing newline is refused.
+for broken in 'project_x released 1 2 1 - done\nproject_x released 1 2 1 - done\n' \
+    'project_x released 1 2 1 - done\n\n' 'project_x released 1 2 1 - done'; do
+    # shellcheck disable=SC2059 # the cases are printf formats
+    printf "$broken" > "$HYDRA_HOME/admission/broken.request"
+    if admit request blocked project_x 60 - > "$TEST_DIR/error"; then exit 1; fi
+    has "$(cat "$TEST_DIR/error")" recovery_required
+    rm "$HYDRA_HOME/admission/broken.request"
+done
 ln -s "$TEST_DIR/absent" "$HYDRA_HOME/admission/broken.request"
 if admit request blocked project_x 60 - >/dev/null; then exit 1; fi
 rm "$HYDRA_HOME/admission/broken.request"

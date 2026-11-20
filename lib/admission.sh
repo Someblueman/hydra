@@ -91,8 +91,14 @@ admission_open() {
 # Record: project state requested deadline sequence labels reason.
 admission_read() {
     [ -f "$1" ] && [ ! -L "$1" ] || return 1
-    IFS=' ' read -r _ad_project _ad_state _ad_requested _ad_deadline _ad_sequence _ad_required _ad_reason _ad_extra < "$1" || return 1
-    [ -z "$_ad_extra" ] && [ "$(wc -l < "$1" | tr -d ' ')" = 1 ] || return 1
+    # Exactly one newline, as "wc -l" counted it, without two processes for
+    # each record of each scan: the first read needs a terminated line and a
+    # second read succeeds only when the file holds another newline.
+    {
+        IFS=' ' read -r _ad_project _ad_state _ad_requested _ad_deadline _ad_sequence _ad_required _ad_reason _ad_extra || return 1
+        ! IFS= read -r _ad_more || return 1
+    } < "$1" || return 1
+    [ -z "$_ad_extra" ] || return 1
     admission_token "$_ad_project" && admission_token "$_ad_reason" &&
         admission_number "$_ad_requested" && admission_number "$_ad_deadline" &&
         admission_number "$_ad_sequence" && admission_labels "$_ad_required" || return 1

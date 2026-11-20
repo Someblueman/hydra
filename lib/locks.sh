@@ -89,6 +89,14 @@ hydra_exclusive_mkdir() {
     (set -C; : > "$1/.claim") 2>/dev/null
 }
 
+# Sets _LOCK_HOST_NAME to this host's name as lock owner records carry it.
+# The name is asked for once per process.
+_LOCK_HOST_NAME=
+lock_load_host_name() {
+    [ -n "$_LOCK_HOST_NAME" ] ||
+        _LOCK_HOST_NAME="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+}
+
 try_lock() {
     candidate="$1"
     operation="${2:-$candidate}"
@@ -105,7 +113,8 @@ try_lock() {
 
     # The directory is the lock. Metadata is diagnostic and enables safe local
     # recovery; a partially written owner record still remains a held lock.
-    _lock_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+    lock_load_host_name
+    _lock_host="$_LOCK_HOST_NAME"
     if ! (
         umask 077
         printf '%s\n' "$$" > "$lock_path/pid" &&
@@ -231,7 +240,8 @@ lock_dir_is_stale() {
     _ldis_owner_host=
     { IFS= read -r _ldis_pid < "$_ldis_path/pid"; } 2>/dev/null || :
     { IFS= read -r _ldis_owner_host < "$_ldis_path/host"; } 2>/dev/null || :
-    _ldis_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+    lock_load_host_name
+    _ldis_host="$_LOCK_HOST_NAME"
     case "$_ldis_pid" in ''|*[!0-9]*) return 1 ;; esac
     [ "$_ldis_owner_host" = "$_ldis_host" ] || return 1
     ! kill -0 "$_ldis_pid" 2>/dev/null
