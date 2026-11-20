@@ -85,6 +85,13 @@ done:
 #define ADMISSION_FIRST_MS 20L
 #define ADMISSION_CAP_MS 1000L
 #define ADMISSION_SLICE_MS 100L
+/* The pause that follows one of previous ms (0 before the first): short
+ * first, then doubled up to the cap. Pure, so the schedule can be tested
+ * without a clock. */
+long task_admission_pause_ms(long previous) {
+    if (previous <= 0) return ADMISSION_FIRST_MS;
+    return previous * 2 < ADMISSION_CAP_MS ? previous * 2 : ADMISSION_CAP_MS;
+}
 static int64_t realtime_ms(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now)) return (int64_t)time(NULL) * 1000;
@@ -116,7 +123,7 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
     const char *id = f_string(state, "admission_id");
     char *argv[] = {(char *)f_hydra, "admission", "claim", (char *)id, NULL};
     int64_t deadline = json_object_get_int64(f_field(state, "admission_deadline"));
-    long wait = ADMISSION_FIRST_MS;
+    long wait = 0;
     if (!id) return -1;
     for (;;) {
         const char *name = f_string(f_field(state, "admission"), "state");
@@ -128,8 +135,8 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
         }
         if (!strcmp(name, "reserved")) return 0;
         if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
+        wait = task_admission_pause_ms(wait);
         pause_until(control, wait, deadline);
-        wait = wait * 2 < ADMISSION_CAP_MS ? wait * 2 : ADMISSION_CAP_MS;
         /* A pause that ended at the deadline or for a stop claims nothing:
          * the checks above decide. */
         if (past(deadline) || control->process.stop(control->process.context)) continue;

@@ -65,6 +65,8 @@ struct task_control {
 int task_admission_request(const char *directory, json_object *state, json_object *accepted, json_object *spec);
 int task_admission_context(const char *directory, json_object *state, json_object *spec);
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control);
+/* The pause after one of previous ms (0 for the first), in ms. */
+long task_admission_pause_ms(long previous);
 void task_admission_close(const char *directory, json_object *state, bool confirmed);
 /* confirmed must reflect independent managed child termination evidence. */
 void task_admission_children(json_object *state, bool confirmed);

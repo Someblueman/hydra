@@ -2,7 +2,14 @@
  * and doubles up to a cap, not every 200 ms; it never runs past the queue
  * deadline and a stop request ends it within one slice. The shell CLI is
  * replaced by a script that counts its claims and answers "queued" until a
- * chosen claim, so no admission state is needed. */
+ * chosen claim, so no admission state is needed.
+ *
+ * The schedule itself is checked exactly, on the pure function that makes it.
+ * The waits are checked by what the pauses guarantee (a floor on the time, a
+ * ceiling on the number of claims, the deadline and the stop request) and
+ * never by how fast a claim runs: the ceilings that depend on it are given
+ * the cost of a claim measured on this machine, so a slow runner (a claim of
+ * 300 ms) passes as a fast one does. */
 static double admission_now(clockid_t clock) {
     struct timespec now;
     assert(!clock_gettime(clock, &now));
@@ -42,8 +49,31 @@ static int admission_run(const char *dir, long reserve_at, int64_t seconds, doub
     *claims = admission_claims(dir);
     return status;
 }
+/* 20, 40, 80, 160, 320, 640 ms, then 1000 ms at the cap, from the first
+ * pause on; a bad start or a huge value stays within the cap. */
+static void admission_schedule(void) {
+    static const long expected[] = {20, 40, 80, 160, 320, 640, 1000, 1000, 1000};
+    long pause = 0; size_t i;
+    for (i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+        pause = task_admission_pause_ms(pause);
+        assert(pause == expected[i]);
+    }
+    assert(task_admission_pause_ms(-5) == 20 && task_admission_pause_ms(501) == 1000 && task_admission_pause_ms(1L << 40) == 1000);
+}
+/* What one claim of the fake CLI costs here: twice the slowest of three. */
+static double admission_claim_cost(const char *script) {
+    char *argv[] = {(char *)script, NULL}; double worst = 0; int i;
+    for (i = 0; i < 3; i++) {
+        struct f_capture cap = {0}; double started = admission_now(CLOCK_MONOTONIC), took;
+        assert(!f_run(argv, NULL, 0, 5, &cap));
+        f_capture_free(&cap);
+        took = admission_now(CLOCK_MONOTONIC) - started;
+        if (took > worst) worst = took;
+    }
+    return 2 * worst;
+}
 static void admission_wait(const char *home) {
-    char dir[F_PATH], script[F_PATH]; json_object *state; long claims; double elapsed, late; int status; const char *saved = f_hydra;
+    char dir[F_PATH], script[F_PATH]; json_object *state; long claims; double elapsed, late, cost; int status; const char *saved = f_hydra;
     static const char fake[] =
         "#!/bin/sh\n"
         "d=$(dirname \"$0\")\n"
@@ -55,29 +85,35 @@ static void admission_wait(const char *home) {
     assert(!f_write(script, fake, sizeof(fake) - 1, false) && !chmod(script, 0700));
     f_hydra = script;
 
-    /* A slot that frees up after two claims is found by the third: the first
-     * retries are short (20 ms and 40 ms), not 200 ms each. */
+    admission_schedule();
+
+    /* A slot that frees up after two claims is found by the third, after two
+     * pauses of at least 20 and 40 ms. How long the claims took is not the
+     * test's business, so there is no ceiling. */
     state = json_object_new_object(); f_string_add(state, "admission_id", "x");
     status = admission_run(dir, 3, 30, 0, state, &claims, &elapsed, &late);
     assert(!status && claims == 3 && !strcmp(f_string(f_field(state, "admission"), "state"), "reserved") && !f_string(state, "failure"));
-    assert(elapsed >= 0.05 && elapsed < 0.35);
+    assert(elapsed >= 0.05);
     json_object_put(state);
+    cost = admission_claim_cost(script);
 
-    /* A slot that never frees up: the pauses double (20, 40, 80, 160, 320,
-     * 640, 1000 ms), so a wait of up to 3 s takes 5 to 7 claims where 200 ms
-     * pauses took 8 or more, and it ends at the deadline, not after it. */
+    /* A slot that never frees up: the claims come at 20, 60, 140, 300, 620,
+     * 1260 and 2260 ms at the earliest, so a wait of up to 3 s takes at most
+     * 7 (200 ms pauses took 14); it ends at the deadline, not before it, and
+     * not more than one claim after it. */
     state = json_object_new_object(); f_string_add(state, "admission_id", "x");
     status = admission_run(dir, 1000000, 3, 0, state, &claims, &elapsed, &late);
-    if (claims < 5 || claims > 7 || late < 0 || late > 0.25) fprintf(stderr, "admission: claims %ld, %.3f s past the deadline\n", claims, late);
+    if (claims < 1 || claims > 7 || late < 0 || late > cost + 0.35) fprintf(stderr, "admission: claims %ld, %.3f s past the deadline (a claim costs %.3f s)\n", claims, late, cost);
     assert(status == -1 && !strcmp(f_string(state, "failure"), "queue_deadline"));
-    assert(claims >= 5 && claims <= 7 && late >= 0 && late < 0.25);
+    assert(claims >= 1 && claims <= 7 && late >= 0 && late <= cost + 0.35);
     json_object_put(state);
 
-    /* A stop request ends a long pause within a slice, not after it. */
+    /* A stop request ends a long pause within a slice (100 ms) and the claim
+     * that may be running, not after the pause. */
     state = json_object_new_object(); f_string_add(state, "admission_id", "x");
     status = admission_run(dir, 1000000, 30, 1.5, state, &claims, &elapsed, &late);
-    if (elapsed >= 2.0) fprintf(stderr, "admission: stopped after %.3f s\n", elapsed);
-    assert(status == -1 && !f_string(state, "failure") && elapsed >= 1.5 && elapsed < 2.0);
+    if (elapsed >= 1.5 + cost + 0.35) fprintf(stderr, "admission: stopped after %.3f s (a claim costs %.3f s)\n", elapsed, cost);
+    assert(status == -1 && !f_string(state, "failure") && elapsed >= 1.5 && elapsed < 1.5 + cost + 0.35);
     json_object_put(state);
 
     f_hydra = saved;
