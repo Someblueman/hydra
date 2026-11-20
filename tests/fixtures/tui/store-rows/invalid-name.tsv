@@ -1,0 +1,5 @@
+HYDRA_TUI	2
+H	later	session-odd	none	-	-	active	live		unavailable	unavailable		0	0	0	0	0	0	0	0	0	0	unavailable		head_000 bad\name	none	exact	hydra capabilities --json	0	@ROOT@/odd/repo/.git/hydra/notifications	interactive	-
+H	odd	session-odd	none	-	-	active	live		starting	exact	instance_0000000000000010	0	0	0	0	0	0	0	0	0	0	running	@ROOT@/odd/home/state/v2/projects/project_0000000042b3111c/heads/head_0000000000000010	head_0000000000000010	none	exact	hydra capabilities --json	0	@ROOT@/odd/repo/.git/hydra/notifications	interactive	-
+H	later	session-later	none	-	-	active	live		unavailable	unavailable		0	0	0	0	0	0	0	0	0	0	unavailable		head_000 bad\name	none	exact	hydra capabilities --json	0	@ROOT@/odd/repo/.git/hydra/notifications	interactive	-
+R	malformed-state	later	@ROOT@/odd/home/state/v2/projects/project_0000000042b3111c/heads/head_000 bad\name	exact	hydra state verify

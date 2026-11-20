@@ -1,0 +1,3 @@
+HYDRA_TUI	2
+R	stale-lock	gone.lock	@ROOT@/plain/home/locks/gone.lock	exact	hydra doctor
+R	stale-lock	inner.lock	@ROOT@/plain/home/locks/nested/inner.lock	exact	hydra doctor

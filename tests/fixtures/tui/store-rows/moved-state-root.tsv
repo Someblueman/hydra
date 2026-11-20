@@ -1,0 +1,2 @@
+HYDRA_TUI	2
+H	moved	session-moved	none	-	-	active	live		starting	exact	instance_0000000000000020	0	0	0	0	0	1	0	0	0	0	running	@ROOT@/moved/elsewhere/v2/projects/project_0000000022d438e7/heads/head_0000000000000020	head_0000000000000020	none	exact	hydra capabilities --json	0	@ROOT@/moved/repo/.git/hydra/notifications	interactive	-
