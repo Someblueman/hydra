@@ -281,6 +281,16 @@ static json_object *result_output(const struct remote_options *options, json_obj
     json_object_put(checked);
     return response;
 }
+static bool mutating(const struct remote_options *options) {
+    return options->submit || options->start || options->resume || options->decide || options->cancel || options->withdraw;
+}
+/* Takes over response, the lost or invalid answer to a mutation. */
+static json_object *outcome_unknown(const struct remote_options *options, json_object *response) {
+    json_object *wrapped = f_error("fleet-task", "outcome_unknown", options->submit ? "the acceptance response was lost or invalid; retry this same package and key to reconcile, never invent a new key" : "the mutation response was lost or invalid; inspect this task's status; execution is never replayed");
+    json_object_object_add(f_field(wrapped, "error"), "cause", json_object_get(f_field(response, "error")));
+    json_object_put(response);
+    return wrapped;
+}
 /* One negotiated transport to a loaded alias; package is borrowed. Lost or
  * invalid responses to mutations become outcome_unknown, never a retry.
  * status, observe, logs, requests and result only read on the receiver, so
@@ -288,7 +298,7 @@ static json_object *result_output(const struct remote_options *options, json_obj
  * mutation is sent only to a receiver whose handshake has been judged. */
 static json_object *transact(struct remote_options *options, const struct f_remote *remote, const char *operation, json_object *package) {
     char capability[32]; json_object *request = NULL, *response, *answer = NULL;
-    bool reads = !(options->submit || options->start || options->resume || options->decide || options->cancel || options->withdraw);
+    bool reads = !mutating(options);
     if (reads) {
         request = make_request(options, operation, package);
         answer = f_request_observed(remote, request, options->seconds, options->seconds, &response);
@@ -312,11 +322,7 @@ static json_object *transact(struct remote_options *options, const struct f_remo
         json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings");
     }
     if (options->result_read && json_object_get_boolean(f_field(response, "ok"))) response = result_output(options, response);
-    if ((options->submit || options->start || options->cancel || options->resume || options->decide || options->withdraw) && uncertain(response)) {
-        json_object *wrapped = f_error("fleet-task", "outcome_unknown", options->submit ? "the acceptance response was lost or invalid; retry this same package and key to reconcile, never invent a new key" : "the mutation response was lost or invalid; inspect this task's status; execution is never replayed");
-        json_object_object_add(f_field(wrapped, "error"), "cause", json_object_get(f_field(response, "error")));
-        json_object_put(response); response = wrapped;
-    }
+    if (mutating(options) && uncertain(response)) response = outcome_unknown(options, response);
     return response;
 }
 json_object *task_remote_submit(const char *host, json_object *package, const char *key, const char *trust, int generation, unsigned seconds) {
