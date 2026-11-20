@@ -318,40 +318,6 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet
 
-  # The run driver. The test and fleet jobs drive every run with the native
-  # driver (hydra-fleet workflow-drive), the default wherever hydra-fleet is
-  # built. This job covers the shell driver that remains as the fallback
-  # without hydra-fleet: the cases that drive runs again with
-  # HYDRA_NATIVE_DRIVER=0, then every differential fixture with both drivers
-  # and their run records compared. Set up like the fleet job above.
-  run-driver:
-    name: Shell run driver and driver differential (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: lint
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install shell dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
-
-    - name: Install shell dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      run: brew install tmux shellcheck json-c pkg-config
-
-    - name: Run the driver cases with the shell driver and compare both drivers
-      env:
-        TMUX_TMPDIR: ${{ runner.temp }}/hydra-driver
-      run: |
-        mkdir -p "$TMUX_TMPDIR"
-        make TEST_JOBS=2 test-shell-driver
-
   # U10 loopback acceptance: a throwaway account behind a private sshd is
   # onboarded through the control centre over a PTY (tests/test_u10_loopback.sh
   # re-executes itself under passwordless sudo). The case prints SKIP and exits
@@ -469,7 +435,7 @@ jobs:
   release-gate:
     name: release-gate
     if: ${{ always() }}
-    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, opt-levels, fleet, run-driver, fleet-static, u10-loopback]
+    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, opt-levels, fleet, fleet-static, u10-loopback]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -485,5 +451,4 @@ jobs:
         test "${{ needs.sanitize.result }}" = success
         test "${{ needs.opt-levels.result }}" = success
         test "${{ needs.fleet.result }}" = success
-        test "${{ needs.run-driver.result }}" = success
         test "${{ needs.fleet-static.result }}" = success

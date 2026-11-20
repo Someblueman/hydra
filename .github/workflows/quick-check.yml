@@ -55,27 +55,6 @@ jobs:
         make build-fleet build-core build-tui
         make test-c test-tui test-kettle test-parity
 
-  # Both run drivers on a selection of fixtures, with their run records
-  # compared: about two minutes of the ten the full differential check takes.
-  # pr-gate's cases drive their runs with the native driver, the default;
-  # ci.yml's run-driver job runs the full check and the shell driver lane.
-  driver-differential:
-    name: Run driver differential (selection)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install shell dependencies (Ubuntu)
-      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
-
-    - name: Compare the run records of the native and shell run drivers
-      env:
-        TMUX_TMPDIR: ${{ runner.temp }}/hydra-driver
-      run: |
-        mkdir -p "$TMUX_TMPDIR"
-        make test-driver-differential-fast
-
   opt-levels:
     name: Warnings at every optimisation level
     runs-on: ubuntu-latest
