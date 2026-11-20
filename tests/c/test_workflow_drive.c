@@ -353,14 +353,16 @@ static void contention(const char *name, bool claim, bool owned) {
  * only the test's way of making a write fail. Run in the case's own process,
  * and the limit is back before anything is checked. */
 static bool append_limit_enforced(const char *dir, size_t have, size_t more, rlim_t limit) {
-    char path[F_PATH], bytes[512]; struct rlimit saved, limited; void (*previous)(int); ssize_t wrote = -1; int fd;
+    char path[F_PATH], bytes[512]; struct rlimit saved, limited; void (*previous)(int) = SIG_DFL; ssize_t wrote = -1; int fd;
     CHECK(have <= sizeof(bytes) && more <= sizeof(bytes), "probe size");
     memset(bytes, 'x', sizeof(bytes));
     CHECK(!f_path(path, sizeof(path), dir, "limit-probe"), "probe path");
     fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0600);
     CHECK(fd >= 0, "probe file");
     CHECK(have == 0 || write(fd, bytes, have) == (ssize_t)have, "probe content");
-    CHECK(!getrlimit(RLIMIT_FSIZE, &saved) && (previous = signal(SIGXFSZ, SIG_IGN)) != SIG_ERR, "file size limit");
+    CHECK(!getrlimit(RLIMIT_FSIZE, &saved), "file size limit");
+    previous = signal(SIGXFSZ, SIG_IGN);
+    CHECK(previous != SIG_ERR, "ignore SIGXFSZ");
     limited = saved; limited.rlim_cur = limit;
     CHECK(!setrlimit(RLIMIT_FSIZE, &limited), "set the file size limit");
     wrote = write(fd, bytes, more);
