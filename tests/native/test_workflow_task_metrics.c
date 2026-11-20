@@ -135,60 +135,81 @@ static int run_onto(int fd, const char *home, char *const argv[], char *err,
     assert(errno == EINTR);
   return status;
 }
+#define OUTPUT_COMMANDS 4
+struct output_commands {
+  char home[sizeof "/tmp/hydra-native-output-XXXXXX"];
+  char **commands[OUTPUT_COMMANDS];
+  char **version;
+};
+/* Standard output discarded: every command still succeeds. */
+static void output_discarded(const struct output_commands *o) {
+  char err[512];
+  int sink = open("/dev/null", O_WRONLY), status;
+  size_t i;
+  assert(sink >= 0);
+  for (i = 0; i < OUTPUT_COMMANDS; i++) {
+    status = run_onto(sink, o->home, o->commands[i], err, sizeof err);
+    if (!WIFEXITED(status) || WEXITSTATUS(status))
+      fprintf(stderr, "%s: wait status %d with output discarded: %s\n",
+              o->commands[i][1], status, err);
+    assert(WIFEXITED(status) && !WEXITSTATUS(status));
+  }
+  close(sink);
+}
+static void output_closed_pipe(const struct output_commands *o) {
+  char err[512];
+  size_t i;
+  int status;
+  for (i = 0; i < OUTPUT_COMMANDS; i++) {
+    int pipes[2];
+    assert(!pipe(pipes));
+    close(pipes[0]);
+    status = run_onto(pipes[1], o->home, o->commands[i], err, sizeof err);
+    close(pipes[1]);
+    if ((WIFEXITED(status) && !WEXITSTATUS(status)) || err[0])
+      fprintf(stderr, "%s: wait status %d into a closed pipe: %s\n",
+              o->commands[i][1], status, err);
+    /* --version keeps the caller's SIGPIPE disposition and may be killed by
+     * it; the other commands ignore SIGPIPE and exit 1 themselves. */
+    assert(!(WIFEXITED(status) && !WEXITSTATUS(status)) && !err[0]);
+    assert(o->commands[i] == o->version ||
+           (WIFEXITED(status) && WEXITSTATUS(status) == 1));
+  }
+}
+static void output_full_device(const struct output_commands *o) {
+  char err[512];
+  size_t i;
+  int status, sink = open("/dev/full", O_WRONLY);
+  if (sink < 0) {
+    puts("SKIP output on a full device: /dev/full unavailable");
+    return;
+  }
+  for (i = 0; i < OUTPUT_COMMANDS; i++) {
+    status = run_onto(sink, o->home, o->commands[i], err, sizeof err);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 1)
+      fprintf(stderr, "%s: wait status %d onto /dev/full: %s\n",
+              o->commands[i][1], status, err);
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == 1);
+    assert(strstr(err, "cannot write output"));
+  }
+  close(sink);
+}
 /* Output that cannot be written fails the command on every path out of
  * main: a JSON envelope, the early --version line, raw TSV and a
  * workflow-task envelope. A reader that closed the pipe gets a failure
  * without a message; a full device gets a failure that names the reason. */
 static void output_failures(void) {
-  char home[] = "/tmp/hydra-native-output-XXXXXX", err[512];
   char *list[] = {(char *)fleet, "fleet", "list", NULL},
        *version[] = {(char *)fleet, "--version", NULL},
        *tsv[] = {(char *)fleet, "workflow-task", "metrics-tsv", root, NULL},
        *json[] = {(char *)fleet, "workflow-task", "metrics", root, NULL};
-  char **commands[] = {list, version, tsv, json};
-  size_t i, count = sizeof commands / sizeof commands[0];
-  int sink, status;
-  assert(mkdtemp(home));
-  sink = open("/dev/null", O_WRONLY);
-  assert(sink >= 0);
-  for (i = 0; i < count; i++) {
-    status = run_onto(sink, home, commands[i], err, sizeof err);
-    if (!WIFEXITED(status) || WEXITSTATUS(status))
-      fprintf(stderr, "%s: wait status %d with output discarded: %s\n",
-              commands[i][1], status, err);
-    assert(WIFEXITED(status) && !WEXITSTATUS(status));
-  }
-  close(sink);
-  for (i = 0; i < count; i++) {
-    int pipes[2];
-    assert(!pipe(pipes));
-    close(pipes[0]);
-    status = run_onto(pipes[1], home, commands[i], err, sizeof err);
-    close(pipes[1]);
-    if ((WIFEXITED(status) && !WEXITSTATUS(status)) || err[0])
-      fprintf(stderr, "%s: wait status %d into a closed pipe: %s\n",
-              commands[i][1], status, err);
-    /* --version keeps the caller's SIGPIPE disposition and may be killed by
-     * it; the other commands ignore SIGPIPE and exit 1 themselves. */
-    assert(!(WIFEXITED(status) && !WEXITSTATUS(status)) && !err[0]);
-    assert(commands[i] == version ||
-           (WIFEXITED(status) && WEXITSTATUS(status) == 1));
-  }
-  sink = open("/dev/full", O_WRONLY);
-  if (sink < 0) {
-    puts("SKIP output on a full device: /dev/full unavailable");
-  } else {
-    for (i = 0; i < count; i++) {
-      status = run_onto(sink, home, commands[i], err, sizeof err);
-      if (!WIFEXITED(status) || WEXITSTATUS(status) != 1)
-        fprintf(stderr, "%s: wait status %d onto /dev/full: %s\n",
-                commands[i][1], status, err);
-      assert(WIFEXITED(status) && WEXITSTATUS(status) == 1);
-      assert(strstr(err, "cannot write output"));
-    }
-    close(sink);
-  }
-  assert(!f_remove_tree(home));
+  struct output_commands o = {"/tmp/hydra-native-output-XXXXXX",
+                              {list, version, tsv, json}, version};
+  assert(mkdtemp(o.home));
+  output_discarded(&o);
+  output_closed_pipe(&o);
+  output_full_device(&o);
+  assert(!f_remove_tree(o.home));
 }
 int main(void) {
   /* Fixtures model records Hydra creates privately; the reader refuses
