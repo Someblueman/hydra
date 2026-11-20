@@ -324,20 +324,10 @@ static bool break_event_lock(struct wdr_run *run, const char *lock, const struct
     return broken;
 }
 
-/* Waits for a held lock: a second at a time while its owner lives, giving up
- * after 30 tries. A lock that has just been released is tried again at once. */
-static int take_event_lock(struct wdr_run *run, const char *lock) {
-    char owner_file[F_PATH], pid[32]; struct lock_wait wait; int fd;
-    memset(&wait, 0, sizeof(wait));
-    if (wdr_join(owner_file, lock, "owner-pid")) return -1;
-    while (mkdir(lock, 0700) || !event_lock_claimed(lock)) {
-        struct lock_view view; bool stale;
-        view_lock(lock, &view);
-        stale = view.owner[0] ? !wdr_pid_alive(run, view.owner) : abandoned(&view, &wait);
-        if (stale && break_event_lock(run, lock, &view)) { wait.ownerless = 0; continue; }
-        if (++wait.tries >= 30) return -1;
-        if (view.held) pause_second();
-    }
+/* Writes this process as the owner of the lock it holds; a lock whose owner
+ * cannot be recorded is removed. */
+static int record_event_owner(const char *lock, const char *owner_file) {
+    char pid[32]; int fd;
     (void)chmod(lock, 0700);
     snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
     /* A holder that cannot record itself would be read as a dead one (a
@@ -351,6 +341,23 @@ static int take_event_lock(struct wdr_run *run, const char *lock) {
     }
     if (close(fd)) { (void)wdr_remove_tree(lock); return -1; }
     return 0;
+}
+
+/* Waits for a held lock: a second at a time while its owner lives, giving up
+ * after 30 tries. A lock that has just been released is tried again at once. */
+static int take_event_lock(struct wdr_run *run, const char *lock) {
+    char owner_file[F_PATH]; struct lock_wait wait;
+    memset(&wait, 0, sizeof(wait));
+    if (wdr_join(owner_file, lock, "owner-pid")) return -1;
+    while (mkdir(lock, 0700) || !event_lock_claimed(lock)) {
+        struct lock_view view; bool stale;
+        view_lock(lock, &view);
+        stale = view.owner[0] ? !wdr_pid_alive(run, view.owner) : abandoned(&view, &wait);
+        if (stale && break_event_lock(run, lock, &view)) { wait.ownerless = 0; continue; }
+        if (++wait.tries >= 30) return -1;
+        if (view.held) pause_second();
+    }
+    return record_event_owner(lock, owner_file);
 }
 
 static bool notice_type(const char *type) {
