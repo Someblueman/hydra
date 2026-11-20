@@ -79,7 +79,7 @@ awk -F '\t' '$1=="R" && $3=="visualization-proof" && $4=="succeeded" {run=1}
 awk -F '\t' '$1=="W" && $3=="visualization-proof" && $4=="succeeded" {run=1}
     $1=="N" && $3=="review" && $5=="succeeded" && $7=="build,tests" {join=1}
     END {exit !(run && join)}' "$viz_tmp/workflows.tsv"
-"$viz_bin" tui --data > "$viz_tmp/heads.tsv"
+"$viz_tui" --hydra "$viz_bin" --data > "$viz_tmp/heads.tsv"
 for viz_size in 40x10 80x24 140x40; do
     "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --workflow-fixture "$viz_tmp/workflows.tsv" \
         --view workflows --ascii --size "$viz_size" > "$viz_tmp/graph.out"

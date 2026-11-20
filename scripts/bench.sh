@@ -65,9 +65,6 @@ for n in $COUNTS; do
     _time_cmd "status" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" status"
     _time_cmd "doctor" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" doctor"
 
-    # Control-centre refresh: the shell snapshot the native TUI reads
-    _time_cmd "tui --data" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" tui --data"
-
     (cd "$repo" && "$HYDRA_BIN" kill --all --force) >/dev/null 2>&1 || true
     unset HYDRA_HOME HYDRA_SKIP_AI HYDRA_NONINTERACTIVE
     rm -rf "$work"

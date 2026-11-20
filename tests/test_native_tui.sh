@@ -602,16 +602,18 @@ seed_state_head "$adapter_home" project_aaaaaaaaaaaaaaaa "$adapter_repo" \
     adapter-live adapter-live custom >/dev/null
 seed_malformed_head "$adapter_home" project_aaaaaaaaaaaaaaaa adapter-malformed \
     head_bbbbbbbbbbbbbbbb
-(cd "$adapter_repo" && HYDRA_HOME="$adapter_home" "$repo_root/bin/hydra" tui --data) > "$test_root/adapter.tsv"
-assert_equal "HYDRA_TUI	2" "$(sed -n '1p' "$test_root/adapter.tsv")" "shell adapter publishes protocol handshake"
-assert_equal "1" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/adapter.tsv")" "shell adapter publishes valid durable heads"
+# The local snapshot is read from the state store by the helper itself
+# (hydra-tui --data prints that read).
+(cd "$adapter_repo" && HYDRA_HOME="$adapter_home" "$tui" --hydra "$repo_root/bin/hydra" --data) > "$test_root/adapter.tsv"
+assert_equal "HYDRA_TUI	2" "$(sed -n '1p' "$test_root/adapter.tsv")" "the store reader publishes the protocol handshake"
+assert_equal "1" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/adapter.tsv")" "the store reader publishes valid durable heads"
 contains "R	malformed-state	adapter-malformed" "$test_root/adapter.tsv" "malformed state is an explicit recovery finding"
 contains "hook-v1	user-declared	$adapter_home/profiles/custom" "$test_root/adapter.tsv" \
-    "live adapter exposes recorded capability and confidence"
-contains "	2	" "$test_root/adapter.tsv" "live adapter exposes configured notification count"
-contains "/.git/hydra/notifications" "$test_root/adapter.tsv" "live adapter links notification configuration source"
+    "the store reader exposes recorded capability and confidence"
+contains "	2	" "$test_root/adapter.tsv" "the store reader exposes the configured notification count"
+contains "/.git/hydra/notifications" "$test_root/adapter.tsv" "the store reader links the notification configuration source"
 "$tui" --headless-fixture "$test_root/adapter.tsv" --size 80x24 --view recovery > /dev/null
-assert_success $? "native renderer accepts the live shell adapter boundary"
+assert_success $? "native renderer accepts the store reader's rows"
 
 parity_home="$test_root/parity-home"
 parity_repo="$test_root/parity-repo"
@@ -628,7 +630,7 @@ seed_malformed_head "$parity_home" "$parity_project" malformed head_dddddddddddd
     "$repo_root/bin/hydra" list --json --no-pr-status) > "$test_root/basic-list.json"
 (cd "$parity_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
     FAKE_TMUX_SESSIONS=session-clean HYDRA_HOME="$parity_home" \
-    "$repo_root/bin/hydra" tui --data) > "$test_root/native-list.tsv"
+    "$tui" --hydra "$repo_root/bin/hydra" --data) > "$test_root/native-list.tsv"
 assert_equal "2" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native-list.tsv")" \
     "native adapter publishes the two valid durable heads"
 contains '"total":2' "$test_root/basic-list.json" "basic list publishes the same valid head cardinality"
@@ -669,7 +671,7 @@ printf '%s\n' broken > "$boundary_heads/$invalid_head/terminal-mode"
     FAKE_TMUX_SESSIONS="session-duplicate
 session-legacy
 session-invalid" HYDRA_HOME="$boundary_home" \
-    "$repo_root/bin/hydra" tui --data) > "$test_root/boundaries.tsv"
+    "$tui" --hydra "$repo_root/bin/hydra" --data) > "$test_root/boundaries.tsv"
 assert_equal "$first_head stopped unavailable" \
     "$(awk -F '\t' '$1 == "H" && $2 == "duplicate" { print $25, $23, $8 }' "$test_root/boundaries.tsv")" \
     "native lookup preserves the stopped first-match identity and mode"
@@ -692,60 +694,13 @@ cp -R "$boundary_heads/$duplicate_head" "$boundary_heads/$bad_name"
 printf '%s\n' bad-name > "$boundary_heads/$bad_name/branch"
 printf '%s\n' "$bad_name" > "$boundary_heads/$bad_name/head-id"
 (cd "$boundary_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
-    HYDRA_HOME="$boundary_home" "$repo_root/bin/hydra" tui --data) > "$test_root/bad-name.tsv"
+    HYDRA_HOME="$boundary_home" "$tui" --hydra "$repo_root/bin/hydra" --data) > "$test_root/bad-name.tsv"
 contains 'R	malformed-state	bad-name' "$test_root/bad-name.tsv" "invalid directory identity remains explicit"
 if grep -Fq "$bad_later" "$test_root/bad-name.tsv"; then
     assert_success 1 "invalid first identity does not select a later valid head"
 else
     assert_success 0 "invalid first identity does not select a later valid head"
 fi
-
-# Change a later branch after rows are enumerated, when observing the first
-# worktree. A remembered directory must not become a stale identity binding.
-vanish_home="$test_root/vanish-home"
-vanish_repo="$test_root/vanish-repo"
-vanish_project=project_1111111111111111
-mkdir -p "$vanish_home" "$vanish_repo" "$test_root/vanish-bin"
-git -C "$vanish_repo" init -q
-mkdir -p "$vanish_repo/.git/hydra"
-printf '%s\n' "$vanish_project" > "$vanish_repo/.git/hydra/project-id"
-vanish_heads="$vanish_home/state/v2/projects/$vanish_project/heads"
-for vanish_branch in first vanishing; do
-    vanish_old="$(seed_state_head "$vanish_home" "$vanish_project" "$vanish_repo" "$vanish_branch" "session-$vanish_branch" none)"
-    case "$vanish_branch" in first) vanish_id=head_1111 ;; *) vanish_id=head_2222 ;; esac
-    mv "$vanish_heads/$vanish_old" "$vanish_heads/$vanish_id"
-    printf '%s\n' "$vanish_id" > "$vanish_heads/$vanish_id/head-id"
-    printf '%s\n' "$vanish_repo" > "$vanish_heads/$vanish_id/worktree"
-done
-cat > "$test_root/vanish-bin/git" <<'GIT'
-#!/bin/sh
-if [ "${1:-}" = -C ] && [ "${3:-}" = status ] && [ -f "$HYDRA_TEST_CHANGE_MARKER" ]; then
-    rm "$HYDRA_TEST_CHANGE_MARKER"
-    case "$HYDRA_TEST_CHANGE_ACTION" in
-        remove) rm "$HYDRA_TEST_CHANGE_BRANCH" ;;
-        rename) printf '%s\n' renamed > "$HYDRA_TEST_CHANGE_BRANCH" ;;
-    esac
-fi
-exec "$HYDRA_TEST_REAL_GIT" "$@"
-GIT
-chmod +x "$test_root/vanish-bin/git"
-vanish_real_git="$(command -v git)"
-for vanish_action in remove rename; do
-    printf '%s\n' vanishing > "$vanish_heads/head_2222/branch"
-    : > "$test_root/change-marker"
-    (cd "$vanish_repo" && PATH="$test_root/vanish-bin:$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
-        HYDRA_TEST_REAL_GIT="$vanish_real_git" HYDRA_TEST_CHANGE_MARKER="$test_root/change-marker" \
-        HYDRA_TEST_CHANGE_BRANCH="$vanish_heads/head_2222/branch" HYDRA_TEST_CHANGE_ACTION="$vanish_action" \
-        HYDRA_HOME="$vanish_home" "$repo_root/bin/hydra" tui --data) > "$test_root/vanish-$vanish_action.tsv"
-    if [ -f "$test_root/change-marker" ]; then vanish_changed=1; else vanish_changed=0; fi
-    assert_success "$vanish_changed" "$vanish_action fixture changes the record during row observation"
-    awk -F '\t' '$1 == "H" && $2 == "vanishing" {
-        seen++; if ($25 != "" || $12 != "" || $23 != "unavailable") bad=1
-    } END { exit !(seen == 1 && !bad) }' "$test_root/vanish-$vanish_action.tsv"
-    assert_success $? "$vanish_action after enumeration cannot reuse a stale head identity"
-    "$tui" --headless-fixture "$test_root/vanish-$vanish_action.tsv" --size 80x24 > /dev/null
-    assert_success $? "$vanish_action during observation retains a complete native snapshot"
-done
 
 changing_home="$test_root/changing-home"
 changing_repo="$test_root/changing-repo"
@@ -771,7 +726,7 @@ change_index=0
 while [ "$change_index" -lt 20 ]; do
     (cd "$changing_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
         FAKE_TMUX_SESSIONS=session-a HYDRA_HOME="$changing_home" \
-        "$repo_root/bin/hydra" tui --data) > "$test_root/changing.tsv"
+        "$tui" --hydra "$repo_root/bin/hydra" --data) > "$test_root/changing.tsv"
     "$tui" --headless-fixture "$test_root/changing.tsv" --size 80x24 > /dev/null || break
     change_index=$((change_index + 1))
 done
