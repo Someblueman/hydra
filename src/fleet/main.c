@@ -62,31 +62,46 @@ static bool early_command(int argc, char **argv, int *status) {
     *status = wdr_main(argc - 2, argv + 2);
     return true;
 }
-static int dispatch(int argc, char **argv) {
-    static char home[F_PATH]; json_object *result = NULL; int status;
+static bool init_home(void) {
+    static char home[F_PATH];
     f_home = getenv("HYDRA_HOME"); f_hydra = getenv("HYDRA_BIN_CMD");
-    if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return 1; f_home = home; }
+    if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return false; f_home = home; }
     if (!f_hydra) f_hydra = "hydra";
+    return true;
+}
+static json_object *fleet_serve_cli(void) {
+    json_object *request = f_read_json(NULL, F_LIMIT), *result;
+    result = request ? f_serve(request) : f_error("fleet", "invalid_request", "expected one bounded JSON object");
+    json_object_put(request);
+    return result;
+}
+typedef json_object *(*route_fn)(int argc, char **argv);
+static const struct route { const char *name, *alias; route_fn run; int skip; } routes[] = {
+    {"workflow-plan", NULL, plan_cli, 2}, {"workflow-review", NULL, review_cli, 2},
+    {"workflow-task", NULL, wt_cli, 2}, {"workflow-data", NULL, wd_cli, 2},
+    {"agent-profile", NULL, agent_profile_cli, 2}, {"agent-run", NULL, agent_run_cli, 2},
+    {"agent-view", NULL, agent_view_cli, 2}, {"remote", NULL, f_remote_cli, 2},
+    {"install", "install-check", f_install_cli, 1},
+};
+static json_object *route_command(int argc, char **argv) {
+    size_t i;
+    if (argc < 2) return f_error("fleet", "invalid_input", "invoke through hydra fleet or hydra remote");
+    for (i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
+        if (!strcmp(argv[1], routes[i].name) || (routes[i].alias && !strcmp(argv[1], routes[i].alias)))
+            return routes[i].run(argc - routes[i].skip, argv + routes[i].skip);
+    if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) return fleet_serve_cli();
+    if (!strcmp(argv[1], "fleet")) return f_cli(argc - 2, argv + 2);
+    return f_error("fleet", "invalid_input", "invoke through hydra fleet or hydra remote");
+}
+static int dispatch(int argc, char **argv) {
+    json_object *result; int status;
+    if (!init_home()) return 1;
     if (early_command(argc, argv, &status)) return status;
     signal(SIGINT, stopped); signal(SIGTERM, stopped); signal(SIGHUP, stopped); signal(SIGPIPE, SIG_IGN);
     setenv("LC_ALL", "C", 1);
     if (raw_workflow_task(argc, argv, &status)) return status;
-    if (argc >= 2 && !strcmp(argv[1], "workflow-plan")) result = plan_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "workflow-review")) result = review_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "workflow-review-data")) return review_workflow_data_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "workflow-task")) result = wt_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "workflow-data")) result = wd_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "agent-profile")) result = agent_profile_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "agent-run")) result = agent_run_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "agent-view")) result = agent_view_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && !strcmp(argv[1], "remote")) result = f_remote_cli(argc - 2, argv + 2);
-    else if (argc >= 2 && (!strcmp(argv[1], "install") || !strcmp(argv[1], "install-check"))) result = f_install_cli(argc - 1, argv + 1);
-    else if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) {
-        json_object *request = f_read_json(NULL, F_LIMIT);
-        result = request ? f_serve(request) : f_error("fleet", "invalid_request", "expected one bounded JSON object");
-        json_object_put(request);
-    } else if (argc >= 2 && !strcmp(argv[1], "fleet")) result = f_cli(argc - 2, argv + 2);
-    else result = f_error("fleet", "invalid_input", "invoke through hydra fleet or hydra remote");
+    if (argc >= 2 && !strcmp(argv[1], "workflow-review-data")) return review_workflow_data_cli(argc - 2, argv + 2);
+    result = route_command(argc, argv);
     if (!result) return f_stopped ? 128 + f_stopped : 0;
     status = emit(argc, argv, result);
     status = command_status(argc, argv, result, status);
