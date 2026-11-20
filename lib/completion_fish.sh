@@ -105,7 +105,6 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'recv' -d 'Read messages for 
 complete -c hydra -f -n '__fish_use_subcommand' -a 'tail' -d 'View output from a session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'broadcast' -d 'Send a command to sessions'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'wait-idle' -d 'Wait for sessions to become idle'
-complete -c hydra -f -n '__fish_use_subcommand' -a 'queue' -d 'Inspect or process the spawn queue'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'pool' -d 'File-backed task pools with sealed bounded expansions'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'schedule' -d 'Host-timer schedules that submit work with a dedup token'
 

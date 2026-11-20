@@ -56,7 +56,7 @@ Failure has:
 `schema_version`, `ok`, `command`, and the matching `data` or `error` member are
 required. Error `code`, `message`, and `recovery` are required strings. Envelope v1 is
 used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
-`queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
+`lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
 `collision`, `resource`, `gate`, `du`, `snapshot`, `pool`, and `schedule` where their
 help documents `--json`.
 

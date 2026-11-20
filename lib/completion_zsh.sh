@@ -270,7 +270,6 @@ _hydra_commands() {
         'tail:View output from a session'
         'broadcast:Send a command to sessions'
         'wait-idle:Wait for sessions to become idle'
-        'queue:Inspect or process the spawn queue'
         'pool:File-backed task pools with sealed bounded expansions'
         'schedule:Host-timer schedules that submit work with a dedup token'
     )

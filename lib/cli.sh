@@ -197,14 +197,6 @@ Commands:
                     Options:
                       --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
-  queue             View and manage pending spawn queue
-                    Subcommands:
-                      queue                    List queued spawns
-                      queue clear              Clear all queued spawns
-                      queue remove <branch>    Remove specific entry
-                      queue process            Process queue immediately
-                    Options:
-                      -j, --json               Output in JSON format
   pool              File-backed task pools with sealed bounded expansions
                     Usage: hydra pool create|add|seal|claim|complete|cancel|status|list|run
                            hydra pool --help
@@ -239,8 +231,6 @@ Environment:
   HYDRA_SKIP_AI     Non-interactive shell-only default
   HYDRA_ROOT        Override hydra installation path (for library discovery)
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
-  HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
-                      When limit is reached, spawns are queued for later
   HYDRA_ADMISSION_QUEUE_SECONDS  Admission wait deadline (default: 60); also
                       bounds an execution's wait for the busy admission lock
   HYDRA_ADMISSION_LABELS  Comma-separated required host labels
@@ -296,7 +286,7 @@ usage_command() {
 # Commands with their own richer help (workflow, admission, claim, ...) keep it.
 usage_command_handles() {
     case "$1" in
-        spawn|init|agent|remote|fleet|capabilities|path|lifecycle|outcome|wait|adapter|resume|notify|exec|diff|review|provenance|integrate|list|switch|kill|group|send|recv|pr|tail|broadcast|wait-idle|regenerate|state|events|status|doctor|cleanup|dashboard|tui|cycle-layout|queue|completion)
+        spawn|init|agent|remote|fleet|capabilities|path|lifecycle|outcome|wait|adapter|resume|notify|exec|diff|review|provenance|integrate|list|switch|kill|group|send|recv|pr|tail|broadcast|wait-idle|regenerate|state|events|status|doctor|cleanup|dashboard|tui|cycle-layout|completion)
             return 0 ;;
     esac
     return 1
@@ -323,7 +313,7 @@ main() {
     esac
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue|pool|schedule)
+        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|pool|schedule)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -557,10 +547,6 @@ main() {
         completion)
             shift
             cmd_completion "$@"
-            ;;
-        queue)
-            shift
-            cmd_queue "$@"
             ;;
         pool)
             shift

@@ -69,24 +69,7 @@ grep -q '"reserved":0,"queued":0' "$fixture/status"
 grep -q '"reserved":1,"queued":0' "$fixture/status"
 "$CLI" kill admission-agent --force >/dev/null
 
-# The existing spawn queue dispatches through exactly the same reservation path.
 "$CLI" kill admission-plain --force >/dev/null
-# Enqueue uses an interactive prompt; seed with its existing helper, then test
-# the public queue processor and real spawned head without automating a prompt.
-# shellcheck disable=SC1090,SC1091
-enqueue() (
-    . "$ROOT/lib/locks.sh"
-    . "$ROOT/lib/identity.sh"
-    . "$ROOT/lib/state_v2.sh"
-    . "$ROOT/lib/limits.sh"
-    queue_spawn "$1" none '' default 50 >/dev/null
-)
-enqueue admission-queued
-"$CLI" queue process > "$fixture/queue"
-"$CLI" path admission-queued >/dev/null
-enqueue admission-after-kill
-"$CLI" kill admission-queued --force >/dev/null
-"$CLI" path admission-after-kill >/dev/null
 "$CLI" admission status > "$fixture/status"
 grep -q '"reserved":0,"queued":0' "$fixture/status"
 
@@ -128,4 +111,4 @@ relative_cli gate run admission-relative --name relative -- touch "$fixture/rela
 relative_cli admission status > "$fixture/status"
 grep -q '"reserved":0,"queued":0' "$fixture/status"
 relative_cli kill --all --force >/dev/null
-printf 'Passed head/gate admission, spawn queue paths, and concurrent create/resume revalidation\n'
+printf 'Passed head/gate admission and concurrent create/resume revalidation\n'

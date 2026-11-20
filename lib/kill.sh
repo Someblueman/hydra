@@ -181,12 +181,6 @@ kill_single_head() {
         return 1
     fi
 
-    # Process pending spawn queue after successful kill (best-effort)
-    # This allows queued spawns to proceed now that capacity is available
-    if command -v process_spawn_queue >/dev/null 2>&1; then
-        process_spawn_queue >/dev/null 2>&1 || true
-    fi
-
     return 0
 }
 
@@ -273,10 +267,6 @@ EOF
     done <<EOF
 $mappings
 EOF
-
-    if command -v process_spawn_queue >/dev/null 2>&1; then
-        process_spawn_queue >/dev/null 2>&1 || true
-    fi
 
     # Summary
     echo ""

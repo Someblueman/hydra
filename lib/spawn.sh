@@ -34,57 +34,6 @@ spawn_rollback_session() {
     return 0
 }
 
-# Queue bulk spawns with same AI tool
-# Usage: queue_bulk_spawns <base_branch> <count> <ai_tool> <group> <layout>
-queue_bulk_spawns() {
-    _base="$1"
-    _count="$2"
-    _ai_tool="${3:-}"
-    _group="${4:-}"
-    _layout="${5:-default}"
-
-    if [ "$_count" -eq 1 ]; then
-        queue_spawn "$_base" "$_ai_tool" "$_group" "$_layout" "50" >/dev/null
-        return 0
-    fi
-
-    _i=1
-    while [ "$_i" -le "$_count" ]; do
-        queue_spawn "${_base}-${_i}" "$_ai_tool" "$_group" "$_layout" "50" >/dev/null
-        _i=$((_i + 1))
-    done
-}
-
-# Queue spawns from mixed agents spec (e.g. "claude:2,aider:1")
-# Usage: queue_mixed_spawns <base_branch> <agents_spec> <group> <layout>
-queue_mixed_spawns() {
-    _base_branch="$1"
-    _agents_spec="$2"
-    _group="${3:-}"
-    _layout="${4:-default}"
-    _session_num=1
-
-    while [ -n "$_agents_spec" ]; do
-        _pair="${_agents_spec%%,*}"
-        if [ "$_pair" = "$_agents_spec" ]; then
-            _agents_spec=""
-        else
-            _agents_spec="${_agents_spec#*,}"
-        fi
-
-        _agent="${_pair%%:*}"
-        _agent_count="${_pair#*:}"
-
-        _i=1
-        while [ "$_i" -le "$_agent_count" ]; do
-            _branch_name="${_base_branch}-${_session_num}"
-            queue_spawn "$_branch_name" "$_agent" "$_group" "$_layout" "50" >/dev/null
-            _session_num=$((_session_num + 1))
-            _i=$((_i + 1))
-        done
-    done
-}
-
 # Confirm an allowlisted AI command exists on PATH
 # Usage: ensure_ai_on_path <command>
 # Returns: 0 if found, 1 if missing
