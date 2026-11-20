@@ -766,7 +766,8 @@ projection, not an automation API.
 Plain `hydra tui` runs the native control centre and has no fallback interface.
 Without a qualified `hydra-tui` helper it prints how to obtain one and exits 1;
 an unexpected helper exit status is reported on one line and returned after the
-terminal is restored. `hydra tui --basic` is rejected as a usage error (exit 2).
+terminal is restored. An option `hydra tui` does not know, such as the `--basic`
+and `--native` of earlier releases, is a usage error (exit 2).
 `hydra tui --capabilities --json` keeps its fields and reports
 `"fallback_mode":"none"` and `"basic":false`. The control centre has four
 screens, Work, Inbox, Hosts and Stats; `hydra tui --view work|inbox|hosts|stats`

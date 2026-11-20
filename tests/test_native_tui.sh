@@ -533,18 +533,12 @@ done
 
 for basic_tui in "$tui" "$test_root/missing-hydra-tui"; do
     HYDRA_TUI_BIN="$basic_tui" "$repo_root/bin/hydra" tui --basic > "$test_root/basic.out" 2> "$test_root/basic.err"
-    assert_equal "2" "$?" "removed --basic mode is a usage error"
-    contains "the basic shell TUI was removed" "$test_root/basic.err" "removed --basic mode says it was removed"
-    contains "'hydra list' and 'hydra switch'" "$test_root/basic.err" "removed --basic mode names what to use instead"
-    assert_equal "" "$(cat "$test_root/basic.out")" "removed --basic mode starts no interface"
+    assert_equal "2" "$?" "--basic is a usage error like any unknown option"
+    contains "unknown TUI option '--basic'" "$test_root/basic.err" "--basic is not retained as a shim"
+    assert_equal "" "$(cat "$test_root/basic.out")" "--basic starts no interface"
 done
 "$repo_root/bin/hydra" help > "$test_root/help.out" 2>&1
 contains "  tui  " "$test_root/help.out" "help lists the tui command"
-if grep -Fq -- "--basic" "$test_root/help.out"; then
-    assert_success 1 "help no longer offers --basic"
-else
-    assert_success 0 "help no longer offers --basic"
-fi
 
 # shellcheck disable=SC2016
 printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 4.0.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"

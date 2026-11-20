@@ -328,7 +328,7 @@ test_completion_includes_shipped_commands() {
     printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from remote' | grep -Eq -- '-l project([[:space:]]|$)' && removed_setup_status=1
     assert_success "$removed_setup_status" "remote setup completions omit removed options"
 
-    # tui keeps its diagnostics option; the removed --basic flag is not offered.
+    # tui offers its diagnostics option.
     tui_option_status=0
     printf '%s\n' "$bash_out" | grep '^        tui)' | grep -q -- '--capabilities' || tui_option_status=1
     printf '%s\n' "$zsh_out" | awk '
@@ -339,11 +339,6 @@ test_completion_includes_shipped_commands() {
     ' || tui_option_status=1
     printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from tui' | grep -Eq -- '-l capabilities([[:space:]]|$)' || tui_option_status=1
     assert_success "$tui_option_status" "tui completion offers --capabilities in every shell"
-    removed_basic_status=0
-    for generated in "$bash_out" "$zsh_out" "$fish_out"; do
-        case "$generated" in *--basic*|*'-l basic'*) removed_basic_status=1 ;; esac
-    done
-    assert_success "$removed_basic_status" "tui completions omit the removed --basic flag"
 }
 
 # Run all tests
