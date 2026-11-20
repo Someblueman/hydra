@@ -280,11 +280,24 @@ hydra_core_snapshot_valid() {
     ' "$_hcsv_file"
 }
 
-# The shell implementation, after the native helper could not be used. The
-# reason is named on stderr only for "explain" (hydra snapshot --native).
-hydra_snapshot_fallback() {
-    [ "$1" != explain ] || echo "hydra: native snapshot fallback: $2" >&2
-    LC_ALL=C hydra_snapshot_shell
+# Runs one helper call for the named handshake step, within the timeout.
+# Succeeds with the helper's output in <dir>/stdout; otherwise leaves
+# "<step>-timeout" or "<step>-failure" in _hsn_reason.
+# Usage: hydra_core_step <step> <dir> <helper> [argument...]
+hydra_core_step() {
+    _hcs_step="$1"
+    _hcs_dir="$2"
+    shift 2
+    rm -f "$_hcs_dir/stdout" "$_hcs_dir/stderr" "$_hcs_dir/timed-out"
+    hydra_core_run_bounded "$_hcs_dir" "$@" && return 0
+    if [ $? -eq 124 ]; then _hsn_reason="$_hcs_step-timeout"; else _hsn_reason="$_hcs_step-failure"; fi
+    return 1
+}
+
+# Succeeds when the file holds exactly the expected line and nothing else.
+hydra_core_answered() {
+    [ "$(cat "$1"; printf x)" = "$2
+x" ]
 }
 
 # Usage: hydra_snapshot [explain]
@@ -292,66 +305,37 @@ hydra_snapshot_fallback() {
 # protocol and exact-version handshake and prints a well-formed snapshot, each
 # within HYDRA_CORE_TIMEOUT_SECONDS. In every other case, including a state the
 # helper refuses, the shell implementation decides: its output, diagnostics and
-# exit status are the command's.
+# exit status are the command's. Only "explain" (hydra snapshot --native) names
+# on stderr why the helper was not used.
 hydra_snapshot() {
     _hsn_explain="${1:-}"
     _hsn_core="$(hydra_core_path 2>/dev/null || true)"
+    _hsn_dir=""
     if [ -z "$_hsn_core" ] || [ ! -e "$_hsn_core" ]; then
-        hydra_snapshot_fallback "$_hsn_explain" helper-unavailable
-        return
-    fi
-    if [ ! -x "$_hsn_core" ]; then
-        hydra_snapshot_fallback "$_hsn_explain" helper-not-executable
-        return
-    fi
-    if ! _hsn_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-core.XXXXXX" 2>/dev/null)"; then
-        hydra_snapshot_fallback "$_hsn_explain" scratch-unavailable
-        return
-    fi
-    if hydra_core_run_bounded "$_hsn_dir" "$_hsn_core" --protocol-version; then
-        _hsn_status=0
-    else
-        _hsn_status=$?
-        if [ "$_hsn_status" -eq 124 ]; then _hsn_reason=protocol-timeout; else _hsn_reason=protocol-failure; fi
-    fi
-    if [ "$_hsn_status" -ne 0 ]; then
+        _hsn_reason=helper-unavailable
+    elif [ ! -x "$_hsn_core" ]; then
+        _hsn_reason=helper-not-executable
+    elif ! _hsn_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-core.XXXXXX" 2>/dev/null)"; then
+        _hsn_reason=scratch-unavailable
+    elif ! hydra_core_step protocol "$_hsn_dir" "$_hsn_core" --protocol-version; then
         :
-    elif [ "$(sed -n '1p' "$_hsn_dir/stdout")" != "$HYDRA_CORE_PROTOCOL" ] || \
-         [ "$(wc -l < "$_hsn_dir/stdout" | tr -d ' ')" != "1" ]; then
+    elif ! hydra_core_answered "$_hsn_dir/stdout" "$HYDRA_CORE_PROTOCOL"; then
         _hsn_reason=protocol-skew
+    elif ! hydra_core_step version "$_hsn_dir" "$_hsn_core" --version; then
+        :
+    elif ! hydra_core_answered "$_hsn_dir/stdout" "Hydra core $HYDRA_VERSION protocol $HYDRA_CORE_PROTOCOL"; then
+        _hsn_reason=version-skew
+    elif ! hydra_core_step snapshot "$_hsn_dir" "$_hsn_core" snapshot "$HYDRA_STATE_V2_ROOT"; then
+        :
+    elif ! hydra_core_snapshot_valid "$_hsn_dir/stdout"; then
+        _hsn_reason=malformed-output
     else
-        rm -f "$_hsn_dir/stdout" "$_hsn_dir/stderr" "$_hsn_dir/timed-out"
-        if hydra_core_run_bounded "$_hsn_dir" "$_hsn_core" --version; then
-            _hsn_status=0
-        else
-            _hsn_status=$?
-            if [ "$_hsn_status" -eq 124 ]; then _hsn_reason=version-timeout; else _hsn_reason=version-failure; fi
-        fi
-        if [ "$_hsn_status" -ne 0 ]; then
-            :
-        elif [ "$(sed -n '1p' "$_hsn_dir/stdout")" != "Hydra core $HYDRA_VERSION protocol $HYDRA_CORE_PROTOCOL" ] || \
-             [ "$(wc -l < "$_hsn_dir/stdout" | tr -d ' ')" != 1 ]; then
-            _hsn_reason=version-skew
-        else
-            rm -f "$_hsn_dir/stdout" "$_hsn_dir/stderr" "$_hsn_dir/timed-out"
-            if hydra_core_run_bounded "$_hsn_dir" "$_hsn_core" snapshot "$HYDRA_STATE_V2_ROOT"; then
-                _hsn_status=0
-            else
-                _hsn_status=$?
-                if [ "$_hsn_status" -eq 124 ]; then _hsn_reason=snapshot-timeout; else _hsn_reason=snapshot-failure; fi
-            fi
-            if [ "$_hsn_status" -ne 0 ]; then
-                :
-            elif ! hydra_core_snapshot_valid "$_hsn_dir/stdout"; then
-                _hsn_reason=malformed-output
-            else
-                cat "$_hsn_dir/stdout"
-                _hsn_status=$?
-                rm -rf "$_hsn_dir"
-                return "$_hsn_status"
-            fi
-        fi
+        cat "$_hsn_dir/stdout"
+        _hsn_status=$?
+        rm -rf "$_hsn_dir"
+        return "$_hsn_status"
     fi
-    rm -rf "$_hsn_dir"
-    hydra_snapshot_fallback "$_hsn_explain" "$_hsn_reason"
+    [ -z "$_hsn_dir" ] || rm -rf "$_hsn_dir"
+    [ "$_hsn_explain" != explain ] || echo "hydra: native snapshot fallback: $_hsn_reason" >&2
+    LC_ALL=C hydra_snapshot_shell
 }
