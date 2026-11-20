@@ -56,35 +56,6 @@ get_worktree_path_for_branch() {
     printf '%s%s' "$prefix" "$branch"
 }
 
-# Extract branch name from a hydra worktree path
-# Usage: branch_from_hydra_worktree_path <path> [repo_root]
-# Returns: Branch name on stdout, 1 if not a hydra worktree path
-branch_from_hydra_worktree_path() {
-    path="$1"
-    repo_root="${2:-}"
-    if [ -z "$path" ]; then
-        return 1
-    fi
-    if [ -z "$repo_root" ]; then
-        repo_root="$(get_repo_root 2>/dev/null)" || return 1
-    fi
-    prefix="$(get_hydra_worktree_prefix "$repo_root")"
-    case "$path" in
-        "$prefix"*)
-            printf '%s' "${path#"$prefix"}"
-            return 0
-            ;;
-    esac
-    return 1
-}
-
-# Check if a path is a hydra worktree directory
-# Usage: is_hydra_worktree_path <path> [repo_root]
-# Returns: 0 if hydra worktree path, 1 otherwise
-is_hydra_worktree_path() {
-    branch_from_hydra_worktree_path "$1" "${2:-}" >/dev/null 2>&1
-}
-
 # Normalize a path to absolute form
 # Usage: normalize_path <path>
 # Returns: Normalized absolute path on stdout
