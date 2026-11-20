@@ -50,12 +50,14 @@ static enum verdict status_command(struct setup_ctx *ctx, json_object *recipe, c
 /* A present credential file proves sign-in; absence may mean a keyring. */
 static enum verdict status_file(struct setup_ctx *ctx, const char *agent) {
     json_object *request, *reply; const char *state; enum verdict verdict;
-    if (!auth_agent(agent) || !agent_remote_capability(&ctx->remote, "agent-auth", ctx->seconds)) return UNKNOWN;
+    if (!auth_agent(agent)) return UNKNOWN;
     request = json_object_new_object();
     json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL));
     json_object_object_add(request, "auth_protocol", json_object_new_int(1));
     f_string_add(request, "action", "auth"); f_string_add(request, "operation", "status"); f_string_add(request, "agent", agent);
-    reply = f_request(&ctx->remote, request, ctx->seconds);
+    /* Status reads on the host and carries no secret: one SSH session with
+     * the handshake that says whether the host answers it at all. */
+    reply = f_request_if_capable(&ctx->remote, "agent-auth", request, ctx->seconds, ctx->seconds);
     state = f_string(f_field(reply, "data"), "credential_state");
     verdict = json_object_get_boolean(f_field(reply, "ok")) && state && !strcmp(state, "present") ? SIGNED_IN : UNKNOWN;
     json_object_put(request); json_object_put(reply);

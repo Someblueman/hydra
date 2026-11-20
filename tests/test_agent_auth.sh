@@ -21,6 +21,7 @@ fi
 # The remote side sees a minimal non-interactive PATH, like sshd's default.
 export PATH="$AUTH_TEST_ROOT/remote-path:/usr/bin:/bin"
 while [ $# -gt 2 ]; do shift; done
+printf '%s\n' "$1" >> "$AUTH_TEST_ROOT/sessions"
 request="$(cat)"
 case "$request" in
     *'"operation":"copy"'*)
@@ -29,12 +30,19 @@ case "$request" in
             success-echo) printf '{"schema_version":1,"command":"fleet-auth","ok":true,"data":%s}' "$request"; exit 0 ;;
             partial) printf '{'; exit 1 ;;
         esac ;;
-    *'"action":"handshake"'*)
-        if [ "${AUTH_TEST_MODE:-}" = old ]; then
-            printf '{"schema_version":1,"command":"fleet-handshake","ok":true,"data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
-            exit 0
-        fi ;;
 esac
+# A receiver from before agent authentication: its handshake advertises
+# nothing, and it refuses the status request that arrives in the same session
+# (the handshake is asked for on the command line, the request on standard
+# input).
+if [ "${AUTH_TEST_MODE:-}" = old ]; then
+    case "$2$request" in *'"action":"handshake"'*)
+        printf '%s\n' '{"schema_version":1,"command":"fleet-handshake","ok":true,"data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
+        case "$request" in *'"action":"handshake"'*) exit 0 ;; esac
+        printf '%s\n' '{"schema_version":1,"command":"fleet","ok":false,"error":{"code":"invalid_project","message":"an existing absolute remote project path is required","recovery":"none"}}'
+        exit 1 ;;
+    esac
+fi
 unset CODEX_HOME PI_CODING_AGENT_DIR XDG_DATA_HOME CLAUDE_CONFIG_DIR
 export HOME="$AUTH_TEST_HOME"
 printf '%s' "$request" | /bin/sh -c "$2"
@@ -49,7 +57,11 @@ reject() { if "$@" > "$fixture/error" 2>&1; then echo "Expected rejection: $*" >
 printf '%s' '{"auth_mode":"apikey","OPENAI_API_KEY":"synthetic-codex-secret"}' > "$fixture/local/codex.json"
 hydra fleet auth status test --agent codex > "$fixture/status"
 grep -q '"credential_state":"absent"' "$fixture/status"
+# Status carries no secret and only reads, so it shares the handshake's SSH
+# session; a preview is that status and nothing more on the host.
+[ "$(wc -l < "$fixture/sessions")" -eq 1 ] || { echo 'auth status is not one SSH session' >&2; exit 1; }
 preview codex
+[ "$(wc -l < "$fixture/sessions")" -eq 2 ] || { echo 'auth preview is not one SSH session' >&2; exit 1; }
 hash="$(approval)"
 [ "${#hash}" -eq 64 ]
 reject hydra fleet auth copy test --agent codex --source "$fixture/local/codex.json" --approve "$(printf '%064d' 0)"
@@ -72,7 +84,11 @@ export AUTH_TEST_MODE=old
 reject preview codex
 unset AUTH_TEST_MODE
 preview codex
-hydra fleet auth copy test --agent codex --source "$fixture/local/codex.json" --approve "$(approval)" > "$fixture/copy"
+approved="$(approval)"
+: > "$fixture/sessions"
+hydra fleet auth copy test --agent codex --source "$fixture/local/codex.json" --approve "$approved" > "$fixture/copy"
+# The credential travels in a session of its own, after the handshake.
+[ "$(wc -l < "$fixture/sessions")" -eq 2 ] || { echo 'auth copy is not a status session and a copy session' >&2; exit 1; }
 grep -q synthetic-codex-secret "$fixture/remote/.codex/auth.json"
 if grep -q synthetic-codex-secret "$fixture/copy"; then exit 1; fi
 # Existing destination rotation invalidates approval.
