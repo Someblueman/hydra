@@ -5,6 +5,8 @@
 #include "fleet/fleet.h"
 #include "fleet/revocation/revocation.h"
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -21,10 +23,50 @@ static int host_order(const void *left, const void *right) {
     const char *a = f_string(*(json_object *const *)left, "host"), *b = f_string(*(json_object *const *)right, "host");
     return strcmp(a ? a : "", b ? b : "");
 }
+/* One worker process per host. The coordinator used to look for finished
+ * workers every 20 ms, so every aggregate ended up to 20 ms after its last
+ * host had answered. Each worker now holds the write end of a pipe of its
+ * own (close-on-exec, so the ssh it starts does not), and the coordinator
+ * waits on the read ends: a worker's exit closes its pipe and ends the wait
+ * at once. The wait is still bounded by WORKER_WAIT_MS, which is also how
+ * soon a stop request is noticed, as before. Without a pipe (none could be
+ * created) a worker is simply looked at once per wait. */
+#define WORKER_WAIT_MS 20
+static pid_t worker_fork(int *done) {
+    int ends[2]; pid_t pid;
+    if (pipe(ends)) ends[0] = ends[1] = -1;
+    pid = fork();
+    if (pid == 0) {
+        if (ends[0] >= 0) close(ends[0]);
+        if (ends[1] >= 0) (void)fcntl(ends[1], F_SETFD, FD_CLOEXEC);
+        return 0;
+    }
+    if (ends[1] >= 0) close(ends[1]);
+    if (ends[0] >= 0 && (pid < 0 || fcntl(ends[0], F_SETFD, FD_CLOEXEC))) { close(ends[0]); ends[0] = -1; }
+    *done = ends[0];
+    return pid;
+}
+static void workers_wait(const int *done, unsigned count) {
+    struct pollfd waits[16]; unsigned i; nfds_t open_ends = 0;
+    for (i = 0; i < count && i < 16; i++) if (done[i] >= 0) { waits[open_ends].fd = done[i]; waits[open_ends].events = 0; waits[open_ends++].revents = 0; }
+    (void)poll(waits, open_ends, WORKER_WAIT_MS);
+}
+/* True once the worker has been reaped. A closed pipe says it is exiting,
+ * so it is waited for; otherwise it is only looked at. */
+static bool worker_reaped(pid_t pid, int *done, int *status) {
+    struct pollfd end; int options = WNOHANG; pid_t reaped;
+    end.fd = *done; end.events = 0; end.revents = 0;
+    if (*done >= 0 && poll(&end, 1, 0) > 0 && (end.revents & (POLLHUP | POLLERR | POLLNVAL))) options = 0;
+    do reaped = waitpid(pid, status, options); while (reaped < 0 && errno == EINTR);
+    if (reaped != pid) return false;
+    if (*done >= 0) close(*done);
+    *done = -1;
+    return true;
+}
 json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs) {
     json_object *names = f_remotes(), *hosts = json_object_new_array(), *result, *data = json_object_new_object();
     size_t count = json_object_array_length(names), next = 0, finished = 0;
-    struct worker { pid_t pid; size_t index; char path[F_PATH]; } workers[16] = {{0}};
+    struct worker { pid_t pid; size_t index; int done; char path[F_PATH]; } workers[16] = {{0}};
     char dir[] = "/tmp/hydra-fleet.XXXXXX"; unsigned active = 0, i; bool failed = false, succeeded = false;
     if (count > 16 || !mkdtemp(dir)) { json_object_put(names); json_object_put(hosts); json_object_put(data); return f_error("fleet", "limit", "fleet supports at most 16 hosts"); }
     while (finished < count && !f_stopped) {
@@ -32,7 +74,7 @@ json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs) {
             if (workers[i].pid) continue;
             workers[i].index = next++;
             snprintf(workers[i].path, sizeof(workers[i].path), "%s/%zu", dir, workers[i].index);
-            workers[i].pid = fork();
+            workers[i].pid = worker_fork(&workers[i].done);
             if (workers[i].pid == 0) {
                 struct f_remote remote; json_object *row; const char *text;
                 const char *name = json_object_get_string(json_object_array_get_idx(names, workers[i].index));
@@ -47,18 +89,23 @@ json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs) {
         }
         for (i = 0; i < jobs; i++) {
             int status; char *text; json_object *row;
-            if (!workers[i].pid || waitpid(workers[i].pid, &status, WNOHANG) != workers[i].pid) continue;
+            if (!workers[i].pid || !worker_reaped(workers[i].pid, &workers[i].done, &status)) continue;
             workers[i].pid = 0; active--; finished++;
             text = f_read(workers[i].path, F_LIMIT); row = text ? f_parse(text) : NULL; free(text);
             if (!row) row = f_error("fleet", "worker_failed", "host worker did not return a result");
             if (json_object_get_boolean(f_field(row, "ok"))) succeeded = true; else failed = true;
             json_object_array_add(hosts, row); unlink(workers[i].path);
         }
-        if (active) { struct timespec pause = {0, 20000000}; nanosleep(&pause, NULL); }
+        if (active) {
+            int ends[16]; unsigned waiting = 0;
+            for (i = 0; i < jobs; i++) if (workers[i].pid) ends[waiting++] = workers[i].done;
+            workers_wait(ends, waiting);
+        }
     }
     for (i = 0; i < jobs; i++) if (workers[i].pid) {
         int status; kill(workers[i].pid, SIGTERM);
         while (waitpid(workers[i].pid, &status, 0) < 0 && errno == EINTR) { }
+        if (workers[i].done >= 0) close(workers[i].done);
         unlink(workers[i].path);
     }
     rmdir(dir); json_object_put(names);
@@ -283,13 +330,14 @@ static json_object *decorate(json_object *row, const struct f_remote *remote, in
 struct observation_worker {
     pid_t pid;
     size_t index;
+    int done;
     char path[F_PATH];
 };
 
 static int launch_observation_worker(struct observation_worker *worker, const char *directory, json_object *names, unsigned seconds) {
     struct f_remote remote; json_object *row; const char *text, *name; pid_t pid;
     if (snprintf(worker->path, sizeof(worker->path), "%s/%zu", directory, worker->index) >= (int)sizeof(worker->path)) return -1;
-    pid = fork();
+    pid = worker_fork(&worker->done);
     if (pid != 0) { worker->pid = pid < 0 ? 0 : pid; return pid < 0 ? -1 : 0; }
     name = json_object_get_string(json_object_array_get_idx(names, worker->index));
     row = f_remote_load(name, &remote) ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe(&remote, "overview", seconds);
@@ -299,7 +347,7 @@ static int launch_observation_worker(struct observation_worker *worker, const ch
 
 static bool collect_observation_worker(struct observation_worker *worker, json_object *names, json_object *hosts, int64_t now, bool *partial) {
     int status; char *text; json_object *row; struct f_remote remote; const char *name;
-    if (!worker->pid || waitpid(worker->pid, &status, WNOHANG) != worker->pid) return false;
+    if (!worker->pid || !worker_reaped(worker->pid, &worker->done, &status)) return false;
     worker->pid = 0; name = json_object_get_string(json_object_array_get_idx(names, worker->index));
     text = f_read(worker->path, OBSERVATION_CACHE_LIMIT); row = text ? f_parse(text) : NULL; free(text);
     if (!row || f_remote_load(name, &remote)) {
@@ -314,6 +362,7 @@ static void stop_observation_workers(struct observation_worker *workers, unsigne
     for (i = 0; i < jobs; i++) if (workers[i].pid) {
         int status; kill(workers[i].pid, SIGTERM);
         while (waitpid(workers[i].pid, &status, 0) < 0 && errno == EINTR) { }
+        if (workers[i].done >= 0) close(workers[i].done);
         unlink(workers[i].path);
     }
 }
@@ -343,7 +392,11 @@ static void run_observation_workers(json_object *names, json_object *hosts, stru
     while (finished < count && !f_stopped) {
         launch_ready_workers(workers, names, count, jobs, seconds, directory, &next, &active);
         collect_ready_workers(workers, names, hosts, jobs, now, partial, &active, &finished);
-        if (active) { struct timespec pause = {0, 20000000}; nanosleep(&pause, NULL); }
+        if (active) {
+            int ends[16]; unsigned waiting = 0, i;
+            for (i = 0; i < jobs; i++) if (workers[i].pid) ends[waiting++] = workers[i].done;
+            workers_wait(ends, waiting);
+        }
     }
     stop_observation_workers(workers, jobs);
 }
