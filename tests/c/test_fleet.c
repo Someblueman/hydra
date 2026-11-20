@@ -4,6 +4,8 @@
 #include "fleet/transport/remote.h"
 #include "fleet/transport/server.h"
 #include "fleet/transport/bundle.h"
+#include "fleet/enrollment/enrollment.h"
+#include "fleet/enrollment/receiver.h"
 #include "fleet/workflow/workflow_drive.h"
 #include "fleet/fleet.h"
 #include <assert.h>
@@ -126,6 +128,7 @@ int main(void) {
     durable_writes(dir);
     durable_helper(dir);
     durable_remote_alias(dir);
+    durable_enrollment(dir);
     handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);

@@ -4,8 +4,6 @@
 #include "fleet/support/json.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 
 bool enrollment_path(const char *path) { return path && path[0] == '/' && hd_text(path, F_PATH); }
 bool enrollment_digest(const char *value) {
@@ -14,16 +12,10 @@ bool enrollment_digest(const char *value) {
     for (i = 0; i < 64; i++) if (!strchr("0123456789abcdef", value[i])) return false;
     return true;
 }
+/* f_write stages, replaces and syncs the directory of path. */
 int enrollment_write(const char *path, json_object *value) {
     const char *text = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
-    char directory[F_PATH], *slash; int fd, status;
-    if (f_write(path, text, strlen(text), true) || f_copy(directory, sizeof(directory), path)) return -1;
-    slash = strrchr(directory, '/');
-    if (!slash) f_copy(directory, sizeof(directory), ".");
-    else if (slash == directory) slash[1] = '\0';
-    else *slash = '\0';
-    fd = open(directory, O_RDONLY); if (fd < 0) return -1;
-    status = fsync(fd); close(fd); return status;
+    return f_write(path, text, strlen(text), true) ? -1 : 0;
 }
 /* The digest of exactly the bytes enrollment_write stores for value: its
  * plain serialisation, no trailing newline. Records carry this digest and

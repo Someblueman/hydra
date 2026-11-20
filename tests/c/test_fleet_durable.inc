@@ -136,3 +136,42 @@ static void durable_remote_alias(const char *home) {
     assert(!f_remote_save(&remote) && !f_remote_load("alias-a", &loaded) && !strcmp(loaded.target, "host-b"));
     assert(durable_entries(dir) == before + 1);
 }
+/* Enrollment's records: the reviewed intent and apply progress on the
+ * operator's side (enrollment_write), and on the receiving host the claim
+ * that an operation ID is taken. A claim that cannot be written runs
+ * nothing: the mutation would otherwise be repeatable. */
+static void durable_enrollment(const char *home) {
+    char dir[F_PATH], progress[F_PATH], marker[F_PATH], command[F_PATH + 16];
+    char *argv[] = {(char *)"sh", (char *)"-c", command, NULL};
+    json_object *first = f_parse("{\"schema_version\":1,\"hosts\":[]}"), *second = f_parse("{\"schema_version\":1,\"hosts\":[1]}");
+    json_object *request = f_parse("{\"protocol\":1,\"action\":\"init\",\"project\":\"/srv/p\",\"args\":[],\"enrollment_operation_id\":"
+        "\"0000000000000000000000000000000000000000000000000000000000000000:alias\"}");
+    json_object *refused, *done, *again;
+    struct durable_limit limit; int written; size_t before;
+    assert(first && second && request);
+    assert(!f_path(dir, sizeof(dir), home, "durable-enroll") && !mkdir(dir, 0700));
+    assert(!f_path(progress, sizeof(progress), dir, "progress.json") && !f_path(marker, sizeof(marker), dir, "ran"));
+    assert(snprintf(command, sizeof(command), ": > '%s'", marker) < (int)sizeof(command));
+    assert(!enrollment_write(progress, first));
+    before = durable_entries(dir);
+
+    durable_limit_on(&limit);
+    written = enrollment_write(progress, second);
+    refused = enrollment_apply_request(request, argv, 5);
+    durable_limit_off(&limit);
+
+    assert(written && durable_entries(dir) == before);
+    durable_expect(progress, "{\"schema_version\":1,\"hosts\":[]}");
+    assert(!json_object_get_boolean(f_field(refused, "ok")) && !strcmp(f_string(f_field(refused, "error"), "code"), "outcome_unknown"));
+    assert(access(marker, F_OK) && errno == ENOENT);
+    assert(!f_path(dir, sizeof(dir), home, "fleet/enrollment-ops") && durable_entries(dir) == 2);
+    done = enrollment_apply_request(request, argv, 5);
+    assert(done && !access(marker, F_OK) && durable_entries(dir) == 3);
+    assert(!unlink(marker));
+    again = enrollment_apply_request(request, argv, 5);
+    assert(json_object_equal(done, again) && access(marker, F_OK));
+    assert(!enrollment_write(progress, second));
+    durable_expect(progress, "{\"schema_version\":1,\"hosts\":[1]}");
+    json_object_put(refused); json_object_put(done); json_object_put(again);
+    json_object_put(first); json_object_put(second); json_object_put(request);
+}
