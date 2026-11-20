@@ -115,6 +115,21 @@ project_worktree_path() {
     printf '%s/%s\n' "$_pwp_root" "$_pwp_head"
 }
 
+# The worktree of the head recorded for a branch: its stored path, else the
+# path under this host's worktree root. "hydra path" prints the same.
+# Usage: project_branch_worktree <branch>
+project_branch_worktree() {
+    _pbw_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _pbw_head="$(state_v2_find_head_by_branch "$_pbw_project" "$1" 2>/dev/null)" || return 1
+    _pbw_dir="$(state_v2_head_dir "$_pbw_project" "$_pbw_head")" || return 1
+    _pbw_stored="$(sed -n '1p' "$_pbw_dir/worktree" 2>/dev/null || true)"
+    if [ -n "$_pbw_stored" ]; then
+        printf '%s\n' "$_pbw_stored"
+    else
+        project_worktree_path "$_pbw_project" "$_pbw_head"
+    fi
+}
+
 project_activate_state_v2() {
     _pas_project="$1"
     _pas_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1

@@ -539,7 +539,7 @@ spawn_print_context() {
     _spc_session="$2"
     _spc_profile="$3"
     _spc_verb="${4:-created}"
-    _spc_worktree="$(spawn_worktree_for_branch "$_spc_branch" 2>/dev/null || true)"
+    _spc_worktree="$(project_branch_worktree "$_spc_branch" 2>/dev/null || true)"
     _spc_agent="$_spc_profile"
     case "$_spc_agent" in ''|none|-) _spc_agent="none (plain shell)" ;; esac
     echo "Head '$_spc_branch' $_spc_verb; it keeps running in the background."
@@ -564,20 +564,6 @@ spawn_human_path() {
             esac
             ;;
     esac
-}
-
-# Resolve the worktree Hydra recorded for a branch's head.
-# Usage: spawn_worktree_for_branch <branch>
-spawn_worktree_for_branch() {
-    _swfb_project="$(hydra_get_project_id 2>/dev/null)" || return 1
-    _swfb_head="$(state_v2_find_head_by_branch "$_swfb_project" "$1" 2>/dev/null)" || return 1
-    _swfb_dir="$(state_v2_head_dir "$_swfb_project" "$_swfb_head")" || return 1
-    _swfb_stored="$(sed -n '1p' "$_swfb_dir/worktree" 2>/dev/null || true)"
-    if [ -n "$_swfb_stored" ]; then
-        printf '%s\n' "$_swfb_stored"
-    else
-        project_worktree_path "$_swfb_project" "$_swfb_head"
-    fi
 }
 
 # Detect durable head state for a branch without mutating anything.
@@ -626,7 +612,7 @@ spawn_report_existing_head() {
 spawn_resume_existing() {
     _sre_branch="$1"
     _sre_dry="$2"
-    _sre_worktree="$(spawn_worktree_for_branch "$_sre_branch" 2>/dev/null || true)"
+    _sre_worktree="$(project_branch_worktree "$_sre_branch" 2>/dev/null || true)"
     _sre_mode="$(get_terminal_mode_for_branch "$_sre_branch" 2>/dev/null || echo interactive)"
     if [ -n "$_sre_dry" ]; then
         echo "Hydra spawn plan (no changes will be made)"
