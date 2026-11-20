@@ -84,6 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`make test-driver-differential-fast`).
 - `make bench-core` runs again and reports 5, 20 and 60 heads; `make
   bench-tui` measures stores that contain heads (its fixture had none).
+- **Opening the control centre no longer starts one `hydra adapter activity`
+  process per head.** A head whose recorded activity state still holds starts
+  none, and heads never observed before are recorded one per refresh instead
+  of all at once (100 such heads: about a fifth of one core for the first two
+  seconds instead of two cores; all recorded after about 200 seconds instead
+  of about 20). A changed state is recorded at once, as before.
+- `make bench-tui` measures what `hydra tui` runs: the control centre's own
+  state read (`hydra-tui --data`) and an interactive session started as
+  `hydra`. It used to time the shell reader `hydra tui --data` and a helper
+  started without `--store`, neither of which `hydra tui` uses.
 
 ### Removed
 - `hydra-core capabilities`, `hydra-core json-string` and `hydra-core
