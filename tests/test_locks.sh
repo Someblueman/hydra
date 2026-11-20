@@ -125,9 +125,7 @@ lock_entries() {
 test_acquire_lock_recovers_dead_owner() {
     echo "Testing acquire_lock recovers a lock whose owner died..."
 
-    (exit 0) &
-    dead_pid=$!
-    wait "$dead_pid"
+    dead_pid="$(test_dead_pid)"
     HYDRA_LOCK_RETRIES=1
     export HYDRA_LOCK_RETRIES
 
@@ -155,9 +153,7 @@ test_acquire_lock_recovers_dead_owner() {
 test_acquire_lock_keeps_owned_locks() {
     echo "Testing acquire_lock never breaks a lock that may be owned..."
 
-    (exit 0) &
-    dead_pid=$!
-    wait "$dead_pid"
+    dead_pid="$(test_dead_pid)"
     sleep 60 &
     live_pid=$!
     HYDRA_LOCK_RETRIES=2
@@ -341,9 +337,7 @@ test_remove_stale_lock_dir_paths() {
 test_acquire_lock_breaks_once_under_contention() {
     echo "Testing concurrent acquirers of a lock whose owner died..."
 
-    (exit 0) &
-    dead_pid=$!
-    wait "$dead_pid"
+    dead_pid="$(test_dead_pid)"
     contend_dir="$test_home/contend"
     mkdir -p "$contend_dir"
     cat > "$contend_dir/contender.sh" <<'CONTENDER'

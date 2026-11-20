@@ -76,13 +76,12 @@ static void hold_lock(const char *dir, bool claim, const char *owner) {
     if (owner) put(lock, "owner-pid", owner);
 }
 
-/* The PID of a process that has exited and been reaped. */
+/* The PID of a process that cannot be running. A reaped child's PID is not
+ * that: with a small pid_max it is reused within seconds, and its new owner
+ * makes the lock look held. 4194304 is above the highest PID Linux issues
+ * (pid_max is at most 4194304) and above macOS's 99998. */
 static long dead_pid(void) {
-    pid_t pid = fork(); int status;
-    CHECK(pid >= 0, "fork");
-    if (pid == 0) _exit(0);
-    CHECK(waitpid(pid, &status, 0) == pid, "waitpid");
-    return (long)pid;
+    return 4194304L;
 }
 
 /* A process that exited with status 0. */

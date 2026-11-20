@@ -186,9 +186,7 @@ evidence_dir="$(pool_path evidence)"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run_id" | sed -n '1p')"
 assert_equal succeeded "$(sed -n '1p' "$run_dir/state" 2>/dev/null)" "the workflow run record succeeded"
 assert_equal "$run_id" "$(sed -n '1p' "$evidence_dir/tasks/one/attempt-1/run-id")" "the attempt binds the run ID"
-sleep 1 &
-dead_pid=$!
-wait "$dead_pid"
+dead_pid="$(test_dead_pid)"
 out="$("$HYDRA_BIN" pool claim evidence --worker gone --owner-pid "$dead_pid" --json)"
 assert_equal two "$(json_field "$out" task_id)" "a second workflow task is claimed by a dead owner"
 printf '%s\n' "$run_id" > "$evidence_dir/tasks/two/attempt-1/run-id"

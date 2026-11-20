@@ -135,8 +135,8 @@ new_case() {
     mkdir -p "$case_dir/run" && printf 'run_lock_test\n' > "$case_dir/run/run-id"
     : > "$case_dir/hold"
 }
-# The PID of a process that has exited and been reaped.
-dead_pid() { sh -c 'exit 0' & dead=$!; wait "$dead"; printf '%s\n' "$dead"; }
+# The PID of a process that cannot be running (see test_dead_pid).
+dead_pid() { test_dead_pid; }
 # A lock as a writer leaves it when it dies: the directory, its claim and
 # the owner record $2 (none without it).
 stale_lock() {

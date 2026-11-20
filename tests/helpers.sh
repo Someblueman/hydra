@@ -89,6 +89,19 @@ wait_for() {
     done
 }
 
+# The PID of a process that cannot be running. The PID of a child that has
+# exited and been reaped is not that: with a small pid_max the kernel reuses
+# it within seconds, and the process that gets it makes a lock owner look
+# alive. 4194304 is above the highest PID Linux issues (pid_max is at most
+# 4194304, so PIDs stop at 4194303) and above macOS's 99998, yet it is still
+# the largest value `hydra pool claim --owner-pid` accepts, so every product
+# path that validates a PID as digits within range reads it as a dead
+# process, not as malformed input. `kill -0` on it fails with ESRCH.
+# Usage: pid="$(test_dead_pid)"
+test_dead_pid() {
+    printf '%s\n' 4194304
+}
+
 # PIDs of processes whose arguments name a fixture path. The path travels in
 # the environment so neither ps nor awk lists it in its own arguments.
 test_processes_naming() {
