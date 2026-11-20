@@ -9,7 +9,7 @@ usage() {
     echo "Usage: [PREFIX=/usr/local] [DESTDIR=] ./install.sh" >&2
     echo "  PREFIX    installation prefix (default: /usr/local)" >&2
     echo "  DESTDIR   optional staging directory prepended to PREFIX" >&2
-    echo "  HYDRA_INSTALL_FLEET auto copies a prebuilt helper; required or never" >&2
+    echo "  HYDRA_INSTALL_FLEET auto copies a prebuilt helper; required or never (workflows need it)" >&2
     echo "  HYDRA_INSTALL_CORE  auto (default), never, or required" >&2
     echo "  HYDRA_BUILD_CORE=1  build the optional core from this checkout" >&2
     echo "  HYDRA_CORE_ARTIFACT offline hydra-core path with adjacent metadata" >&2

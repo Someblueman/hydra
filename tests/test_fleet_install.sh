@@ -48,6 +48,14 @@ cmp "$root/release/fleet-assets.tsv" "$prefix/share/hydra/fleet-assets.tsv"
 assert_success $? "installation includes the pinned fleet asset digests"
 (
     unset HYDRA_ROOT HYDRA_FLEET_BIN
+    cd "$test_home" && HOME="$test_home" HYDRA_HOME="$test_home/state" "$prefix/bin/hydra" doctor > "$fixture/doctor-with-fleet.log" 2>&1
+)
+grep -q 'workflows available' "$fixture/doctor-with-fleet.log"
+assert_success $? "doctor reports workflows available with the installed helper"
+if grep -q 'Workflows are unavailable' "$fixture/install.log"; then warned=1; else warned=0; fi
+assert_success "$warned" "an installation with fleet does not warn that workflows are unavailable"
+(
+    unset HYDRA_ROOT HYDRA_FLEET_BIN
     HOME="$test_home" HYDRA_HOME="$test_home/state" "$prefix/bin/hydra" fleet handshake --json
 ) > "$fixture/handshake.json" 2> "$fixture/handshake.err"
 assert_success $? "installed shell discovers its adjacent fleet helper"
@@ -107,6 +115,8 @@ assert_success $? "a platform-bound package bootstraps on its own platform"
 
 install_fleet "$fixture/disabled" never
 assert_success $? "never mode installs the shell with a fleet binary available"
+grep -q 'Workflows are unavailable' "$fixture/install.log"
+assert_success $? "never mode says that workflows are unavailable"
 test ! -e "$fixture/disabled/libexec/hydra/hydra-fleet"
 assert_success $? "never mode omits the fleet helper from a fresh prefix"
 
@@ -115,6 +125,22 @@ install_fleet "$fixture/missing" required
 assert_failure $? "required mode refuses a missing fleet helper"
 install_fleet "$fixture/optional" auto
 assert_success $? "auto mode permits a shell-only installation without fleet"
+grep -q 'Workflows are unavailable' "$fixture/install.log" && grep -q 'make build-fleet' "$fixture/install.log" && grep -q 'JSON-C' "$fixture/install.log"
+assert_success $? "auto mode without fleet says that workflows are unavailable and how to build the helper"
+(
+    unset HYDRA_ROOT HYDRA_FLEET_BIN
+    cd "$test_home" && HOME="$test_home" HYDRA_HOME="$test_home/state" "$fixture/optional/bin/hydra" doctor > "$fixture/optional-doctor.log" 2>&1
+)
+assert_success $? "doctor of an installation without fleet still succeeds"
+grep -q 'hydra-fleet helper not found: workflows unavailable' "$fixture/optional-doctor.log"
+assert_success $? "doctor reports workflows unavailable without the helper"
+(
+    unset HYDRA_ROOT HYDRA_FLEET_BIN
+    cd "$test_home" && HOME="$test_home" HYDRA_HOME="$test_home/state" "$fixture/optional/bin/hydra" workflow run nothing.yml > "$fixture/optional-run.out" 2> "$fixture/optional-run.err"
+)
+assert_failure $? "an installation without fleet refuses workflow run"
+grep -q 'workflows need the hydra-fleet helper' "$fixture/optional-run.err"
+assert_success $? "the refusal names the helper"
 test ! -e "$fixture/optional/libexec/hydra/hydra-fleet"
 assert_success $? "missing optional helper is not installed"
 

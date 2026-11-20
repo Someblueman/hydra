@@ -131,6 +131,19 @@ cmd_doctor() {
             "install tmux 3.0 or newer to use interactive spawn and attach"
     fi
 
+    _load_lib cmd_fleet
+    if _doctor_fleet="$(fleet_binary 2>/dev/null)"; then
+        if [ "$("$_doctor_fleet" workflow-drive --capability 2>/dev/null)" = 'workflow-drive 1' ]; then
+            print_success "hydra-fleet helper: $_doctor_fleet (workflows available)"
+        else
+            doctor_info "hydra-fleet helper is too old for this release: workflows unavailable ($_doctor_fleet)" \
+                "run make build-fleet (needs JSON-C development files and pkg-config), then ./install.sh again"
+        fi
+    else
+        doctor_info "hydra-fleet helper not found: workflows unavailable (other commands work)" \
+            "run make build-fleet (needs JSON-C development files and pkg-config), then ./install.sh again to install it at <prefix>/libexec/hydra/hydra-fleet"
+    fi
+
     if command -v git >/dev/null 2>&1; then
         print_success "$(git --version)"
     else
