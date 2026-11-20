@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reinstall, or set `HYDRA_ROOT`. Installs made by `install.sh`, including the
   default prefix, are unaffected.
 - `hydra tui --basic` reports `unknown TUI option '--basic'`; it still exits 2.
+- **Workflows need the `hydra-fleet` helper.** The shell workflow run driver is
+  removed. Without a helper, or with one too old to drive runs, `hydra
+  workflow run` exits 1 before creating a run record, with one error that says
+  how to get it (`make build-fleet`, which needs JSON-C and pkg-config, then
+  `./install.sh`). Other commands are unaffected. `HYDRA_NATIVE_DRIVER=0` is
+  refused with the same error; other values are ignored. Runs an earlier
+  release's shell driver started can still be read with `hydra workflow
+  status`; `resume` and `cancel` finish them with `hydra-fleet`, and without it
+  refuse and leave the run unchanged.
+- **`HYDRA_MAX_SESSIONS` and `hydra queue` are removed.** Use `hydra admission
+  configure` for a host-wide limit; it also covers resume, exec and gates, and
+  is enforced under a lock. `hydra spawn` prints one warning when
+  `HYDRA_MAX_SESSIONS` is set (and not 0) and ignores it. `hydra queue` fails
+  like any unknown command. Spawns queued by an earlier release are not run and
+  `hydra kill` no longer starts them; spawn those branches again, and delete
+  `<HYDRA_HOME>/state/v2/projects/<project>/queue` if you want the files gone.
+  The control centre's command palette no longer offers "queue".
 - **The control centre has one reader of local head data**, the native read
   of the state store. `hydra tui --data` is removed (`unknown TUI option`,
   exit 2); use `hydra list`, or `hydra-tui --data` for the same rows.
@@ -122,11 +139,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses, so a store the shell rejects is rejected by both. `--native`
   reports on stderr why the helper was not used; the new `--shell` never runs
   it.
-- **The native workflow run driver is the default** when the installed
-  `hydra-fleet` supports it. The shell driver remains the fallback when there
-  is no helper, and `HYDRA_NATIVE_DRIVER=0` selects it. `hydra workflow
-  status` and each `run.running` event name the driver that ran: the first
-  line of `workflow status` changes and its JSON gains a `driver` member.
+- **Workflow runs are driven by `hydra-fleet`** (see Breaking). `hydra
+  workflow status` and each `run.running` event name the driver that ran: the
+  first line of `workflow status` changes and its JSON gains a `driver`
+  member.
 - The native driver numbers a new event from the bytes appended since its last
   one instead of re-reading `events.jsonl` each time.
 - **Fewer SSH connections for remote operations.** `hydra fleet list`,
@@ -141,6 +157,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the host's login shell must run a `A | B && C` command line.
 - Multi-host fleet commands no longer wait up to 20 ms after the last host
   has answered.
+- `./install.sh` no longer skips `hydra-fleet` silently: it warns that
+  workflows are unavailable without it, and `hydra doctor` reports whether
+  workflows are available.
 - The control centre reads each head's record files once per refresh instead
   of several times: about a third fewer file reads per head and about 20% less
   time per refresh at 100 heads.
@@ -177,10 +196,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: every job has a timeout; pull requests also run a macOS native lane, a
   sanitizer lane and the optimisation-level check; a release branch without a
   pinned helper digest prints a notice instead of failing.
-- CI: both run drivers are tested. `make test` and `make test-fleet` use the
-  native driver; `make test-shell-driver` forces the shell driver and compares
-  the two; pull requests run the short comparison
-  (`make test-driver-differential-fast`).
 - `make bench-core` runs again and reports 5, 20 and 60 heads; `make
   bench-tui` measures stores that contain heads (its fixture had none).
 - **Opening the control centre no longer starts one `hydra adapter activity`
@@ -200,6 +215,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The shell reader of the control centre's head snapshot (`lib/tui_native.sh`
   shrinks from about 500 to 240 lines); `make test-parity` now checks the
   store reader against recorded rows.
+- The shell workflow run driver and its test lanes (`make test-shell-driver`,
+  `test-native-driver`, `test-driver-differential`,
+  `test-driver-differential-fast`) and the CI jobs that ran them.
 - 39 shell functions nothing called, `scripts/bench-tmux-control.sh`, and four
   unreferenced screenshots under `assets/`.
 
