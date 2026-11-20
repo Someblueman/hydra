@@ -138,6 +138,34 @@ assert_equal 'first text' "$(cat "$test_root/text-record")" "a failed text write
 assert_equal "" "$(find "$test_root" -maxdepth 1 -name '.hydra-tmp.*' -print)" "a failed text write leaves no temporary file"
 state_v2_write_scalar "$head_dir/desired-state" stopped
 assert_success $? "the scalar is writable again once writes succeed"
+
+# Records are private (0600) whatever the umask, with no chmod after the
+# write: mktemp_adjacent creates the temporary file that way.
+for record_umask in 000 002 022 077; do
+    (
+        umask "$record_umask"
+        state_v2_write_scalar "$test_root/mode-scalar-$record_umask" value &&
+            state_v2_write_text "$test_root/mode-text-$record_umask" text &&
+            mktemp_adjacent "$test_root/mode-temp-$record_umask" > "$test_root/mode-temp-path-$record_umask"
+    )
+    # ls -ld is the portable way to read one entry's mode (stat differs).
+    # shellcheck disable=SC2012
+    record_modes="$(ls -ld "$test_root/mode-scalar-$record_umask" "$test_root/mode-text-$record_umask" \
+        "$(cat "$test_root/mode-temp-path-$record_umask")" | awk '{ printf "%s ", substr($1, 1, 10) }')"
+    assert_equal "-rw------- -rw------- -rw------- " "$record_modes" \
+        "records and their temporary files are 0600 under umask $record_umask"
+done
+umask_before="$(umask)"
+mktemp_adjacent "$test_root/mode-direct" > /dev/null
+assert_equal "$umask_before" "$(umask)" "mktemp_adjacent leaves the caller's umask alone"
+# The temporary file is created where dirname puts the destination.
+mkdir -p "$test_root/adjacent/sub"
+for adjacent_dest in "$test_root/adjacent/sub/record" "$test_root/adjacent//sub/record" \
+    "$test_root/adjacent/sub/" relative-record ./relative-record; do
+    adjacent_tmp="$(cd "$test_root/adjacent" && mktemp_adjacent "$adjacent_dest")"
+    assert_equal "$(dirname "$adjacent_dest")" "${adjacent_tmp%/.hydra-tmp.*}" \
+        "the temporary file for $adjacent_dest is in that path's directory"
+done
 assert_equal stopped "$(cat "$head_dir/desired-state")" "a later scalar write replaces the value"
 state_v2_write_scalar "$head_dir/desired-state" running
 

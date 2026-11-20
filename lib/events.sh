@@ -88,7 +88,7 @@ event_emit() {
     case "$_ee_type" in ''|*[!a-z0-9._-]*) return 1 ;; esac
     case "$_ee_payload" in \{*\}) ;; *) return 1 ;; esac
     _ee_file="$(event_file_for_head "$_ee_project" "$_ee_head")" || return 1
-    hydra_private_mkdir "$(dirname "$_ee_file")" || return 1
+    hydra_private_mkdir "${_ee_file%/*}" || return 1
     hydra_private_touch "$_ee_file" || return 1
     _ee_lock="events_${_ee_project}_${_ee_head}"
     acquire_lock "$_ee_lock" "event append" || return 1

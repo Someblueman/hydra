@@ -49,6 +49,7 @@ state_v2_write_scalar() {
         *'
 '*|*''*) echo "Error: scalar state values cannot contain newlines" >&2; return 1 ;;
     esac
+    # mktemp_adjacent creates the temporary file private (0600).
     _sv2ws_tmp="$(mktemp_adjacent "$_sv2ws_path")" || return 1
     # A write that fails (full disk, quota, file size limit) leaves an empty
     # or short temporary file; replacing the record with it would publish that
@@ -57,7 +58,6 @@ state_v2_write_scalar() {
         rm -f "$_sv2ws_tmp"
         return 1
     fi
-    chmod 600 "$_sv2ws_tmp" 2>/dev/null || true
     if ! atomic_replace "$_sv2ws_path" "$_sv2ws_tmp"; then
         rm -f "$_sv2ws_tmp"
         return 1
@@ -72,7 +72,6 @@ state_v2_write_text() {
         rm -f "$_sv2wt_tmp"
         return 1
     fi
-    chmod 600 "$_sv2wt_tmp" 2>/dev/null || true
     if ! atomic_replace "$_sv2wt_path" "$_sv2wt_tmp"; then
         rm -f "$_sv2wt_tmp"
         return 1
@@ -279,7 +278,7 @@ state_v2_create_head() {
     _sv2ch_dir="$(state_v2_head_dir "$_sv2ch_project" "$_sv2ch_head")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }
-    _sv2ch_heads_dir="$(dirname "$_sv2ch_dir")"
+    _sv2ch_heads_dir="${_sv2ch_dir%/*}"
     _sv2ch_tmp="$(mktemp -d "$_sv2ch_heads_dir/.head.XXXXXX")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }

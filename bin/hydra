@@ -26,14 +26,20 @@ if [ -L "$HYDRA_BIN_PATH" ]; then
     fi
 fi
 
-# Get the directory containing the hydra binary
-if HYDRA_BIN_DIR="$(cd "$(dirname "$HYDRA_BIN_PATH")" 2>/dev/null && pwd)"; then
+# Get the directory containing the hydra binary. The path names a file, so
+# its directory and name are cut from it here instead of by dirname and
+# basename, two processes every command would otherwise start.
+case "$HYDRA_BIN_PATH" in
+    */*) HYDRA_BIN_DIR="${HYDRA_BIN_PATH%/*}"; [ -n "$HYDRA_BIN_DIR" ] || HYDRA_BIN_DIR=/ ;;
+    *) HYDRA_BIN_DIR=. ;;
+esac
+if HYDRA_BIN_DIR="$(cd "$HYDRA_BIN_DIR" 2>/dev/null && pwd)"; then
     : # Successfully got absolute path
 else
     # Fallback to dirname if cd fails
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
-HYDRA_BIN_PATH="$HYDRA_BIN_DIR/$(basename "$HYDRA_BIN_PATH")"
+HYDRA_BIN_PATH="$HYDRA_BIN_DIR/${HYDRA_BIN_PATH##*/}"
 
 # Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then

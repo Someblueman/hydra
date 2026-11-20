@@ -189,16 +189,25 @@ acquire_lock() {
 # Create a temporary file in the same directory as dest (same filesystem).
 # Usage: mktemp_adjacent <dest>
 # Returns: temp path on stdout
+# The file is private (0600) whatever the caller's umask: mktemp creates it
+# with mode 0600 less the umask, and it runs here under umask 077. Callers
+# therefore need no chmod before renaming it into place.
 mktemp_adjacent() {
     _ma_dest="$1"
     if [ -z "$_ma_dest" ]; then
         return 1
     fi
-    _ma_dir="$(dirname "$_ma_dest")"
+    # The directory of an ordinary path, without a dirname process. dirname
+    # still answers for the forms it treats specially.
+    case "$_ma_dest" in
+        */|*//*) _ma_dir="$(dirname "$_ma_dest")" ;;
+        */*) _ma_dir="${_ma_dest%/*}"; [ -n "$_ma_dir" ] || _ma_dir=/ ;;
+        *) _ma_dir=. ;;
+    esac
     if [ ! -d "$_ma_dir" ]; then
         hydra_private_mkdir "$_ma_dir" || return 1
     fi
-    mktemp "$_ma_dir/.hydra-tmp.XXXXXX"
+    (umask 077; exec mktemp "$_ma_dir/.hydra-tmp.XXXXXX")
 }
 
 # Atomically replace dest with tmpfile via rename. tmpfile must be same-FS.
