@@ -178,8 +178,8 @@ _load_libs_for_cmd() {
             _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
-            _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
-                lifecycle limits parallel worktree_ops maintenance tui_native tui
+            _load_libs output paths locks identity git tmux state state_v2 project profiles notify \
+                parallel worktree_ops maintenance tui_native tui
             ;;
         queue)
             _load_runtime_libs layout
@@ -197,10 +197,7 @@ _load_libs_for_cmd() {
             _load_libs completion_bash completion_zsh completion_fish completion cmd_completion
             ;;
         *)
-            _load_libs output paths locks git tmux layout state completion dashboard github hooks yaml spawn \
-                spawn_bulk kill limits maintenance tui_native tui cmd_spawn cmd_queue cmd_list cmd_session \
-                cmd_group cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion identity \
-                state_v2 project parallel worktree_ops
+            # An unknown command needs no library: main reports it and exits 1.
             ;;
     esac
 }
