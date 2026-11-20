@@ -39,14 +39,40 @@ hydra_project_identity_file() {
     printf '%s/hydra/project-id\n' "$_hpif_common"
 }
 
-hydra_get_project_id() {
-    _hgpi_file="$(hydra_project_identity_file)" || return 1
-    [ -f "$_hgpi_file" ] || return 1
-    _hgpi_id=
+# Where this repository keeps its project id, remembered for the working
+# directory and Git environment it was resolved in. A cd or a different
+# GIT_DIR gives another key, so the next lookup asks Git again.
+_HYDRA_IDENTITY_KEY=
+_HYDRA_IDENTITY_FILE=
+
+# Resolve this repository's project id without printing it.
+# Usage: hydra_load_project_id
+# Sets HYDRA_LOADED_PROJECT_ID and returns 0; outside an initialised project
+# it is empty and the status is 1. Git is asked for the identity file once
+# per process and working directory (a subshell inherits the answer). The
+# file itself is read on every call, so an id written later is seen.
+hydra_load_project_id() {
+    HYDRA_LOADED_PROJECT_ID=
+    _hlpi_key="${PWD:-}|${GIT_DIR:-}|${GIT_COMMON_DIR:-}|${GIT_WORK_TREE:-}"
+    if [ -z "$_HYDRA_IDENTITY_FILE" ] || [ "$_HYDRA_IDENTITY_KEY" != "$_hlpi_key" ]; then
+        _HYDRA_IDENTITY_KEY=
+        _HYDRA_IDENTITY_FILE="$(hydra_project_identity_file)" || {
+            _HYDRA_IDENTITY_FILE=
+            return 1
+        }
+        _HYDRA_IDENTITY_KEY="$_hlpi_key"
+    fi
+    [ -f "$_HYDRA_IDENTITY_FILE" ] || return 1
+    _hlpi_id=
     # The first line, read by the shell itself (no sed process).
-    { IFS= read -r _hgpi_id < "$_hgpi_file"; } 2>/dev/null || :
-    hydra_valid_id "$_hgpi_id" || return 1
-    printf '%s\n' "$_hgpi_id"
+    { IFS= read -r _hlpi_id < "$_HYDRA_IDENTITY_FILE"; } 2>/dev/null || :
+    hydra_valid_id "$_hlpi_id" || return 1
+    HYDRA_LOADED_PROJECT_ID="$_hlpi_id"
+}
+
+hydra_get_project_id() {
+    hydra_load_project_id || return 1
+    printf '%s\n' "$HYDRA_LOADED_PROJECT_ID"
 }
 
 hydra_ensure_project_id() {

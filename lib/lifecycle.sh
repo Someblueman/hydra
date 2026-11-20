@@ -3,7 +3,9 @@
 
 lifecycle_load_head() {
     _llh_branch="$1"
-    LIFECYCLE_PROJECT_ID="$(hydra_get_project_id 2>/dev/null)" || return 1
+    LIFECYCLE_PROJECT_ID=
+    hydra_load_project_id 2>/dev/null || return 1
+    LIFECYCLE_PROJECT_ID="$HYDRA_LOADED_PROJECT_ID"
     if ! state_v2_lookup_head "$LIFECYCLE_PROJECT_ID" "$_llh_branch"; then
         LIFECYCLE_HEAD_ID=
         echo "Error: no Hydra head for branch '$_llh_branch'" >&2
@@ -45,7 +47,8 @@ _lifecycle_load_terminal_mode() {
 _lifecycle_load_head_locked() {
     _llhl_branch="$1"
     _llhl_operation="$2"
-    _llhl_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    hydra_load_project_id 2>/dev/null || return 1
+    _llhl_project="$HYDRA_LOADED_PROJECT_ID"
     # Resolve the head before waiting so the shared project lock is held only
     # to recheck it; a head that does not resolve yet is loaded under the lock.
     _llhl_preloaded=0

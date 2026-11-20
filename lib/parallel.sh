@@ -18,7 +18,9 @@ parallel_validate_path_pattern() {
 }
 
 parallel_project_load() {
-    PARALLEL_PROJECT_ID="$(hydra_get_project_id)" || return 1
+    PARALLEL_PROJECT_ID=
+    hydra_load_project_id || return 1
+    PARALLEL_PROJECT_ID="$HYDRA_LOADED_PROJECT_ID"
     PARALLEL_PROJECT_DIR="$(state_v2_project_dir "$PARALLEL_PROJECT_ID")" || return 1
     [ -d "$PARALLEL_PROJECT_DIR" ] || return 1
     export PARALLEL_PROJECT_ID PARALLEL_PROJECT_DIR

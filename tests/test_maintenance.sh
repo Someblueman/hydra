@@ -51,6 +51,9 @@ setup_env() {
 
 # shellcheck disable=SC2317,SC2329
 hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+# The libraries resolve the project through this loader.
+# shellcheck disable=SC2034,SC2317,SC2329
+hydra_load_project_id() { HYDRA_LOADED_PROJECT_ID="$TEST_PROJECT_ID"; }
 
 add_test_head() {
     state_v2_create_head "$TEST_PROJECT_ID" "$1" "$2" - - 100 - - "$TEST_DIR/repo" >/dev/null

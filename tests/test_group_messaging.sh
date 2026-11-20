@@ -34,6 +34,9 @@ setup_test_env() {
     TEST_PROJECT_ID=project_0123456789abcdefabcd
     # shellcheck disable=SC2317,SC2329
     hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+    # The libraries resolve the project through this loader.
+    # shellcheck disable=SC2034,SC2317,SC2329
+    hydra_load_project_id() { HYDRA_LOADED_PROJECT_ID="$TEST_PROJECT_ID"; }
     for branch in feature-a feature/test-branch test-branch target-branch recv-test \
         sender-name-test peek-test count-test empty-test target; do
         state_v2_create_head "$TEST_PROJECT_ID" "$branch" "$(printf '%s' "$branch" | tr / _)" - - 100 - - "$TEST_HOME/repo" >/dev/null

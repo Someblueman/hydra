@@ -24,8 +24,8 @@ get_head_worktree_path() {
         return 1
     fi
 
-    _path_project="$(hydra_get_project_id 2>/dev/null)" || return 1
-    state_v2_lookup_head "$_path_project" "$_branch" || return 1
+    hydra_load_project_id 2>/dev/null || return 1
+    state_v2_lookup_head "$HYDRA_LOADED_PROJECT_ID" "$_branch" || return 1
     hydra_valid_id "$STATE_V2_HEAD_ID" || return 1
     state_v2_read_scalar "$STATE_V2_HEAD_DIR/worktree"
     _path="$STATE_V2_SCALAR"

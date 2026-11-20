@@ -133,7 +133,7 @@ assert_equal ":0" "$STATE_V2_SCALAR:$(wc -c < "$scalars/stderr" | tr -d ' ')" \
     "a missing record reads as empty and prints nothing"
 (
     # No command can be found, so only the shell itself can do the reading.
-    # shellcheck disable=SC2123
+    # shellcheck disable=SC2030,SC2123
     PATH=/nonexistent
     state_v2_read_scalar "$scalars/plain"
     [ "$STATE_V2_SCALAR" = plain ]
@@ -148,6 +148,43 @@ assert_success $? "the scalar reader starts no process"
 assert_success $? "a missing record does not stop a set -e caller"
 state_v2_lookup_head "$project_id" no-such-branch
 assert_equal "1::" "$?:$STATE_V2_HEAD_ID:$STATE_V2_HEAD_DIR" "an unknown branch has no head and leaves no stale result"
+
+# The project id lookup asks Git once per working directory, not per call.
+other="$test_root/other"
+mkdir -p "$other" "$test_root/plain" "$test_root/bin"
+git -C "$other" init -q
+git -C "$other" config user.name Test
+git -C "$other" config user.email test@example.com
+git -C "$other" commit --allow-empty -qm init
+# A git on PATH that records each call before running the real one.
+git_calls="$test_root/git-calls"
+printf '#!/bin/sh\necho call >> "%s"\nexec "%s" "$@"\n' "$git_calls" "$(command -v git)" > "$test_root/bin/git"
+chmod +x "$test_root/bin/git"
+# shellcheck disable=SC2031 # the subshell above changed its own copy
+saved_path="$PATH"
+# shellcheck disable=SC2031
+PATH="$test_root/bin:$PATH"
+hydra_load_project_id
+: > "$git_calls"
+hydra_load_project_id && hydra_load_project_id && lookup_id="$(hydra_get_project_id)"
+assert_equal "0:$project_id:0" "$?:$lookup_id:$(wc -l < "$git_calls" | tr -d ' ')" \
+    "repeated project id lookups in one directory do not run Git again"
+cd "$other" || exit 1
+hydra_load_project_id
+assert_equal "1:" "$?:$HYDRA_LOADED_PROJECT_ID" "another repository is not answered from the previous one's id"
+other_id="$(hydra_ensure_project_id)"
+hydra_load_project_id
+assert_equal "0:$other_id" "$?:$HYDRA_LOADED_PROJECT_ID" "an id written after a failed lookup is seen"
+[ "$other_id" != "$project_id" ]
+assert_success $? "the two repositories have different ids"
+cd "$test_root/plain" || exit 1
+hydra_load_project_id
+assert_equal "1:" "$?:$HYDRA_LOADED_PROJECT_ID" "a directory outside any repository has no project id"
+cd "$repo" || exit 1
+assert_equal "$other_id" "$(cd "$other" && hydra_get_project_id)" "a subshell that changes directory gets that repository's id"
+hydra_load_project_id
+assert_equal "0:$project_id" "$?:$HYDRA_LOADED_PROJECT_ID" "returning to the first repository returns its id"
+PATH="$saved_path"
 
 # Two heads of one project on one branch: each is reported, by branch and
 # project. A branch that only begins like another is not a duplicate.

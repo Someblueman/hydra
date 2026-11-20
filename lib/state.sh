@@ -51,7 +51,9 @@ _state_project_dir() {
 # Sets STATE_PROJECT_ID and STATE_PROJECT_DIR for this repository's project.
 # Prints nothing; returns 1 outside an initialised project.
 _state_load_project() {
-    STATE_PROJECT_ID="$(_state_project_id)" || return 1
+    STATE_PROJECT_ID=
+    hydra_load_project_id 2>/dev/null || return 1
+    STATE_PROJECT_ID="$HYDRA_LOADED_PROJECT_ID"
     hydra_valid_id "$STATE_PROJECT_ID" || return 1
     STATE_PROJECT_DIR="$HYDRA_STATE_V2_ROOT/projects/$STATE_PROJECT_ID"
 }
