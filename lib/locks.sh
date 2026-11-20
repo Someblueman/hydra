@@ -289,11 +289,15 @@ lock_breaker_active() {
 # and is never deleted by others (its PID may belong to a new process that
 # has just announced under the same name). Only a lock whose recorded host is
 # this one gets as far as a claim, so the PID in a claim's name is a local one.
+#
+# Besides the locks of acquire_lock this accepts the admission lock
+# ($HYDRA_HOME/admission/lock, lib/admission.sh), which keeps the same owner
+# record in a directory of its own.
 remove_stale_lock_dir() {
     _rsld_path="$1"
     [ -n "${HYDRA_HOME:-}" ] || return 1
     case "$_rsld_path" in
-        "$HYDRA_HOME"/locks/*.lock) ;;
+        "$HYDRA_HOME"/locks/*.lock|"$HYDRA_HOME"/admission/lock) ;;
         *) return 1 ;;
     esac
     lock_dir_is_stale "$_rsld_path" || return 1

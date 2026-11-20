@@ -205,6 +205,36 @@ test_acquire_lock_keeps_owned_locks() {
     unset HYDRA_LOCK_RETRIES
 }
 
+# Only Hydra's own locks are ever broken: those of acquire_lock and the
+# admission lock. Any other directory is left alone, whatever it records.
+test_remove_stale_lock_dir_paths() {
+    echo "Testing remove_stale_lock_dir only breaks Hydra's own locks..."
+
+    # No process can have PID 99999999, so each record names a dead owner.
+    for stale_dir in "$HYDRA_HOME/admission/lock" "$HYDRA_HOME/admission/other" \
+        "$HYDRA_HOME/elsewhere/name.lock" "$test_home.outside/locks/name.lock"; do
+        mkdir -p "$stale_dir"
+        printf '99999999\n' > "$stale_dir/pid"
+        hostname > "$stale_dir/host"
+    done
+    remove_stale_lock_dir "$HYDRA_HOME/admission/other"
+    assert_failure $? "another directory beside the admission lock is not a lock"
+    remove_stale_lock_dir "$HYDRA_HOME/elsewhere/name.lock"
+    assert_failure $? "a .lock directory outside the lock directory is not a lock"
+    remove_stale_lock_dir "$test_home.outside/locks/name.lock"
+    assert_failure $? "a lock directory outside HYDRA_HOME is not a lock"
+    if [ -f "$HYDRA_HOME/admission/other/pid" ] && [ -f "$HYDRA_HOME/elsewhere/name.lock/pid" ] &&
+        [ -f "$test_home.outside/locks/name.lock/pid" ]; then
+        assert_success 0 "directories that are not locks are untouched"
+    else
+        assert_success 1 "directories that are not locks are untouched"
+    fi
+    remove_stale_lock_dir "$HYDRA_HOME/admission/lock"
+    assert_success $? "the admission lock of a dead owner is broken"
+    assert_equal "other" "$(ls -A "$HYDRA_HOME/admission")" "breaking the admission lock leaves nothing beside it"
+    rm -rf "$HYDRA_HOME/admission" "$HYDRA_HOME/elsewhere" "$test_home.outside"
+}
+
 # Several processes find the same dead owner at once. Each must hold the lock
 # alone: a waiter that deleted the lock another had just taken over would let
 # two of them into the critical section together.
@@ -398,6 +428,7 @@ test_release_lock
 test_acquire_lock_fail_closed
 test_acquire_lock_recovers_dead_owner
 test_acquire_lock_keeps_owned_locks
+test_remove_stale_lock_dir_paths
 test_acquire_lock_breaks_once_under_contention
 test_cleanup_stale_locks
 test_cleanup_dead_local_lock

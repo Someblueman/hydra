@@ -41,15 +41,28 @@ admission_open() {
     fi
     [ -d "$_ad_root" ] || return 1
     [ "$(find "$_ad_root" -prune -user "$(id -u)" ! -perm -0020 ! -perm -0002 -exec printf yes \;)" = yes ] || return 1
-    # This lock is deliberately not swept by generic stale-lock cleanup. A
-    # crashed writer needs inspection; it must never permit concurrent writers.
     # A caller waits about 2 s for a busy lock. An execution owner (see
     # admission_binding) sets _ad_lock_seconds to its queue deadline and keeps
     # waiting up to that long, so owners contending on one host, such as
     # parallel workflow steps, take turns instead of failing.
+    #
+    # The lock records its holder as the shared locks do (pid, host), and a
+    # lock whose holder died on this host is broken by one waiter at a time
+    # (remove_stale_lock_dir) and tried again at once: a holder that was
+    # killed releases nothing, and every later admission would wait out its
+    # deadline and fail. Each change made under the lock is a single rename
+    # or unlink, so a holder that died left valid records. A lock held by a
+    # live process, by another host, or without an owner record is never
+    # broken. The holder is this subshell, which $$ does not name: with $$
+    # the lock of a live subshell would count as abandoned once the command
+    # that started it was killed.
     _ad_problem='the admission lock is held'
     _ad_tries=0 _ad_lock_until=''
+    # Both are asked for before the lock is taken, not while it is held.
+    _ad_self="$(exec sh -c 'echo "$PPID"' 2>/dev/null)" || _ad_self=''
+    lock_load_host_name
     until hydra_exclusive_mkdir "$_ad_root/lock"; do
+        if remove_stale_lock_dir "$_ad_root/lock" 2>/dev/null; then continue; fi
         _ad_tries=$((_ad_tries + 1))
         if [ "$_ad_tries" -lt 40 ]; then sleep 0.05; continue; fi
         case "${_ad_lock_seconds:-}" in ''|*[!0-9]*) return 1 ;; esac
@@ -58,10 +71,20 @@ admission_open() {
         [ "$(date +%s)" -lt "$_ad_lock_until" ] || return 1
         sleep 0.2
     done
-    trap 'rm -f "$_ad_root/lock/.claim"; rmdir "$_ad_root/lock" 2>/dev/null || true' 0
+    trap 'rm -f "$_ad_root/lock/.claim" "$_ad_root/lock/pid" "$_ad_root/lock/host"; rmdir "$_ad_root/lock" 2>/dev/null || true' 0
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
+    # The host first: the record counts once it holds a PID. A record that
+    # cannot be written leaves the lock simply held.
+    case "$_ad_self" in
+        ''|*[!0-9]*) ;;
+        *)
+            if { printf '%s\n' "$_LOCK_HOST_NAME" > "$_ad_root/lock/host"; } 2>/dev/null; then
+                { printf '%s\n' "$_ad_self" > "$_ad_root/lock/pid"; } 2>/dev/null || :
+            fi
+            ;;
+    esac
     _ad_now="$(date +%s)"
     _ad_host_limit=0 _ad_project_limit=0 _ad_disk_floor_kb=0 _ad_queue_limit=128 _ad_host_labels=-
     _ad_problem='the admission policy is invalid'

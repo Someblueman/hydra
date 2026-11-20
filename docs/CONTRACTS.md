@@ -1263,7 +1263,11 @@ execution deduplication lock. An execution owner (exec, gates, heads, resume, an
 workflow steps through them) waits for a busy admission lock up to its queue deadline
 (`HYDRA_ADMISSION_QUEUE_SECONDS`, default 60, or the task's queue seconds) for its
 request, claims, and release; other callers, such as `hydra admission status`, give
-up after about 2 seconds with `state_unavailable`.
+up after about 2 seconds with `state_unavailable`. The lock
+(`$HYDRA_HOME/admission/lock`) records the process and host that hold it. A lock
+whose holder died on this host is taken over by the next admission command, one
+waiter at a time; a lock held by a live process, by another host, or without
+that record is never broken, and waiting for it ends as above.
 
 Admission records are `$HYDRA_HOME/admission/<id>.request`. Every admission
 command that scans them (status, request, inspect, claim, cancel, unknown,
