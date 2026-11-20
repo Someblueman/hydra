@@ -111,11 +111,6 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_STATS_FILTER_DOWN, KEY_SCOPE_STATS_FILTER, "statistics.filter-down", "select", G_FILTER, 5),
     ROW(KEY_STATS_FILTER_KEEP, KEY_SCOPE_STATS_FILTER, "statistics.filter-keep", "keep filter", G_FILTER, 9),
     ROW(KEY_STATS_FILTER_CLEAR, KEY_SCOPE_STATS_FILTER, "statistics.filter-clear", "clear filter", G_FILTER, 8),
-    ROW(KEY_STATS_PAGE, KEY_SCOPE_STATISTICS, "statistics.page", "sessions/runs", G_STATS, -1),
-    ROW(KEY_STATS_WORKFLOW_PREVIOUS, KEY_SCOPE_STATISTICS, "statistics.workflow-previous", "workflow", G_STATS, -1),
-    ROW(KEY_STATS_WORKFLOW_NEXT, KEY_SCOPE_STATISTICS, "statistics.workflow-next", "workflow", G_STATS, -1),
-    ROW(KEY_STATS_FIND, KEY_SCOPE_STATISTICS, "statistics.find", "find", G_STATS, -1),
-    ROW(KEY_STATS_REFRESH, KEY_SCOPE_STATISTICS, "statistics.refresh", "refresh", G_STATS, -1),
 
     ROW(KEY_HOSTS_UP, KEY_SCOPE_HOSTS, "hosts.up", "select", G_HOSTS, 9),
     ROW(KEY_HOSTS_DOWN, KEY_SCOPE_HOSTS, "hosts.down", "select", G_HOSTS, 9),
@@ -221,28 +216,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_WORK_PAGE_NEXT, KEY_SCOPE_WORK, "work.page-next", "page", G_WORK, 4),
     ROW(KEY_WS_ZOOM, KEY_SCOPE_WORK, "workspace.zoom-pane", "zoom", G_WORK, -1),
     ROW(KEY_WS_SPLIT, KEY_SCOPE_WORK, "workspace.two-agents", "two agents", G_WORK, -1),
-    ROW(KEY_WS_COLLAPSE, 0, "workspace.collapse", "collapse/expand", G_WORK, -1),
-    ROW(KEY_WS_EXPAND, 0, "workspace.expand", "collapse/expand", G_WORK, -1),
-    ROW(KEY_WS_TALK, 0, "workspace.talk", "talk to agent", G_WORK, -1),
-    ROW(KEY_WS_ATTACH, 0, "workspace.attach", "attach", G_WORK, -1),
-    ROW(KEY_WS_CONVERSATION, 0, "workspace.conversation", "conversation", G_WORK, -1),
-    ROW(KEY_WS_PLAN, 0, "workspace.plan", "plan review", G_WORK, -1),
-    ROW(KEY_WS_MONITOR, 0, "workspace.monitor", "monitor", G_WORK, -1),
-    ROW(KEY_MONITOR_PREVIOUS_RUN, 0, "monitor.previous-run", "run", G_RUNS, -1),
-    ROW(KEY_MONITOR_NEXT_RUN, 0, "monitor.next-run", "run", G_RUNS, -1),
-    ROW(KEY_FLOW_PREVIOUS_RUN, 0, "workflows.previous-run", "run", G_RUNS, -1),
-    ROW(KEY_FLOW_NEXT_RUN, 0, "workflows.next-run", "run", G_RUNS, -1),
-    ROW(KEY_HEADS_ATTACH, 0, "heads.attach", "attach", G_HEADS, -1),
-    ROW(KEY_HEADS_INTERRUPT, 0, "heads.interrupt", "interrupt", G_HEADS, -1),
-    ROW(KEY_HEADS_COORDINATION, 0, "heads.coordination", "coordination", G_HEADS, -1),
-    ROW(KEY_HEAD_OUTPUT, 0, "head.output", "output", G_HEADS, -1),
-    ROW(KEY_REMOTE_APPROVE, 0, "remote.approve", "approve task", G_HEADS, -1),
-    ROW(KEY_REMOTE_REJECT, 0, "remote.reject", "reject task", G_HEADS, -1),
-    ROW(KEY_REMOTE_RESUME, 0, "remote.resume", "resume task", G_HEADS, -1),
-    ROW(KEY_REMOTE_CANCEL, 0, "remote.cancel", "cancel task", G_HEADS, -1),
 
-    ROW(KEY_VIEWS_NEXT, KEY_SCOPE_VIEWS, "views.next", "views", G_ALL, 2),
-    ROW(KEY_VIEWS_PREVIOUS, KEY_SCOPE_VIEWS, "views.previous", "views", G_ALL, 2),
     ROW(KEY_VIEWS_LEFT, KEY_SCOPE_VIEW_ARROWS, "views.left", "previous/next view", G_ALL, -1),
     ROW(KEY_VIEWS_RIGHT, KEY_SCOPE_VIEW_ARROWS, "views.right", "previous/next view", G_ALL, -1),
 
@@ -250,15 +224,7 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
     ROW(KEY_VIEW_2, KEY_SCOPE_GLOBAL, "view.2", "Inbox", G_ALL, -1),
     ROW(KEY_VIEW_3, KEY_SCOPE_GLOBAL, "view.3", "Hosts", G_ALL, -1),
     ROW(KEY_VIEW_4, KEY_SCOPE_GLOBAL, "view.4", "Stats", G_ALL, -1),
-    ROW(KEY_VIEW_5, KEY_SCOPE_GLOBAL, "view.5", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_6, KEY_SCOPE_GLOBAL, "view.6", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_7, KEY_SCOPE_GLOBAL, "view.7", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_8, KEY_SCOPE_GLOBAL, "view.8", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_9, KEY_SCOPE_GLOBAL, "view.9", "view by number", G_ALL, -1),
-    ROW(KEY_VIEW_CYCLE, KEY_SCOPE_JUMPS, "view.cycle", "next view", G_ALL, -1),
     ROW(KEY_VIEW_WORKSPACE, KEY_SCOPE_JUMPS, "view.workspace", "Work (old key)", G_ALL, -1),
-    ROW(KEY_VIEW_OVERVIEW, KEY_SCOPE_JUMPS, "view.overview", "overview", G_ALL, -1),
-    ROW(KEY_VIEW_WORKFLOWS, KEY_SCOPE_JUMPS, "view.workflows", "workflows", G_ALL, -1),
     ROW(KEY_VIEW_HOSTS, KEY_SCOPE_JUMPS, "view.hosts", "Hosts (old key)", G_ALL, -1),
     ROW(KEY_VIEW_ATTENTION, KEY_SCOPE_JUMPS, "view.attention", "Inbox (old key)", G_ALL, -1),
     ROW(KEY_VIEW_STATS, KEY_SCOPE_JUMPS, "view.stats", "Stats (old key)", G_ALL, -1),
@@ -271,42 +237,44 @@ static const struct kt_binding key_rows[KEY_ACTIONS] = {
 };
 #undef T
 
-/* Which mode a row belongs to: both, the local control centre only (the
- * fleet entry's statistics are the hosts' own), or neither. Local and remote
- * work share every other key, so a retired row is one whose job another row
- * now does: a (heads.talk) attaches to remote heads too, x (head.remove)
- * interrupts a selected remote head. A row that is not live (scope 0) keeps
- * its name, so keys files of earlier versions still load. */
-enum { MODE_BOTH, MODE_LOCAL, MODE_RETIRED };
+/* Which mode a row belongs to: both, or the local control centre only (the
+ * fleet entry's statistics are the hosts' own). Local and remote work share
+ * every other key: a (heads.talk) attaches to remote heads too, x
+ * (head.remove) interrupts a selected remote head. */
+enum { MODE_BOTH, MODE_LOCAL };
 static const unsigned char key_modes[KEY_ACTIONS] = {
     [KEY_INBOX_RETURN] = MODE_LOCAL, [KEY_INBOX_REMOVE] = MODE_LOCAL, [KEY_INBOX_LAND] = MODE_LOCAL,
     [KEY_INBOX_CHECK] = MODE_LOCAL,
     [KEY_STATS_PAGE_PREVIOUS] = MODE_LOCAL, [KEY_STATS_PAGE_NEXT] = MODE_LOCAL, [KEY_STATS_GRAPH] = MODE_LOCAL,
     [KEY_STATS_RANGE] = MODE_LOCAL, [KEY_STATS_METRIC] = MODE_LOCAL, [KEY_STATS_WORKFLOW] = MODE_LOCAL,
     [KEY_STATS_COHORTS] = MODE_LOCAL, [KEY_STATS_LOCATION] = MODE_LOCAL,
-    /* Stats pages are [ ], its filter is typed after /, ctrl+r reads again. */
-    [KEY_STATS_PAGE] = MODE_RETIRED, [KEY_STATS_WORKFLOW_PREVIOUS] = MODE_RETIRED, [KEY_STATS_WORKFLOW_NEXT] = MODE_RETIRED,
-    [KEY_STATS_FIND] = MODE_RETIRED, [KEY_STATS_REFRESH] = MODE_RETIRED,
-    /* Work: pages replaced the layouts and the run keys of Workflows and the
-     * monitor; a and x took over attach and interrupt; run.* act on a
-     * selected remote task too; the conversation always shows the output. */
-    [KEY_WS_COLLAPSE] = MODE_RETIRED, [KEY_WS_EXPAND] = MODE_RETIRED, [KEY_WS_TALK] = MODE_RETIRED,
-    [KEY_WS_ATTACH] = MODE_RETIRED, [KEY_WS_CONVERSATION] = MODE_RETIRED, [KEY_WS_PLAN] = MODE_RETIRED,
-    [KEY_WS_MONITOR] = MODE_RETIRED, [KEY_MONITOR_PREVIOUS_RUN] = MODE_RETIRED, [KEY_MONITOR_NEXT_RUN] = MODE_RETIRED,
-    [KEY_FLOW_PREVIOUS_RUN] = MODE_RETIRED, [KEY_FLOW_NEXT_RUN] = MODE_RETIRED,
-    [KEY_HEADS_ATTACH] = MODE_RETIRED, [KEY_HEADS_INTERRUPT] = MODE_RETIRED, [KEY_HEADS_COORDINATION] = MODE_RETIRED,
-    [KEY_HEAD_OUTPUT] = MODE_RETIRED, [KEY_REMOTE_APPROVE] = MODE_RETIRED, [KEY_REMOTE_REJECT] = MODE_RETIRED,
-    [KEY_REMOTE_RESUME] = MODE_RETIRED, [KEY_REMOTE_CANCEL] = MODE_RETIRED,
     [KEY_PLAN_PROPOSAL] = MODE_LOCAL, [KEY_PLAN_VALIDATE] = MODE_LOCAL, [KEY_PLAN_RETURN] = MODE_LOCAL,
     [KEY_PLAN_EXECUTE] = MODE_LOCAL, [KEY_PLAN_LAND] = MODE_LOCAL, [KEY_PLAN_REVIEW] = MODE_LOCAL,
     [KEY_PLAN_STATUS] = MODE_LOCAL,
-    /* Four screens: 1 to 4. The next-view, Overview and Workflows letters
-     * are gone with those views. */
-    [KEY_VIEW_5] = MODE_RETIRED, [KEY_VIEW_6] = MODE_RETIRED, [KEY_VIEW_7] = MODE_RETIRED,
-    [KEY_VIEW_8] = MODE_RETIRED, [KEY_VIEW_9] = MODE_RETIRED, [KEY_VIEW_CYCLE] = MODE_RETIRED,
-    [KEY_VIEW_OVERVIEW] = MODE_RETIRED, [KEY_VIEW_WORKFLOWS] = MODE_RETIRED,
-    /* Tab moves between the panes of a screen, Hosts' too. */
-    [KEY_VIEWS_NEXT] = MODE_RETIRED, [KEY_VIEWS_PREVIOUS] = MODE_RETIRED,
+};
+
+/* The action names of earlier releases that are gone, and the action that
+ * does the job now (NULL: nothing does). A keys file that names one is told
+ * so (retired_lines); the names bind nothing. */
+static const struct { const char *name, *now; } retired_keys[] = {
+    {"statistics.page", "statistics.page-previous and statistics.page-next"},
+    {"statistics.workflow-previous", "statistics.workflow"}, {"statistics.workflow-next", "statistics.workflow"},
+    {"statistics.find", "statistics.filter"}, {"statistics.refresh", "app.refresh"},
+    {"workspace.collapse", "heads.collapse"}, {"workspace.expand", "heads.expand"},
+    {"workspace.talk", "heads.talk"}, {"workspace.attach", "heads.talk"}, {"heads.attach", "heads.talk"},
+    {"workspace.conversation", "work.page-previous and work.page-next"},
+    {"workspace.plan", "work.page-previous and work.page-next"},
+    {"workspace.monitor", "work.page-previous and work.page-next"},
+    {"monitor.previous-run", "heads.up and heads.down"}, {"monitor.next-run", "heads.up and heads.down"},
+    {"workflows.previous-run", "heads.up and heads.down"}, {"workflows.next-run", "heads.up and heads.down"},
+    {"heads.interrupt", "head.remove"}, {"heads.coordination", "work.page-previous and work.page-next"},
+    {"head.output", NULL},
+    {"remote.approve", "run.approve"}, {"remote.reject", "run.reject"},
+    {"remote.resume", "run.resume"}, {"remote.cancel", "run.cancel"},
+    {"views.next", "workspace.pane-next"}, {"views.previous", "workspace.pane-previous"},
+    {"view.5", NULL}, {"view.6", NULL}, {"view.7", NULL}, {"view.8", NULL}, {"view.9", NULL},
+    {"view.cycle", "view.1 to view.4"}, {"view.overview", "work.page-previous and work.page-next"},
+    {"view.workflows", "work.page-previous and work.page-next"},
 };
 
 /* Ctrl-] alone leaves agent input; every other agent-layer command follows
@@ -344,8 +312,6 @@ static const char default_keys[] =
     "statistics.cohorts = C\nstatistics.location = L\nstatistics.attention = !\nstatistics.reset = 0\n"
     "statistics.filter-up = up\nstatistics.filter-down = down\nstatistics.filter-keep = enter\n"
     "statistics.filter-clear = esc\n"
-    "statistics.page = s\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
-    "statistics.find = /\nstatistics.refresh = r\n"
     "hosts.up = up, k\nhosts.down = down, j\nhosts.open = enter\nhosts.add = A\nhosts.edit = e\nhosts.remove = x\n"
     "hosts.retry = r\nhosts.onboarding = O\nhosts.filter = /\nhosts.pane = tab\nhosts.pane-previous = shift+tab\n"
     "hosts.page-previous = [\nhosts.page-next = ]\n"
@@ -365,14 +331,9 @@ static const char default_keys[] =
     "heads.location = L\nheads.retry = r\nhead.technical = d\n"
     "workspace.pane-next = tab\nworkspace.pane-previous = shift+tab\nwork.page-previous = [\nwork.page-next = ]\n"
     "workspace.zoom-pane = z\nworkspace.two-agents = S\n"
-    "workspace.collapse = left, h\nworkspace.expand = right, l\nworkspace.talk = a\nworkspace.attach = a\n"
-    "workspace.conversation = A\nworkspace.plan = B\nworkspace.monitor = C\n"
-    "monitor.previous-run = [\nmonitor.next-run = ]\nworkflows.previous-run = [\nworkflows.next-run = ]\n"
-    "heads.attach = a\nheads.interrupt = c\nheads.coordination = c\nhead.output = p\n"
-    "remote.approve = Y\nremote.reject = N\nremote.resume = R\nremote.cancel = X\n"
-    "views.next = tab\nviews.previous = shift+tab\nviews.left = left\nviews.right = right\n"
-    "view.1 = 1\nview.2 = 2\nview.3 = 3\nview.4 = 4\nview.5 = 5\nview.6 = 6\nview.7 = 7\nview.8 = 8\nview.9 = 9\n"
-    "view.cycle = v\nview.workspace = W\nview.overview = o\nview.workflows = w\nview.hosts = H\n"
+    "views.left = left\nviews.right = right\n"
+    "view.1 = 1\nview.2 = 2\nview.3 = 3\nview.4 = 4\n"
+    "view.workspace = W\nview.hosts = H\n"
     "view.attention = I\nview.stats = D\napp.theme = t\napp.actions = :\napp.refresh = ctrl+r\n"
     "app.back = esc\napp.help = ?\napp.exit = q\n";
 
@@ -404,15 +365,13 @@ static void default_bindings(struct kt_binding rows[KEY_ACTIONS]) {
 static void keys_mode(struct native_keys *k) {
     size_t i;
     for (i = 0; i < KEY_ACTIONS; i++)
-        if ((key_modes[i] == MODE_LOCAL && k->fleet) || key_modes[i] == MODE_RETIRED) k->bindings[i].scope = 0;
+        if (key_modes[i] == MODE_LOCAL && k->fleet) k->bindings[i].scope = 0;
         else k->bindings[i].scope = key_rows[i].scope;
 }
 
 /* What --print-keys says about a row that is not live in this mode. */
 static const char *mode_note(const struct native_keys *k, size_t row) {
-    if (k->bindings[row].scope) return "";
-    if (key_modes[row] == MODE_RETIRED) return " (no longer used)";
-    return k->fleet ? " (local only)" : "";
+    return !k->bindings[row].scope && k->fleet ? " (local only)" : "";
 }
 
 static void keys_defaults(struct native_keys *k) {
@@ -486,9 +445,48 @@ static char *keys_read(const char *path, size_t *length, char *reason, size_t si
     return NULL;
 }
 
+/* The retired action a line of a keys file names, or NULL. */
+static const char *retired_now(const char *line, size_t length, const char **name) {
+    size_t i, n;
+    while (length && (*line == ' ' || *line == '\t')) { line++; length--; }
+    for (i = 0; i < sizeof(retired_keys) / sizeof(retired_keys[0]); i++) {
+        n = strlen(retired_keys[i].name);
+        if (length <= n || memcmp(line, retired_keys[i].name, n) || (line[n] != ' ' && line[n] != '\t' && line[n] != '=')) continue;
+        *name = retired_keys[i].name;
+        return retired_keys[i].now ? retired_keys[i].now : "";
+    }
+    return NULL;
+}
+
+/* Takes the lines that name a retired action out of the text (blanked, so
+ * that line numbers stay) and says in reason, for the first of them, which
+ * line it is and what does its job now. Returns how many there were. */
+static unsigned retired_lines(char *text, size_t length, char *reason, size_t size) {
+    unsigned count = 0, line = 0, first_line = 0;
+    const char *first = NULL, *first_now = NULL;
+    size_t at = 0;
+    while (at < length) {
+        size_t n = 0;
+        const char *name = NULL, *now;
+        while (at + n < length && text[at + n] != '\n') n++;
+        line++;
+        now = retired_now(text + at, n, &name);
+        if (now) {
+            if (!count++) { first = name; first_now = now; first_line = line; }
+            memset(text + at, ' ', n);
+        }
+        at += n + 1U;
+    }
+    if (!count) return 0;
+    if (first_now[0]) snprintf(reason, size, "line %u: %s was removed; use %s", first_line, first, first_now);
+    else snprintf(reason, size, "line %u: %s was removed and nothing replaces it", first_line, first);
+    if (count > 1U) text_append(reason, size, " (and %u more removed actions; --print-keys lists the current ones)", count - 1U);
+    return count;
+}
+
 void native_keys_load(struct app *app, bool default_file) {
     struct native_keys *k = native_keys(app);
-    char reason[TEXT], conflict[TEXT + 32], *text;
+    char reason[TEXT], retired[TEXT], conflict[TEXT + 32], *text;
     size_t length = 0;
     bool named;
     k->problem[0] = '\0';
@@ -499,6 +497,7 @@ void native_keys_load(struct app *app, bool default_file) {
         else if (named) keys_problem(k, "does not exist", "using the default keys");
         return;
     }
+    if (retired_lines(text, length, retired, sizeof(retired))) keys_problem(k, retired, "other lines applied");
     if (!kt_keymap_configure(&k->map, text, length, reason, sizeof(reason)))
         keys_problem(k, reason, "other lines applied");
     free(text);

@@ -14,7 +14,6 @@ struct kt_event;
  * several. The focused element's scope chain (key_chain) is a set of these
  * bits, and within one chain no key has two meanings (key_chain_conflict).
  * TERMINAL: Hydra's own commands while an agent pane may hold input.
- * VIEWS: Tab changing screens (retired: Tab moves between panes);
  * VIEW_ARROWS: the arrows change screens (Stats).
  * JUMPS: the letters of earlier releases that open a screen (kept for one
  * release, help only) and t for the theme. STATS_FILTER: the keys while a
@@ -31,7 +30,7 @@ struct kt_event;
  * ONBOARDING_RUNNING: a command that runs; ONBOARDING_FORM: the forms, whose
  * fields take every other key as text. */
 enum key_scope {
-    KEY_SCOPE_TERMINAL = 1U << 0, KEY_SCOPE_GLOBAL = 1U << 1, KEY_SCOPE_VIEWS = 1U << 2,
+    KEY_SCOPE_TERMINAL = 1U << 0, KEY_SCOPE_GLOBAL = 1U << 1,
     KEY_SCOPE_VIEW_ARROWS = 1U << 3, KEY_SCOPE_WORK_LIST = 1U << 4, KEY_SCOPE_WORK_RUN = 1U << 5,
     KEY_SCOPE_WORK_VIEWPORT = 1U << 6, KEY_SCOPE_WORK = 1U << 7, KEY_SCOPE_WORK_PLAN = 1U << 8,
     KEY_SCOPE_INBOX_PAGES = 1U << 9, KEY_SCOPE_WORK_CONVERSATION = 1U << 10, KEY_SCOPE_HOSTS = 1U << 11,
@@ -64,8 +63,6 @@ enum key_action {
     KEY_STATS_FILTER, KEY_STATS_GRAPH, KEY_STATS_PANE, KEY_STATS_WORKFLOW, KEY_STATS_METRIC, KEY_STATS_COHORTS,
     KEY_STATS_LOCATION, KEY_STATS_ATTENTION, KEY_STATS_RESET, KEY_STATS_FILTER_UP, KEY_STATS_FILTER_DOWN,
     KEY_STATS_FILTER_KEEP, KEY_STATS_FILTER_CLEAR,
-    /* statistics rows of 3.0 whose jobs moved: [ ] and the filter keys */
-    KEY_STATS_PAGE, KEY_STATS_WORKFLOW_PREVIOUS, KEY_STATS_WORKFLOW_NEXT, KEY_STATS_FIND, KEY_STATS_REFRESH,
     /* Hosts: the list, its panes and pages, then the open setup (hosts.c) */
     KEY_HOSTS_UP, KEY_HOSTS_DOWN, KEY_HOSTS_OPEN, KEY_HOSTS_ADD, KEY_HOSTS_EDIT, KEY_HOSTS_REMOVE,
     KEY_HOSTS_RETRY, KEY_HOSTS_ONBOARDING, KEY_HOSTS_FILTER, KEY_HOSTS_PANE, KEY_HOSTS_PANE_BACK,
@@ -92,19 +89,11 @@ enum key_action {
     KEY_HEAD_REMOVE, KEY_HEAD_MARK, KEY_HEAD_MARK_ALL, KEY_HEAD_GROUP, KEY_TASK_NEW, KEY_HEADS_SEARCH,
     KEY_HEADS_LOCATION, KEY_HEADS_RETRY, KEY_HEAD_TECHNICAL,
     KEY_WS_PANE_NEXT, KEY_WS_PANE_PREVIOUS, KEY_WORK_PAGE_PREVIOUS, KEY_WORK_PAGE_NEXT, KEY_WS_ZOOM, KEY_WS_SPLIT,
-    /* Work rows of earlier versions whose jobs moved: pages replaced the
-     * layouts and the Workflows run keys, a and x took over attach and
-     * interrupt, run.* act on remote tasks too, the conversation shows the
-     * output */
-    KEY_WS_COLLAPSE, KEY_WS_EXPAND, KEY_WS_TALK, KEY_WS_ATTACH, KEY_WS_CONVERSATION, KEY_WS_PLAN, KEY_WS_MONITOR,
-    KEY_MONITOR_PREVIOUS_RUN, KEY_MONITOR_NEXT_RUN, KEY_FLOW_PREVIOUS_RUN, KEY_FLOW_NEXT_RUN,
-    KEY_HEADS_ATTACH, KEY_HEADS_INTERRUPT, KEY_HEADS_COORDINATION, KEY_HEAD_OUTPUT,
-    KEY_REMOTE_APPROVE, KEY_REMOTE_REJECT, KEY_REMOTE_RESUME, KEY_REMOTE_CANCEL,
     /* views */
-    KEY_VIEWS_NEXT, KEY_VIEWS_PREVIOUS, KEY_VIEWS_LEFT, KEY_VIEWS_RIGHT,
+    KEY_VIEWS_LEFT, KEY_VIEWS_RIGHT,
     /* everywhere */
-    KEY_VIEW_1, KEY_VIEW_2, KEY_VIEW_3, KEY_VIEW_4, KEY_VIEW_5, KEY_VIEW_6, KEY_VIEW_7, KEY_VIEW_8, KEY_VIEW_9,
-    KEY_VIEW_CYCLE, KEY_VIEW_WORKSPACE, KEY_VIEW_OVERVIEW, KEY_VIEW_WORKFLOWS, KEY_VIEW_HOSTS, KEY_VIEW_ATTENTION,
+    KEY_VIEW_1, KEY_VIEW_2, KEY_VIEW_3, KEY_VIEW_4,
+    KEY_VIEW_WORKSPACE, KEY_VIEW_HOSTS, KEY_VIEW_ATTENTION,
     KEY_VIEW_STATS, KEY_THEME, KEY_PALETTE, KEY_REFRESH, KEY_BACK, KEY_HELP, KEY_QUIT,
     KEY_ACTIONS
 };
@@ -134,8 +123,9 @@ struct native_keys *native_keys(struct app *app);
  * ~/.hydra). A missing default file means defaults. A refused line keeps that
  * action's default, as does unbinding terminal.leave (input could never
  * return to Hydra); keys that conflict within a scope chain put every key
- * back to its default. Either way keys->problem says which file, line and
- * why. default_file is false for deterministic rendering, which reads only an
+ * back to its default. A line that names an action of an earlier release
+ * that no longer exists is refused with the action that does its job now.
+ * Either way keys->problem says which file, line and why. default_file is false for deterministic rendering, which reads only an
  * explicit file. Call it after the mode (app->fleet) is known. */
 void native_keys_load(struct app *app, bool default_file);
 /* Writes the effective bindings in the keys-file syntax. */

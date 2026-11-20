@@ -140,8 +140,7 @@ static uint32_t action_key(enum key_action action) {
         [KEY_HEAD_GROUP] = 'G', [KEY_HEAD_TECHNICAL] = 'd', [KEY_HEADS_SEARCH] = '/',
         [KEY_HEADS_LOCATION] = 'L', [KEY_HEADS_RETRY] = 'r',
         [KEY_VIEWS_LEFT] = KT_KEY_LEFT, [KEY_VIEWS_RIGHT] = KT_KEY_RIGHT,
-        [KEY_VIEW_1] = '1', [KEY_VIEW_2] = '2', [KEY_VIEW_3] = '3', [KEY_VIEW_4] = '4', [KEY_VIEW_5] = '5',
-        [KEY_VIEW_6] = '6', [KEY_VIEW_7] = '7', [KEY_VIEW_8] = '8', [KEY_VIEW_9] = '9',
+        [KEY_VIEW_1] = '1', [KEY_VIEW_2] = '2', [KEY_VIEW_3] = '3', [KEY_VIEW_4] = '4',
         [KEY_THEME] = 't',
         [KEY_PALETTE] = ':', [KEY_BACK] = 27, [KEY_HELP] = '?', [KEY_QUIT] = 'q'};
     return action < KEY_ACTIONS ? keys[action] : 0;
