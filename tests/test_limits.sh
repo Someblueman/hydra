@@ -58,6 +58,11 @@ setup_test_env() {
 # shellcheck disable=SC2317,SC2329
 hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
 
+# Queue entries on disk, counted independently of the queue library.
+queued_entry_count() {
+    find "$(_get_queue_dir)" -maxdepth 1 -name '*.queue' -type f 2>/dev/null | wc -l | tr -d ' '
+}
+
 add_test_head() {
     state_v2_create_head "$TEST_PROJECT_ID" "$1" "$2" "${3:--}" "${4:--}" 100 - - "$TEST_DIR/repo" >/dev/null
 }
@@ -241,7 +246,7 @@ test_queue_spawn() {
     assert_success $? "queue_spawn should succeed"
 
     # Check file was created
-    count="$(get_queue_count)"
+    count="$(queued_entry_count)"
     assert_equal "1" "$count" "Should have 1 queued entry"
 
     # Check file contents
@@ -267,7 +272,7 @@ test_queue_spawn_multiple() {
     queue_spawn "feature-2" "aider" "" "default" "30" >/dev/null
     queue_spawn "feature-3" "gemini" "" "default" "70" >/dev/null
 
-    count="$(get_queue_count)"
+    count="$(queued_entry_count)"
     assert_equal "3" "$count" "Should have 3 queued entries"
 
     cleanup_test_env
@@ -280,7 +285,7 @@ test_queue_atomic_and_serial_processing() {
     # shellcheck disable=SC2317,SC2329
     ( atomic_replace() { return 1; }; queue_spawn "not-published" none "" default 50 >/dev/null 2>&1 )
     assert_failure $? "failed atomic publication rejects the queue entry"
-    assert_equal "0" "$(get_queue_count)" "failed publication exposes no partial queue file"
+    assert_equal "0" "$(queued_entry_count)" "failed publication exposes no partial queue file"
 
     queue_spawn "only-once" none "" default 50 >/dev/null
     spawn_log="$TEST_DIR/spawn.log"
@@ -305,7 +310,7 @@ test_queue_atomic_and_serial_processing() {
     )
     assert_equal "1" "$(wc -l < "$spawn_log" | tr -d ' ')" "concurrent processors cannot attempt the same entry"
     assert_failure "$(sed -n '1p' "$second_code")" "a concurrent queue processor fails closed"
-    assert_equal "1" "$(get_queue_count)" "failed processing retains the queued request"
+    assert_equal "1" "$(queued_entry_count)" "failed processing retains the queued request"
 
     cleanup_test_env
 }
@@ -318,13 +323,13 @@ test_dequeue_spawn() {
     queue_spawn "feature-1" "claude" "" "default" "50" >/dev/null
     queue_spawn "feature-2" "aider" "" "default" "50" >/dev/null
 
-    count="$(get_queue_count)"
+    count="$(queued_entry_count)"
     assert_equal "2" "$count" "Should have 2 entries"
 
     dequeue_spawn "feature-1"
     assert_success $? "dequeue_spawn should succeed for existing entry"
 
-    count="$(get_queue_count)"
+    count="$(queued_entry_count)"
     assert_equal "1" "$count" "Should have 1 entry after removal"
 
     dequeue_spawn "nonexistent"
@@ -345,7 +350,7 @@ test_clear_queue() {
     result="$(clear_queue)"
     assert_equal "3" "$result" "clear_queue should return count of cleared entries"
 
-    count="$(get_queue_count)"
+    count="$(queued_entry_count)"
     assert_equal "0" "$count" "Queue should be empty after clear"
 
     cleanup_test_env

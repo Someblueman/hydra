@@ -219,17 +219,6 @@ EOF
     return 0
 }
 
-# Get count of queued spawns
-# Usage: get_queue_count
-# Returns: Count on stdout
-get_queue_count() {
-    _ensure_queue_dir || return 1
-    _qdir="$(_get_queue_dir)" || return 1
-    # Use find to count .queue files, handle empty directory
-    _count="$(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | wc -l | tr -d ' ')"
-    printf '%s' "$_count"
-}
-
 # List queued spawns in priority order
 # Usage: list_queue [--json]
 # Returns: Queued entries on stdout
