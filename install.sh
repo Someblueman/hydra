@@ -160,7 +160,7 @@ CORE_SOURCE_REF=""
 if [ "$CORE_MODE" != never ]; then
     if [ "${HYDRA_BUILD_CORE:-0}" = 1 ]; then
         echo "Building optional read-only native helper..."
-        make -C "$SCRIPT_DIR" build-core
+        make -C "$SCRIPT_DIR" WERROR= build-core
     fi
     if [ -n "${HYDRA_CORE_ARTIFACT:-}" ]; then
         CORE_SOURCE="$HYDRA_CORE_ARTIFACT"
@@ -278,7 +278,7 @@ fi
 if [ "$TUI_MODE" != never ]; then
     if [ "${HYDRA_BUILD_TUI:-0}" = 1 ]; then
         echo "Building native mission-control TUI..."
-        make -C "$SCRIPT_DIR" build-tui
+        make -C "$SCRIPT_DIR" WERROR= build-tui
     elif [ -z "${HYDRA_TUI_ARTIFACT:-}" ] && command -v make >/dev/null 2>&1; then
         tui_compiler="${CC:-cc}"
         tui_compiler="${tui_compiler%% *}"
@@ -289,7 +289,7 @@ if [ "$TUI_MODE" != never ]; then
         fi
         if [ "$tui_needs_build" -eq 1 ] && command -v "$tui_compiler" >/dev/null 2>&1; then
             echo "Building native mission-control TUI by default..."
-            if ! make -C "$SCRIPT_DIR" build-tui; then
+            if ! make -C "$SCRIPT_DIR" WERROR= build-tui; then
                 echo "Warning: native TUI build failed; installing without it ('hydra tui' will not be available)" >&2
             fi
         fi
