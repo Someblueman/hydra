@@ -216,8 +216,30 @@ lifecycle_set_observed() {
         "{\"status\":\"$(json_escape "$_lso_status")\",\"confidence\":\"$(json_escape "$_lso_confidence")\",\"exit_code\":$_lso_exit_json}" >/dev/null
 }
 
+# True when tmux has a session of exactly this name.
+# Usage: _lifecycle_session_live <session> [snapshot]
+# With "snapshot", a batched tmux snapshot that an observing command loaded
+# (tmux_load_snapshot) answers: the name has to be one whole line of it.
+# Otherwise tmux is asked, with "=name:", its exact session match. Neither
+# form accepts a session that the name is only a prefix of. (Inline: fleet-local
+# loads this file without lib/tmux.sh and its tmux_exact_target.)
+_lifecycle_session_live() {
+    if [ "${2:-}" = snapshot ] && [ -n "${_TMUX_SNAPSHOT_LOADED:-}" ]; then
+        case "
+${_TMUX_SNAPSHOT_SESSIONS:-}
+" in
+            *"
+$1
+"*) return 0 ;;
+        esac
+        return 1
+    fi
+    tmux has-session -t "=$1:" 2>/dev/null
+}
+
 # Sets LIFECYCLE_LIVENESS (live, stopped or unavailable) for the head that
 # lifecycle_load_head loaded. Prints nothing.
+# Usage: _lifecycle_load_liveness [snapshot]
 _lifecycle_load_liveness() {
     state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/session"
     _ll_session="$STATE_V2_SCALAR"
@@ -241,10 +263,7 @@ _lifecycle_load_liveness() {
         esac
         return 0
     fi
-    # "=name:" is tmux's exact session match: a bare name also selects another
-    # head's session that it is a prefix of. (Inline: fleet-local loads this
-    # file without lib/tmux.sh and its tmux_exact_target.)
-    if [ -n "$_ll_session" ] && tmux has-session -t "=$_ll_session:" 2>/dev/null; then
+    if [ -n "$_ll_session" ] && _lifecycle_session_live "$_ll_session" "${1:-}"; then
         LIFECYCLE_LIVENESS=live
     else
         LIFECYCLE_LIVENESS=stopped
@@ -257,6 +276,9 @@ lifecycle_liveness() {
     printf '%s\n' "$LIFECYCLE_LIVENESS"
 }
 
+# One row's lifecycle for list and status: the head is loaded once, and an
+# interactive head's liveness comes from the command's tmux snapshot when it
+# loaded one (a live probe otherwise).
 lifecycle_snapshot() {
     _ls_branch="$1"
     LIFECYCLE_SNAPSHOT_INSTANCE=""
@@ -279,10 +301,11 @@ lifecycle_snapshot() {
     LIFECYCLE_SNAPSHOT_OBSERVED="$STATE_V2_SCALAR"
     state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-confidence"
     LIFECYCLE_SNAPSHOT_CONFIDENCE="$STATE_V2_SCALAR"
-    LIFECYCLE_SNAPSHOT_LIVENESS="$(lifecycle_liveness "$_ls_branch" 2>/dev/null || echo unavailable)"
+    _lifecycle_load_liveness snapshot
+    LIFECYCLE_SNAPSHOT_LIVENESS="$LIFECYCLE_LIVENESS"
     state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/completion-policy"
     LIFECYCLE_SNAPSHOT_POLICY="$STATE_V2_SCALAR"
-    if lifecycle_completion_satisfied "$_ls_branch"; then LIFECYCLE_SNAPSHOT_COMPLETE=true; fi
+    if _lifecycle_completion_loaded; then LIFECYCLE_SNAPSHOT_COMPLETE=true; fi
     export LIFECYCLE_SNAPSHOT_INSTANCE LIFECYCLE_SNAPSHOT_OUTCOME
     export LIFECYCLE_SNAPSHOT_OBSERVED LIFECYCLE_SNAPSHOT_CONFIDENCE
     export LIFECYCLE_SNAPSHOT_LIVENESS LIFECYCLE_SNAPSHOT_POLICY LIFECYCLE_SNAPSHOT_COMPLETE
@@ -290,8 +313,12 @@ lifecycle_snapshot() {
 }
 
 lifecycle_completion_satisfied() {
-    _lcs_branch="$1"
-    lifecycle_load_head "$_lcs_branch" || return 1
+    lifecycle_load_head "$1" || return 1
+    _lifecycle_completion_loaded
+}
+
+# True when the head that lifecycle_load_head loaded meets its completion policy.
+_lifecycle_completion_loaded() {
     state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/completion-policy"
     _lcs_policy="$STATE_V2_SCALAR"
     state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/declared-outcome"
