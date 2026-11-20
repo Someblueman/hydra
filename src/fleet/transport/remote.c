@@ -234,18 +234,26 @@ static json_object *session_answer(const struct f_remote *remote, const struct f
  * on the command line: three lines. */
 #define SERVE_COMMAND (F_PATH * 8 + 128)
 #define SESSION_COMMAND (SERVE_COMMAND * 3 + 1024)
-static int serve_command(const struct f_remote *remote, bool handshake_first, const char *between, char *command, size_t size) {
-    char *exe = f_quote(remote->hydra), *home = f_quote(remote->home), *serve = malloc(SERVE_COMMAND); int n = -1;
-    char *middle = between ? f_quote(between) : NULL;
-    if (exe && home && serve && (!between || middle)) {
+static int compose_serve(const struct f_remote *remote, char *serve) {
+    char *exe = f_quote(remote->hydra), *home = f_quote(remote->home); int n = -1;
+    if (exe && home) {
         n = snprintf(serve, SERVE_COMMAND, "env LC_ALL=C %s%s %s fleet serve", remote->home[0] ? "HYDRA_HOME=" : "", remote->home[0] ? home : "", exe);
         if (n < 0 || n >= SERVE_COMMAND) n = -1;
-        else if (!handshake_first) n = snprintf(command, size, "%s", serve);
-        else if (!between) n = snprintf(command, size, "printf '%%s' '{\"protocol\":%d,\"action\":\"handshake\"}' | %s && %s", F_PROTOCOL, serve, serve);
-        else n = snprintf(command, size, "printf '%%s' '{\"protocol\":%d,\"action\":\"handshake\"}' | %s && printf '%%s' %s | %s && %s",
-                          F_PROTOCOL, serve, middle, serve, serve);
     }
-    free(exe); free(home); free(serve); free(middle);
+    free(exe); free(home);
+    return n;
+}
+static int compose_session(char *command, size_t size, bool handshake_first, const char *serve, const char *middle) {
+    if (!handshake_first) return snprintf(command, size, "%s", serve);
+    if (!middle) return snprintf(command, size, "printf '%%s' '{\"protocol\":%d,\"action\":\"handshake\"}' | %s && %s", F_PROTOCOL, serve, serve);
+    return snprintf(command, size, "printf '%%s' '{\"protocol\":%d,\"action\":\"handshake\"}' | %s && printf '%%s' %s | %s && %s",
+                    F_PROTOCOL, serve, middle, serve, serve);
+}
+static int serve_command(const struct f_remote *remote, bool handshake_first, const char *between, char *command, size_t size) {
+    char *serve = malloc(SERVE_COMMAND), *middle = between ? f_quote(between) : NULL; int n = -1;
+    if (serve && (!between || middle) && compose_serve(remote, serve) >= 0)
+        n = compose_session(command, size, handshake_first, serve, middle);
+    free(serve); free(middle);
     return n >= 0 && (size_t)n < size ? 0 : -1;
 }
 json_object *f_request_measured(const struct f_remote *remote, json_object *request, unsigned seconds,
@@ -272,37 +280,40 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
 /* The session of f_request_observed, with between (NULL: none) answered
  * after the handshake: *between_answer is then its answer, or NULL when the
  * session did not get that far. */
+/* The answers of a completed session, one line each: the handshake, then
+ * the between request (when asked) and the request. Each answer is one line:
+ * plain JSON holds no raw newline. The session's exit status is that of its
+ * last command. A line that was ended is the whole answer of a command the
+ * session got past, so it is judged on its own; one that was not ended is
+ * judged with the status of the session, as a session of its own would be. */
+static json_object *session_replies(const struct f_remote *remote, const struct f_capture *cap, char *out, bool has_between,
+                                    json_object **handshake, json_object **between_answer) {
+    char *line = strchr(out, '\n'), *last;
+    if (line) *line++ = '\0';
+    *handshake = session_answer(remote, cap, out, line ? 0 : cap->status);
+    if (!json_object_get_boolean(f_field(*handshake, "ok"))) return NULL;
+    if (has_between) {
+        last = line ? strchr(line, '\n') : NULL;
+        if (last) *last++ = '\0';
+        *between_answer = session_answer(remote, cap, line ? line : "", last ? 0 : cap->status);
+        /* A command that failed ends the session: the request was not asked. */
+        if (!json_object_get_boolean(f_field(*between_answer, "ok"))) return NULL;
+        line = last;
+    }
+    return session_answer(remote, cap, line ? line : "", cap->status);
+}
 static json_object *observed_session(const struct f_remote *remote, json_object *between, json_object *request,
                                      unsigned connect_seconds, unsigned seconds, json_object **handshake, json_object **between_answer) {
     struct f_capture cap = {0}; json_object *result = NULL;
-    char *command = malloc(SESSION_COMMAND), *line, *last;
+    char *command = malloc(SESSION_COMMAND);
     const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN);
     *handshake = NULL;
     if (between_answer) *between_answer = NULL;
     if (!command || serve_command(remote, true, between ? json_object_to_json_string_ext(between, JSON_C_TO_STRING_PLAIN) : NULL, command, SESSION_COMMAND) ||
-        ssh_captured(remote, command, input, strlen(input), connect_seconds, seconds, &cap)) {
+        ssh_captured(remote, command, input, strlen(input), connect_seconds, seconds, &cap))
         *handshake = f_error("fleet", "transport_failed", "cannot start SSH transport");
-        goto done;
-    }
-    /* Each answer is one line: plain JSON holds no raw newline. The session's
-     * exit status is that of its last command. A line that was ended is the
-     * whole answer of a command the session got past, so it is judged on its
-     * own; one that was not ended is judged with the status of the session,
-     * as a session of its own would be. */
-    line = strchr(cap.out, '\n');
-    if (line) *line++ = '\0';
-    *handshake = session_answer(remote, &cap, cap.out, line ? 0 : cap.status);
-    if (!json_object_get_boolean(f_field(*handshake, "ok"))) goto done;
-    if (between) {
-        last = line ? strchr(line, '\n') : NULL;
-        if (last) *last++ = '\0';
-        *between_answer = session_answer(remote, &cap, line ? line : "", last ? 0 : cap.status);
-        /* A command that failed ends the session: the request was not asked. */
-        if (!json_object_get_boolean(f_field(*between_answer, "ok"))) goto done;
-        line = last;
-    }
-    result = session_answer(remote, &cap, line ? line : "", cap.status);
- done:
+    else
+        result = session_replies(remote, &cap, cap.out, between != NULL, handshake, between_answer);
     free(command); f_capture_free(&cap);
     return result;
 }
