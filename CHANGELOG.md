@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reinstall, or set `HYDRA_ROOT`. Installs made by `install.sh`, including the
   default prefix, are unaffected.
 - `hydra tui --basic` reports `unknown TUI option '--basic'`; it still exits 2.
+- **The control centre has one reader of local head data**, the native read
+  of the state store. `hydra tui --data` is removed (`unknown TUI option`,
+  exit 2); use `hydra list`, or `hydra-tui --data` for the same rows.
+  `hydra-tui --store` is refused, since the store is always read: drop the
+  option.
+- **Old view names are refused.** `hydra-tui --view heads|workspace` (use
+  `work`), `coordination` (use `detail`), `workflows` (use `overview`),
+  `attention|recovery` (use `inbox`) and `statistics` (use `stats`) exit 2
+  with an error naming the current view. An unknown view name now lists the
+  valid ones instead of exiting silently.
+- **Key actions that bound nothing are removed** (34 of them, for example
+  `statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+  `views.next`, `view.5` to `view.9`, `view.cycle`, `head.output`). A keys file
+  that names one shows a notice at start-up naming the action to use, or
+  saying nothing replaces it; its other lines still apply. A keys file written
+  by `hydra tui --print-keys` of 3.0 or 4.0 contains these names: delete those
+  lines.
 
 ### Fixed
 - **Head names that begin another head's name:** `hydra kill`, `hydra
@@ -80,6 +97,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds them.
 - `hydra` started through a relative symbolic link finds its libraries on
   systems whose `readlink` has no `-f`.
+- `hydra fleet handshake HOST` works again. It always failed with
+  `capability_unavailable`; it now prints the host's handshake and exits 0,
+  and still reports an unreachable host as `offline`, a host without Hydra as
+  `remote_failed` and an incompatible one as `version_mismatch`.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
@@ -156,6 +177,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `hydra-core capabilities`, `hydra-core json-string` and `hydra-core
   validate-state`, which nothing called.
+- The shell reader of the control centre's head snapshot (`lib/tui_native.sh`
+  shrinks from about 500 to 240 lines); `make test-parity` now checks the
+  store reader against recorded rows.
 - 39 shell functions nothing called, `scripts/bench-tmux-control.sh`, and four
   unreferenced screenshots under `assets/`.
 
