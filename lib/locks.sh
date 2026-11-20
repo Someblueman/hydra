@@ -73,9 +73,6 @@ hydra_private_touch() (
     done
 )
 
-# Try to acquire a lock for a session name candidate
-# Usage: try_lock <candidate_name>
-# Returns: 0 if lock acquired, 1 if failed
 # Creates directory $1 for this caller alone: false when it exists or when
 # another process creates it at the same moment. mkdir's exit status cannot
 # decide that: the Rust coreutils Ubuntu ships from 25.10 (0.10.0 in 26.04)
@@ -97,9 +94,66 @@ lock_load_host_name() {
         _LOCK_HOST_NAME="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
 }
 
+# Sets _LOCK_PROC_PID to this process's PID as /proc gives it, without
+# starting a process: /proc/self belongs to the process that looks at it, and
+# the one entry of its task directory, the main thread, carries the PID.
+# Returns 1, with _LOCK_PROC_PID empty, without such a /proc.
+lock_read_proc_pid() {
+    _LOCK_PROC_PID=
+    for _lock_task in /proc/self/task/*; do
+        # A shell is one thread; with more entries this is not the PID.
+        [ -z "$_LOCK_PROC_PID" ] || { _LOCK_PROC_PID=; return 1; }
+        _LOCK_PROC_PID="${_lock_task##*/}"
+    done
+    case "$_LOCK_PROC_PID" in
+        ''|*[!0-9]*) _LOCK_PROC_PID=; return 1 ;;
+    esac
+}
+
+# Set when /proc is trusted for that. Libraries are loaded by the top-level
+# shell, where the PID is $$: /proc has to give the same here. Where it does
+# not (no /proc, one that belongs to another PID namespace, or a library
+# loaded by a subshell), a process is asked for the PID instead.
+_LOCK_PROC_SELF=
+if lock_read_proc_pid && [ "$_LOCK_PROC_PID" = "$$" ]; then
+    _LOCK_PROC_SELF=1
+fi
+
+# Sets _LOCK_SELF_PID to the PID of the shell process that calls this, which
+# in a subshell is not $$: $$ stays the top-level shell's PID. Call it as a
+# plain command; inside a command substitution it would name that
+# substitution's process. Returns 1, with _LOCK_SELF_PID empty, when the PID
+# cannot be found.
+lock_load_self_pid() {
+    _LOCK_SELF_PID=
+    if [ -n "$_LOCK_PROC_SELF" ] && lock_read_proc_pid; then
+        _LOCK_SELF_PID="$_LOCK_PROC_PID"
+        return 0
+    fi
+    # The parent of a process started here is this shell.
+    _LOCK_SELF_PID="$(exec sh -c 'echo "$PPID"' 2>/dev/null)" || _LOCK_SELF_PID=
+    case "$_LOCK_SELF_PID" in
+        ''|*[!0-9]*) _LOCK_SELF_PID=; return 1 ;;
+    esac
+}
+
+# Try once to take a lock, recording the top-level shell ($$) as its owner.
+# Usage: try_lock <name> [operation]
+# Returns: 0 if the lock was taken, 1 if not
+# The owner is $$ because callers of try_lock reserve a name for the whole
+# command: generate_session_name runs in a command substitution, and the lock
+# it takes is kept by the command after that substitution has ended. A lock
+# that guards a section of code is taken with acquire_lock, which records the
+# process that runs the section.
 try_lock() {
+    lock_take "$1" "${2:-$1}" "$$"
+}
+
+# Usage: lock_take <name> <operation> <owner-pid>
+lock_take() {
     candidate="$1"
-    operation="${2:-$candidate}"
+    operation="$2"
+    _lock_owner="$3"
     # Only lock if HYDRA_HOME is set
     if [ -z "${HYDRA_HOME:-}" ]; then
         return 0
@@ -117,7 +171,7 @@ try_lock() {
     _lock_host="$_LOCK_HOST_NAME"
     if ! (
         umask 077
-        printf '%s\n' "$$" > "$lock_path/pid" &&
+        printf '%s\n' "$_lock_owner" > "$lock_path/pid" &&
         printf '%s\n' "$_lock_host" > "$lock_path/host" &&
         printf '%s\n' "$(date +%s)" > "$lock_path/created_at" &&
         printf '%s\n' "$operation" > "$lock_path/operation"
@@ -129,15 +183,24 @@ try_lock() {
     return 0
 }
 
-# Release a lock for a session name candidate
-# Usage: release_lock <candidate_name>
+# Release a lock this process holds.
+# Usage: release_lock <name>
 # Returns: 0 always (best-effort cleanup)
+# The lock is removed when its owner record names this process: $$ for a lock
+# of try_lock or of acquire_lock in the top-level shell, or the PID of this
+# subshell for a lock acquire_lock took here. Another process's lock is left
+# alone. A subshell asks for its own PID only when the record is not $$.
 release_lock() {
     candidate="$1"
     if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
         _rl_path="$HYDRA_HOME/locks/$candidate.lock"
         _rl_pid=
         { IFS= read -r _rl_pid < "$_rl_path/pid"; } 2>/dev/null || :
+        if [ -n "$_rl_pid" ] && [ "$_rl_pid" != "$$" ]; then
+            # Not the top-level shell's: this subshell's, or somebody else's.
+            lock_load_self_pid || :
+            [ "$_rl_pid" != "$_LOCK_SELF_PID" ] || _rl_pid="$$"
+        fi
         # Empty PID supports pre-v1 metadata-free locks acquired by this process.
         if [ -z "$_rl_pid" ] || [ "$_rl_pid" = "$$" ]; then
             rm -f "$_rl_path/pid" "$_rl_path/host" \
@@ -169,6 +232,13 @@ release_session_lock() {
 # killed never releases) is broken and the try repeated at once. A lock owned
 # by a live process, by another host, or without a complete owner record is
 # never broken, however long it has been held.
+#
+# The owner recorded is the shell process that calls this, which runs the
+# locked section and releases the lock. In a subshell that is not $$: with $$
+# a subshell that still held the lock after the command that started it was
+# killed would own a lock that names a dead process, and the next caller
+# would break it and run the same section beside it. The lock must therefore
+# be released by the process that acquired it, before that process ends.
 # Returns: 0 if acquired, 1 if not
 acquire_lock() {
     _al_name="$1"
@@ -178,13 +248,15 @@ acquire_lock() {
     case "$_al_retries" in
         ''|*[!0-9]*) _al_retries=5 ;;
     esac
+    lock_load_self_pid || _LOCK_SELF_PID="$$"
+    _al_owner="$_LOCK_SELF_PID"
     while [ "$_al_i" -lt "$_al_retries" ]; do
-        if try_lock "$_al_name" "$_al_operation"; then
+        if lock_take "$_al_name" "$_al_operation" "$_al_owner"; then
             return 0
         fi
         if [ -n "${HYDRA_HOME:-}" ] &&
             remove_stale_lock_dir "$HYDRA_HOME/locks/$_al_name.lock" 2>/dev/null &&
-            try_lock "$_al_name" "$_al_operation"; then
+            lock_take "$_al_name" "$_al_operation" "$_al_owner"; then
             return 0
         fi
         _al_i=$((_al_i + 1))

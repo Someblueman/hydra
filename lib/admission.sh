@@ -59,7 +59,8 @@ admission_open() {
     _ad_problem='the admission lock is held'
     _ad_tries=0 _ad_lock_until=''
     # Both are asked for before the lock is taken, not while it is held.
-    _ad_self="$(exec sh -c 'echo "$PPID"' 2>/dev/null)" || _ad_self=''
+    lock_load_self_pid || :
+    _ad_self="$_LOCK_SELF_PID"
     lock_load_host_name
     until hydra_exclusive_mkdir "$_ad_root/lock"; do
         if remove_stale_lock_dir "$_ad_root/lock" 2>/dev/null; then continue; fi

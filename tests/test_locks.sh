@@ -24,8 +24,13 @@ export HYDRA_HOME
 
 # Cleanup function
 cleanup_test_locks() {
+    test_stop_processes_naming "$test_home"
     rm -rf "$test_home"
 }
+trap cleanup_test_locks EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # Test try_lock function
 test_try_lock() {
@@ -203,6 +208,101 @@ test_acquire_lock_keeps_owned_locks() {
         "$HYDRA_HOME/locks/no-owner.lock" "$HYDRA_HOME/locks/no-host.lock" \
         "$HYDRA_HOME/locks/being-broken.lock.breaking.$dead_pid"
     unset HYDRA_LOCK_RETRIES
+}
+
+# acquire_lock records the shell process that calls it. In a subshell that
+# is the subshell, which $$ does not name.
+test_acquire_lock_records_its_holder() {
+    echo "Testing acquire_lock records the process that holds the lock..."
+
+    acquire_lock top-holder
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/top-holder.lock/pid" 2>/dev/null)" "in the top-level shell the holder is \$\$"
+    # Any shell of the command may release what the top-level shell holds.
+    ( release_lock top-holder )
+    assert_equal "" "$(lock_entries top-holder)" "a subshell releases the top-level shell's lock"
+
+    (
+        acquire_lock sub-holder "subshell section" || exit 2
+        recorded="$(sed -n '1p' "$HYDRA_HOME/locks/sub-holder.lock/pid" 2>/dev/null)"
+        # The parent of a process this subshell starts is the subshell.
+        own="$(exec sh -c 'echo "$PPID"')"
+        printf '%s %s\n' "$recorded" "$own" > "$test_home/sub-holder.pids"
+        # A sibling is another process: it must leave the lock alone.
+        ( release_lock sub-holder )
+        [ -d "$HYDRA_HOME/locks/sub-holder.lock" ] || exit 3
+        acquire_lock sub-holder && exit 4
+        release_lock sub-holder
+        [ ! -e "$HYDRA_HOME/locks/sub-holder.lock" ] || exit 5
+        exit 0
+    )
+    sub_status=$?
+    read -r recorded_pid own_pid < "$test_home/sub-holder.pids"
+    assert_equal "$own_pid" "$recorded_pid" "in a subshell the holder is the subshell"
+    if [ "$recorded_pid" != "$$" ]; then
+        assert_success 0 "the subshell's lock does not name the top-level shell"
+    else
+        assert_success 1 "the subshell's lock does not name the top-level shell"
+    fi
+    assert_success "$sub_status" "a subshell releases its own lock, and no other process of the command does (exit $sub_status)"
+
+    # try_lock reserves a name for the whole command: a lock taken in a command
+    # substitution is still held, by a live owner, after the substitution ended.
+    reserved="$(try_lock reserved-name && echo taken)"
+    assert_equal taken "$reserved" "try_lock takes a lock inside a command substitution"
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/reserved-name.lock/pid" 2>/dev/null)" "a lock of try_lock names the top-level shell"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/reserved-name.lock"
+    assert_failure $? "the reserved name is not stale once the substitution has ended"
+    release_lock reserved-name
+    assert_equal "" "$(lock_entries reserved-name)" "the command releases the name it reserved"
+}
+
+# A command is killed while a subshell of it holds a lock. The subshell goes
+# on running its section, so the lock is held: nobody may break it, and the
+# subshell releases it when it is done.
+test_subshell_lock_survives_its_command() {
+    echo "Testing a subshell's lock when the command that started it is killed..."
+
+    cat > "$test_home/holder.sh" <<'EOF'
+#!/bin/sh
+# holder.sh <locks.sh> <directory>: a subshell holds a lock while hold exists.
+. "$1"
+(
+    acquire_lock orphan-held "subshell section" || exit 1
+    : > "$2/holding"
+    while [ -f "$2/hold" ]; do sleep 0.05; done
+    release_lock orphan-held
+    : > "$2/released"
+) &
+wait
+EOF
+    : > "$test_home/hold"
+    sh "$test_home/holder.sh" "$(dirname "$0")/../lib/locks.sh" "$test_home" &
+    command_pid=$!
+    wait_for "the subshell to hold the lock" test -f "$test_home/holding"
+    holder_pid="$(sed -n '1p' "$HYDRA_HOME/locks/orphan-held.lock/pid" 2>/dev/null)"
+    assert_equal "$command_pid" "$(ps -o ppid= -p "$holder_pid" 2>/dev/null | tr -d ' ')" "the lock names the subshell of the command"
+
+    kill -9 "$command_pid"
+    wait "$command_pid" 2>/dev/null
+    kill -0 "$holder_pid" 2>/dev/null
+    assert_success $? "the subshell outlives the command that started it"
+    HYDRA_LOCK_RETRIES=2
+    export HYDRA_LOCK_RETRIES
+    acquire_lock orphan-held "second writer"
+    assert_failure $? "acquire_lock does not break the lock of a live subshell whose command died"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/orphan-held.lock"
+    assert_failure $? "the live subshell's lock is not stale"
+    release_lock orphan-held
+    assert_equal "$holder_pid" "$(sed -n '1p' "$HYDRA_HOME/locks/orphan-held.lock/pid" 2>/dev/null)" "another process cannot release the subshell's lock"
+    unset HYDRA_LOCK_RETRIES
+
+    rm -f "$test_home/hold"
+    wait_for "the subshell to finish its section" test -f "$test_home/released"
+    assert_equal "" "$(lock_entries orphan-held)" "the subshell releases its lock when it is done"
+    acquire_lock orphan-held "second writer"
+    assert_success $? "the lock is free for the next writer"
+    release_lock orphan-held
+    rm -f "$test_home/holder.sh" "$test_home/holding" "$test_home/released" "$test_home/sub-holder.pids"
 }
 
 # Only Hydra's own locks are ever broken: those of acquire_lock and the
@@ -428,6 +528,16 @@ test_release_lock
 test_acquire_lock_fail_closed
 test_acquire_lock_recovers_dead_owner
 test_acquire_lock_keeps_owned_locks
+test_acquire_lock_records_its_holder
+# Once more as on a system without /proc, where the shell asks a process for
+# its own PID.
+lock_proc_self="$_LOCK_PROC_SELF"
+# shellcheck disable=SC2034 # read by lock_load_self_pid
+_LOCK_PROC_SELF=
+test_acquire_lock_records_its_holder
+# shellcheck disable=SC2034
+_LOCK_PROC_SELF="$lock_proc_self"
+test_subshell_lock_survives_its_command
 test_remove_stale_lock_dir_paths
 test_acquire_lock_breaks_once_under_contention
 test_cleanup_stale_locks

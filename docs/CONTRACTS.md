@@ -99,6 +99,10 @@ them.
 
 Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.
+A lock under `$HYDRA_HOME/locks` records the host and the process that holds it,
+which for a section run in a subshell is that subshell. A lock whose holder died
+on this host is taken over by the next writer, one at a time; a lock held by a
+live process, by another host, or without that record is never broken.
 Head history remains after teardown with `desired-state=stopped`.
 
 ### Snapshot
