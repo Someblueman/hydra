@@ -509,7 +509,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 - `default`: Single full-screen pane
 - `dev`: Two panes (editor ~70% left, terminal right)
 - `full`: Three panes (editor top-left, terminal top-right, logs bottom)
-- Cycle in-session with `Ctrl-L`.
+- Cycle in-session with `hydra cycle-layout`.
 
 ## Configuration
 
