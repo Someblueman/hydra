@@ -589,10 +589,17 @@ screen: `output.*` (a command's output), `help.*`, `review.*` and `inbox.*`,
 Onboarding page), `heads.*`, `head.*`, `workspace.*`, `work.*`, `workflows.*`
 (the Run page), `plan.*`, `run.*`, `task.new`, `view.*`, `views.*` and `app.*`. The footer
 and `?` help are generated from it, so they always name the keys in effect.
-Names of earlier releases stay in the table so their keys files load: rows
-whose job moved are marked `(no longer used)` and are live nowhere, and
 `view.workspace`, `view.attention`, `view.hosts` and `view.stats` (`W`, `I`,
-`H`, `D`) are the one-release old keys of the four screens.
+`H`, `D`) are the one-release old keys of the four screens. The table holds
+only actions that do something: the names of earlier releases whose job moved
+(`statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+`views.next`, `view.5` to `view.9` and the like, which `--print-keys` used to
+mark "no longer used") are gone. A keys file that still names one starts with a
+notice that names the first such line and the action to use instead, for
+example `keys.conf line 12: statistics.page was removed; use
+statistics.page-previous and statistics.page-next (and 3 more removed actions;
+--print-keys lists the current ones); other lines applied`. Delete those lines
+(or start again from `hydra tui --print-keys`) to clear it.
 
 To change the keys, write a keys file at `$HYDRA_HOME/tui/keys.conf` (default
 `~/.hydra/tui/keys.conf`), or name one in `HYDRA_TUI_KEYS`. `hydra tui --print-keys`
@@ -779,11 +786,11 @@ default; `t` (or "Theme" in `:`) cycles dark, light and your terminal's colours,
 and `--theme` and `--ascii` choose at start. Only changed cells are repainted, so
 idle refreshes do not flicker.
 
-`--view` opens a screen by name (`work`, `inbox`, `hosts`, `stats`). The names of
-earlier releases still work and open the page that replaced them: `heads` and
-`workspace` open Work, `detail` and `coordination` its Details page, `overview`
-and `workflows` its Run page, `attention` and `recovery` Inbox, `statistics`
-Stats. Session states use plain words (`running`, `terminal gone`, `stopped`,
+`--view` opens a screen by name (`work`, `inbox`, `hosts`, `stats`), or Work on
+one of its pages: `detail` (Details) and `overview` (Run). The other names of
+earlier releases were removed and are refused with the name to use: `heads` and
+`workspace` are `work`, `coordination` is `detail`, `workflows` is `overview`,
+`attention` and `recovery` are `inbox`, `statistics` is `stats`. Session states use plain words (`running`, `terminal gone`, `stopped`,
 `unknown`); internal tokens stay behind `d` (technical details).
 
 One interaction model applies everywhere Hydra has the keys:
@@ -1009,7 +1016,8 @@ queue...) open inside Hydra.
 | `Y` / `N` | approve / reject after typing the request ID and the word | approve / reject from a dialog (`y` confirms) |
 | `i` `f` `l` `t` `p` `o` in review | IDs, references, supply a log, transcript or PR, follow a reference | Technical and References pages; `+` adds a reference; Enter opens the selected one |
 
-`keys.conf` files of earlier releases keep working: their action names still
-load, the three `workspace.layout.*` actions keep their chords with the new page
-meaning, and actions whose job moved are kept by name but live nowhere
-(`--print-keys` marks them "no longer used").
+A `keys.conf` of an earlier release keeps its current actions: the three
+`workspace.layout.*` actions keep their chords with the new page meaning. The
+actions whose job moved no longer exist; a line that names one is reported at
+start-up with the action that replaced it, and the other lines apply (see
+[TUI keys](#tui-keys)).

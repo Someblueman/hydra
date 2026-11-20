@@ -241,8 +241,8 @@ cannot be combined.
   interval extends it; a later one starts a new interval. When the oldest
   interval is dropped, or a damaged file is set aside as `coverage.corrupt.<epoch>`,
   `unknown-before` moves forward: time before it is unknown, not unobserved.
-- The control centre started by `hydra tui` (`hydra-tui --store`) is the
-  observer. Its 2-second refresh already runs one `tmux list-sessions` for the
+- The control centre started by `hydra tui` is the observer (the fleet entry,
+  `hydra fleet tui`, is not). Its 2-second refresh already runs one `tmux list-sessions` for the
   head snapshot; that call also names every session's window activity times
   (`#{W:#{window_activity} }`), so observing adds no process. A local
   interactive head is quiet after 10 seconds without output and active once
@@ -687,12 +687,16 @@ head rows, extends `T` with connection/freshness fields, and adds bounded `O` ta
 rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
 versions fail closed. This adapter is not a general automation API.
 
-`hydra tui --data` (the shell reader) is the reference for the local snapshot. The
-control centre started by `hydra tui` (`hydra-tui --store`) does not run it for each
-refresh: it reads the same state v2 records in its own process and writes the same
-rows, then parses them as it parses the shell reader's. `hydra-tui --hydra PATH --data`
-prints that read, and `make test-parity` (`tests/test_tui_store_parity.sh`) requires
-it to equal `hydra tui --data` byte for byte over records of every kind. Three facts
+The control centre has one reader of the local snapshot: `hydra-tui` reads the
+state v2 records in its own process, writes them as the rows above and parses
+those, at every start (`hydra tui`, bare `hydra` and `hydra fleet tui` alike).
+The shell reader `hydra tui --data` and the helper option `--store`, which chose
+between the two readers, were removed: `hydra tui --data` is an unknown option
+(exit 2) and `hydra-tui --store` is refused with a message that says so (exit
+2). `hydra-tui --hydra PATH --data` prints the read, and `make test-parity`
+(`tests/test_tui_store_rows.sh`) requires it to equal, byte for byte, the rows
+recorded in `tests/fixtures/tui/store-rows` for records of every kind; those
+rows were written from the shell reader while the two readers agreed. Three facts
 are not in the store. Live sessions come from one `tmux list-sessions` per refresh;
 its answer also carries each session's window activity times, which the snapshot
 rows do not use and the activity observer does (see `activity.changed`).
@@ -702,8 +706,9 @@ since it was read and the selected head's, plus the four least recently read oth
 so a count can lag an edit that touched neither by a few refreshes. Leftover
 worktrees are described by the private `hydra tui --orphan-rows`, which prints only
 those `R` rows and is run only while a `head_<id>` directory under the project's
-worktree root has no head record. A helper started without `--store` asks its
-`--hydra` command for `tui --data`, as before. With `--store` the helper also answers
+worktree root has no head record. A refresh whose commands do not answer within
+ten seconds keeps the last good snapshot, marked `state read timed out`; a CLI
+that fails does not fail the snapshot. The helper also answers
 the workflow projection and the workspace links itself when the project records no
 run, keeps the workspace links while no run was added or removed and no recorded
 graph changed, and keeps the workflow projection while every run has ended and its
@@ -769,12 +774,21 @@ and `--native` of earlier releases, is a usage error (exit 2).
 `hydra tui --capabilities --json` keeps its fields and reports
 `"fallback_mode":"none"` and `"basic":false`. The control centre has four
 screens, Work, Inbox, Hosts and Stats; `hydra tui --view work|inbox|hosts|stats`
-opens one, and the view names of earlier releases (`heads`, `workspace`,
-`detail`, `coordination`, `overview`, `workflows`, `attention`, `recovery`,
-`statistics`) are still accepted and open the screen, or the Work page, that
-replaced them. Keys files (`HYDRA_TUI_KEYS`, `$HYDRA_HOME/tui/keys.conf`) written
-for earlier releases still load: every action name they may contain is still
-known, and actions whose job moved are live nowhere. Native mutations execute
+opens one, and `--view detail` and `--view overview` open Work on its Details
+and Run page. The view names of earlier releases that only stood for one of
+these (`heads`, `workspace`, `coordination`, `workflows`, `attention`,
+`recovery`, `statistics`) are refused (exit 2) with the name to use, as in
+`hydra-tui: --view heads was removed; use --view work`; any other name is refused
+with the list of names. Keys files (`HYDRA_TUI_KEYS`, `$HYDRA_HOME/tui/keys.conf`)
+keep the action names of the current table. A line that names an action of an
+earlier release that no longer exists (the ones `--print-keys` marked "no longer
+used": `statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+`views.next`, `view.5` to `view.9`, `view.cycle` and the like) is refused with
+the action that does its job now, as in `line 12: statistics.page was removed;
+use statistics.page-previous and statistics.page-next (and 3 more removed
+actions; --print-keys lists the current ones)`; the file's other lines apply.
+The old screen letters (`view.workspace`, `view.attention`, `view.hosts`,
+`view.stats`) are current names. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `hydra tui --attention-data` (internal), which merges `workflow
 attention-data` with `fleet attention-data` (when remote aliases are registered)
