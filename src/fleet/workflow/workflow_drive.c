@@ -6,10 +6,11 @@
 #include <time.h>
 #include <unistd.h>
 
-/* The loop of workflow_drive (lib/workflow_runtime.sh) after the shell has
- * taken the run's drive lock and recorded the statistics start. Each poll
- * makes the same decisions in the same order; it sleeps until a worker exits
- * or a second passes, as the shell driver's USR1 wake-up does. */
+/* The loop of the run driver after the shell (workflow_drive in
+ * lib/workflow_runtime.sh) has taken the run's drive lock and recorded the
+ * statistics start. It is the only run driver; the shell driver of earlier
+ * releases was removed. Each poll sleeps until a worker exits or a second
+ * passes. */
 
 #define CONTINUE (-1)
 
@@ -47,7 +48,7 @@ static int prologue(struct wdr_run *run) {
     char pid[32];
     snprintf(pid, sizeof(pid), "%ld", (long)getpid());
     if (wdr_run_scalar(run, "owner-pid", pid) || heartbeat(run) || wdr_run_scalar(run, "state", "running")) return 1;
-    /* Each drive records which driver it is, as the shell driver does. */
+    /* Each drive records which driver it is; the removed shell driver recorded driver=shell. */
     (void)wdr_event(run, NULL, "run.running", "driver=native");
     if (!wdr_cancel_requested(run) && approval_waiting(run) &&
         wdr_hook(run, NULL, 0, false, "approval-resume", NULL, NULL)) {

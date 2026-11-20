@@ -331,49 +331,28 @@ steps:
       head: workflow-a
       argv: [sh, $test_root/long.sh, $test_root/cancel-started, $test_root/cancel-completed]
 EOF
-# Delay the scheduler's next state scan until the cancelled step publishes its
-# terminal state, reproducing the ordering that intermittently failed in CI.
-# The scheduler's step-state scans are awk passes that receive the run
-# directory as WORKFLOW_RUN_DIR.
-mkdir "$test_root/race-bin"
-cat > "$test_root/race-bin/awk" <<EOF
-#!/bin/sh
-run_dir=\$(cat "$test_root/cancel-race-dir" 2>/dev/null || true)
-if [ -n "\$run_dir" ] && [ "\${WORKFLOW_RUN_DIR:-}" = "\$run_dir" ] && [ -s "\$run_dir/residual-children.tsv" ]; then
-    count=0
-    while [ "\$(cat "\$run_dir/steps/long/state")" = running ] && [ "\$count" -lt 100 ]; do
-        sleep 0.05; count=\$((count + 1))
-    done
-    : > "$test_root/cancel-race-observed"
-fi
-exec "$(command -v awk)" "\$@"
-EOF
-chmod +x "$test_root/race-bin/awk"
-PATH="$test_root/race-bin:$PATH" "$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
+# A worker that finishes after the driver listed the running steps must still
+# be cancelled: the run reaches the terminal state with no residual child.
+"$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
 cancel_runner=$!
 wait_for_file "$test_root/cancel-started" || exit 1
 cancel_run="$(sed -n '1p' "$test_root/cancel.out")"
 cancel_dir="$(run_dir_for "$cancel_run")"
-printf '%s\n' "$cancel_dir" > "$test_root/cancel-race-dir"
 # Hold event publication so the worker stays alive after writing its terminal
 # step state. This exposes a residual snapshot taken before that transition.
 mkdir "$cancel_dir/.events.lock" || exit 1
 printf '%s\n' "$$" > "$cancel_dir/.events.lock/owner-pid"
-cancel_observer=''
-if [ "${HYDRA_NATIVE_DRIVER:-}" != 0 ]; then
-    # The native driver reads step states itself rather than through awk, so
-    # the snapshot is observed from here: it lists the step while its worker
-    # runs, and the worker, kept alive by the held event lock, publishes its
-    # terminal state only after that.
-    (
-        observe_count=0
-        while [ "$observe_count" -lt 200 ] && [ ! -f "$test_root/cancel-race-observed" ]; do
-            [ ! -s "$cancel_dir/residual-children.tsv" ] || : > "$test_root/cancel-race-observed"
-            sleep 0.05; observe_count=$((observe_count + 1))
-        done
-    ) &
-    cancel_observer=$!
-fi
+# The snapshot is observed from here: the driver lists the step while its
+# worker runs, and the worker, kept alive by the held event lock, publishes its
+# terminal state only after that.
+(
+    observe_count=0
+    while [ "$observe_count" -lt 200 ] && [ ! -f "$test_root/cancel-race-observed" ]; do
+        [ ! -s "$cancel_dir/residual-children.tsv" ] || : > "$test_root/cancel-race-observed"
+        sleep 0.05; observe_count=$((observe_count + 1))
+    done
+) &
+cancel_observer=$!
 "$HYDRA_BIN" workflow cancel "$cancel_run" > "$test_root/cancel-command.out" &
 cancel_request=$!
 cancel_wait=0
@@ -383,7 +362,7 @@ done
 rm -rf "$cancel_dir/.events.lock"
 wait "$cancel_request"
 assert_success $? "cancellation reaches an active workflow owner"
-[ -z "$cancel_observer" ] || wait "$cancel_observer"
+wait "$cancel_observer"
 assert_success "$(if [ -f "$test_root/cancel-race-observed" ]; then printf 0; else printf 1; fi)" "cancellation exercises a worker finishing after the residual snapshot"
 wait "$cancel_runner" 2>/dev/null || true
 assert_equal cancelled "$(sed -n '1p' "$cancel_dir/state")" "cancelled run records a terminal state"

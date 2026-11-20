@@ -16,8 +16,8 @@
 
 static long now(void) { return (long)time(NULL); }
 
-/* The shell driver's trap records a cancelling signal as cancel-requested
- * between commands; the driver checks the request at the same points. */
+/* A cancelling signal is recorded as cancel-requested (as the removed shell
+ * driver's trap did); the driver checks the request between commands. */
 bool wdr_cancel_requested(struct wdr_run *run) {
     char path[F_PATH];
     if (wdr_join(path, run->dir, "cancel-requested")) return false;

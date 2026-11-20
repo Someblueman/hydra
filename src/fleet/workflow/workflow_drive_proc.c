@@ -48,8 +48,9 @@ int wdr_signals_init(void) {
     return handle(SIGCHLD, on_child);
 }
 
-/* The shell driver's `trap ... HUP INT TERM`: a signal that was ignored when
- * the driver started stays ignored, as a non-interactive shell cannot trap it. */
+/* Handles HUP, INT and TERM as the removed shell driver's `trap` did: a signal
+ * that was ignored when the driver started stays ignored, as a non-interactive
+ * shell cannot trap it. */
 void wdr_cancel_traps(void) {
     size_t i;
     for (i = 0; i < 3; i++)

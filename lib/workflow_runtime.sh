@@ -162,35 +162,6 @@ workflow_pid_alive() {
     case "$(ps -o stat= -p "$1" 2>/dev/null)" in *Z*) return 1 ;; esac
 }
 
-# Each scan below reads every step state of a run in graph order inside one
-# awk process, rather than starting one process per step. A missing or empty
-# state file reads as an empty state, as `sed -n '1p'` reads it. The run
-# directory reaches awk through the environment, which keeps it byte-exact.
-
-# Usage: workflow_count_states <run-dir> "<state> ..." [kind]
-# Prints how many steps (of the given kind, if any) are in one of the states.
-workflow_count_states() {
-    WORKFLOW_RUN_DIR="$1" awk -F '\t' -v want=" $2 " -v kind="${3:-}" '
-        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
-        $1 == "step" && (kind == "" || $3 == kind) {
-            state = ""; file = dir "/steps/" $2 "/state"
-            getline state < file; close(file)
-            if (state != "" && index(want, " " state " ")) count++
-        }
-        END { print count + 0 }' "$1/graph.tsv"
-}
-
-# Run by a step worker as it exits, after it recorded its result, so the
-# driver polls at once instead of finishing its one-second sleep. A worker is
-# the driver's child; once the driver is gone the worker is reparented and the
-# driver's PID may name an unrelated process, so no signal is sent then.
-workflow_wake_driver() {
-    [ -n "${_wd_driver_pid:-}" ] || return 0
-    _wwd_worker="$(exec sh -c 'printf %s "$PPID"')"
-    operations_owns_pid "$_wd_driver_pid" "$_wwd_worker" || return 0
-    kill -USR1 "$_wd_driver_pid" 2>/dev/null || true
-}
-
 workflow_run_owner_active() {
     _wroa_dir="$1"
     _wroa_pid="$(sed -n '1p' "$_wroa_dir/owner-pid" 2>/dev/null || true)"
@@ -327,115 +298,10 @@ workflow_step_command() {
     "$HYDRA_BIN_PATH" "$@"
 }
 
-# Decides queued steps exactly as one sequential pass per graph line would,
-# repeated until nothing changes: a decision is visible to the steps after it.
-# Prints "cancelled <id>" when a dependency failed, "ready <id>" when all
-# dependencies succeeded, in the order the transitions are to be recorded.
-workflow_queued_decisions() {
-    WORKFLOW_RUN_DIR="$1" awk -F '\t' '
-        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
-        $1 == "step" {
-            state = ""; file = dir "/steps/" $2 "/state"
-            getline state < file; close(file)
-            count++; id[count] = $2; needs[count] = $4; current[$2] = state
-        }
-        END {
-            changed = 1
-            while (changed) {
-                changed = 0
-                for (i = 1; i <= count; i++) {
-                    if (current[id[i]] != "queued") continue
-                    ready = 1; failed = 0
-                    # Split as the shell splits with IFS=",": a trailing comma
-                    # ends the list instead of naming an empty dependency.
-                    deps = split(needs[i], dep, ",")
-                    if (deps > 0 && dep[deps] == "") deps--
-                    for (j = 1; j <= deps; j++) {
-                        if (dep[j] == "-") continue
-                        dep_state = current[dep[j]]
-                        if (dep_state == "succeeded") continue
-                        if (dep_state == "failed" || dep_state == "cancelled" || dep_state == "recovery-required") failed = 1
-                        else ready = 0
-                    }
-                    if (failed) { current[id[i]] = "cancelled"; print "cancelled " id[i]; changed = 1 }
-                    else if (ready) { current[id[i]] = "ready"; print "ready " id[i]; changed = 1 }
-                }
-            }
-        }' "$1/graph.tsv"
-}
-
-workflow_refresh_states() {
-    _wrs_dir="$1"
-    while :; do
-        _wrs_decisions="$(workflow_queued_decisions "$_wrs_dir")"
-        [ -n "$_wrs_decisions" ] || return 0
-        while read -r _wrs_action _wrs_id; do
-            _wrs_sd="$_wrs_dir/steps/$_wrs_id"
-            if [ "$_wrs_action" = cancelled ]; then
-                workflow_atomic_scalar "$_wrs_sd/state" cancelled
-                workflow_event "$_wrs_dir" "$_wrs_id" step.cancelled dependency_failed
-            else
-                if [ "$(sed -n '1p' "$_wrs_sd/attempts")" = 0 ]; then
-                    workflow_atomic_scalar "$_wrs_sd/initial-ready-at" "$(date +%s)"
-                fi
-                workflow_atomic_scalar "$_wrs_sd/state" ready
-                workflow_event "$_wrs_dir" "$_wrs_id" step.ready
-            fi
-        done <<EOF
-$_wrs_decisions
-EOF
-    done
-}
-
-workflow_disk_available() {
-    _wda_dir="$1"
-    _wda_required="$(sed -n '1p' "$_wda_dir/disk-mb")"
-    _wda_root="$(workflow_repo_root)" || return 1
-    _wda_kb="$(df -Pk "$_wda_root" 2>/dev/null | awk 'END { print $4 }')"
-    case "$_wda_kb" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$_wda_kb" -ge $((_wda_required * 1024)) ] || {
-        workflow_event "$_wda_dir" "" run.resource_refused "disk_mb=$_wda_required"
-        return 1
-    }
-}
-
-workflow_recover_running_steps() {
-    _wrr_dir="$1"
-    # One pass lists running steps with their recorded worker, read after the
-    # state as before. A worker records its result and then exits, so a step
-    # whose worker is gone is read again before it is recovered.
-    _wrr_running="$(WORKFLOW_RUN_DIR="$_wrr_dir" awk -F '\t' '
-        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
-        $1 == "step" {
-            state = ""; file = dir "/steps/" $2 "/state"
-            getline state < file; close(file)
-            if (state != "running") next
-            pid = ""; file = dir "/steps/" $2 "/worker-pid"
-            getline pid < file; close(file)
-            if (pid == "") pid = "-"
-            print $2 "\t" $3 "\t" $5 "\t" $6 "\t" pid
-        }' "$_wrr_dir/graph.tsv")" || return 1
-    [ -n "$_wrr_running" ] || return 0
-    while IFS="$(printf '\t')" read -r _wrr_id _wrr_kind _wrr_retry _wrr_idem _wrr_pid; do
-        workflow_pid_alive "$_wrr_pid" && continue
-        _wrr_sd="$_wrr_dir/steps/$_wrr_id"
-        [ "$(sed -n '1p' "$_wrr_sd/state")" = running ] || continue
-        _wrr_attempt="$(sed -n '1p' "$_wrr_sd/attempts")"
-        _wrr_exit="$(sed -n '1p' "$_wrr_sd/attempt-$_wrr_attempt/exit-code" 2>/dev/null || true)"
-        if [ "$_wrr_kind" = task ]; then
-            workflow_atomic_scalar "$_wrr_sd/state" waiting-remote
-            continue
-        fi
-        workflow_attempt_result "$_wrr_dir" "$_wrr_id" "$_wrr_retry" "$_wrr_idem" "${_wrr_exit:-unknown}"
-    done <<EOF
-$_wrr_running
-EOF
-}
-
 # Usage: workflow_start_step <run-dir> <step> [<attempt>]
-# Starts a step's attempt and its worker in the background. Given an attempt
-# number, as the native driver's worker, it runs that attempt's worker in the
-# foreground instead; the driver recorded the start itself.
+# The shell half of a native drive (workflow_driver_hook): creates an approval
+# request, or, given the attempt number the driver recorded, runs that
+# attempt's worker in the foreground. The driver records each start itself.
 workflow_start_step() {
     _wss_dir="$1"
     _wss_id="$2"
@@ -461,32 +327,13 @@ workflow_start_step() {
         workflow_approval_create "$_wss_dir" "$_wss_id" "$1" "$7" "$6" "${11}"
         return $?
     fi
+    # A worker is started only by the driver, which names its attempt.
+    [ -n "$_wss_worker" ] || return 2
     if [ "$_wss_kind" = task ]; then
-        workflow_task_start "$_wss_dir" "$_wss_id" "$_wss_worker"
-        return $?
-    fi
-    if [ -n "$_wss_worker" ]; then
-        workflow_step_run "$_wss_dir" "$_wss_id" "$_wss_kind" "$_wss_retry" "$_wss_idem" "$_wss_worker" "$@"
+        workflow_task_worker "$_wss_dir" "$_wss_id" "$_wss_worker"
         return
     fi
-    _wss_sd="$_wss_dir/steps/$_wss_id"
-    _wss_attempt="$(sed -n '1p' "$_wss_sd/attempts")"
-    _wss_attempt=$((_wss_attempt + 1))
-    _wss_attempt_dir="$_wss_sd/attempt-$_wss_attempt"
-    (umask 077; mkdir -p "$_wss_attempt_dir") || return 1
-    workflow_atomic_scalar "$_wss_sd/attempts" "$_wss_attempt"
-    workflow_atomic_scalar "$_wss_sd/state" running
-    _wss_started="$(date +%s)"
-    workflow_atomic_scalar "$_wss_sd/started-at" "$_wss_started"
-    if [ "$_wss_attempt" -eq 1 ]; then
-        workflow_atomic_scalar "$_wss_sd/initial-started-at" "$_wss_started"
-    fi
-    if [ "$_wss_kind" = approve ]; then
-        workflow_atomic_scalar "$_wss_attempt_dir/decision-source" workflow-policy || return 1
-    fi
-    workflow_event "$_wss_dir" "$_wss_id" step.running "attempt=$_wss_attempt"
-    ( workflow_step_run "$_wss_dir" "$_wss_id" "$_wss_kind" "$_wss_retry" "$_wss_idem" "$_wss_attempt" "$@" ) &
-    workflow_atomic_scalar "$_wss_sd/worker-pid" "$!"
+    workflow_step_run "$_wss_dir" "$_wss_id" "$_wss_kind" "$_wss_retry" "$_wss_idem" "$_wss_worker" "$@"
 }
 
 # Usage: workflow_step_run <run-dir> <step> <kind> <retry> <idempotent> <attempt> <argument>...
@@ -497,7 +344,6 @@ workflow_step_run() {
     shift 6
     _wss_sd="$_wss_dir/steps/$_wss_id"
     _wss_attempt_dir="$_wss_sd/attempt-$_wss_attempt"
-    trap 'workflow_wake_driver' 0
     _ws_command_pid=""
     _ws_cancelled=0
     trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
@@ -602,48 +448,27 @@ EOF
     fi
 }
 
-workflow_cancel_steps() {
-    _wcs_dir="$1"
-    hydra_private_touch "$_wcs_dir/residual-children.tsv" || return 1
-    : > "$_wcs_dir/residual-children.tsv"
-    while IFS= read -r _wcs_sd; do
-        [ -n "$_wcs_sd" ] || continue
-        _wcs_state="$(sed -n '1p' "$_wcs_sd/state")"
-        workflow_task_cancel "$_wcs_dir" "$_wcs_sd" "$_wcs_state" && continue
-        case "$_wcs_state" in
-            queued|ready|retrying|waiting-approval)
-                workflow_atomic_scalar "$_wcs_sd/state" cancelled
-                workflow_event "$_wcs_dir" "$(basename "$_wcs_sd")" step.cancelled request
-                ;;
-            running)
-                _wcs_worker="$(sed -n '1p' "$_wcs_sd/worker-pid" 2>/dev/null || true)"
-                _wcs_command="$(sed -n '1p' "$_wcs_sd/command-pid" 2>/dev/null || true)"
-                if workflow_pid_alive "$_wcs_command"; then
-                    operations_signal_tree "$_wcs_command" TERM
-                fi
-                _wcs_worker_state="$(ps -o stat= -p "$_wcs_worker" 2>/dev/null | sed -n '1p' | tr -d ' ')"
-                case "$_wcs_worker_state" in Z*) wait "$_wcs_worker" 2>/dev/null || true ;; esac
-                if workflow_pid_alive "$_wcs_worker"; then
-                    printf '%s\t%s\t%s\n' "$(basename "$_wcs_sd")" "$_wcs_worker" "$_wcs_command" >> "$_wcs_dir/residual-children.tsv"
-                fi
-                ;;
-        esac
-    done <<EOF
-$(find "$_wcs_dir/steps" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | LC_ALL=C sort)
-EOF
-}
-
 # Usage: workflow_native_driver
-# Prints the hydra-fleet that drives runs natively: the one Hydra finds, when
-# it implements this run layout. Prints nothing when there is no hydra-fleet,
-# when the one found does not answer the capability probe (an older helper),
-# or when HYDRA_NATIVE_DRIVER=0 asks for the shell driver; the shell driver
-# below then drives the run. Any other value, such as the 1 that earlier
-# releases needed, leaves the choice to the probe.
+# Prints the hydra-fleet that drives runs. Every run is driven by
+# `hydra-fleet workflow-drive`; there is no shell driver. Without a hydra-fleet
+# that answers the capability probe (none installed, or one built before the
+# native driver or for another run layout), or with HYDRA_NATIVE_DRIVER=0, which
+# once selected the removed shell driver, it prints one error and returns 1.
+# No other value of HYDRA_NATIVE_DRIVER has an effect.
 workflow_native_driver() {
-    [ "${HYDRA_NATIVE_DRIVER:-}" != 0 ] || return 0
-    _wnd_binary="$(fleet_binary 2>/dev/null)" || return 0
-    [ "$("$_wnd_binary" workflow-drive --capability 2>/dev/null)" = 'workflow-drive 1' ] || return 0
+    _wnd_next="build it with make build-fleet (it needs JSON-C development files and pkg-config) and install it with ./install.sh, which puts it at <prefix>/libexec/hydra/hydra-fleet, or point HYDRA_FLEET_BIN at one"
+    if [ "${HYDRA_NATIVE_DRIVER:-}" = 0 ]; then
+        cli_error workflow helper_missing "workflows need the hydra-fleet helper: the shell workflow driver was removed, so HYDRA_NATIVE_DRIVER=0 no longer selects it, and nothing was started" "unset HYDRA_NATIVE_DRIVER; $_wnd_next"
+        return 1
+    fi
+    if ! _wnd_binary="$(fleet_binary 2>/dev/null)"; then
+        cli_error workflow helper_missing "workflows need the hydra-fleet helper, which was not found: workflows are unavailable and nothing was started" "$_wnd_next"
+        return 1
+    fi
+    if [ "$("$_wnd_binary" workflow-drive --capability 2>/dev/null)" != 'workflow-drive 1' ]; then
+        cli_error workflow helper_unsupported "workflows need the hydra-fleet helper, and $_wnd_binary is too old or for another run layout (it does not answer workflow-drive 1): workflows are unavailable and nothing was started" "$_wnd_next"
+        return 1
+    fi
     printf '%s\n' "$_wnd_binary"
 }
 
@@ -687,13 +512,14 @@ workflow_driver_hook() {
 }
 
 # Usage: workflow_drive <run-dir> [tail]
+# Returns 1 with one error, and changes nothing, when no hydra-fleet can drive
+# the run (see workflow_native_driver).
 workflow_drive() {
     _wd_dir="$1"
     if workflow_task_needs_owner "$_wd_dir"; then workflow_task_tool drive "$_wd_dir"; return $?; fi
-    _wd_native="$(workflow_native_driver)"
+    _wd_native="$(workflow_native_driver)" || return 1
     _wd_drive_lock="$_wd_dir/.drive.lock"
     if ! (umask 077; hydra_exclusive_mkdir "$_wd_drive_lock") 2>/dev/null; then
-        _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
         workflow_run_owner_active "$_wd_dir" && {
             cli_error workflow already_running "workflow owner is still alive" "wait or cancel the run"
             return 1
@@ -703,155 +529,5 @@ workflow_drive() {
     fi
     _load_lib workflow_statistics
     workflow_statistics_begin "$_wd_dir" || true
-    if [ -n "$_wd_native" ]; then
-        workflow_drive_native "$_wd_dir" "$_wd_native" "${2:-}"
-        return
-    fi
-    # The shell driver: no hydra-fleet can drive this run layout, or
-    # HYDRA_NATIVE_DRIVER=0 asked for this loop.
-    # Record this driver's own PID. Inside a subshell, such as the one a plan
-    # run drives in, $$ names the top-level process instead, which can exit
-    # while the driver keeps running; the run would then look stale and a
-    # resume could start a second driver.
-    _wd_driver_pid="$(exec sh -c 'printf %s "$PPID"')"
-    # Step workers started from here on signal USR1 as they exit (see
-    # workflow_wake_driver); the trap stays set so a late signal is harmless.
-    _wd_woken=0
-    trap '_wd_woken=1' USR1
-    workflow_atomic_scalar "$_wd_dir/owner-pid" "$_wd_driver_pid" || return 1
-    workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
-    workflow_atomic_scalar "$_wd_dir/state" running || return 1
-    # Each drive records which driver it is; hydra workflow status shows the
-    # latest.
-    workflow_event "$_wd_dir" "" run.running driver=shell
-    if [ ! -f "$_wd_dir/cancel-requested" ]; then
-        workflow_approval_resume "$_wd_dir" || {
-            workflow_atomic_scalar "$_wd_dir/state" recovery-required
-            rm -rf "$_wd_drive_lock"
-            return 1
-        }
-    fi
-    workflow_plan_repair "$_wd_dir" repair-resume >/dev/null || return 1
-    workflow_recover_running_steps "$_wd_dir" || return 1
-    workflow_task_resume "$_wd_dir" || return 1
-    trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
-    _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
-    while :; do
-        # A worker that finishes after this point is either seen by this
-        # poll's scans or makes the poll skip its sleep.
-        _wd_woken=0
-        workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)"
-        if workflow_plan_expired "$_wd_dir" && [ ! -f "$_wd_dir/cancel-requested" ]; then
-            workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"
-            workflow_event "$_wd_dir" "" run.budget_exhausted plan_deadline
-        fi
-        workflow_recover_running_steps "$_wd_dir"
-        if [ -f "$_wd_dir/cancel-requested" ]; then
-            [ -f "$_wd_dir/cancel-started-at" ] || workflow_atomic_scalar "$_wd_dir/cancel-started-at" "$(date +%s)"
-            workflow_cancel_steps "$_wd_dir"
-        else
-            workflow_retry_ready "$_wd_dir"
-            workflow_refresh_states "$_wd_dir"
-        fi
-
-        _wd_active="$(workflow_count_states "$_wd_dir" running)"
-        if [ ! -f "$_wd_dir/cancel-requested" ]; then
-            _wd_slots=$((_wd_parallelism - _wd_active))
-            while [ "$_wd_slots" -gt 0 ]; do
-                _wd_next="$(workflow_next_step "$_wd_dir")" || {
-                    workflow_atomic_scalar "$_wd_dir/state" recovery-required
-                    rm -rf "$_wd_drive_lock"
-                    return 1
-                }
-                [ -n "$_wd_next" ] || break
-                _wd_next_kind="$(awk -F '\t' -v id="$_wd_next" '$1=="step" && $2==id { print $3; exit }' "$_wd_dir/graph.tsv")"
-                if [ "$_wd_next_kind" = spawn ]; then
-                    _wd_spawn_active="$(workflow_count_states "$_wd_dir" running spawn)"
-                    [ "$_wd_spawn_active" -eq 0 ] || break
-                fi
-                if ! workflow_disk_available "$_wd_dir"; then
-                    workflow_atomic_scalar "$_wd_dir/steps/$_wd_next/state" failed
-                    workflow_event "$_wd_dir" "$_wd_next" step.failed disk_safeguard
-                    break
-                fi
-                workflow_start_step "$_wd_dir" "$_wd_next" || {
-                    workflow_atomic_scalar "$_wd_dir/steps/$_wd_next/state" failed
-                    workflow_event "$_wd_dir" "$_wd_next" step.failed launch_error
-                    break
-                }
-                _wd_slots=$((_wd_slots - 1))
-                _wd_active=$((_wd_active + 1))
-            done
-        fi
-
-        # Count active work first so a concurrent waiting-remote publication cannot look terminal.
-        _wd_nonterminal="$(workflow_count_states "$_wd_dir" 'queued ready running retrying')"
-        if workflow_waiting_state "$_wd_dir"; then
-            trap - HUP INT TERM
-            rm -rf "$_wd_drive_lock"
-            return 3
-        fi
-
-        if [ "$_wd_nonterminal" -eq 0 ]; then
-            _wd_repaired="$(workflow_plan_repair "$_wd_dir")" || return 1
-            if [ "$_wd_repaired" = 1 ]; then
-                workflow_event "$_wd_dir" "" run.repair new_candidate_round
-                continue
-            fi
-            # A worker can finish after the cancellation snapshot was taken.
-            # Refresh it before publishing a terminal run state.
-            [ ! -f "$_wd_dir/cancel-requested" ] || workflow_cancel_steps "$_wd_dir"
-            if [ "$(workflow_count_states "$_wd_dir" recovery-required)" -gt 0 ]; then
-                _wd_final=recovery-required
-            elif [ "$(workflow_count_states "$_wd_dir" failed)" -gt 0 ]; then
-                _wd_final=failed
-            elif [ -f "$_wd_dir/cancel-requested" ]; then
-                _wd_final=cancelled
-            else
-                _wd_final=succeeded
-            fi
-            if [ "$_wd_final" = succeeded ] && ! workflow_plan_finish "$_wd_dir"; then
-                _wd_final=failed
-                workflow_event "$_wd_dir" "" run.delivery_rejected missing_or_negative_verification
-            fi
-            case "$_wd_final" in succeeded|failed|cancelled)
-                workflow_atomic_scalar "$_wd_dir/completed-at" "$(date +%s)" ;;
-            esac
-            workflow_atomic_scalar "$_wd_dir/state" "$_wd_final"
-            workflow_event "$_wd_dir" "" "run.$_wd_final"
-            # The result is published first; retiring verifier heads is
-            # reported in the run record and never changes it.
-            case "$_wd_final" in succeeded|failed|cancelled)
-                if { command -v workflow_retire_verifiers >/dev/null 2>&1 || _load_lib workflow_retire; }; then
-                    workflow_retire_verifiers "$_wd_dir" || true
-                fi ;;
-            esac
-            trap - HUP INT TERM
-            rm -rf "$_wd_drive_lock"
-            [ "$_wd_final" = succeeded ]
-            return
-        fi
-
-        if [ -f "$_wd_dir/cancel-requested" ] && [ -s "$_wd_dir/residual-children.tsv" ]; then
-            _wd_cancel_at="$(sed -n '1p' "$_wd_dir/cancel-started-at")"
-            if [ "$(($(date +%s) - _wd_cancel_at))" -ge 5 ]; then
-                workflow_atomic_scalar "$_wd_dir/state" recovery-required
-                workflow_event "$_wd_dir" "" run.recovery_required residual_children
-                trap - HUP INT TERM
-                rm -rf "$_wd_drive_lock"
-                return 1
-            fi
-        fi
-        # Sleep at most a second; a finishing worker's signal ends the wait.
-        # The background sleep lets the trap run at once instead of after a
-        # foreground sleep returns.
-        if [ "$_wd_woken" -eq 0 ]; then
-            sleep 1 &
-            _wd_sleep=$!
-            if ! wait "$_wd_sleep" 2>/dev/null; then
-                kill "$_wd_sleep" 2>/dev/null || true
-                wait "$_wd_sleep" 2>/dev/null || true
-            fi
-        fi
-    done
+    workflow_drive_native "$_wd_dir" "$_wd_native" "${2:-}"
 }

@@ -145,6 +145,8 @@ cmd_workflow() {
             ;;
         run)
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "run requires exactly one workflow ID or path" "run hydra workflow --help"; return 1; }
+            # Every run is driven by hydra-fleet: refuse before a record exists.
+            workflow_native_driver > /dev/null || return 1
             _cw_file="$(workflow_resolve "$2")" || return 1
             workflow_require_trust "$_cw_file" || return 1
             workflow_parse "$_cw_file" validate || return 1
@@ -230,6 +232,10 @@ cmd_workflow() {
                 printf 'Workflow %s: %s (source: recorded%s)\n' "$2" "$_cw_state" "${_cw_driver:+, driver: $_cw_driver}"
                 [ "$_cw_expired" != true ] || printf '  Evidence expired; this historical state is not a verified outcome.\n'
                 workflow_status_steps "$_cw_dir" text
+                case "$_cw_driver:$_cw_state" in
+                    shell:succeeded|shell:failed|shell:cancelled) ;;
+                    shell:*) printf '  Started by the removed shell driver; hydra workflow resume %s continues it with hydra-fleet.\n' "$2" ;;
+                esac
             fi
             ;;
         replay)
@@ -246,8 +252,15 @@ cmd_workflow() {
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || return 1
             _cw_state="$(sed -n '1p' "$_cw_dir/state")"
             case "$_cw_state" in running|waiting-approval|waiting-remote) ;; *) cli_error workflow not_running "workflow run is already terminal: $_cw_state" "inspect it with hydra workflow status $2"; return 1 ;; esac
-            workflow_atomic_scalar "$_cw_dir/cancel-requested" "$(date +%s)"; workflow_event "$_cw_dir" "" run.cancel_requested
             _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
+            # A live owner, whichever release started it, records the
+            # cancellation itself. Otherwise hydra-fleet drives it: without one
+            # the run is left exactly as it is.
+            if ! { [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; } &&
+                ! workflow_task_needs_owner "$_cw_dir"; then
+                workflow_native_driver > /dev/null || return 1
+            fi
+            workflow_atomic_scalar "$_cw_dir/cancel-requested" "$(date +%s)"; workflow_event "$_cw_dir" "" run.cancel_requested
             if [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; then
                 kill -TERM "$_cw_owner" 2>/dev/null || true
             else
@@ -287,6 +300,9 @@ cmd_workflow() {
             _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"; _cw_state="$(sed -n '1p' "$_cw_dir/state")"
             case "$_cw_state" in succeeded|failed|cancelled) return 0 ;; esac
             if [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; then cli_error workflow already_running "workflow owner is still active" "wait or cancel the run"; return 1; fi
+            # A run left by the removed shell driver resumes under hydra-fleet;
+            # without one it stays as it is.
+            if ! workflow_task_needs_owner "$_cw_dir"; then workflow_native_driver > /dev/null || return 1; fi
             workflow_bindings_match "$_cw_dir" || { workflow_atomic_scalar "$_cw_dir/state" recovery-required; cli_error workflow binding_mismatch "recorded workflow bindings do not match this checkout" "restore the recorded project and base commit"; return 1; }
             if [ "${HYDRA_WORKFLOW_LOCKED_RUN:-}" != "$_cw_dir" ]; then
                 workflow_event "$_cw_dir" "" run.resume_requested source=local-cli

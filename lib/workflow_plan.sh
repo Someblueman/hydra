@@ -317,13 +317,6 @@ workflow_plan_commit() (
     fi
 )
 
-workflow_plan_expired() {
-    [ -f "$1/compiled.json" ] || return 1
-    _wpe_deadline="$(sed -n '1p' "$1/plan-deadline")"
-    case "$_wpe_deadline" in ''|*[!0-9]*) return 0 ;; esac
-    [ "$(date +%s)" -ge "$_wpe_deadline" ]
-}
-
 workflow_plan_finish() {
     [ -f "$1/compiled.json" ] || return 0
     workflow_plan_bindings_match "$1" && hydra_private_touch "$1/plan-verification.json" &&
