@@ -179,12 +179,14 @@ static size_t entries(const char *dir) {
 /* A package or a pinned asset that cannot be written is not cached: the
  * call fails, an entry already cached keeps its bytes, and neither a
  * partial entry nor a temporary file is left in the private directory. */
-static void cache_write_failure(void) {
-    char home[F_PATH], dir[F_PATH], assets[F_PATH], digest[65], kept[65], path[F_PATH], source[F_PATH], table[F_PATH], row[512];
-    char text[F_PLATFORM_TEXT], *stored;
-    struct write_limit limit; struct setup_ctx ctx; struct setup_binary out; struct f_platform platform;
-    json_object *error; int fresh, same; size_t before;
-    at(home, "hydra-home-full"); f_home = home;
+static void expect_cached_bytes(const char *path, const char *bytes) {
+    char *stored = f_read(path, 100);
+    assert(stored && !strcmp(stored, bytes));
+    free(stored);
+}
+static void package_write_failure(void) {
+    char dir[F_PATH], digest[65], kept[65], path[F_PATH];
+    struct write_limit limit; int fresh, same; size_t before;
     assert(!setup_private_dir("packages", dir) && !setup_cache_store(dir, ".json", "{\"a\":1}", 7, kept, path));
     before = entries(dir);
     writes_fail(&limit);
@@ -192,11 +194,13 @@ static void cache_write_failure(void) {
     same = setup_cache_store(dir, ".json", "{\"a\":1}", 7, digest, path);
     writes_work(&limit);
     assert(fresh == -1 && same == -1 && entries(dir) == before && !strcmp(digest, kept));
-    assert((stored = f_read(path, 100)) && !strcmp(stored, "{\"a\":1}") && mode_of(path) == 0600);
-    free(stored);
-
-    assert(!f_platform_local(&platform));
-    f_platform_text(&platform, text);
+    expect_cached_bytes(path, "{\"a\":1}");
+    assert(mode_of(path) == 0600);
+}
+/* Pins the local platform's release asset to a table and a source directory. */
+static void pin_asset(const struct f_platform *platform, char digest[65]) {
+    char text[F_PLATFORM_TEXT], source[F_PATH], table[F_PATH], row[512];
+    f_platform_text(platform, text);
     at(source, "release"); assert(!f_mkdirs(source));
     assert(snprintf(row, sizeof(row), "release/hydra-fleet-" F_VERSION "-%s", text) < (int)sizeof(row));
     at(source, row); write_text(source, "pinned asset bytes");
@@ -206,22 +210,35 @@ static void cache_write_failure(void) {
     write_text(table, row);
     at(source, "release");
     setenv("HYDRA_FLEET_ASSETS_FILE", table, 1); setenv("HYDRA_FLEET_ASSET_BASE", source, 1);
+}
+static void expect_resolve_error(struct setup_ctx *ctx, const struct f_platform *platform, const char *code) {
+    struct setup_binary out;
+    json_object *error = setup_asset_resolve(ctx, NULL, platform, &out);
+    assert(error && !strcmp(f_string(f_field(error, "error"), "code"), code));
+    json_object_put(error);
+}
+static void asset_write_failure(void) {
+    char digest[65], assets[F_PATH], path[F_PATH];
+    struct write_limit limit; struct setup_ctx ctx; struct f_platform platform;
+    assert(!f_platform_local(&platform));
+    pin_asset(&platform, digest);
     memset(&ctx, 0, sizeof(ctx)); ctx.command = "remote-provision"; ctx.seconds = 5;
     writes_fail(&limit);
-    error = setup_asset_resolve(&ctx, NULL, &platform, &out);
+    expect_resolve_error(&ctx, &platform, "asset_download_failed");
     writes_work(&limit);
-    assert(error && !strcmp(f_string(f_field(error, "error"), "code"), "asset_download_failed"));
-    json_object_put(error);
     assert(!setup_private_dir("assets", assets) && entries(assets) == 2);
     /* The same download with writes working is cached under its digest, 0600;
      * it is then refused only for not being an executable. */
-    error = setup_asset_resolve(&ctx, NULL, &platform, &out);
-    assert(error && !strcmp(f_string(f_field(error, "error"), "code"), "platform_mismatch"));
-    json_object_put(error);
+    expect_resolve_error(&ctx, &platform, "platform_mismatch");
     assert(!f_path(path, sizeof(path), assets, digest) && mode_of(path) == 0600 && entries(assets) == 3);
-    assert((stored = f_read(path, 100)) && !strcmp(stored, "pinned asset bytes"));
-    free(stored);
+    expect_cached_bytes(path, "pinned asset bytes");
     unsetenv("HYDRA_FLEET_ASSETS_FILE"); unsetenv("HYDRA_FLEET_ASSET_BASE");
+}
+static void cache_write_failure(void) {
+    char home[F_PATH];
+    at(home, "hydra-home-full"); f_home = home;
+    package_write_failure();
+    asset_write_failure();
 }
 
 /* A source tree (lib/NAME.sh) or an installed prefix (lib/hydra/NAME.sh). */
