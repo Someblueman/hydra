@@ -27,12 +27,6 @@ cmd_tui() {
             fi
             return $?
             ;;
-        --data)
-            shift
-            [ $# -eq 0 ] || return 2
-            tui_native_emit_data
-            return $?
-            ;;
         --remote-data)
             shift
             [ $# -eq 0 ] || return 2

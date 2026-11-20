@@ -326,7 +326,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 
 test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
-	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_parity.sh
+	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_rows.sh
 
 test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-shell-driver test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
@@ -472,7 +472,7 @@ help:
 	@echo "  make build-plan-precompile - Build native finite-example planner"
 	@echo "  make test-tui  - Run deterministic native TUI acceptance"
 	@echo "  make test-tui-pty - Run real pseudo-terminal safety and input acceptance"
-	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
+	@echo "  make test-parity - Verify shell/native core parity and the control centre's rows from the state store"
 	@echo "  make test-all  - Run shell/native, fleet, both run drivers, install, parity, and onboarding acceptance"
 	@echo "  make sanitize  - Run the sanitizer lanes in BUILD_DIR/sanitize (SANITIZE_LANES=\"core tui ...\" selects)"
 	@echo "  make sanitize-<lane> - One lane: core, tui, fleet, workspace, attached, plan-workspace or statistics"

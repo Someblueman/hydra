@@ -5,17 +5,18 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-/* The local head snapshot read straight from Hydra's state store: the rows
- * `hydra tui --data` prints, without starting the shell CLI. This file knows
- * only the store's files; what tmux and git alone can say (live sessions,
- * uncommitted files) is handed in by the caller. The two readers are kept
- * identical by tests/test_tui_store_parity.sh. */
+/* The local head snapshot read straight from Hydra's state store, as
+ * protocol rows (`hydra-tui --data` prints them), without starting the shell
+ * CLI. This file knows only the store's files; what tmux and git alone can
+ * say (live sessions, uncommitted files) is handed in by the caller. The rows
+ * of records of every kind are pinned by tests/test_tui_store_rows.sh. */
 
 #define STORE_TEXT 1024
 #define STORE_PATH 4096
 
-/* Where the records are. An empty string is "not known" and reads as it does
- * in the shell reader, where the same variable would be empty. */
+/* Where the records are. An empty string is "not known": paths built from
+ * it are read as they stand (as the CLI reads a path built from an empty
+ * variable). */
 struct store_location {
     char home[STORE_PATH];       /* HYDRA_HOME, physical */
     char state_root[STORE_PATH]; /* HYDRA_STATE_V2_ROOT, or home/state/v2 */
@@ -52,8 +53,8 @@ struct store_snapshot {
     size_t findings_length;
     /* Some listed head has a terminal, so live sessions decide its status. */
     bool interactive;
-    /* A directory under the worktree root has no head record: the shell
-     * reader decides whether it is a leftover worktree. */
+    /* A directory under the worktree root has no head record: the CLI
+     * decides whether it is a leftover worktree (hydra tui --orphan-rows). */
     bool leftovers;
 };
 
@@ -73,7 +74,7 @@ struct store_cache {
 };
 
 /* Reads the store. cache may be NULL. False only when memory ran out; a
- * missing or unreadable store reads as an empty one, as it does in the shell.
+ * missing or unreadable store reads as an empty one, as it does in the CLI.
  * The caller frees the snapshot with store_snapshot_free. */
 bool store_read(const struct store_location *where, struct store_cache *cache, struct store_snapshot *snapshot);
 void store_snapshot_free(struct store_snapshot *snapshot);
@@ -117,7 +118,7 @@ bool store_stamp_equal(const struct store_stamp *a, const struct store_stamp *b)
 bool store_valid_id(const char *value);
 /* A path from a printf format; empty when it does not fit the buffer. */
 void store_path(char *out, size_t size, const char *format, ...);
-/* The first line of a file as the shell reader takes it; false when the file
- * cannot be read. */
+/* The first line of a file as the CLI takes it (`sed -n 1p`); false when the
+ * file cannot be read. */
 bool store_first_line(const char *path, char *out, size_t size);
 #endif

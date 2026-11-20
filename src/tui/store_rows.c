@@ -13,11 +13,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-/* The store half of the local head snapshot (store.h). Every rule here is the
- * shell reader's (lib/tui_native.sh and what it calls), field for field: what
- * a missing file reads as, which directory a branch name selects, how a
- * record that does not split into its columns is reported. Where the shell
- * reads a path built from an empty variable, the same path is read here. */
+/* The store half of the local head snapshot (store.h). Its rules were fixed,
+ * field for field, against the shell reader it replaced (`hydra tui --data`,
+ * since removed) and are pinned by the rows recorded from that reader
+ * (tests/test_tui_store_rows.sh): what a missing file reads as, which
+ * directory a branch name selects, how a record that does not split into its
+ * columns is reported. Where the shell read a path built from an empty
+ * variable, the same path is read here; the comments that say "as find
+ * walks" or "as awk counts" name the rule a helper keeps. */
 
 #define WALK_DEPTH 16
 
@@ -841,7 +844,7 @@ static void read_notifications(const struct reader *r, struct store_snapshot *s)
     FILE *file;
     char *line = NULL;
     size_t capacity = 0;
-    /* Outside a repository the shell reader names the file by an empty directory. */
+    /* Outside a repository the file is named by an empty directory. */
     if (r->where->common[0]) path_join(s->notification_source, sizeof(s->notification_source), r->where->common, "/hydra/notifications");
     else text_copy(s->notification_source, sizeof(s->notification_source), "/notifications");
     file = has_bytes(s->notification_source) ? fopen(s->notification_source, "rb") : NULL;

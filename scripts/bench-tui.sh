@@ -5,13 +5,11 @@
 #
 #   adapter_ms   one head snapshot as the control centre reads it at every
 #                refresh: the state store read in the helper's own process,
-#                plus its one tmux command (`hydra-tui --data`). The shell
-#                reader `hydra tui --data` is not timed: the control centre
-#                `hydra tui` starts (`hydra-tui --store`) never runs it, and
-#                tests/test_tui_store_parity.sh keeps the two byte-identical.
+#                plus its one tmux command (`hydra-tui --data`), which is how
+#                every control centre gets its heads.
 #   render_ms    ten headless frames of that snapshot.
 #   interactive  `hydra` in a pseudo-terminal, as a user starts it (the
-#                launcher, then `hydra-tui --store`): time to the first frame,
+#                launcher, then `hydra-tui`): time to the first frame,
 #                and the processor time of the whole process tree over the two
 #                seconds after it, as a share of one core. The heads have never
 #                been observed, so the window includes the activity observer's
@@ -113,7 +111,7 @@ for heads in 5 20 100; do
     # The sessions created above become quiet, as the observer sees them.
     sleep "$quiet_after"
     # HYDRA_TEST_PUBLIC_ENTRY: the session is `hydra` itself, which finds the
-    # helper through HYDRA_TUI_BIN and starts it with --store.
+    # helper through HYDRA_TUI_BIN and starts it.
     interactive="$(cd "$bench_repo" && HYDRA_TEST_PUBLIC_ENTRY=1 "$build_dir/test-tui-pty" --measure \
         "$build_dir/hydra-tui" "$repo_root/bin/hydra" "$repo_root/tests/fixtures/tui/fake-bin")"
     startup_ms="$(printf '%s\n' "$interactive" | sed -n 's/.*"startup_ms":\([0-9][0-9]*\).*/\1/p')"
@@ -122,7 +120,7 @@ for heads in 5 20 100; do
     cpu_percent=$((interactive_cpu_ms * 100 / window_ms))
     adapter_ms=$((adapter_end - adapter_start))
     render_ms=$((render_end - render_start))
-    printf '{"schema_version":1,"benchmark":"native-tui-live-refresh","heads":%s,"frames":10,"adapter_ms":%s,"render_ms":%s,"render_cpu_ms":%s,"interactive_startup_ms":%s,"interactive_window_ms":%s,"interactive_cpu_ms":%s,"interactive_cpu_percent":%s,"budgets":{"adapter_ms":1000,"render_ms":100,"interactive_startup_ms":3000,"interactive_cpu_percent":40},"scope":"live isolated tmux sessions; adapter is the native store read (hydra-tui --data); interactive is hydra as a user starts it (hydra-tui --store)"}\n' \
+    printf '{"schema_version":1,"benchmark":"native-tui-live-refresh","heads":%s,"frames":10,"adapter_ms":%s,"render_ms":%s,"render_cpu_ms":%s,"interactive_startup_ms":%s,"interactive_window_ms":%s,"interactive_cpu_ms":%s,"interactive_cpu_percent":%s,"budgets":{"adapter_ms":1000,"render_ms":100,"interactive_startup_ms":3000,"interactive_cpu_percent":40},"scope":"live isolated tmux sessions; adapter is the native store read (hydra-tui --data); interactive is hydra as a user starts it"}\n' \
         "$heads" "$adapter_ms" "$render_ms" "$cpu_ms" "$startup_ms" "$window_ms" "$interactive_cpu_ms" "$cpu_percent"
     [ "$adapter_ms" -le 1000 ] || { echo "adapter budget exceeded at $heads heads" >&2; exceeded=1; }
     [ "$render_ms" -le 100 ] || { echo "render budget exceeded at $heads heads" >&2; exceeded=1; }
