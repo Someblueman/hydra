@@ -48,10 +48,15 @@ project_config_hash() (
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
-    # Validate names before newline serialization. Do not follow links.
+    # Validate names before newline serialization. Do not follow links or ignore
+    # nested local.yml files: only the root one is exempt. Hydra 2.5 and
+    # earlier wrote that file per host, so an approval never covered it, and
+    # a repository that still has it must not read as changed.
     find "$_pch_dir" -exec sh -c '
+        excluded="$1/local.yml"; shift
         cr="$(printf "\r")"
         for path do
+            [ "$path" = "$excluded" ] && continue
             case "$path" in *"
 "*|*"$cr"*) exit 1 ;; esac
             [ ! -L "$path" ] || exit 1
@@ -59,7 +64,7 @@ project_config_hash() (
             elif [ ! -d "$path" ]; then exit 1
             fi
         done
-    ' sh {} + > "$_pch_scratch/files" || return 1
+    ' sh "$_pch_dir" {} + > "$_pch_scratch/files" || return 1
     LC_ALL=C sort "$_pch_scratch/files" > "$_pch_scratch/sorted" || return 1
     while IFS= read -r _pch_file; do
         _pch_relative="${_pch_file#"$_pch_dir"/}"

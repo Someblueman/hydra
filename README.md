@@ -96,10 +96,8 @@ local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` wh
 running the installer. `hydra tui` is then unavailable; `hydra list` and
 `hydra switch` work without the native helper.
 
-Upgrading from a release before 4.0.0? Install 4.0.0 first and run its
-`hydra state migrate` and `hydra init`: this release stops with an error on
-the files earlier releases left behind
-([Contracts](docs/CONTRACTS.md#durable-state-v2)).
+Upgrading from 2.5 or earlier? If `hydra init` stops on `.hydra/local.yml`, see
+[project registration](docs/USAGE.md#project-registration-and-shared-config).
 
 ## Start a task
 

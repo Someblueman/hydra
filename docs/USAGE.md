@@ -665,17 +665,21 @@ existing file. The template runs nothing by itself, and every host still has to
 approve the exact content with `hydra init --trust` before setup commands,
 startup commands, or repository workflows execute.
 
-Hydra 2.5 and earlier kept the worktree root in `.hydra/local.yml`. This release
-does not read that file, and `hydra init` exits 1 while it exists:
+Hydra 2.5 and earlier kept the worktree root in `.hydra/local.yml`, and releases
+up to 4.0.0 imported it. This release does not read that file. Where the host
+already has a worktree root recorded, or `--worktree-root` gives one, the file
+changes nothing and is ignored. Only where neither is the case does `hydra init`
+exit 1, before it registers anything:
 
 ```
 Error: .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read
 Next: run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file
 ```
 
-The `.hydra/config.yml` stub those releases generated (`version`, `profile`, an
+The file is never part of the approved configuration, tracked or not. The
+`.hydra/config.yml` stub those releases generated (`version`, `profile`, an
 empty `setup:`) is ordinary configuration now: `hydra init` keeps it, and it
-needs `hydra init --trust` like any other file under `.hydra/`.
+needs `hydra init --trust` like any other configuration under `.hydra/`.
 
 ## YAML Config (optional)
 

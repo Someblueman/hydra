@@ -23,18 +23,22 @@ mv "$fixture/changed.yml" .hydra/workflows/local.yml
 "$root/bin/hydra" workflow validate local > "$fixture/result" 2>&1
 assert_failure $? "nested local.yml change invalidates trust"
 "$root/bin/hydra" init --no-agent --trust >/dev/null || exit 1
-# A root .hydra/local.yml is repository configuration like any other file:
-# adding it invalidates the approval, and init refuses to register with it.
+# The root .hydra/local.yml that Hydra 2.5 and earlier wrote per host is no
+# part of the approved content: adding, changing or deleting it leaves the
+# approval as it is, and with a worktree root recorded init ignores it.
 printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
-"$root/bin/hydra" workflow validate local > "$fixture/result" 2>&1
-assert_failure $? "a root local.yml is part of the approved content"
-"$root/bin/hydra" init --no-agent --trust > "$fixture/result" 2>&1
-assert_failure $? "init refuses a root local.yml instead of approving it"
-grep -Fq "Error: .hydra/local.yml is a host-local record from Hydra 2.5 or earlier" "$fixture/result"
-assert_success $? "the refusal names the file"
+"$root/bin/hydra" workflow validate local >/dev/null 2>&1
+assert_success $? "adding a root local.yml leaves the approval standing"
+"$root/bin/hydra" init --no-agent > "$fixture/result" 2>&1
+assert_success $? "init ignores a root local.yml when a worktree root is recorded"
+grep -Fq "Repository config trusted." "$fixture/result"
+assert_success $? "init still reports the approval"
+printf 'version: 1\nworktree_root: %s\n' "$fixture/another-root" > .hydra/local.yml
+"$root/bin/hydra" workflow validate local >/dev/null 2>&1
+assert_success $? "changing a root local.yml leaves the approval standing"
 rm .hydra/local.yml
 "$root/bin/hydra" workflow validate local >/dev/null 2>&1
-assert_success $? "deleting the file restores the earlier approval"
+assert_success $? "deleting a root local.yml leaves the approval standing"
 # A config.yml of the shape earlier releases generated is never removed.
 printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
 cp .hydra/config.yml "$fixture/config-before"

@@ -29,22 +29,26 @@ cmd_init() {
         cli_error init unsafe_configuration "repository .hydra must not be a symbolic link" "replace the link with reviewed regular configuration files"
         return 1
     fi
-    # Hydra 2.5 and earlier kept this host's worktree root in .hydra/local.yml.
-    # Nothing reads that file now, so init stops instead of registering a
-    # root other than the one it names.
-    if [ -e "$_ci_root/.hydra/local.yml" ] || [ -L "$_ci_root/.hydra/local.yml" ]; then
-        cli_error init unsupported_configuration ".hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read" "run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file"
-        return 1
+    # Without --worktree-root, reopening keeps the root this host already uses.
+    if [ -z "$_ci_worktree_root" ]; then
+        _ci_worktree_root="$(project_host_value worktree-root 2>/dev/null || true)"
+        # Hydra 2.5 and earlier kept this host's worktree root in
+        # .hydra/local.yml, and releases up to 4.0.0 took it from there.
+        # Nothing reads that file now. Where a root is recorded or given the
+        # file changes nothing and is ignored; where none is, init stops
+        # before it registers anything, instead of choosing a root other than
+        # the one the file names.
+        if [ -z "$_ci_worktree_root" ] &&
+            { [ -e "$_ci_root/.hydra/local.yml" ] || [ -L "$_ci_root/.hydra/local.yml" ]; }; then
+            cli_error init unsupported_configuration ".hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read" "run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file"
+            return 1
+        fi
     fi
     _ci_project="$(hydra_ensure_project_id)" || return 1
     if [ -z "$_ci_profile" ]; then
         _ci_profile="$(profile_resolve "")" || return 1
     else
         _ci_profile="$(profile_resolve "$_ci_profile")" || return 1
-    fi
-    # Without --worktree-root, reopening keeps the root this host already uses.
-    if [ -z "$_ci_worktree_root" ]; then
-        _ci_worktree_root="$(project_host_value worktree-root 2>/dev/null || true)"
     fi
     if [ -z "$_ci_worktree_root" ]; then
         _ci_worktree_root="$(project_default_worktree_root "$_ci_project")" || return 1

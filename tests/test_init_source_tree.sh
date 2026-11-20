@@ -1,7 +1,8 @@
 #!/bin/sh
 # hydra init keeps ordinary onboarding out of the source tree: registration is
 # host-local, shared config is an explicit opt-in, and the host-local record an
-# earlier release left in the tree is refused by name.
+# earlier release left in the tree is ignored where it changes nothing and
+# refused by name where it would have decided the worktree root.
 set -u
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck disable=SC1091
@@ -108,39 +109,85 @@ assert_success $? "trusted committed config spawns"
 assert_cond "committed setup commands are still parsed and run" test -e "$fixture/setup-ran"
 "$HYDRA_BIN" kill parsed-head >/dev/null 2>&1 || true
 
-# --- the host-local record of Hydra 2.5 or earlier is refused, never imported ---
+# --- .hydra/local.yml, the host-local record of Hydra 2.5 or earlier ---
+# Releases up to 4.0.0 took the worktree root from it. With a root recorded
+# for this host the file changes nothing: init goes on and says nothing.
 new_repo "$fixture/legacy"
-"$HYDRA_BIN" init --no-agent >/dev/null 2>&1 || exit 1
+out_without="$("$HYDRA_BIN" init --no-agent 2>&1)" || exit 1
 root_before="$(sed -n '1p' .git/hydra/worktree-root)"
 mkdir -p .hydra
 printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
 cp .hydra/local.yml "$fixture/local-before"
 out="$("$HYDRA_BIN" init --no-agent 2>&1)"
-assert_equal 1 "$?" "init stops on .hydra/local.yml"
+assert_success $? "init goes on with .hydra/local.yml when a worktree root is recorded"
+assert_equal "$out_without" "$out" "init prints what it prints without the file"
+assert_equal "$root_before" "$(sed -n '1p' .git/hydra/worktree-root)" "the recorded worktree root is kept, not the one the file names"
+assert_cond "the file is left as it was" cmp -s .hydra/local.yml "$fixture/local-before"
+# A team repository that committed the file blocks nobody whose root is recorded.
+git add .hydra/local.yml
+git commit -qm 'a tracked local.yml'
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_success $? "init goes on with a tracked .hydra/local.yml when a worktree root is recorded"
+assert_equal "$out_without" "$out" "init says nothing about a tracked file either"
+assert_equal "" "$(git status --porcelain)" "init leaves the tracked file and the tree unchanged"
+json="$("$HYDRA_BIN" init --no-agent --json 2>&1)"
+case "$json" in
+    '{"schema_version":1,"ok":true,"command":"init","data":{"project_id":"project_'*'","worktree_root":"'"$root_before"'","trusted":false}}') assert_success 0 "init --json succeeds with the recorded root and nothing on stderr" ;;
+    *) assert_success 1 "init --json succeeds with the recorded root and nothing on stderr"; echo "  Actual: $json" ;;
+esac
+
+# Without a recorded root the file would have decided where worktrees go:
+# init stops before it registers anything.
+new_repo "$fixture/legacy-unregistered"
+mkdir -p .hydra
+printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
+cp .hydra/local.yml "$fixture/local-before"
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_equal 1 "$?" "init stops on .hydra/local.yml when no worktree root is recorded"
 assert_equal "Error: .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read
 Next: run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file" "$out" "the refusal names the file and both ways out, and prints nothing else"
 assert_cond "the refused record is left as it was" cmp -s .hydra/local.yml "$fixture/local-before"
-assert_equal "$root_before" "$(sed -n '1p' .git/hydra/worktree-root)" "the registered worktree root is unchanged"
-json="$("$HYDRA_BIN" init --no-agent --trust --worktree-root "$fixture/other-root" --json 2>/dev/null)"
-assert_equal 1 "$?" "init --json stops on .hydra/local.yml whatever the options"
+assert_cond "a refused first init registers nothing" test ! -e .git/hydra
+json="$("$HYDRA_BIN" init --no-agent --trust --json 2>/dev/null)"
+assert_equal 1 "$?" "init --json stops on .hydra/local.yml when no worktree root is recorded"
 case "$json" in
     '{"schema_version":1,"ok":false,"command":"init","error":{"code":"unsupported_configuration","message":".hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read","recovery":'*) assert_success 0 "init --json reports the refusal as one error object" ;;
     *) assert_success 1 "init --json reports the refusal as one error object"; echo "  Actual: $json" ;;
 esac
-assert_equal "$root_before" "$(sed -n '1p' .git/hydra/worktree-root)" "a refused init registers no other worktree root"
+assert_cond "a refused init --json registers nothing" test ! -e .git/hydra
+# A root given on the command line leaves the file nothing to decide, as in
+# the releases that imported it.
+out="$("$HYDRA_BIN" init --no-agent --worktree-root "$fixture/given-root" 2>&1)"
+assert_success $? "init --worktree-root goes on with .hydra/local.yml and no recorded root"
+assert_equal "$fixture/given-root" "$(sed -n '1p' .git/hydra/worktree-root)" "the given worktree root is recorded"
+assert_not_contains "$out" "local.yml" "init --worktree-root says nothing about the file"
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_success $? "later inits go on with the root now recorded"
+assert_contains "$out" "Worktrees go in $fixture/given-root." "the recorded root stays in use"
+
+# The file is no part of what a host approves: its presence, content and
+# absence leave an approval as it is.
+new_repo "$fixture/legacy-trusted"
+mkdir -p .hydra
+printf 'version: 1\nsetup:\n  - touch "%s/legacy-setup-ran"\n' "$fixture" > .hydra/config.yml
+out="$("$HYDRA_BIN" init --no-agent --trust 2>&1)" || exit 1
+assert_contains "$out" "Repository config trusted." "the configuration is approved before the file appears"
+printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_contains "$out" "Repository config trusted." "adding .hydra/local.yml leaves the approval standing"
+"$HYDRA_BIN" spawn legacy-trusted-head --no-agent --dry-run >/dev/null 2>&1
+assert_success $? "spawn accepts the approved configuration beside .hydra/local.yml"
+printf 'version: 1\nworktree_root: %s\n' "$fixture/another-root" > .hydra/local.yml
+out="$("$HYDRA_BIN" init --no-agent 2>&1)"
+assert_contains "$out" "Repository config trusted." "changing .hydra/local.yml leaves the approval standing"
 rm .hydra/local.yml
 out="$("$HYDRA_BIN" init --no-agent 2>&1)"
-assert_success $? "init succeeds once the file is deleted"
-assert_contains "$out" "Worktrees go in $root_before." "the registered worktree root is still in use"
-new_repo "$fixture/legacy-unregistered"
-mkdir -p .hydra
-printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
-"$HYDRA_BIN" init --no-agent >/dev/null 2>&1
-assert_equal 1 "$?" "init stops on .hydra/local.yml in a repository it never registered"
-assert_cond "a refused first init registers nothing" test ! -e .git/hydra
+assert_contains "$out" "Repository config trusted." "deleting .hydra/local.yml leaves the approval standing"
+
 # The config.yml stub the same releases generated is ordinary configuration:
 # it is kept, and it needs approval like any other.
-rm .hydra/local.yml
+new_repo "$fixture/legacy-stub"
+mkdir -p .hydra
 printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
 out="$("$HYDRA_BIN" init --no-agent 2>&1)"
 assert_success $? "init accepts a repository with a generated config.yml stub"
