@@ -116,21 +116,23 @@ static int temp_file(const char *dir, char temp[F_PATH]) {
     if (snprintf(temp, F_PATH, "%s/.partial.XXXXXX", dir) >= F_PATH) return -1;
     return mkstemp(temp);
 }
-/* Moves a verified private temporary file to DIR/NAME. */
+/* Moves a verified private temporary file in DIR to DIR/NAME and syncs DIR
+ * (f_publish_at); the temporary file is gone afterwards either way. */
 static int publish(const char *temp, const char *dir, const char *name, char path[F_PATH]) {
-    if (f_path(path, F_PATH, dir, name) || chmod(temp, 0600) || rename(temp, path)) return -1;
-    return task_sync_dir(dir);
-}
-int setup_cache_store(const char *dir, const char *suffix, const char *data, size_t size, char digest[65], char path[F_PATH]) {
-    char temp[F_PATH], name[80]; int fd = temp_file(dir, temp), status = -1;
+    const char *leaf = strrchr(temp, '/'); int fd, status;
+    if (!leaf || f_path(path, F_PATH, dir, name) || chmod(temp, 0600)) return -1;
+    fd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) return -1;
-    if (!write_all(fd, data, size) && !fsync(fd) && !close(fd)) {
-        fd = -1;
-        if (!f_hash(temp, digest) && snprintf(name, sizeof(name), "%s%s", digest, suffix) < (int)sizeof(name)) status = publish(temp, dir, name, path);
-    }
-    if (fd >= 0) close(fd);
-    if (status) unlink(temp);
-    return status;
+    status = f_publish_at(fd, leaf + 1, name, true); close(fd);
+    return status ? -1 : 0;
+}
+/* The name is the digest of the bytes, so the record is replaced only by
+ * itself; task_write_file stages, publishes and syncs it. */
+int setup_cache_store(const char *dir, const char *suffix, const char *data, size_t size, char digest[65], char path[F_PATH]) {
+    char name[80];
+    f_sha256_text(data, size, digest);
+    if (snprintf(name, sizeof(name), "%s%s", digest, suffix) >= (int)sizeof(name) || f_path(path, F_PATH, dir, name)) return -1;
+    return task_write_file(dir, name, data, size, true) ? -1 : 0;
 }
 
 /* ---- Helper sources ---- */
@@ -217,7 +219,7 @@ static int fetch(const char *filename, int fd, const char *temp, unsigned second
     if (!base || !base[0]) base = release;
     if (!strncmp(base, "file://", 7)) base += 7;
     if (f_path(url, sizeof(url), base, filename)) return -1;
-    if (base[0] == '/') return copy_file(url, fd) || fsync(fd) ? -1 : 0;
+    if (base[0] == '/') return copy_file(url, fd) ? -1 : 0;
     if (strncmp(base, "https://", 8) && strncmp(base, "http://", 7)) return -1;
     return curl_file(url, temp, seconds);
 }
@@ -228,8 +230,10 @@ static bool cached(const char *path, const char *sha256) {
 static json_object *download(const struct setup_ctx *ctx, const char *dir, const char *sha256, const char *filename, char path[F_PATH]) {
     char temp[F_PATH], actual[65]; int fd = temp_file(dir, temp), fetched;
     if (fd < 0) return asset_error(ctx, "asset_download_failed", "cannot create a private download file", "check $HYDRA_HOME/fleet/assets ownership and permissions");
-    fetched = fetch(filename, fd, temp, ctx->seconds);
-    close(fd);
+    /* curl writes the file by name; either way it is synced and closed,
+     * checked, before it is verified and published. */
+    fetched = fetch(filename, fd, temp, ctx->seconds) || fsync(fd) ? -1 : 0;
+    if (close(fd)) fetched = -1;
     if (fetched) {
         unlink(temp);
         return asset_error(ctx, "asset_download_failed", "cannot download the pinned hydra-fleet release asset",
@@ -240,7 +244,9 @@ static json_object *download(const struct setup_ctx *ctx, const char *dir, const
         return asset_error(ctx, "hash_mismatch", "the downloaded hydra-fleet asset does not match the digest pinned in fleet-assets.tsv; it was discarded",
                            "do not use this download; retry later or report the mismatch");
     }
-    return publish(temp, dir, sha256, path) ? asset_error(ctx, "asset_download_failed", "cannot cache the verified asset", NULL) : NULL;
+    if (!publish(temp, dir, sha256, path)) return NULL;
+    unlink(temp);
+    return asset_error(ctx, "asset_download_failed", "cannot cache the verified asset", NULL);
 }
 static json_object *use_release(const struct setup_ctx *ctx, const struct f_platform *platform, const char *sha256, const char *filename,
                                 struct setup_binary *out) {
