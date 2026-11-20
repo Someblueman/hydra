@@ -78,16 +78,22 @@ assert_same_file() {
     fi
 }
 
+# Where the CLI under test keeps the helper's output while it checks it. Every
+# case must leave it empty.
+scratch="$test_root/scratch"
+mkdir -p "$scratch"
+
 # Runs the default path with a helper that cannot be used and asserts that the
 # shell implementation answers: the same bytes, and nothing on stderr.
 assert_silent_fallback() {
     _asf_mode="$1"
     _asf_core="$2"
-    FAKE_CORE_MODE="$_asf_mode" HYDRA_CORE="$_asf_core" HYDRA_CORE_TIMEOUT_SECONDS=1 \
+    TMPDIR="$scratch" FAKE_CORE_MODE="$_asf_mode" HYDRA_CORE="$_asf_core" HYDRA_CORE_TIMEOUT_SECONDS=1 \
         "$HYDRA_BIN" snapshot > "$test_root/fallback.out" 2> "$test_root/fallback.err"
     assert_success $? "$_asf_mode: the snapshot succeeds through the shell implementation"
     assert_same_file "$test_root/shell.out" "$test_root/fallback.out" "$_asf_mode: the fallback is byte-identical"
     assert_equal "" "$(cat "$test_root/fallback.err")" "$_asf_mode: the fallback is silent"
+    assert_equal "" "$(ls "$scratch" 2>/dev/null)" "$_asf_mode: no helper output is left behind"
 }
 
 # The same, then with --native, which also names why the helper was not used.
@@ -96,7 +102,7 @@ assert_fallback() {
     _af_reason="$2"
     _af_core="$3"
     assert_silent_fallback "$_af_mode" "$_af_core"
-    FAKE_CORE_MODE="$_af_mode" HYDRA_CORE="$_af_core" HYDRA_CORE_TIMEOUT_SECONDS=1 \
+    TMPDIR="$scratch" FAKE_CORE_MODE="$_af_mode" HYDRA_CORE="$_af_core" HYDRA_CORE_TIMEOUT_SECONDS=1 \
         "$HYDRA_BIN" snapshot --native > "$test_root/fallback.out" 2> "$test_root/fallback.err"
     assert_success $? "$_af_mode: --native succeeds through the shell implementation"
     assert_same_file "$test_root/shell.out" "$test_root/fallback.out" "$_af_mode: the --native fallback is byte-identical"
@@ -146,8 +152,9 @@ HYDRA_CORE="$core" "$HYDRA_BIN" snapshot --shell > "$test_root/shell.out" 2> "$t
 assert_success $? "shell implementation emits the snapshot"
 assert_equal "$canonical" "$(cat "$test_root/shell.out")" "shell snapshot is the canonical document"
 assert_equal "" "$(cat "$test_root/shell.err")" "shell implementation has no diagnostic"
-HYDRA_CORE="$core" "$HYDRA_BIN" snapshot > "$test_root/default.out" 2> "$test_root/default.err"
+TMPDIR="$scratch" HYDRA_CORE="$core" "$HYDRA_BIN" snapshot > "$test_root/default.out" 2> "$test_root/default.err"
 assert_success $? "default snapshot succeeds"
+assert_equal "" "$(ls "$scratch")" "default snapshot leaves no helper output behind"
 assert_same_file "$test_root/shell.out" "$test_root/default.out" "default snapshot is byte-identical to shell"
 assert_equal "" "$(cat "$test_root/default.err")" "default snapshot has no diagnostic"
 HYDRA_CORE="$core" "$HYDRA_BIN" snapshot --native > "$test_root/native.out" 2> "$test_root/native.err"
@@ -237,11 +244,9 @@ assert_fallback hang protocol-timeout "$fake_core"
 assert_fallback snapshot-hang snapshot-timeout "$fake_core"
 
 # Without a directory for the helper's output the helper is not tried.
-saved_tmpdir="${TMPDIR:-}"
-TMPDIR="$test_root/no-such-directory"
-export TMPDIR
+scratch="$test_root/no-such-directory"
 assert_fallback scratch scratch-unavailable "$fake_core"
-if [ -n "$saved_tmpdir" ]; then TMPDIR="$saved_tmpdir"; else unset TMPDIR; fi
+scratch="$test_root/scratch"
 
 # Succeeds once no pid listed in the file exists any more, polling for up to the
 # given seconds. A terminated descendant that was orphaned stays visible until
@@ -346,8 +351,9 @@ assert_fallback unterminated malformed-output "$fake_core"
 assert_fallback trailing malformed-output "$fake_core"
 
 if [ -c /dev/full ]; then
-    HYDRA_CORE="$core" "$HYDRA_BIN" snapshot > /dev/full 2> /dev/null
+    TMPDIR="$scratch" HYDRA_CORE="$core" "$HYDRA_BIN" snapshot > /dev/full 2> /dev/null
     assert_failure $? "a snapshot that cannot be written fails (native)"
+    assert_equal "" "$(ls "$scratch")" "a snapshot that cannot be written leaves no helper output behind"
     HYDRA_CORE="$core" "$HYDRA_BIN" snapshot --shell > /dev/full 2> /dev/null
     assert_failure $? "a snapshot that cannot be written fails (shell)"
 else

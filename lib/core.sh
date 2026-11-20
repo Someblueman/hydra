@@ -330,8 +330,9 @@ hydra_snapshot() {
     elif ! hydra_core_snapshot_valid "$_hsn_dir/stdout"; then
         _hsn_reason=malformed-output
     else
-        cat "$_hsn_dir/stdout"
-        _hsn_status=$?
+        # Tested, so that under the CLI's `set -e` a failed write still reaches
+        # the cleanup below.
+        if cat "$_hsn_dir/stdout"; then _hsn_status=0; else _hsn_status=$?; fi
         rm -rf "$_hsn_dir"
         return "$_hsn_status"
     fi
