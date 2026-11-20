@@ -344,6 +344,38 @@ static void contention(const char *name, bool claim, bool owned) {
     expect_released(dir, name, NULL);
 }
 
+/* Whether this platform refuses an O_APPEND write that would take a file
+ * past RLIMIT_FSIZE, as Linux does (the write is cut short at the limit or
+ * fails with EFBIG). A file of have bytes is appended to by more bytes with
+ * the limit at limit; a platform that checks the limit against the offset
+ * before the append (or not at all) lets the write through whole, and then
+ * the fault cannot be injected that way. The product code does not differ:
+ * only the test's way of making a write fail. Run in the case's own process,
+ * and the limit is back before anything is checked. */
+static bool append_limit_enforced(const char *dir, size_t have, size_t more, rlim_t limit) {
+    char path[F_PATH], bytes[512]; struct rlimit saved, limited; void (*previous)(int); ssize_t wrote = -1; int fd;
+    CHECK(have <= sizeof(bytes) && more <= sizeof(bytes), "probe size");
+    memset(bytes, 'x', sizeof(bytes));
+    CHECK(!f_path(path, sizeof(path), dir, "limit-probe"), "probe path");
+    fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0600);
+    CHECK(fd >= 0, "probe file");
+    CHECK(have == 0 || write(fd, bytes, have) == (ssize_t)have, "probe content");
+    CHECK(!getrlimit(RLIMIT_FSIZE, &saved) && (previous = signal(SIGXFSZ, SIG_IGN)) != SIG_ERR, "file size limit");
+    limited = saved; limited.rlim_cur = limit;
+    CHECK(!setrlimit(RLIMIT_FSIZE, &limited), "set the file size limit");
+    wrote = write(fd, bytes, more);
+    if (setrlimit(RLIMIT_FSIZE, &saved)) _exit(2);
+    (void)signal(SIGXFSZ, previous);
+    close(fd); (void)unlink(path);
+    return wrote != (ssize_t)more;
+}
+static bool can_inject_append_failure(const char *name, const char *dir, size_t have, size_t more, rlim_t limit) {
+    if (append_limit_enforced(dir, have, more, limit)) return true;
+    printf("SKIP %s: this platform does not apply RLIMIT_FSIZE to appends\n", name);
+    fflush(stdout);
+    return false;
+}
+
 /* An event that cannot be appended whole: the file size limit sits ten
  * bytes past the log, so the first bytes of the line are written and the
  * rest are refused (EFBIG, with SIGXFSZ ignored), as on a disk that fills
@@ -355,6 +387,7 @@ static void torn_append(void) {
     struct wdr_run run; char dir[F_PATH], path[F_PATH], *before, *after;
     struct rlimit saved, limited; struct stat st; int status;
     new_run(&run, dir, "torn-append");
+    if (!can_inject_append_failure("torn-append", dir, 200, 200, 210)) return;
     CHECK(!wdr_event(&run, NULL, "run.created", ""), "first event");
     CHECK(!f_path(path, sizeof(path), dir, "events.jsonl") && !stat(path, &st) && st.st_size > 0, "the log exists");
     CHECK((before = f_read(path, 65536)) != NULL, "read the log");
@@ -398,6 +431,7 @@ static void residual_write_failed(void) {
     struct wdr_run run; char dir[F_PATH], step[F_PATH], list[F_PATH], pid[32], *text;
     struct rlimit saved, none; int status;
     new_run(&run, dir, "residual-write-failed");
+    if (!can_inject_append_failure("residual-write-failed", dir, 0, 1, 0)) return;
     CHECK(!f_path(step, sizeof(step), dir, "steps") && !mkdir(step, 0700) && !f_path(step, sizeof(step), dir, "steps/build") && !mkdir(step, 0700), "step directory");
     (void)snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
     put(step, "state", "running\n"); put(step, "worker-pid", pid); put(step, "command-pid", "4194304\n");
