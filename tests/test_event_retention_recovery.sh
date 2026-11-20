@@ -38,7 +38,9 @@ for scenario in same appended zero-tail conflict expired; do
             if [ "$1" = "$file" ]; then exit 73; fi
             mv "$2" "$1"
         }
-        event_retain_file "$file" "$max" "$project" "$head"
+        # The same two steps as "hydra events retain": lock, then retain.
+        acquire_lock "events_${project}_${head}" "event retention" "$head" || exit 1
+        _event_retain_file_locked "$file" "$max" "$project" "$head"
     ' sh "$root" "$file" "$project" "$head" "$max" || code=$?
     [ "$code" = 73 ]
     # Explicit stale-owner reconciliation is required before acquiring the lock.

@@ -428,18 +428,3 @@ _event_expire_archive() {
     fi
     rm -f "$_eea_archive" "$_eea_meta"
 }
-
-event_retain_file() {
-    _ert_file="$1"
-    _ert_max="$2"
-    _ert_project="$3"
-    _ert_head="$4"
-    hydra_valid_id "$_ert_project" || return 1
-    hydra_valid_id "$_ert_head" || return 1
-    _ert_lock="events_${_ert_project}_${_ert_head}"
-    acquire_lock "$_ert_lock" "event retention" "$_ert_head" || return 1
-    _event_retain_file_locked "$_ert_file" "$_ert_max" "$_ert_project" "$_ert_head"
-    _ert_status=$?
-    release_lock "$_ert_lock"
-    return "$_ert_status"
-}

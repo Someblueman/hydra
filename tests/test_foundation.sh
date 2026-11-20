@@ -166,12 +166,12 @@ event_lock="events_${project_id}_${head_id}"
 try_lock "$event_lock" "test held event writer"
 HYDRA_LOCK_RETRIES=1
 export HYDRA_LOCK_RETRIES
-event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null 2>&1
+"$HYDRA_BIN" events retain --project "$project_id" --head "$head_id" --max-events 1 >/dev/null 2>&1
 assert_failure $? "event retention refuses a concurrent writer"
 assert_equal "2" "$(wc -l < "$event_file" | tr -d ' ')" "failed retention preserves concurrent event input"
 release_lock "$event_lock"
 unset HYDRA_LOCK_RETRIES
-event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null
+"$HYDRA_BIN" events retain --project "$project_id" --head "$head_id" --max-events 1 >/dev/null
 assert_success $? "event retention archives before truncating"
 event_verify_file "$event_file"
 assert_success $? "retained stream preserves valid sequence"
