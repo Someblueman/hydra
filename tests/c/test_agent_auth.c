@@ -2,9 +2,12 @@
 #include "fleet/support/files.h"
 #include "fleet/auth/agent_auth.h"
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -44,6 +47,36 @@ int main(void) {
     assert(!auth_read(path, &value, digest));
     assert(!strcmp(f_string(value, "OPENAI_API_KEY"), "synthetic-b")); json_object_put(value); value = NULL;
     assert(auth_store(path, before, a) == -2);
+    /* A credential that cannot be written (every write fails as on a full
+     * disk: a zero file size limit, SIGXFSZ ignored) is reported, and the
+     * stored one stays as it was with nothing left beside it. */
+    {
+        struct rlimit saved, none; void (*previous)(int); char dir[F_PATH], fresh[F_PATH];
+        int replaced, created; size_t entries = 0, after = 0; DIR *stream; struct dirent *entry;
+        assert(!f_path(dir, sizeof(dir), base, "new/sub") && !f_path(fresh, sizeof(fresh), base, "new/sub/other.json"));
+        assert((stream = opendir(dir)));
+        while (readdir(stream)) entries++;
+        closedir(stream);
+        assert(!getrlimit(RLIMIT_FSIZE, &saved));
+        none = saved; none.rlim_cur = 0;
+        previous = signal(SIGXFSZ, SIG_IGN);
+        assert(previous != SIG_ERR && !setrlimit(RLIMIT_FSIZE, &none));
+        replaced = auth_store(path, digest, a);
+        created = auth_store(fresh, "absent", a);
+        if (setrlimit(RLIMIT_FSIZE, &saved)) abort();
+        (void)signal(SIGXFSZ, previous);
+        assert(replaced == -1 && created == -1 && access(fresh, F_OK));
+        assert((stream = opendir(dir)));
+        while ((entry = readdir(stream))) { after++; assert(!strstr(entry->d_name, "auth.json.") && !strstr(entry->d_name, "other.json")); }
+        closedir(stream);
+        assert(after == entries);
+        assert(!f_copy(before, sizeof(before), digest) && !auth_read(path, &value, digest) && !strcmp(before, digest));
+        assert(!strcmp(f_string(value, "OPENAI_API_KEY"), "synthetic-b")); json_object_put(value); value = NULL;
+        assert(!stat(path, &st) && (st.st_mode & 0777) == 0600 && st.st_nlink == 1);
+        assert(!auth_store(path, digest, a) && !auth_read(path, &value, digest));
+        assert(!strcmp(f_string(value, "OPENAI_API_KEY"), "synthetic-a")); json_object_put(value); value = NULL;
+        assert(!stat(path, &st) && (st.st_mode & 0777) == 0600 && st.st_nlink == 1);
+    }
     assert(!chmod(path, 0644) && auth_read(path, &value, digest));
     assert(!chmod(path, 0600));
     {

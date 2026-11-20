@@ -89,37 +89,28 @@ int auth_read(const char *path, json_object **value, char digest[65]) {
     }
     rc = read_at(fd, leaf, value, digest); close(fd); return rc;
 }
+/* Staged, compared and published with f_stage_at and f_publish_at under the
+ * store's lock. The destination is read again once the new bytes are staged:
+ * the agent's own CLI writes this file without taking the lock, so the
+ * comparison sits as close to the publication as it can. A credential that
+ * was absent is linked into place, which never replaces a file that appeared
+ * meanwhile. */
 int auth_store(const char *path, const char *before, json_object *value) {
-    char leaf[F_PATH], digest[65], tmp[80] = ""; int dir = -1, lock = -1, fd = -1, rc = -1;
+    char leaf[F_PATH], digest[65], temp[F_TEMP_NAME] = ""; int dir = -1, lock = -1, rc = -1;
     json_object *old = NULL; struct stat st; const char *text = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
-    size_t size = strlen(text), used = 0; ssize_t n;
+    size_t size = strlen(text);
     if (size > AUTH_LIMIT || (dir = parent_open(path, true, leaf)) < 0) goto done;
     lock = openat(dir, ".hydra-auth.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
     if (lock < 0 || fstat(lock, &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() || st.st_nlink != 1 || (st.st_mode & 0077) || flock(lock, LOCK_EX | LOCK_NB)) goto done;
     if (read_at(dir, leaf, &old, digest) || strcmp(before, digest)) { rc = -2; goto done; }
     json_object_put(old); old = NULL;
-    snprintf(tmp, sizeof(tmp), ".hydra-auth-%ld.tmp", (long)getpid());
-    fd = openat(dir, tmp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (fd < 0) { tmp[0] = 0; goto done; }
-    while (used < size) {
-        n = write(fd, text + used, size - used);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) goto done;
-        used += (size_t)n;
-    }
-    if (fsync(fd)) goto done;
+    if (f_stage_at(dir, leaf, text, size, temp)) goto done;
     if (read_at(dir, leaf, &old, digest) || strcmp(before, digest)) { rc = -2; goto done; }
-    if (!strcmp(before, "absent")) {
-        if (linkat(dir, tmp, dir, leaf, 0)) goto done;
-        if (unlinkat(dir, tmp, 0)) goto done;
-    } else if (renameat(dir, tmp, dir, leaf)) goto done;
-    tmp[0] = 0;
-    if (fsync(dir)) goto done;
-    rc = 0;
+    rc = f_publish_at(dir, temp, leaf, strcmp(before, "absent") != 0) ? -1 : 0;
+    temp[0] = '\0';
 done:
     json_object_put(old);
-    if (fd >= 0) close(fd);
-    if (dir >= 0 && tmp[0]) unlinkat(dir, tmp, 0);
+    if (dir >= 0 && temp[0]) unlinkat(dir, temp, 0);
     if (lock >= 0) close(lock);
     if (dir >= 0) close(dir);
     return rc;
