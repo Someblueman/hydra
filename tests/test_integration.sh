@@ -333,8 +333,8 @@ test_hydra_home_init() {
     # HYDRA_HOME should not exist initially
     if [ -d "$HYDRA_HOME" ]; then
         echo "[WARN] HYDRA_HOME already exists, skipping initialization test"
-        pass_count=$((pass_count + 2))
-        test_count=$((test_count + 2))
+        pass_count=$((pass_count + 1))
+        test_count=$((test_count + 1))
     else
         # Run any hydra command to trigger initialization
         env HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" version >/dev/null 2>&1
@@ -345,15 +345,6 @@ test_hydra_home_init() {
             pass_count=$((pass_count + 1))
         else
             echo "[FAIL] HYDRA_HOME directory should be created (path: $HYDRA_HOME)"
-            fail_count=$((fail_count + 1))
-        fi
-        
-        test_count=$((test_count + 1))
-        if [ ! -e "$HYDRA_HOME/map" ]; then
-            echo "[PASS] Global 1.x map should not be created"
-            pass_count=$((pass_count + 1))
-        else
-            echo "[FAIL] Global 1.x map should not be created"
             fail_count=$((fail_count + 1))
         fi
     fi

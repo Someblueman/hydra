@@ -178,7 +178,7 @@ Commands:
                       -s, --seconds <N>        Idle threshold (default: 10)
                       -t, --timeout <N>        Max wait time (default: 300)
   regenerate        Restore tmux sessions for existing worktrees
-  state             Verify, back up, migrate, or roll back durable state
+  state             Verify, back up, or roll back durable state
   events            Verify, tail, filter, retain, or repair head events
   status            Show health status of all heads
                     Options:
@@ -334,6 +334,10 @@ main() {
     esac
     export HYDRA_JSON_REQUESTED
     init_hydra_home
+    case "${1:-}" in
+        version|-v|--version|help|-h|--help|completion) ;;
+        *) refuse_pre4_store ;;
+    esac
 
     # Load only the libraries needed for this command
     _load_libs_for_cmd "${1:-}"

@@ -183,7 +183,7 @@ _hydra() {
                     _arguments '1:subcommand:(list create show edit delete)'
                     ;;
                 state)
-                    _arguments '1:subcommand:(verify backup migrate rollback)'
+                    _arguments '1:subcommand:(verify backup rollback)'
                     ;;
                 events)
                     _arguments '1:subcommand:(verify tail filter retain repair)'
@@ -250,7 +250,7 @@ _hydra_commands() {
         'switch:Switch to a different head'
         'kill:Remove a worktree and its tmux session'
         'regenerate:Restore tmux sessions for existing worktrees'
-        'state:Verify, back up, migrate, or roll back durable state'
+        'state:Verify, back up, or roll back durable state'
         'events:Verify, tail, filter, retain, or repair head events'
         'status:Show health status of all heads'
         'doctor:Check system performance'

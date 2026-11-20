@@ -80,15 +80,28 @@ the project's recorded worktree root whose head record is gone. `hydra gc --poli
 orphaned` is the only detector; doctor, cleanup, `du` and Recovery reuse it. Other
 worktrees, including `hydra-<branch>` siblings, are never candidates.
 
-The seven-field global map and project `compat-map` are not 2.0 runtime formats.
-Before migration, finish or stop active mutations, preserve local work, then run
-`hydra state verify` and `hydra state migrate --dry-run`. The dry run must report
-authoritative state v2 as verified. Run `hydra state migrate`, then
-`hydra state verify`; retain the generated backup path printed by migration.
-For a 1.9 rollback, use that exact path:
-`hydra state rollback "$HOME/.hydra/backups/state-YYYYMMDDTHHMMSS-PID"`, then
-`hydra state verify`. Rollback restores state and obsolete projections only; it does
-not replay commands or restore active owners.
+`hydra state backup` copies `$HYDRA_HOME/state` to
+`$HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>/state` and prints that
+directory. `hydra state rollback <that directory>` replaces the state tree with
+the copy while it holds the rollback, project, state and event locks, and fails
+without changing anything when a writer is active. Rollback restores records
+only; it does not replay commands or restore active owners. Run `hydra state
+verify` afterwards.
+
+Hydra 1.x kept sessions in `$HYDRA_HOME/map`, and 1.9 kept a `compat-map`
+projection in each project record. Releases 2.0 to 4.0.0 ignored both and
+removed them with `hydra state migrate`; this release has no reader and no
+such command. While either file exists, every command except `version`, `help`
+and `completion` exits 1 before it reads the store:
+
+```
+Error: <path> is a Hydra 1.x session map, which this release does not read
+Next: install Hydra 4.0.0 and run 'hydra state migrate' with it, or delete the file if nothing needs it
+```
+
+(`a Hydra 1.9 compatibility projection` for a `compat-map`.) `hydra state
+rollback` refuses, in the same terms, a backup that holds either file. A backup
+made by 4.0.0 without them is restored as before.
 
 Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.

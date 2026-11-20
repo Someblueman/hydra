@@ -13,19 +13,12 @@ cmd_state() {
             _cs_backup="$(state_v2_backup)" || return 1
             echo "Backup: $_cs_backup"
             ;;
-        migrate)
-            case "${1:-}" in
-                '') state_v2_migrate ;;
-                --dry-run) state_v2_migrate --dry-run ;;
-                *) echo "Usage: hydra state migrate [--dry-run]" >&2; return 1 ;;
-            esac
-            ;;
         rollback)
             [ $# -eq 1 ] || { echo "Usage: hydra state rollback <backup-path>" >&2; return 1; }
             state_v2_rollback "$1"
             ;;
         *)
-            echo "Usage: hydra state <verify|backup|migrate|rollback>" >&2
+            echo "Usage: hydra state <verify|backup|rollback>" >&2
             return 1
             ;;
     esac

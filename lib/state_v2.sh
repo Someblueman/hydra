@@ -436,76 +436,11 @@ state_v2_backup() {
     hydra_private_mkdir "$HYDRA_HOME/backups" || return 1
     _sv2b_dir="$(mktemp -d "$HYDRA_HOME/backups/state-$_sv2b_stamp.XXXXXX")" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
-    if [ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ]; then
-        cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map" || { rm -rf "$_sv2b_dir"; return 1; }
-    else
-        hydra_private_touch "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
-    fi
     if [ ! -d "$HYDRA_HOME/state" ] || ! cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"; then
         rm -rf "$_sv2b_dir"
         return 1
     fi
     printf '%s\n' "$_sv2b_dir"
-}
-
-_state_v2_projection_matches() {
-    _sv2pm_project_dir="$1"
-    _sv2pm_map="$_sv2pm_project_dir/compat-map"
-    [ -f "$_sv2pm_map" ] || return 0
-    while IFS=' ' read -r _sv2pm_branch _sv2pm_session _sv2pm_profile _sv2pm_group \
-        _sv2pm_created _sv2pm_deps _sv2pm_pr _sv2pm_extra || [ -n "${_sv2pm_branch:-}" ]; do
-        if [ -z "${_sv2pm_branch:-}" ] || [ -z "${_sv2pm_session:-}" ] || \
-            [ -n "${_sv2pm_extra:-}" ]; then
-            echo "Error: malformed 1.9 compatibility projection: $_sv2pm_map" >&2
-            return 1
-        fi
-        _sv2pm_head="$(state_v2_find_head_by_branch "$(basename "$_sv2pm_project_dir")" \
-            "$_sv2pm_branch" 2>/dev/null)" || {
-            echo "Error: compatibility projection has no durable head: $_sv2pm_branch" >&2
-            return 1
-        }
-        _sv2pm_dir="$_sv2pm_project_dir/heads/$_sv2pm_head"
-        if [ "$(sed -n '1p' "$_sv2pm_dir/session")" != "$_sv2pm_session" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/profile")" != "${_sv2pm_profile:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/group")" != "${_sv2pm_group:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/created-at")" != "${_sv2pm_created:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/dependencies")" != "${_sv2pm_deps:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/pr")" != "${_sv2pm_pr:--}" ]; then
-            echo "Error: compatibility projection diverges from durable head: $_sv2pm_branch" >&2
-            return 1
-        fi
-    done < "$_sv2pm_map"
-}
-
-state_v2_migrate() {
-    _sv2m_dry_run="${1:-}"
-    state_v2_verify || return 1
-    _sv2m_count=0
-    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
-        [ -d "$_sv2m_project" ] || continue
-        _state_v2_projection_matches "$_sv2m_project" || return 1
-        [ ! -f "$_sv2m_project/compat-map" ] || _sv2m_count=$((_sv2m_count + 1))
-    done
-    if [ "$_sv2m_dry_run" = --dry-run ]; then
-        echo "State migration plan:"
-        echo "  remove verified 1.9 compatibility projections: $_sv2m_count"
-        echo "  remove inactive global 1.x map: $([ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] && echo yes || echo no)"
-        echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>"
-        echo "  verify authoritative state v2 after migration: yes"
-        return 0
-    fi
-    _sv2m_backup="$(state_v2_backup)" || return 1
-    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
-        [ -d "$_sv2m_project" ] || continue
-        rm -f "$_sv2m_project/compat-map" || return 1
-    done
-    rm -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" || return 1
-    state_v2_verify || {
-        echo "Error: post-migration verification failed; rollback with: hydra state rollback $_sv2m_backup" >&2
-        return 1
-    }
-    echo "Removed $_sv2m_count compatibility projection(s)"
-    echo "Backup: $_sv2m_backup"
 }
 
 _state_v2_release_locks_file() {
@@ -523,14 +458,33 @@ state_v2_rollback() {
         *) echo "Error: backup must be under $HYDRA_HOME/backups" >&2; return 1 ;;
     esac
     [ -d "$_sv2r_backup" ] || { echo "Error: backup does not exist: $_sv2r_backup" >&2; return 1; }
-    if [ ! -d "$_sv2r_backup/state" ] || \
-       { [ -f "$_sv2r_backup/map" ] && [ -f "$_sv2r_backup/map.absent" ]; } || \
-       { [ ! -f "$_sv2r_backup/map" ] && [ ! -f "$_sv2r_backup/map.absent" ]; }; then
+    if [ ! -d "$_sv2r_backup/state" ]; then
         echo "Error: backup is incomplete: $_sv2r_backup" >&2
         return 1
     fi
+    # A backup taken while a Hydra 1.x session map or a 1.9 compatibility
+    # projection was still present holds a copy of it. This release restores
+    # neither: leaving the map out would drop it unnoticed, and a restored
+    # projection would leave a store that every command refuses
+    # (refuse_pre4_store in bin/hydra).
+    _sv2r_old=""
+    if [ -f "$_sv2r_backup/map" ]; then
+        _sv2r_old="$_sv2r_backup/map"
+        _sv2r_kind="a Hydra 1.x session map"
+    else
+        for _sv2r_file in "$_sv2r_backup"/state/v2/projects/*/compat-map; do
+            [ -f "$_sv2r_file" ] || continue
+            _sv2r_old="$_sv2r_file"
+            _sv2r_kind="a Hydra 1.9 compatibility projection"
+            break
+        done
+    fi
+    if [ -n "$_sv2r_old" ]; then
+        echo "Error: the backup holds $_sv2r_kind, which this release cannot restore: $_sv2r_old" >&2
+        echo "Next: roll back with Hydra 4.0.0, or delete that file to restore the state without it" >&2
+        return 1
+    fi
     _sv2r_guard="$HYDRA_HOME/state"
-    _sv2r_map_target="${HYDRA_1X_MAP:-$HYDRA_HOME/map}"
     if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
         return 1
     fi
@@ -587,26 +541,9 @@ state_v2_rollback() {
             return 1
         }
     fi
-    _sv2r_map_tmp=""
-    if [ -f "$_sv2r_backup/map" ]; then
-        _sv2r_map_tmp="$(mktemp_adjacent "$_sv2r_map_target")" || {
-            rm -rf "$_sv2r_stage"
-            _state_v2_release_locks_file "$_sv2r_locks"
-            rm -f "$_sv2r_locks"
-            return 1
-        }
-        cp "$_sv2r_backup/map" "$_sv2r_map_tmp" || {
-            [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
-            rm -rf "$_sv2r_stage"
-            _state_v2_release_locks_file "$_sv2r_locks"
-            rm -f "$_sv2r_locks"
-            return 1
-        }
-    fi
 
     if [ -d "$_sv2r_guard" ]; then
         mv "$_sv2r_guard" "$_sv2r_stage/previous-state" || {
-            rm -f "$_sv2r_map_tmp"
             rm -rf "$_sv2r_stage"
             _state_v2_release_locks_file "$_sv2r_locks"
             rm -f "$_sv2r_locks"
@@ -615,17 +552,6 @@ state_v2_rollback() {
     fi
     if [ -d "$_sv2r_stage/restored-state" ] && ! mv "$_sv2r_stage/restored-state" "$_sv2r_guard"; then
         [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
-        rm -rf "$_sv2r_stage"
-        _state_v2_release_locks_file "$_sv2r_locks"
-        rm -f "$_sv2r_locks"
-        return 1
-    fi
-    if { [ -n "$_sv2r_map_tmp" ] && ! atomic_replace "$_sv2r_map_target" "$_sv2r_map_tmp"; } || \
-       { [ -z "$_sv2r_map_tmp" ] && ! rm -f "$_sv2r_map_target"; }; then
-        [ ! -d "$_sv2r_guard" ] || mv "$_sv2r_guard" "$_sv2r_stage/failed-state"
-        [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
         rm -rf "$_sv2r_stage"
         _state_v2_release_locks_file "$_sv2r_locks"
         rm -f "$_sv2r_locks"

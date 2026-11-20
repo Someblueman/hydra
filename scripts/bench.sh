@@ -69,15 +69,6 @@ for n in $COUNTS; do
     _time_cmd "tui --data" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" tui --data"
 
     (cd "$repo" && "$HYDRA_BIN" kill --all --force) >/dev/null 2>&1 || true
-    # Kill only sessions recorded for this isolated HYDRA_HOME, never a
-    # global bench-* prefix sweep of the shared tmux server.
-    if [ -f "$home/map" ]; then
-        awk '{ print $2 }' "$home/map" | while IFS= read -r _sess; do
-            if [ -n "$_sess" ]; then
-                tmux kill-session -t "$_sess" 2>/dev/null || true
-            fi
-        done
-    fi
     unset HYDRA_HOME HYDRA_SKIP_AI HYDRA_NONINTERACTIVE
     rm -rf "$work"
 done

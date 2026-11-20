@@ -96,8 +96,10 @@ local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` wh
 running the installer. `hydra tui` is then unavailable; `hydra list` and
 `hydra switch` work without the native helper.
 
-Upgrading from 1.9? Review the compatibility and backup notes in
-[Contracts](docs/CONTRACTS.md) before upgrading.
+Upgrading from a release before 4.0.0? Install 4.0.0 first and run its
+`hydra state migrate` and `hydra init`: this release stops with an error on
+the files earlier releases left behind
+([Contracts](docs/CONTRACTS.md#durable-state-v2)).
 
 ## Start a task
 

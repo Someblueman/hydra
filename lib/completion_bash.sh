@@ -310,7 +310,7 @@ _hydra_completion() {
             return 0
             ;;
         state)
-            COMPREPLY=($(compgen -W "verify backup migrate rollback" -- ${cur}))
+            COMPREPLY=($(compgen -W "verify backup rollback" -- ${cur}))
             return 0
             ;;
         events)

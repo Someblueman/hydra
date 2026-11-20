@@ -383,8 +383,9 @@ parallel_resource_release() {
 
 parallel_release_head_records() {
     _prhr_branch="$1"
-    # A legacy/phantom map entry has no v2 head and therefore cannot own v2
-    # resources or claims. Treat that teardown as an idempotent no-op.
+    # A branch without a head record owns no resources or claims: teardown
+    # is then a no-op, as in lifecycle_prepare_teardown and
+    # lifecycle_finish_teardown.
     parallel_head_load "$_prhr_branch" >/dev/null 2>&1 || return 0
     _prhr_head="$PARALLEL_HEAD_ID"
     parallel_project_load || return 1

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Identity, state v2, migration, event, and lock-contract tests.
+# Identity, state v2, backup, event, and lock-contract tests.
 
 set -u
 
@@ -227,26 +227,14 @@ assert_success $? "repaired stream verifies"
 HYDRA_HOME="$test_root/home" "$HYDRA_BIN" events verify --project "$project_id" --head "$head_id" >/dev/null
 assert_success $? "events command verifies an explicit head"
 
-# Migration and rollback use a fresh home to prove the 1.9 projection retirement.
-HYDRA_HOME="$test_root/migrate-home"
-HYDRA_1X_MAP="$HYDRA_HOME/map"
+# Backup and rollback use a fresh home.
+HYDRA_HOME="$test_root/backup-home"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-export HYDRA_HOME HYDRA_1X_MAP HYDRA_STATE_V2_ROOT
+export HYDRA_HOME HYDRA_STATE_V2_ROOT
 mkdir -p "$HYDRA_HOME"
-legacy_row='legacy-branch legacy-session claude group 123 dep 9'
-state_v2_create_head "$project_id" legacy-branch legacy-session claude group 123 dep 9 "$repo" >/dev/null
-legacy_project_dir="$(state_v2_project_dir "$project_id")"
-printf '%s\n' "$legacy_row" > "$legacy_project_dir/compat-map"
-printf '%s\n' "$legacy_row" > "$HYDRA_1X_MAP"
-dry_output="$(state_v2_migrate --dry-run)"
-assert_success $? "migration dry-run succeeds"
-if [ -f "$legacy_project_dir/compat-map" ] && [ -f "$HYDRA_1X_MAP" ]; then
-    assert_success 0 "migration dry-run does not mutate compatibility projections"
-else
-    assert_success 1 "migration dry-run does not mutate compatibility projections"
-fi
-printf '%s\n' "$dry_output" | grep -q 'remove verified 1.9 compatibility projections: 1'
-assert_success $? "migration dry-run reports exact projection count"
+state_v2_create_head "$project_id" backup-branch backup-session claude group 123 dep 9 "$repo" >/dev/null
+backup_project_dir="$(state_v2_project_dir "$project_id")"
+backup_head_id="$(state_v2_find_head_by_branch "$project_id" backup-branch)"
 
 backup_count_before="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
 # shellcheck disable=SC2317,SC2329
@@ -255,16 +243,13 @@ assert_failure $? "backup fails when a source cannot be copied"
 backup_count_after="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
 assert_equal "$backup_count_before" "$backup_count_after" "failed backup leaves no incomplete recovery point"
 
-migrate_output="$(state_v2_migrate)"
-assert_success $? "migration writes state v2"
-backup_path="$(printf '%s\n' "$migrate_output" | sed -n 's/^Backup: //p')"
-if [ -d "$backup_path" ] && [ -f "$backup_path/map" ] && [ -f "$backup_path/state/v2/schema-version" ]; then
-    assert_success 0 "migration creates a recoverable backup"
-else
-    assert_success 1 "migration creates a recoverable backup"
-fi
+backup_output="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state backup)"
+assert_success $? "state backup succeeds"
+backup_path="$(printf '%s\n' "$backup_output" | sed -n 's/^Backup: //p')"
+assert_equal "state" "$(ls -A "$backup_path" 2>/dev/null)" "a backup holds the state tree and nothing else"
+assert_equal 2 "$(sed -n '1p' "$backup_path/state/v2/schema-version" 2>/dev/null)" "the backed-up state names its schema"
 state_v2_verify
-assert_success $? "migrated state verifies"
+assert_success $? "backed-up state verifies"
 HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state verify >/dev/null
 assert_success $? "state command verifies active schema v2"
 printf '999\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
@@ -278,7 +263,6 @@ esac
 printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
 incomplete_backup="$HYDRA_HOME/backups/state-incomplete"
 mkdir -p "$incomplete_backup"
-: > "$incomplete_backup/map.absent"
 state_v2_rollback "$incomplete_backup" >/dev/null 2>&1
 assert_failure $? "rollback rejects a backup without durable state"
 assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "incomplete backup rejection preserves current state"
@@ -290,22 +274,64 @@ assert_failure $? "rollback refuses a concurrent state writer"
 assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "failed rollback preserves current state"
 release_lock "state_${project_id}"
 unset HYDRA_LOCK_RETRIES
+printf 'changed-after-backup\n' > "$backup_project_dir/heads/$backup_head_id/group"
 state_v2_rollback "$backup_path" >/dev/null
 assert_success $? "rollback succeeds with generated backup"
-assert_equal "$legacy_row" "$(sed -n '1p' "$HYDRA_1X_MAP")" "rollback restores the global 1.x map for downgrade"
-assert_equal "$legacy_row" "$(sed -n '1p' "$legacy_project_dir/compat-map")" "rollback restores the 1.9 project projection"
+assert_equal group "$(sed -n '1p' "$backup_project_dir/heads/$backup_head_id/group")" "rollback restores the backed-up records"
 
-rm -f "$HYDRA_1X_MAP"
-absent_map_backup="$(state_v2_backup)"
-assert_success $? "backup records an absent legacy map"
-printf 'stale projection\n' > "$HYDRA_1X_MAP"
-state_v2_rollback "$absent_map_backup" >/dev/null
-assert_success $? "rollback restores a backup with no legacy map"
-if [ ! -e "$HYDRA_1X_MAP" ]; then
-    assert_success 0 "rollback preserves exact legacy-map absence"
-else
-    assert_success 1 "rollback preserves exact legacy-map absence"
-fi
+# A backup made by 4.0.0 also holds the marker "map.absent"; it restores as before.
+: > "$backup_path/map.absent"
+printf 'changed-again\n' > "$backup_project_dir/heads/$backup_head_id/group"
+HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state rollback "$backup_path" >/dev/null
+assert_success $? "rollback accepts a backup made by 4.0.0"
+assert_equal group "$(sed -n '1p' "$backup_project_dir/heads/$backup_head_id/group")" "a 4.0.0 backup restores the backed-up records"
+rm -f "$backup_path/map.absent"
+
+# Stores and backups that still hold what 1.x left behind are refused by name.
+old_row='old-branch old-session claude group 123 dep 9'
+printf 'changed-before-refusal\n' > "$backup_project_dir/heads/$backup_head_id/group"
+printf '%s\n' "$old_row" > "$backup_path/map"
+refusal="$(state_v2_rollback "$backup_path" 2>&1)"
+assert_failure $? "rollback refuses a backup that holds a 1.x session map"
+assert_equal "Error: the backup holds a Hydra 1.x session map, which this release cannot restore: $backup_path/map
+Next: roll back with Hydra 4.0.0, or delete that file to restore the state without it" "$refusal" "the refused backup map is named with both ways out"
+rm -f "$backup_path/map"
+printf '%s\n' "$old_row" > "$backup_path/state/v2/projects/$project_id/compat-map"
+refusal="$(state_v2_rollback "$backup_path" 2>&1)"
+assert_failure $? "rollback refuses a backup that holds a 1.9 compatibility projection"
+assert_equal "Error: the backup holds a Hydra 1.9 compatibility projection, which this release cannot restore: $backup_path/state/v2/projects/$project_id/compat-map
+Next: roll back with Hydra 4.0.0, or delete that file to restore the state without it" "$refusal" "the refused backup projection is named with both ways out"
+assert_equal changed-before-refusal "$(sed -n '1p' "$backup_project_dir/heads/$backup_head_id/group")" "a refused rollback leaves the current state untouched"
+rm -f "$backup_path/state/v2/projects/$project_id/compat-map"
+
+HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list >/dev/null 2>&1
+assert_success $? "a store without 1.x leftovers is accepted"
+printf '%s\n' "$old_row" > "$HYDRA_HOME/map"
+for old_store_command in list status "state verify" "state backup" snapshot doctor "spawn refused-branch --no-agent"; do
+    # shellcheck disable=SC2086 # the command and its arguments are separate words
+    refusal="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" $old_store_command 2>&1)"
+    assert_equal 1 "$?" "hydra $old_store_command stops on a 1.x session map"
+    assert_equal "Error: $HYDRA_HOME/map is a Hydra 1.x session map, which this release does not read
+Next: install Hydra 4.0.0 and run 'hydra state migrate' with it, or delete the file if nothing needs it" "$refusal" "hydra $old_store_command names the map and both ways out, and prints nothing else"
+done
+assert_equal "$old_row" "$(sed -n '1p' "$HYDRA_HOME/map")" "the refused map is left as it was"
+for no_store_command in version help "completion bash"; do
+    # shellcheck disable=SC2086
+    HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" $no_store_command >/dev/null 2>&1
+    assert_success $? "hydra $no_store_command needs no store and still answers"
+done
+rm -f "$HYDRA_HOME/map"
+printf '%s\n' "$old_row" > "$backup_project_dir/compat-map"
+refusal="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list 2>&1)"
+assert_equal 1 "$?" "hydra list stops on a 1.9 compatibility projection"
+assert_equal "Error: $backup_project_dir/compat-map is a Hydra 1.9 compatibility projection, which this release does not read
+Next: install Hydra 4.0.0 and run 'hydra state migrate' with it, or delete the file if nothing needs it" "$refusal" "the projection is named with both ways out"
+rm -f "$backup_project_dir/compat-map"
+HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list >/dev/null 2>&1
+assert_success $? "removing the leftover is enough to continue"
+refusal="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state migrate 2>&1)"
+assert_equal 1 "$?" "state migrate is not a state action any more"
+assert_equal "Usage: hydra state <verify|backup|rollback>" "$refusal" "state migrate prints the state usage"
 
 echo "====================================="
 echo "Test Results:"
