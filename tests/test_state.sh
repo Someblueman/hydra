@@ -186,6 +186,68 @@ hydra_load_project_id
 assert_equal "0:$project_id" "$?:$HYDRA_LOADED_PROJECT_ID" "returning to the first repository returns its id"
 PATH="$saved_path"
 
+# Lookup by branch: the first record in name order wins whatever its state,
+# and a record's branch is read once per process, not once per lookup.
+for lookup_case in 1:gone-a 2:gone-b 3:again 4:gone-c 5:live; do
+    state_v2_create_head "$other_id" "${lookup_case#*:}" "s-${lookup_case#*:}" - - 100 - - "$other" \
+        "head_00000000000000000${lookup_case%%:*}00" >/dev/null
+done
+other_heads="$HYDRA_STATE_V2_ROOT/projects/$other_id/heads"
+for lookup_case in 1 2 3 4; do
+    state_v2_write_scalar "$other_heads/head_00000000000000000${lookup_case}00/desired-state" stopped
+done
+# A separate shell counts how often a lookup opens a branch record (the
+# reader is replaced by a counting copy there).
+cat > "$test_root/count-reads.sh" <<'EOF'
+for library in output locks identity state_v2; do . "$HYDRA_LIB_DIR/$library.sh"; done
+branch_reads=0
+state_v2_read_scalar() {
+    case "$1" in */branch) branch_reads=$((branch_reads + 1)) ;; esac
+    STATE_V2_SCALAR=
+    { IFS= read -r STATE_V2_SCALAR < "$1"; } 2>/dev/null || :
+}
+report() { printf '%s=%s:%s:%s ' "$1" "$2" "$STATE_V2_HEAD_ID" "$branch_reads"; branch_reads=0; }
+state_v2_lookup_head "$1" live; report first "$?"
+state_v2_lookup_head "$1" live; state_v2_lookup_head "$1" live; report repeated "$?"
+state_v2_lookup_head "$1" again; report stopped "$?"
+state_v2_lookup_head "$1" never-spawned; report unknown "$?"
+EOF
+assert_equal "first=0:head_00000000000000000500:5 repeated=0:head_00000000000000000500:2 stopped=0:head_00000000000000000300:1 unknown=1::0 " \
+    "$(sh "$test_root/count-reads.sh" "$other_id")" \
+    "a branch record is read once per process: repeated lookups confirm one record, and no stopped record is rescanned"
+state_v2_lookup_head "$other_id" again
+assert_equal "0:head_00000000000000000300:$other_heads/head_00000000000000000300" \
+    "$?:$STATE_V2_HEAD_ID:$STATE_V2_HEAD_DIR" "a stopped head still owns its branch"
+# Killed, then spawned again: the branch keeps its one record.
+assert_equal head_00000000000000000300 \
+    "$(state_v2_create_head "$other_id" again s-again - - 200 - - "$other")" \
+    "spawning a stopped branch again resolves to its existing record"
+state_v2_write_scalar "$other_heads/head_00000000000000000300/desired-state" running
+assert_equal head_00000000000000000300 "$(state_v2_find_head_by_branch "$other_id" again)" \
+    "a killed and respawned branch resolves to the same head"
+state_v2_lookup_head "$other_id" live
+state_v2_create_head "$other_id" late s-late - - 300 - - "$other" head_00000000000000000050 >/dev/null
+state_v2_lookup_head "$other_id" late
+assert_equal "0:head_00000000000000000050" "$?:$STATE_V2_HEAD_ID" "a head created after earlier lookups is found"
+# Two records for one branch are invalid state (state_v2_verify reports them).
+# The first in name order answers, also when it is stopped and also when it
+# appears after this process first resolved the branch.
+state_v2_lookup_head "$other_id" live
+cp -R "$other_heads/head_00000000000000000500" "$other_heads/head_00000000000000000450"
+state_v2_write_scalar "$other_heads/head_00000000000000000450/desired-state" stopped
+state_v2_lookup_head "$other_id" live
+first_lookup="$STATE_V2_HEAD_ID"
+state_v2_lookup_head "$other_id" live
+assert_equal "head_00000000000000000450:head_00000000000000000450" "$first_lookup:$STATE_V2_HEAD_ID" \
+    "with two records for a branch the first in name order wins on every lookup"
+rm -rf "$other_heads/head_00000000000000000450"
+state_v2_lookup_head "$other_id" live
+assert_equal head_00000000000000000500 "$STATE_V2_HEAD_ID" "a removed record is not answered from memory"
+state_v2_lookup_head "$other_id" "$(printf 'live\thead_00000000000000000500')"
+assert_equal "1:" "$?:$STATE_V2_HEAD_ID" "a name with a tab matches no record"
+state_v2_lookup_head "$other_id" live
+assert_equal head_00000000000000000500 "$STATE_V2_HEAD_ID" "lookups still resolve after a name that cannot be indexed"
+
 # Two heads of one project on one branch: each is reported, by branch and
 # project. A branch that only begins like another is not a duplicate.
 head_one_dir="$(state_v2_head_dir "$project_id" "$head_one")"

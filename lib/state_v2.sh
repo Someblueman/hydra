@@ -122,22 +122,86 @@ state_v2_init_project() {
     release_lock "$_sv2ip_lock"
 }
 
+# Branches this process has read so far, for the heads directory in the key
+# while it held the counted number of records: one "<branch><TAB><head id>"
+# line per record, in the order they were read.
+_STATE_V2_BRANCH_INDEX_KEY=
+_STATE_V2_BRANCH_INDEX_COUNT=
+_STATE_V2_BRANCH_INDEX='
+'
+
 # Find the head record of a branch without printing or starting a process.
 # Usage: state_v2_lookup_head <project-id> <branch>
 # Sets STATE_V2_HEAD_ID and STATE_V2_HEAD_DIR and returns 0; both are empty
 # and the status is 1 when no record carries the branch. Records are taken in
 # name order and the first one with the branch wins, whatever its state: a
 # stopped head keeps its branch, and spawn resumes that record.
+#
+# Stopped heads are never deleted, so the records before a branch's own grow
+# without bound. Each record's branch is therefore read once per process: a
+# branch found earlier is answered from the index after confirming that its
+# record still carries it, and a scan skips records it has already read. The
+# winner is unchanged: a record's branch is written once, when the record is
+# created, so an indexed record that carried the branch would have answered
+# before the scan started, and the index is dropped as soon as the number of
+# records differs from the one it was built for (a head was created or
+# removed, by this process or another).
 state_v2_lookup_head() {
     STATE_V2_HEAD_ID=
     STATE_V2_HEAD_DIR=
     hydra_valid_id "$1" || return 1
-    [ -d "$HYDRA_STATE_V2_ROOT/projects/$1/heads" ] || return 1
-    for _sv2lh_dir in "$HYDRA_STATE_V2_ROOT/projects/$1"/heads/head_*; do
+    _sv2lh_heads="$HYDRA_STATE_V2_ROOT/projects/$1/heads"
+    [ -d "$_sv2lh_heads" ] || return 1
+    _sv2lh_branch="$2"
+    set -- "$_sv2lh_heads"/head_*
+    if [ "$_STATE_V2_BRANCH_INDEX_KEY" != "$_sv2lh_heads" ] || [ "$_STATE_V2_BRANCH_INDEX_COUNT" != "$#" ]; then
+        _STATE_V2_BRANCH_INDEX_KEY="$_sv2lh_heads"
+        _STATE_V2_BRANCH_INDEX_COUNT="$#"
+        _STATE_V2_BRANCH_INDEX='
+'
+    fi
+    # A name with a tab or a newline could span index lines: never index it.
+    case "$_sv2lh_branch" in
+        *'	'*|*'
+'*) _STATE_V2_BRANCH_INDEX='
+' ;;
+        *)
+            case "$_STATE_V2_BRANCH_INDEX" in
+                *"
+$_sv2lh_branch	"*)
+                    _sv2lh_id="${_STATE_V2_BRANCH_INDEX#*"
+$_sv2lh_branch	"}"
+                    _sv2lh_id="${_sv2lh_id%%"
+"*}"
+                    state_v2_read_scalar "$_sv2lh_heads/$_sv2lh_id/branch"
+                    if [ -d "$_sv2lh_heads/$_sv2lh_id" ] && [ "$STATE_V2_SCALAR" = "$_sv2lh_branch" ]; then
+                        STATE_V2_HEAD_ID="$_sv2lh_id"
+                        # shellcheck disable=SC2034 # read by the callers
+                        STATE_V2_HEAD_DIR="$_sv2lh_heads/$_sv2lh_id"
+                        return 0
+                    fi
+                    # The record changed or is gone: read everything again.
+                    _STATE_V2_BRANCH_INDEX='
+'
+                    ;;
+            esac
+            ;;
+    esac
+    for _sv2lh_dir in "$@"; do
         [ -d "$_sv2lh_dir" ] || continue
+        _sv2lh_id="${_sv2lh_dir##*/}"
+        case "$_STATE_V2_BRANCH_INDEX" in
+            *"	$_sv2lh_id
+"*) continue ;;
+        esac
         state_v2_read_scalar "$_sv2lh_dir/branch"
-        if [ "$STATE_V2_SCALAR" = "$2" ]; then
-            STATE_V2_HEAD_ID="${_sv2lh_dir##*/}"
+        case "$STATE_V2_SCALAR" in
+            *'	'*) ;;
+            *) _STATE_V2_BRANCH_INDEX="$_STATE_V2_BRANCH_INDEX$STATE_V2_SCALAR	$_sv2lh_id
+" ;;
+        esac
+        if [ "$STATE_V2_SCALAR" = "$_sv2lh_branch" ]; then
+            STATE_V2_HEAD_ID="$_sv2lh_id"
             # shellcheck disable=SC2034 # read by the callers
             STATE_V2_HEAD_DIR="$_sv2lh_dir"
             return 0
