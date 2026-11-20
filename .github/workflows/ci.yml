@@ -318,12 +318,14 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet
 
-  # The native run driver (hydra-fleet workflow-drive, HYDRA_NATIVE_DRIVER=1):
-  # the workflow shell cases and the workflow, plan and remote task DAG fleet
-  # cases with the switch on, then every differential fixture with both drivers
+  # The run driver. The test and fleet jobs drive every run with the native
+  # driver (hydra-fleet workflow-drive), the default wherever hydra-fleet is
+  # built. This job covers the shell driver that remains as the fallback
+  # without hydra-fleet: the cases that drive runs again with
+  # HYDRA_NATIVE_DRIVER=0, then every differential fixture with both drivers
   # and their run records compared. Set up like the fleet job above.
   run-driver:
-    name: Native run driver (${{ matrix.os }})
+    name: Shell run driver and driver differential (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: lint
     timeout-minutes: 45
@@ -343,12 +345,12 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: brew install tmux shellcheck json-c pkg-config
 
-    - name: Run the driver cases with the native driver and compare both drivers
+    - name: Run the driver cases with the shell driver and compare both drivers
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-driver
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make TEST_JOBS=2 test-native-driver
+        make TEST_JOBS=2 test-shell-driver
 
   # U10 loopback acceptance: a throwaway account behind a private sshd is
   # onboarded through the control centre over a PTY (tests/test_u10_loopback.sh

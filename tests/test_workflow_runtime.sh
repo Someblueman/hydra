@@ -360,7 +360,7 @@ printf '%s\n' "$cancel_dir" > "$test_root/cancel-race-dir"
 mkdir "$cancel_dir/.events.lock" || exit 1
 printf '%s\n' "$$" > "$cancel_dir/.events.lock/owner-pid"
 cancel_observer=''
-if [ "${HYDRA_NATIVE_DRIVER:-}" = 1 ]; then
+if [ "${HYDRA_NATIVE_DRIVER:-}" != 0 ]; then
     # The native driver reads step states itself rather than through awk, so
     # the snapshot is observed from here: it lists the step while its worker
     # runs, and the worker, kept alive by the held event lock, publishes its

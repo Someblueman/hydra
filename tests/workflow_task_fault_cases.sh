@@ -41,11 +41,12 @@ case "$HYDRA_TEST_DAG_FAULT" in
     *) exit 1 ;;
 esac
 # The snapshot tools force a worker's waiting-remote publication between the
-# shell driver's two state scans, which are awk processes. The native driver
-# (HYDRA_NATIVE_DRIVER=1) scans in process, so there the case runs the same
-# cancellation without forcing that interleaving.
+# shell driver's two state scans, which are awk processes. The native driver,
+# the default, scans in process, so there the case runs the same cancellation
+# without forcing that interleaving; make test-shell-driver forces it with
+# HYDRA_NATIVE_DRIVER=0.
 snapshot_race=0
-[ "$HYDRA_TEST_DAG_FAULT" != cancel-offline ] || [ "${HYDRA_NATIVE_DRIVER:-}" = 1 ] || snapshot_race=1
+if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ] && [ "${HYDRA_NATIVE_DRIVER:-}" = 0 ]; then snapshot_race=1; fi
 if [ "$snapshot_race" = 1 ]; then
     HYDRA_TEST_DAG_RUN=$run_dir
     HYDRA_TEST_DAG_REAL_AWK=$(command -v awk)

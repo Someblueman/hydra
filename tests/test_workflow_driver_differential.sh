@@ -1,6 +1,6 @@
 #!/bin/sh
-# Differential check of the native run driver (HYDRA_NATIVE_DRIVER=1) against
-# the shell driver. Every fixture runs once with each driver, in the same
+# Differential check of the native run driver, the default, against the shell
+# driver (HYDRA_NATIVE_DRIVER=0). Every fixture runs once with each driver, in the same
 # directory and with fixed Git dates, and the two run records must agree once
 # times, PIDs, generated identities and temporary names are normalized: the
 # same files with the same modes and contents, the same exit status, and the
@@ -135,10 +135,17 @@ snapshot_tree() (
     done | normalize
 )
 
-# Events without their times. At parallelism above 1 workers interleave, so
-# only each step's events are compared, as a multiset without sequences.
+# The drivers that drove a run, one word per drive, as run.running records them.
+run_drivers() {
+    sed -n 's/.*"type":"run.running","detail":"driver=\([a-z]*\)".*/\1/p' "$1/events.jsonl" | LC_ALL=C sort -u | tr '\n' ' '
+}
+
+# Events without their times and without the name of the driver, which
+# run_case checks. At parallelism above 1 workers interleave, so only each
+# step's events are compared, as a multiset without sequences.
 snapshot_events() {
-    sed -E 's/"occurred_at":"[^"]*",//' "$1/events.jsonl" | normalize > "$2.ordered"
+    sed -E -e 's/"occurred_at":"[^"]*",//' -e 's/("type":"run.running","detail":"driver=)(shell|native)"/\1<DRIVER>"/' "$1/events.jsonl" |
+        normalize > "$2.ordered"
     if [ "$3" = order ]; then
         cp "$2.ordered" "$2"
     else
@@ -151,12 +158,14 @@ snapshot_events() {
 
 snapshot_runs() {
     _sr_index=0
+    : > "$3.drivers"
     while IFS= read -r _sr_run; do
         [ -n "$_sr_run" ] || continue
         _sr_index=$((_sr_index + 1))
         _sr_dir="$(run_dir_for "$2" "$_sr_run")"
         if [ -z "$_sr_dir" ]; then printf 'missing run %s\n' "$_sr_run" > "$3.run$_sr_index.tree"; continue; fi
         snapshot_tree "$_sr_dir" > "$3.run$_sr_index.tree"
+        run_drivers "$_sr_dir" >> "$3.drivers"
         snapshot_events "$_sr_dir" "$3.run$_sr_index.events" "$4" || printf 'sequence gap\n' >> "$3.run$_sr_index.events"
     done < "$1"
     printf '%s\n' "$_sr_index" > "$3.runs"
@@ -174,23 +183,26 @@ run_case() {
         : > "$CASE/runs"
         : > "$DIFF_FLEET_LOG"
         HYDRA_HOME="$CASE/home"
-        HYDRA_NATIVE_DRIVER=0
-        [ "$_rc_driver" = shell ] || HYDRA_NATIVE_DRIVER=1
-        export HYDRA_HOME HYDRA_NATIVE_DRIVER
+        export HYDRA_HOME
+        # The native driver is the default: it needs no setting.
+        unset HYDRA_NATIVE_DRIVER
+        if [ "$_rc_driver" = shell ]; then HYDRA_NATIVE_DRIVER=0; export HYDRA_NATIVE_DRIVER; fi
         _rc_started="$(date +%s)"
         (cd "$CASE" && "$_rc_function") > "$OUT/$_rc_name.$_rc_driver.log" 2>&1
         printf '%s\n' "$?" > "$OUT/$_rc_name.$_rc_driver.status"
         printf '%s %s %ss\n' "$_rc_name" "$_rc_driver" "$(($(date +%s) - _rc_started))" >> "$OUT/durations"
         _rc_handoffs="$(wc -l < "$DIFF_FLEET_LOG" | tr -d ' ')"
         if [ "$_rc_driver" = shell ]; then
-            assert_equal 0 "$_rc_handoffs" "$_rc_name: the shell driver drives every run with the switch off"
+            assert_equal 0 "$_rc_handoffs" "$_rc_name: the shell driver drives every run with HYDRA_NATIVE_DRIVER=0"
         else
             if [ "$_rc_handoffs" -gt 0 ]; then _rc_used=0; else _rc_used=1; fi
-            assert_success "$_rc_used" "$_rc_name: the native driver drives the runs with the switch on"
+            assert_success "$_rc_used" "$_rc_name: the native driver drives the runs by default"
         fi
         _rc_home="$CASE/home"
         [ ! -f "$CASE/home-path" ] || _rc_home="$(cat "$CASE/home-path")"
         snapshot_runs "$CASE/runs" "$_rc_home" "$OUT/$_rc_name.$_rc_driver" "$_rc_events"
+        assert_equal "$_rc_driver" "$(LC_ALL=C sort -u "$OUT/$_rc_name.$_rc_driver.drivers" | tr -d ' \n')" \
+            "$_rc_name: every drive of every run records the $_rc_driver driver"
     done
     assert_equal 0 "$(cat "$OUT/$_rc_name.shell.status")" "$_rc_name: the fixture behaves as expected with the shell driver"
     assert_equal 0 "$(cat "$OUT/$_rc_name.native.status")" "$_rc_name: the fixture behaves as expected with the native driver"
@@ -475,7 +487,7 @@ run_case statistics-fault order statistics_fault_case
 # tests/test_workflow_plan_task.sh as the fleet-case-dag-*, plan-task-* and
 # plan-repair-* cases run them, kept in a fixed directory so that both
 # drivers' records can be compared. Runs are compared in creation order.
-# The cancel faults are left to test-native-driver: their tests resume once a
+# The cancel faults are left to make test-fleet and test-shell-driver: their tests resume once a
 # second until the remote side confirms, so the number of resumes is timing.
 task_case() {
     # shellcheck disable=SC2086 # TASK_ENV is a list of assignments.

@@ -47,7 +47,8 @@ static int prologue(struct wdr_run *run) {
     char pid[32];
     snprintf(pid, sizeof(pid), "%ld", (long)getpid());
     if (wdr_run_scalar(run, "owner-pid", pid) || heartbeat(run) || wdr_run_scalar(run, "state", "running")) return 1;
-    (void)wdr_event(run, NULL, "run.running", "");
+    /* Each drive records which driver it is, as the shell driver does. */
+    (void)wdr_event(run, NULL, "run.running", "driver=native");
     if (!wdr_cancel_requested(run) && approval_waiting(run) &&
         wdr_hook(run, NULL, 0, false, "approval-resume", NULL, NULL)) {
         (void)wdr_run_scalar(run, "state", "recovery-required");

@@ -57,7 +57,8 @@ jobs:
 
   # Both run drivers on a selection of fixtures, with their run records
   # compared: about two minutes of the ten the full differential check takes.
-  # ci.yml's run-driver job runs the full check and the driver lane.
+  # pr-gate's cases drive their runs with the native driver, the default;
+  # ci.yml's run-driver job runs the full check and the shell driver lane.
   driver-differential:
     name: Run driver differential (selection)
     runs-on: ubuntu-latest

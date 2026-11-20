@@ -1,6 +1,8 @@
 #!/bin/sh
 # Workflow run driver: scheduling decisions and recorded event order, terminal
-# state reporting, and ownership of a live run.
+# state reporting, ownership of a live run, and which driver drives a run.
+# The cases before the last section run with the driver the caller selects:
+# the native one by default, the shell one under make test-shell-driver.
 
 set -u
 
@@ -37,6 +39,10 @@ trap cleanup EXIT HUP INT TERM
 run_dir_for() {
     find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$1" -print | sed -n '1p'
 }
+
+# The driver this case's runs get from the caller's environment.
+default_driver=native
+[ "${HYDRA_NATIVE_DRIVER:-}" != 0 ] || default_driver=shell
 
 # The recorded order of transitions without timestamps: "type step detail".
 event_trace() {
@@ -132,7 +138,7 @@ cascade_run="$(sed -n '1p' "$test_root/cascade.out")"
 cascade_dir="$(run_dir_for "$cascade_run")"
 assert_equal failed "$(sed -n '1p' "$cascade_dir/state")" "the run records a terminal failure"
 expected_trace="run.created -
-run.running -
+run.running - driver=$default_driver
 step.ready a
 step.ready c
 step.running a attempt=1
@@ -151,7 +157,7 @@ step.succeeded f attempt=1 class=success
 run.failed -"
 assert_equal "$expected_trace" "$(event_trace "$cascade_dir")" "transitions are decided and recorded in graph order"
 cascade_status="$("$HYDRA_BIN" workflow status "$cascade_run")"
-assert_equal "Workflow $cascade_run: failed (source: recorded)
+assert_equal "Workflow $cascade_run: failed (source: recorded, driver: $default_driver)
   a [exec]: failed (attempts=2)
   b [exec]: cancelled (attempts=0)
   c [exec]: succeeded (attempts=1)
@@ -159,7 +165,7 @@ assert_equal "Workflow $cascade_run: failed (source: recorded)
   e [exec]: cancelled (attempts=0)
   f [exec]: succeeded (attempts=1)
   g [exec]: cancelled (attempts=0)" "$cascade_status" "status reports every step in graph order"
-assert_equal "{\"schema_version\":1,\"ok\":true,\"command\":\"workflow status\",\"data\":{\"run_id\":\"$cascade_run\",\"state\":\"failed\",\"source\":\"recorded\",\"evidence_expired\":false,\"steps\":[{\"step_id\":\"a\",\"state\":\"failed\",\"attempts\":2},{\"step_id\":\"b\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"c\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"d\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"e\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"f\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"g\",\"state\":\"cancelled\",\"attempts\":0}]}}" \
+assert_equal "{\"schema_version\":1,\"ok\":true,\"command\":\"workflow status\",\"data\":{\"run_id\":\"$cascade_run\",\"state\":\"failed\",\"source\":\"recorded\",\"driver\":\"$default_driver\",\"evidence_expired\":false,\"steps\":[{\"step_id\":\"a\",\"state\":\"failed\",\"attempts\":2},{\"step_id\":\"b\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"c\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"d\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"e\",\"state\":\"cancelled\",\"attempts\":0},{\"step_id\":\"f\",\"state\":\"succeeded\",\"attempts\":1},{\"step_id\":\"g\",\"state\":\"cancelled\",\"attempts\":0}]}}" \
     "$("$HYDRA_BIN" workflow status "$cascade_run" --json)" "status JSON reports every step in graph order"
 
 # Deciding the terminal state of a failed run reads every step state without
@@ -236,7 +242,7 @@ wait "$plan_cli" 2>/dev/null
 if [ -n "$plan_owner" ] && kill -0 "$plan_owner" 2>/dev/null; then owner_status=0; else owner_status=1; fi
 assert_success "$owner_status" "the recorded owner is the live driver, not the CLI process that started it"
 plan_state_line="$("$HYDRA_BIN" workflow status "$plan_run" | sed -n '1p')"
-assert_equal "Workflow $plan_run: running (source: recorded)" "$plan_state_line" "status reports a live driver's run as running"
+assert_equal "Workflow $plan_run: running (source: recorded, driver: $default_driver)" "$plan_state_line" "status reports a live driver's run as running"
 "$HYDRA_BIN" workflow resume "$plan_run" > "$plan_root/resume.out" 2>&1 &
 plan_resume=$!
 resume_polls=0
@@ -257,6 +263,143 @@ assert_equal 1 "$(grep -c '"type":"run.running"' "$plan_dir/events.jsonl")" "one
 assert_equal 0 "$(grep -c '"type":"run.recovered"' "$plan_dir/events.jsonl")" "the live run was never recovered by another driver"
 assert_equal 1 "$(grep -c '"type":"run.succeeded"' "$plan_dir/events.jsonl")" "the run records one terminal event"
 cd "$repo" || exit 1
+
+# Which driver drives a run. The native driver is the default wherever a
+# hydra-fleet that implements this run layout is found; the shell driver is
+# the fallback without one and the explicit HYDRA_NATIVE_DRIVER=0. Every drive
+# records its driver in its run.running event.
+cat > "$test_root/choice.yml" <<'EOF'
+version: 1
+id: driver-choice
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 1
+steps:
+  - id: only
+    kind: exec
+    needs: []
+    retry: 0
+    idempotent: true
+    args:
+      head: driver-head
+      argv: ["true"]
+EOF
+# Two helpers that must not be asked to drive: a hydra-fleet from before the
+# run driver, and one for another run layout. Each logs its workflow-drive
+# calls; everything else is the real helper.
+cat > "$test_root/old-fleet" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = workflow-drive ]; then
+    printf '%s\n' "\$*" >> "$test_root/old-fleet.calls"
+    echo 'unknown command' >&2
+    exit 2
+fi
+exec "$HYDRA_FLEET_BIN" "\$@"
+EOF
+cat > "$test_root/other-layout-fleet" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = workflow-drive ]; then
+    printf '%s\n' "\$*" >> "$test_root/other-layout-fleet.calls"
+    if [ "\${2:-}" = --capability ]; then echo 'workflow-drive 2'; exit 0; fi
+    exit 2
+fi
+exec "$HYDRA_FLEET_BIN" "\$@"
+EOF
+chmod +x "$test_root/old-fleet" "$test_root/other-layout-fleet"
+# The driver of each drive of a run, in order, as its run.running events name them.
+run_drivers() {
+    sed -n 's/.*"type":"run.running","detail":"driver=\([a-z]*\)".*/\1/p' "$1/events.jsonl" | tr '\n' ' '
+}
+# Usage: choice_run <label> <expected-driver> [<variable>=<value>...]
+# One run of the workflow with HYDRA_NATIVE_DRIVER unset and the assignments
+# exported; sets choice_dir to its run directory.
+choice_run() {
+    choice_label="$1" choice_expected="$2"
+    shift 2
+    (
+        unset HYDRA_NATIVE_DRIVER
+        for choice_assignment in "$@"; do export "${choice_assignment?}"; done
+        exec "$HYDRA_BIN" workflow run "$test_root/choice.yml"
+    ) > "$test_root/choice.out" 2> "$test_root/choice.err"
+    assert_success $? "$choice_label: the run succeeds"
+    choice_dir="$(run_dir_for "$(sed -n '1p' "$test_root/choice.out")")"
+    assert_equal "$choice_expected" "$(run_drivers "$choice_dir")" "$choice_label: the run records the driver that drove it"
+    assert_equal succeeded "$(sed -n '1p' "$choice_dir/state")" "$choice_label: the run records success"
+}
+choice_run "no setting" 'native '
+assert_equal "Workflow ${choice_dir##*/}: succeeded (source: recorded, driver: native)" \
+    "$("$HYDRA_BIN" workflow status "${choice_dir##*/}" | sed -n '1p')" "status names the native driver"
+choice_run "HYDRA_NATIVE_DRIVER=1, the opt-in of earlier releases" 'native ' HYDRA_NATIVE_DRIVER=1
+choice_run "an empty HYDRA_NATIVE_DRIVER" 'native ' HYDRA_NATIVE_DRIVER=
+choice_run "HYDRA_NATIVE_DRIVER=0" 'shell ' HYDRA_NATIVE_DRIVER=0
+assert_equal "Workflow ${choice_dir##*/}: succeeded (source: recorded, driver: shell)" \
+    "$("$HYDRA_BIN" workflow status "${choice_dir##*/}" | sed -n '1p')" "status names the shell driver"
+case "$("$HYDRA_BIN" workflow status "${choice_dir##*/}" --json)" in
+    *'"source":"recorded","driver":"shell","evidence_expired":false'*) choice_status=0 ;;
+    *) choice_status=1 ;;
+esac
+assert_success "$choice_status" "status JSON names the driver"
+choice_run "a hydra-fleet without the run driver" 'shell ' "HYDRA_FLEET_BIN=$test_root/old-fleet"
+assert_equal 'workflow-drive --capability' "$(cat "$test_root/old-fleet.calls")" "a helper that fails the probe is never asked to drive"
+choice_run "a hydra-fleet for another run layout" 'shell ' "HYDRA_FLEET_BIN=$test_root/other-layout-fleet"
+assert_equal 'workflow-drive --capability' "$(cat "$test_root/other-layout-fleet.calls")" "a helper for another run layout is never asked to drive"
+# Without hydra-fleet a plain YAML workflow still runs: the fallback's purpose.
+choice_run "no hydra-fleet" 'shell ' "HYDRA_FLEET_BIN=$test_root/no-hydra-fleet"
+
+# A run that one driver left waiting for approval is resumed by the other, as
+# after hydra-fleet is installed or removed between two drives: both write the
+# same run records, and the events keep one numbering.
+cat > "$test_root/handover.yml" <<'EOF'
+version: 1
+id: driver-handover
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 1
+steps:
+  - id: before
+    kind: exec
+    needs: []
+    retry: 0
+    idempotent: false
+    args:
+      head: driver-head
+      argv: ["true"]
+  - id: approval
+    kind: approval-wait
+    needs: [before]
+    idempotent: false
+    args:
+      head: driver-head
+      name: review
+      message: Review before continuing
+  - id: after
+    kind: exec
+    needs: [approval]
+    retry: 0
+    idempotent: false
+    args:
+      head: driver-head
+      argv: ["true"]
+EOF
+# Usage: handover <first HYDRA_NATIVE_DRIVER> <second> <expected drivers>
+handover() {
+    HYDRA_NATIVE_DRIVER="$1" "$HYDRA_BIN" workflow run "$test_root/handover.yml" > "$test_root/handover.out" 2> "$test_root/handover.err"
+    assert_equal 3 "$?" "$3: the first driver leaves the run waiting for approval"
+    handover_run="$(sed -n '1p' "$test_root/handover.out")"
+    handover_dir="$(run_dir_for "$handover_run")"
+    "$HYDRA_BIN" workflow decide "$handover_run" "$(sed -n '1p' "$handover_dir/steps/approval/request-id")" approve --by driver-test >/dev/null
+    assert_success $? "$3: the request is approved"
+    HYDRA_NATIVE_DRIVER="$2" "$HYDRA_BIN" workflow resume "$handover_run" > "$test_root/handover-resume.out" 2>&1
+    assert_success $? "$3: the second driver finishes the run"
+    assert_equal succeeded "$(sed -n '1p' "$handover_dir/state")" "$3: the run records success"
+    assert_equal "$3" "$(run_drivers "$handover_dir")" "$3: each drive records its driver"
+    sed -n 's/^{"schema_version":1,"sequence":\([0-9]*\),.*/\1/p' "$handover_dir/events.jsonl" | awk '$1 != NR { bad = 1 } END { exit bad || NR == 0 }'
+    assert_success $? "$3: the events of both drivers are numbered 1, 2, ..."
+}
+handover 0 1 'shell native '
+handover 1 0 'native shell '
 
 echo "============================================"
 echo "Test Results:"

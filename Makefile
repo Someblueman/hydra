@@ -326,7 +326,7 @@ test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_parity.sh
 
-test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-native-driver test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-shell-driver test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 # Sanitizer lanes. Every lane compiles with the same flags, so they share one
 # tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
@@ -451,11 +451,12 @@ dev-setup:
 help:
 	@echo "Hydra Makefile targets (outputs go to BUILD_DIR, default ./build):"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
-	@echo "  make test      - Build the three native helpers and test fixtures, then run the shell test suite"
+	@echo "  make test      - Build the three native helpers and test fixtures, then run the shell test suite (runs are driven by the native run driver)"
 	@echo "  make test-fast - Run the fixed PR feedback test selection (lint, fast shell cases, native unit tests)"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
-	@echo "  make test-native-driver - Workflow, plan and DAG cases with HYDRA_NATIVE_DRIVER=1, then test-driver-differential"
+	@echo "  make test-shell-driver - Workflow, plan and DAG cases with the fallback shell run driver (HYDRA_NATIVE_DRIVER=0), then test-driver-differential"
+	@echo "  make test-native-driver - The same cases with the default native run driver alone (make test and test-fleet already run them)"
 	@echo "  make test-driver-differential - Run each driver fixture with both run drivers and compare the run records"
 	@echo "  make test-driver-differential-fast - The pull-request selection of those fixtures (about two minutes)"
 	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
@@ -470,7 +471,7 @@ help:
 	@echo "  make test-tui  - Run deterministic native TUI acceptance"
 	@echo "  make test-tui-pty - Run real pseudo-terminal safety and input acceptance"
 	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
-	@echo "  make test-all  - Run shell/native, fleet, install, parity, and onboarding acceptance"
+	@echo "  make test-all  - Run shell/native, fleet, both run drivers, install, parity, and onboarding acceptance"
 	@echo "  make sanitize  - Run the sanitizer lanes in BUILD_DIR/sanitize (SANITIZE_LANES=\"core tui ...\" selects)"
 	@echo "  make sanitize-<lane> - One lane: core, tui, fleet, workspace, attached, plan-workspace or statistics"
 	@echo "  make check-opt-levels - Compile every native source at -O0, -Og, -O1, -O2, -O3 and -Os with warnings as errors"

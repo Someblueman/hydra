@@ -219,11 +219,15 @@ cmd_workflow() {
             if [ "$_cw_state" = running ] && ! workflow_run_owner_fresh "$_cw_dir"; then _cw_state=stale; fi
             _cw_expired=false
             [ ! -e "$_cw_dir/retention.json" ] && [ ! -L "$_cw_dir/retention.json" ] || _cw_expired=true
+            # The driver of the latest drive, as its run.running event names
+            # it: native (hydra-fleet workflow-drive) or shell. A run that was
+            # never driven, or only by a release that did not record it, has none.
+            _cw_driver="$(sed -n 's/.*"type":"run\.running","detail":"driver=\([a-z]*\)".*/\1/p' "$_cw_dir/events.jsonl" 2>/dev/null | sed -n '$p')"
             if [ "${3:-}" = --json ]; then
-                printf '{"schema_version":1,"ok":true,"command":"workflow status","data":{"run_id":"%s","state":"%s","source":"recorded","evidence_expired":%s,"steps":[' "$2" "$_cw_state" "$_cw_expired"
+                printf '{"schema_version":1,"ok":true,"command":"workflow status","data":{"run_id":"%s","state":"%s","source":"recorded","driver":"%s","evidence_expired":%s,"steps":[' "$2" "$_cw_state" "${_cw_driver:-unknown}" "$_cw_expired"
                 workflow_status_steps "$_cw_dir" json; printf ']}}\n'
             else
-                printf 'Workflow %s: %s (source: recorded)\n' "$2" "$_cw_state"
+                printf 'Workflow %s: %s (source: recorded%s)\n' "$2" "$_cw_state" "${_cw_driver:+, driver: $_cw_driver}"
                 [ "$_cw_expired" != true ] || printf '  Evidence expired; this historical state is not a verified outcome.\n'
                 workflow_status_steps "$_cw_dir" text
             fi

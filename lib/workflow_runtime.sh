@@ -536,11 +536,14 @@ EOF
 }
 
 # Usage: workflow_native_driver
-# Prints the hydra-fleet that drives runs natively when HYDRA_NATIVE_DRIVER=1
-# asks for it and that binary implements this run layout; otherwise prints
-# nothing and the shell driver drives the run.
+# Prints the hydra-fleet that drives runs natively: the one Hydra finds, when
+# it implements this run layout. Prints nothing when there is no hydra-fleet,
+# when the one found does not answer the capability probe (an older helper),
+# or when HYDRA_NATIVE_DRIVER=0 asks for the shell driver; the shell driver
+# below then drives the run. Any other value, such as the 1 that earlier
+# releases needed, leaves the choice to the probe.
 workflow_native_driver() {
-    [ "${HYDRA_NATIVE_DRIVER:-}" = 1 ] || return 0
+    [ "${HYDRA_NATIVE_DRIVER:-}" != 0 ] || return 0
     _wnd_binary="$(fleet_binary 2>/dev/null)" || return 0
     [ "$("$_wnd_binary" workflow-drive --capability 2>/dev/null)" = 'workflow-drive 1' ] || return 0
     printf '%s\n' "$_wnd_binary"
@@ -606,6 +609,8 @@ workflow_drive() {
         workflow_drive_native "$_wd_dir" "$_wd_native" "${2:-}"
         return
     fi
+    # The shell driver: no hydra-fleet can drive this run layout, or
+    # HYDRA_NATIVE_DRIVER=0 asked for this loop.
     # Record this driver's own PID. Inside a subshell, such as the one a plan
     # run drives in, $$ names the top-level process instead, which can exit
     # while the driver keeps running; the run would then look stale and a
@@ -618,7 +623,9 @@ workflow_drive() {
     workflow_atomic_scalar "$_wd_dir/owner-pid" "$_wd_driver_pid" || return 1
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1
-    workflow_event "$_wd_dir" "" run.running
+    # Each drive records which driver it is; hydra workflow status shows the
+    # latest.
+    workflow_event "$_wd_dir" "" run.running driver=shell
     if [ ! -f "$_wd_dir/cancel-requested" ]; then
         workflow_approval_resume "$_wd_dir" || {
             workflow_atomic_scalar "$_wd_dir/state" recovery-required
