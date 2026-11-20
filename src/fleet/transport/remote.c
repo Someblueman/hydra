@@ -204,6 +204,8 @@ static bool response_valid(json_object *result) {
     if (json_object_get_boolean(f_field(result, "ok"))) return json_object_is_type(f_field(result, "data"), json_type_object);
     return f_string(error, "code") && f_string(error, "message") && f_string(error, "recovery");
 }
+static int ssh_captured(const struct f_remote *remote, const char *command, const char *input, size_t size,
+                        unsigned connect_seconds, unsigned seconds, struct f_capture *cap);
 /* One answer of a completed session, from its text. status is the exit
  * status that belongs to this answer: a successful answer from a command
  * that did not exit 0 is not believed. */
@@ -257,13 +259,14 @@ json_object *f_request_measured(const struct f_remote *remote, json_object *requ
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds) {
     return f_request_measured(remote, request, seconds, NULL, NULL, NULL);
 }
-json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned seconds, json_object **handshake) {
+json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned connect_seconds, unsigned seconds,
+                                json_object **handshake) {
     struct f_capture cap = {0}; json_object *result = NULL;
     char *command = malloc(SERVE_COMMAND * 2 + 96), *line;
     const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN);
     *handshake = NULL;
     if (!command || serve_command(remote, true, command, SERVE_COMMAND * 2 + 96) ||
-        f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) {
+        ssh_captured(remote, command, input, strlen(input), connect_seconds, seconds, &cap)) {
         *handshake = f_error("fleet", "transport_failed", "cannot start SSH transport");
         goto done;
     }
@@ -291,6 +294,27 @@ bool f_handshake_compatible(json_object *data) {
         version && (!strncmp(version, "2.", 2) || !strncmp(version, "3.", 2) || !strncmp(version, "4.", 2)) &&
         json_object_is_type(f_field(data, "capabilities"), json_type_array);
 }
+json_object *f_handshake_judged(const struct f_remote *remote, json_object *handshake) {
+    if (json_object_get_boolean(f_field(handshake, "ok")) && !f_handshake_compatible(f_field(handshake, "data"))) {
+        json_object_put(handshake); handshake = f_error("fleet", "version_mismatch", "remote Hydra or fleet protocol is incompatible");
+    }
+    f_string_add(handshake, "host", remote->name); return handshake;
+}
+static bool advertises(json_object *handshake, const char *capability) {
+    json_object *caps = f_field(f_field(handshake, "data"), "capabilities"); size_t i;
+    for (i = 0; json_object_is_type(caps, json_type_array) && i < json_object_array_length(caps); i++) {
+        json_object *cap = json_object_array_get_idx(caps, i);
+        if (json_object_is_type(cap, json_type_string) && !strcmp(json_object_get_string(cap), capability)) return true;
+    }
+    return false;
+}
+json_object *f_request_if_capable(const struct f_remote *remote, const char *capability, json_object *request,
+                                  unsigned connect_seconds, unsigned seconds) {
+    json_object *handshake = NULL, *answer = f_request_observed(remote, request, connect_seconds, seconds, &handshake);
+    handshake = f_handshake_judged(remote, handshake);
+    if (!json_object_get_boolean(f_field(handshake, "ok")) || !advertises(handshake, capability)) { json_object_put(answer); answer = NULL; }
+    json_object_put(handshake); return answer;
+}
 /* Every action observed here only reads on the receiver (handshake, list,
  * overview, doctor), so the handshake and the action share one SSH session
  * (f_request_observed). The answer is judged as before: a failed handshake
@@ -298,31 +322,19 @@ bool f_handshake_compatible(json_object *data) {
  * action the receiver does not advertise is capability_unavailable whatever
  * the receiver answered to it. */
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds) {
-    json_object *req = json_object_new_object(), *res = NULL, *handshake = NULL, *data, *caps;
-    bool only = !strcmp(action, "handshake");
+    json_object *req = json_object_new_object(), *res = NULL, *handshake = NULL; bool supported;
     json_object_object_add(req, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(req, "action", action);
-    if (only) handshake = f_request(remote, req, seconds);
-    else res = f_request_observed(remote, req, seconds, &handshake);
-    data = f_field(handshake, "data"); caps = f_field(data, "capabilities");
-    if (!json_object_get_boolean(f_field(handshake, "ok"))) { json_object_put(res); res = handshake; handshake = NULL; goto done; }
-    if (!f_handshake_compatible(data)) {
-        json_object_put(res); res = f_error("fleet", "version_mismatch", "remote Hydra or fleet protocol is incompatible"); goto done;
-    }
-    if (only) { res = handshake; handshake = NULL; }
-    else {
-        size_t i; bool supported = false;
-        for (i = 0; i < json_object_array_length(caps); i++) {
-            json_object *cap = json_object_array_get_idx(caps, i);
-            if (json_object_is_type(cap, json_type_string) && !strcmp(json_object_get_string(cap), action)) supported = true;
-        }
-        if (!supported) { json_object_put(res); res = f_error("fleet", "capability_unavailable", "remote lacks required capability"); }
-    }
-done:
+    if (!strcmp(action, "handshake")) { res = f_handshake_judged(remote, f_request(remote, req, seconds)); json_object_put(req); return res; }
+    res = f_request_observed(remote, req, seconds, seconds, &handshake); json_object_put(req);
+    handshake = f_handshake_judged(remote, handshake);
+    if (!json_object_get_boolean(f_field(handshake, "ok"))) { json_object_put(res); return handshake; }
+    supported = advertises(handshake, action);
     json_object_put(handshake);
+    if (!supported) { json_object_put(res); res = f_error("fleet", "capability_unavailable", "remote lacks required capability"); }
     if (!strcmp(action, "list") && json_object_get_boolean(f_field(res, "ok")) && !json_object_is_type(f_field(f_field(res, "data"), "heads"), json_type_array)) {
         json_object_put(res); res = f_error("fleet", "invalid_response", "snapshot heads must be an array");
     }
-    f_string_add(res, "host", remote->name); json_object_put(req); return res;
+    f_string_add(res, "host", remote->name); return res;
 }
 
 static int ssh_control(const struct f_remote *remote, char socket[F_PATH]) {
@@ -370,6 +382,13 @@ static int ssh_argv(const struct f_remote *remote, const char *command, unsigned
     }
     argv[n++] = (char *)remote->target; argv[n++] = (char *)command; argv[n] = NULL;
     return 0;
+}
+/* A captured session whose connection and whole run have separate bounds. */
+static int ssh_captured(const struct f_remote *remote, const char *command, const char *input, size_t size,
+                        unsigned connect_seconds, unsigned seconds, struct f_capture *cap) {
+    char timeout[64], socket[F_PATH]; char *argv[48];
+    if (ssh_argv(remote, command, connect_seconds, false, true, argv, timeout, socket)) return -1;
+    return f_run(argv, input, size, seconds, cap);
 }
 int f_ssh(const struct f_remote *remote, const char *command, const char *input,
           size_t size, unsigned seconds, bool tty, struct f_capture *cap) {

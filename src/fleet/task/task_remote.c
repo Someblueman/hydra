@@ -282,19 +282,32 @@ static json_object *result_output(const struct remote_options *options, json_obj
     return response;
 }
 /* One negotiated transport to a loaded alias; package is borrowed. Lost or
- * invalid responses to mutations become outcome_unknown, never a retry. */
+ * invalid responses to mutations become outcome_unknown, never a retry.
+ * status, observe, logs, requests and result only read on the receiver, so
+ * they travel in the handshake's SSH session and are judged after it; a
+ * mutation is sent only to a receiver whose handshake has been judged. */
 static json_object *transact(struct remote_options *options, const struct f_remote *remote, const char *operation, json_object *package) {
-    char capability[32]; json_object *request, *response = f_observe(remote, "handshake", options->seconds);
-    if (!json_object_get_boolean(f_field(response, "ok"))) return response;
+    char capability[32]; json_object *request = NULL, *response, *answer = NULL;
+    bool reads = !(options->submit || options->start || options->resume || options->decide || options->cancel || options->withdraw);
+    if (reads) {
+        request = make_request(options, operation, package);
+        answer = f_request_observed(remote, request, options->seconds, options->seconds, &response);
+        response = f_handshake_judged(remote, response);
+    } else response = f_observe(remote, "handshake", options->seconds);
+    if (!json_object_get_boolean(f_field(response, "ok"))) { json_object_put(answer); json_object_put(request); return response; }
     snprintf(capability, sizeof(capability), "task-%s", options->submit ? "accept" : operation);
     if (!supported(response, capability) || (options->submit && options->trust && !supported(response, "task-start"))) {
-        json_object_put(response); return f_error("fleet-task", "capability_unavailable", "the receiver lacks the requested task protocol 1 capability");
+        json_object_put(response); json_object_put(answer); json_object_put(request);
+        return f_error("fleet-task", "capability_unavailable", "the receiver lacks the requested task protocol 1 capability");
     }
     /* Receivers advertising task-withdraw record and enforce assignment generations. */
     if (options->generation && !supported(response, "task-withdraw")) options->generation = 0;
     json_object_put(response);
-    request = make_request(options, operation, package);
-    response = f_request(remote, request, options->seconds); json_object_put(request);
+    if (!reads) {
+        request = make_request(options, operation, package);
+        answer = f_request(remote, request, options->seconds);
+    }
+    response = answer; json_object_put(request);
     if (json_object_get_boolean(f_field(response, "ok")) && !response_binding_valid(response, options, package)) {
         json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings");
     }

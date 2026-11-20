@@ -59,9 +59,20 @@ json_object *f_request_measured(const struct f_remote *remote, json_object *requ
  * the return value the request's, each as f_request would return it from a
  * session of its own and each the caller's. When the handshake fails (host
  * unreachable, no Hydra on the host, an error envelope) the request was not
- * answered and its answer is a copy of that failure. seconds bounds the
- * connection and the whole session. */
-json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned seconds, json_object **handshake);
+ * answered and its answer is a copy of that failure. connect_seconds bounds
+ * the connection, as the handshake's own session bounded it, and seconds the
+ * whole session, as the request's own session bounded that. */
+json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned connect_seconds, unsigned seconds,
+                                json_object **handshake);
+/* What f_observe(remote, "handshake", ...) returns for a handshake answer,
+ * which this takes over: the answer itself, or version_mismatch for a
+ * receiver that is not compatible, with the alias as "host". */
+json_object *f_handshake_judged(const struct f_remote *remote, json_object *handshake);
+/* f_request_observed for a caller that needs only yes or no from the
+ * handshake: the request's answer (caller-owned) when the receiver is
+ * compatible and advertises capability, NULL otherwise. */
+json_object *f_request_if_capable(const struct f_remote *remote, const char *capability, json_object *request,
+                                  unsigned connect_seconds, unsigned seconds);
 /* Borrowed handshake data; shares the fleet observation compatibility gate. */
 bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);

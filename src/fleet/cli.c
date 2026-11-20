@@ -182,7 +182,7 @@ json_object *f_cli(int argc, char **argv) {
     const char *action;
     struct fleet_options options = {.seconds = 5, .jobs = 4, .interval = 5, .rest = argc};
     int i;
-    json_object *result, *request, *args; struct f_remote remote;
+    json_object *result, *request, *args; struct f_remote remote; bool observation; unsigned seconds;
     if (argc < 1) return f_error("fleet", "invalid_input", "use hydra fleet help");
     action = argv[0];
     if (domain_cli(argc, argv, &result)) return result;
@@ -219,10 +219,17 @@ json_object *f_cli(int argc, char **argv) {
     }
     if (!options.name || f_remote_load(options.name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
     if (!strcmp(action, "bootstrap")) return bootstrap_alias(&remote, &options);
-    result = f_observe(&remote, "handshake", options.seconds);
-    if (!json_object_get_boolean(f_field(result, "ok"))) return result;
-    if (!supported(result, action)) { json_object_put(result); return f_error("fleet", "capability_unavailable", "remote does not advertise this operation"); }
-    json_object_put(result);
+    /* list, doctor and admission only read on the receiver, so they travel
+     * in the handshake's SSH session and are judged after it; every other
+     * action is sent only to a receiver whose handshake has been judged. */
+    observation = !strcmp(action, "list") || !strcmp(action, "doctor") || !strcmp(action, "admission");
+    seconds = options.explicit_timeout ? options.seconds : ((!strcmp(action, "list") || !strcmp(action, "doctor")) ? 5 : 300);
+    if (!observation) {
+        result = f_observe(&remote, "handshake", options.seconds);
+        if (!json_object_get_boolean(f_field(result, "ok"))) return result;
+        if (!supported(result, action)) { json_object_put(result); return f_error("fleet", "capability_unavailable", "remote does not advertise this operation"); }
+        json_object_put(result);
+    }
     request = json_object_new_object(); args = json_object_new_array();
     json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", action);
     if (options.project) f_string_add(request, "project", options.project);
@@ -235,7 +242,17 @@ json_object *f_cli(int argc, char **argv) {
         if (!bundle) { json_object_put(request); return f_error("fleet-import", "invalid_input", "a valid input bundle is required"); }
         json_object_object_add(request, "bundle", bundle);
     }
-    result = f_request(&remote, request, options.explicit_timeout ? options.seconds : ((!strcmp(action, "list") || !strcmp(action, "doctor")) ? 5 : 300));
+    if (observation) {
+        json_object *handshake = NULL;
+        result = f_request_observed(&remote, request, options.seconds, seconds, &handshake);
+        handshake = f_handshake_judged(&remote, handshake);
+        if (!json_object_get_boolean(f_field(handshake, "ok"))) { json_object_put(result); json_object_put(request); return handshake; }
+        if (!supported(handshake, action)) {
+            json_object_put(handshake); json_object_put(result); json_object_put(request);
+            return f_error("fleet", "capability_unavailable", "remote does not advertise this operation");
+        }
+        json_object_put(handshake);
+    } else result = f_request(&remote, request, seconds);
     json_object_put(request);
     if (!json_object_get_boolean(f_field(result, "ok"))) {
         const char *code = f_string(f_field(result, "error"), "code");

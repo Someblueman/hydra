@@ -85,6 +85,23 @@ grep -q '"heads":\[\]' "$fixture/result"
 # user's SSH config; with it Hydra uses only its own control path.
 grep -q -- '-o ControlMaster=no -o ControlPath=none good ' "$fixture/ssh-argv"
 if grep -q -- 'ControlMaster=auto' "$fixture/ssh-argv"; then echo 'user SSH master allowed'; exit 1; fi
+# An operation that only reads on the host shares the handshake's session;
+# one that changes the host is sent in a second session, after the handshake
+# has been judged.
+sessions() {
+    : > "$fixture/ssh-argv"
+    "$@" > "$fixture/sessions-out" 2>&1 || :
+    wc -l < "$fixture/ssh-argv" | tr -d ' '
+}
+absent_task="task_0000000000000000000000000000000000000000000000000000000000000000"
+[ "$(sessions "$root/bin/hydra" fleet list good --json)" -eq 1 ] || { echo 'fleet list HOST is not one SSH session'; exit 1; }
+grep -q '"heads":\[\]' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet doctor good --json)" -eq 1 ] || { echo 'fleet doctor HOST is not one SSH session'; exit 1; }
+[ "$(sessions "$root/bin/hydra" fleet admission good --json -- status)" -eq 1 ] || { echo 'fleet admission HOST is not one SSH session'; exit 1; }
+grep -q '"command":"admission"' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet task status good --id "$absent_task")" -eq 1 ] || { echo 'fleet task status is not one SSH session'; exit 1; }
+grep -q '"ok":false' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet task cancel good --id "$absent_task")" -eq 2 ] || { echo 'fleet task cancel was not sent after a judged handshake'; exit 1; }
 "$root/bin/hydra" remote add muxed good --hydra "$root/bin/hydra" --multiplex
 : > "$fixture/ssh-argv"
 "$root/bin/hydra" fleet list muxed --json > "$fixture/muxed-result"
@@ -139,6 +156,18 @@ unset HYDRA_TEST_SSH_ARGV
 # Ten hosts, two observations: one SSH session per host and observation.
 [ "$(wc -l < "$fixture/ssh-argv")" -eq 20 ] || { echo "two observations of ten hosts started $(wc -l < "$fixture/ssh-argv") SSH sessions"; exit 1; }
 rm -f "$fixture/ssh-argv"
+# The same holds for one named host, and a receiver that answers an
+# operation it does not advertise is still refused.
+if "$root/bin/hydra" fleet list nohydra --json > "$fixture/specific" 2>&1; then echo 'a host without Hydra listed'; exit 1; fi
+grep -q '"code":"remote_failed","message":"[^"]*nonexistent[^"]*hydra' "$fixture/specific"
+if "$root/bin/hydra" fleet list refusing --json > "$fixture/specific" 2>&1; then echo 'a failed command listed'; exit 1; fi
+grep -q '"code":"receiver_refused"' "$fixture/specific"
+if "$root/bin/hydra" fleet list nocap --json > "$fixture/specific" 2>&1; then echo 'an unadvertised operation was accepted'; exit 1; fi
+grep -q '"code":"capability_unavailable"' "$fixture/specific"
+if "$root/bin/hydra" fleet list offline --json > "$fixture/specific" 2>&1; then echo 'an unreachable host listed'; exit 1; fi
+grep -q '"code":"offline"' "$fixture/specific"
+if "$root/bin/hydra" fleet task status nocap --id "$absent_task" > "$fixture/specific" 2>&1; then echo 'a host without the task protocol answered'; exit 1; fi
+grep -q '"code":"capability_unavailable"' "$fixture/specific"
 for host in nohydra nocap refusing; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
 "$root/bin/hydra" fleet tui-data > "$fixture/tui-v1"
 [ "$(head -n 1 "$fixture/tui-v1")" = "$(printf 'HYDRA_FLEET_TUI\t1')" ]
