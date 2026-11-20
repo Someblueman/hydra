@@ -67,7 +67,9 @@ done:
     json_object_put(obj); return status;
 }
 /* Enrollment never overwrites an existing alias, including one installed by
- * another actor after preflight. Identical duplicate publication is harmless. */
+ * another actor after preflight. Identical duplicate publication is harmless.
+ * f_write syncs the directory for a record it publishes; a record that was
+ * already there is synced here before it is reported as published. */
 static int sync_alias_directory(void) {
     char directory[F_PATH]; int fd, status;
     if (f_path(directory, sizeof(directory), f_home, "fleet/remotes")) return -1;
@@ -76,6 +78,7 @@ static int sync_alias_directory(void) {
 }
 int f_remote_enrolled(const struct f_remote *remote, bool publish) {
     char path[F_PATH], dir[F_PATH]; json_object *expected = remote_record(remote), *existing = NULL; int status = -1;
+    bool written = false;
     if (remote_path(path, remote->name) || revocation_blocked("transport", remote->name)) goto done;
     if (!access(path, F_OK)) {
         existing = f_read_json(path, 16384); status = json_object_equal(existing, expected) ? 0 : -1; goto done;
@@ -83,10 +86,10 @@ int f_remote_enrolled(const struct f_remote *remote, bool publish) {
     if (!publish) { status = 0; goto done; }
     if (f_path(dir, sizeof(dir), f_home, "fleet/remotes") || f_mkdirs(dir)) goto done;
     const char *text = json_object_to_json_string_ext(expected, JSON_C_TO_STRING_PLAIN);
-    if (!f_write(path, text, strlen(text), false)) status = 0;
+    if (!f_write(path, text, strlen(text), false)) { status = 0; written = true; }
     else { existing = f_read_json(path, 16384); status = json_object_equal(existing, expected) ? 0 : -1; }
 done:
-    if (!status && publish) status = sync_alias_directory();
+    if (!status && publish && !written) status = sync_alias_directory();
     json_object_put(existing); json_object_put(expected); return status;
 }
 json_object *f_remotes(void) {

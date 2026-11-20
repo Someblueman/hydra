@@ -125,6 +125,7 @@ int main(void) {
     capture_growth(dir);
     durable_writes(dir);
     durable_helper(dir);
+    durable_remote_alias(dir);
     handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);

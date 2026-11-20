@@ -109,3 +109,30 @@ static void durable_helper(const char *home) {
     close(fd);
     assert(!f_remove_tree(dir));
 }
+/* The alias record: hydra remote add replaces it, enrollment publishes it
+ * once and never over another record. */
+static void durable_remote_alias(const char *home) {
+    char dir[F_PATH]; struct f_remote remote, fresh, loaded; struct durable_limit limit;
+    int saved, enrolled; size_t before;
+    memset(&remote, 0, sizeof(remote));
+    assert(!f_copy(remote.name, sizeof(remote.name), "alias-a") && !f_copy(remote.target, sizeof(remote.target), "host-a") &&
+           !f_copy(remote.hydra, sizeof(remote.hydra), "hydra"));
+    assert(!f_remote_save(&remote) && !f_path(dir, sizeof(dir), home, "fleet/remotes"));
+    before = durable_entries(dir);
+    fresh = remote;
+    assert(!f_copy(remote.target, sizeof(remote.target), "host-b") && !f_copy(fresh.name, sizeof(fresh.name), "alias-b"));
+
+    durable_limit_on(&limit);
+    saved = f_remote_save(&remote);
+    enrolled = f_remote_enrolled(&fresh, true);
+    durable_limit_off(&limit);
+
+    assert(saved && enrolled && durable_entries(dir) == before);
+    assert(!f_remote_load("alias-a", &loaded) && !strcmp(loaded.target, "host-a"));
+    assert(f_remote_load("alias-b", &loaded));
+    assert(!f_remote_enrolled(&fresh, true) && !f_remote_enrolled(&fresh, true));
+    assert(!f_remote_load("alias-b", &loaded) && !strcmp(loaded.target, "host-a"));
+    assert(!f_copy(fresh.target, sizeof(fresh.target), "host-c") && f_remote_enrolled(&fresh, true));
+    assert(!f_remote_save(&remote) && !f_remote_load("alias-a", &loaded) && !strcmp(loaded.target, "host-b"));
+    assert(durable_entries(dir) == before + 1);
+}
