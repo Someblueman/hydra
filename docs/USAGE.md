@@ -239,7 +239,9 @@ hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # install, dependencies, and first-run readiness
 hydra doctor --fix-permissions # remove group/other write from your own Hydra state
-hydra snapshot --native # explicitly try the optional read-only native helper
+hydra snapshot          # canonical state JSON: the native helper when one is installed, else the shell
+hydra snapshot --native # the same, and say on stderr why the helper was not used
+hydra snapshot --shell  # the shell implementation only; never runs the helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
@@ -526,8 +528,8 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
 | `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
 | `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
-| `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
-| `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
+| `HYDRA_CORE` | `hydra-core` executable to use instead of the one installed beside the CLI. `hydra snapshot` uses it only if it qualifies ([Snapshot](CONTRACTS.md#snapshot)); naming a file that does not exist keeps `snapshot` on the shell implementation |
+| `HYDRA_CORE_TIMEOUT_SECONDS` | Time allowed for each of the three `hydra-core` calls of `hydra snapshot` (default `2`); a call that overruns is stopped and the shell implementation answers |
 | `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
 | `HYDRA_TUI_KEYS` | Keys file for the native TUI instead of `$HYDRA_HOME/tui/keys.conf` (see [TUI keys](#tui-keys)) |
 

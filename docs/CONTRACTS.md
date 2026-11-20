@@ -94,6 +94,49 @@ Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.
 Head history remains after teardown with `desired-state=stopped`.
 
+### Snapshot
+
+`hydra snapshot [--json]` prints one line and exits 0:
+
+```json
+{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":"project_…","head_id":"head_…","branch":"feature-x","desired_state":"running","current_instance":"instance_…"}]}}
+```
+
+`projects` counts the project records; `heads` holds every head of every project,
+ordered by project ID and then head ID. A snapshot is printed only for a store
+whose schema, project, head and current-instance records pass the record checks of
+`hydra state verify` (event logs are not read). For any other store the command
+prints the verifier's diagnostics on stderr, nothing on stdout, and exits 1.
+
+Two implementations produce this output, byte for byte: the read-only `hydra-core`
+helper and the shell. The command uses the helper when one qualifies and the shell
+implementation otherwise, without saying so. A helper qualifies when all of these
+hold:
+
+- It is the file `HYDRA_CORE` names or, with `HYDRA_CORE` unset, `build/hydra-core`
+  or `libexec/hydra/hydra-core` beside the directory that holds `hydra`, and it is
+  executable.
+- A scratch directory can be created under `TMPDIR` (default `/tmp`).
+- `hydra-core --protocol-version` prints exactly `1`, and `hydra-core --version`
+  prints exactly `Hydra core <version> protocol 1` with the CLI's own version.
+- `hydra-core snapshot <state root>` exits 0 and prints exactly one line of the
+  shape above.
+- Each of those three calls ends within `HYDRA_CORE_TIMEOUT_SECONDS` (default `2`).
+  A call that overruns is terminated together with its process tree.
+
+In every other case the shell implementation runs, and its output, diagnostics and
+exit status are the command's. That includes a store the helper refuses: the helper
+refuses every store the shell verifier refuses, so the fallback changes how long
+the command takes and never its verdict.
+
+`--native` does the same and also writes `hydra: native snapshot fallback: <reason>`
+to stderr when the helper was not used. The reasons are `helper-unavailable`,
+`helper-not-executable`, `scratch-unavailable`, `protocol-timeout`,
+`protocol-failure`, `protocol-skew`, `version-timeout`, `version-failure`,
+`version-skew`, `snapshot-timeout`, `snapshot-failure` and `malformed-output`.
+`--shell` uses the shell implementation and never runs the helper. The two options
+cannot be combined.
+
 ## Events, lifecycle, and completion
 
 - Events are append-only JSON Lines schema v1 with ordered sequence numbers,
