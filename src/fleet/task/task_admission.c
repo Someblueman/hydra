@@ -119,6 +119,18 @@ static void pause_until(struct task_control *control, long ms, int64_t deadline)
         if (control->process.stop(control->process.context)) return;
     }
 }
+/* What the recorded admission says now: 0 reserved, 1 still queued, -1 it
+ * will not be (the failure is recorded in state). */
+static int admission_verdict(json_object *state, int64_t deadline) {
+    const char *name = f_string(f_field(state, "admission"), "state");
+    if (!name) return -1;
+    if (past(deadline) || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
+        f_string_add(state, "failure", "queue_deadline"); return -1;
+    }
+    if (!strcmp(name, "reserved")) return 0;
+    if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
+    return 1;
+}
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control) {
     const char *id = f_string(state, "admission_id");
     char *argv[] = {(char *)f_hydra, "admission", "claim", (char *)id, NULL};
@@ -126,15 +138,10 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
     long wait = 0;
     if (!id) return -1;
     for (;;) {
-        const char *name = f_string(f_field(state, "admission"), "state");
-        json_object *reply; int status;
+        json_object *reply; int status, verdict;
         if (control->process.stop(control->process.context)) return -1;
-        if (!name) return -1;
-        if (past(deadline) || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
-            f_string_add(state, "failure", "queue_deadline"); return -1;
-        }
-        if (!strcmp(name, "reserved")) return 0;
-        if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
+        verdict = admission_verdict(state, deadline);
+        if (verdict <= 0) return verdict;
         wait = task_admission_pause_ms(wait);
         pause_until(control, wait, deadline);
         /* A pause that ended at the deadline or for a stop claims nothing:
