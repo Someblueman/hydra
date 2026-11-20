@@ -109,6 +109,26 @@ static void durable_helper(const char *home) {
     close(fd);
     assert(!f_remove_tree(dir));
 }
+/* An append that stops part way (the file size limit sits four bytes past
+ * the log) is cut off again: the log holds whole lines only. */
+static void durable_append(const char *home) {
+    char path[F_PATH]; struct rlimit saved, limited; void (*previous)(int); int fd, torn, refused;
+    assert(!f_path(path, sizeof(path), home, "durable-log") && (fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0600)) >= 0);
+    assert(!f_append(fd, "first\n", 6, true));
+    assert(!getrlimit(RLIMIT_FSIZE, &saved));
+    limited = saved; limited.rlim_cur = 10;
+    previous = signal(SIGXFSZ, SIG_IGN);
+    assert(previous != SIG_ERR && !setrlimit(RLIMIT_FSIZE, &limited));
+    torn = f_append(fd, "second-line\n", 12, false);
+    refused = f_append(fd, "second-line\n", 12, true);
+    if (setrlimit(RLIMIT_FSIZE, &saved)) abort();
+    (void)signal(SIGXFSZ, previous);
+    assert(torn == -1 && refused == -1);
+    durable_expect(path, "first\n");
+    assert(!f_append(fd, "second-line\n", 12, true) && !f_append(fd, "", 0, false));
+    durable_expect(path, "first\nsecond-line\n");
+    assert(!close(fd) && !unlink(path));
+}
 /* The alias record: hydra remote add replaces it, enrollment publishes it
  * once and never over another record. */
 static void durable_remote_alias(const char *home) {

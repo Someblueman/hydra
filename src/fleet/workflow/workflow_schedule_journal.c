@@ -60,7 +60,7 @@ static int history_read(FILE *stream, json_object *graph, int parallelism, const
     return ferror(stream) ? -1 : 0;
 }
 static int append(FILE *stream, json_object *observations, const char *choice, int parallelism, const char *graph_sha, struct history *history) {
-    json_object *entry = json_object_new_object(); char digest[65]; int status = -1;
+    json_object *entry = json_object_new_object(); char digest[65], *line = NULL; const char *text; size_t length; int status = -1;
     json_object_object_add(entry, "schema_version", json_object_new_int(1));
     json_object_object_add(entry, "sequence", json_object_new_int(history->count + 1));
     json_object_object_add(entry, "parallelism", json_object_new_int(parallelism));
@@ -68,11 +68,17 @@ static int append(FILE *stream, json_object *observations, const char *choice, i
     json_object_object_add(entry, "observations", json_object_get(observations)); f_string_add(entry, "decision", choice);
     if (plan_digest(entry, digest)) goto done;
     f_string_add(entry, "sha256", digest);
-    if (fseek(stream, 0, SEEK_END) || fprintf(stream, "%s\n", json_object_to_json_string_ext(entry, JSON_C_TO_STRING_PLAIN)) < 0 ||
-        fflush(stream) || fsync(fileno(stream))) goto done;
+    /* One line, written to the descriptor itself (the stream has only been
+     * read): the coordinator lock makes this the only appender, so a line
+     * that cannot be written and synced whole is cut off again instead of
+     * staying as a torn entry no later run could read past. */
+    text = json_object_to_json_string_ext(entry, JSON_C_TO_STRING_PLAIN); length = strlen(text);
+    if (!(line = malloc(length + 1))) goto done;
+    memcpy(line, text, length); line[length] = '\n';
+    if (f_append(fileno(stream), line, length + 1, true)) goto done;
     status = 0;
 done:
-    json_object_put(entry); return status;
+    free(line); json_object_put(entry); return status;
 }
 static bool unchanged(json_object *last, json_object *observations, const char *choice) {
     json_object *prior = f_field(last, "observations");

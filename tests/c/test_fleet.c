@@ -130,6 +130,7 @@ int main(void) {
     capture_growth(dir);
     durable_writes(dir);
     durable_helper(dir);
+    durable_append(dir);
     durable_remote_alias(dir);
     durable_enrollment(dir);
     durable_task_records(dir);

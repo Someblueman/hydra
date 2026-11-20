@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -344,6 +345,34 @@ static void contention(const char *name, bool claim, bool owned) {
     expect_released(dir, name, NULL);
 }
 
+/* An event that cannot be appended whole: the file size limit sits ten
+ * bytes past the log, so the first bytes of the line are written and the
+ * rest are refused (EFBIG, with SIGXFSZ ignored), as on a disk that fills
+ * mid-line. The event is reported as not recorded, the log is exactly what
+ * it was, and the next event takes the number the lost one would have had.
+ * Nothing is checked while the limit is in force: the test's own output
+ * may be a regular file. */
+static void torn_append(void) {
+    struct wdr_run run; char dir[F_PATH], path[F_PATH], *before, *after;
+    struct rlimit saved, limited; struct stat st; int status;
+    new_run(&run, dir, "torn-append");
+    CHECK(!wdr_event(&run, NULL, "run.created", ""), "first event");
+    CHECK(!f_path(path, sizeof(path), dir, "events.jsonl") && !stat(path, &st) && st.st_size > 0, "the log exists");
+    CHECK((before = f_read(path, 65536)) != NULL, "read the log");
+    CHECK(!getrlimit(RLIMIT_FSIZE, &saved) && signal(SIGXFSZ, SIG_IGN) != SIG_ERR, "file size limit");
+    limited = saved; limited.rlim_cur = (rlim_t)st.st_size + 10;
+    CHECK(!setrlimit(RLIMIT_FSIZE, &limited), "set the file size limit");
+    status = wdr_event(&run, "a", "step.ready", "does not fit");
+    if (setrlimit(RLIMIT_FSIZE, &saved)) _exit(2);
+    CHECK(status != 0, "an event that could not be appended is reported");
+    after = f_read(path, 65536);
+    CHECK(after && !strcmp(before, after), "the log is unchanged: '%s'", after ? after : "(unreadable)");
+    expect_released(dir, "torn-append", NULL);
+    CHECK(!wdr_event(&run, "a", "step.ready", "fits"), "the event is recorded once writes work");
+    expect_trace(dir, "1 run.created 2 step.ready ", "the lost event's number is used by the next one");
+    free(before); free(after);
+}
+
 static void run_ownerless_claimed(void) { ownerless("ownerless-claimed", true, NULL); }
 static void run_ownerless_unclaimed(void) { ownerless("ownerless-unclaimed", false, NULL); }
 static void run_ownerless_empty(void) { ownerless("ownerless-empty-record", true, ""); }
@@ -359,7 +388,7 @@ static bool selected(int argc, char **argv, const char *name) {
 /* With arguments, only the named cases run. */
 int main(int argc, char **argv) {
     static const struct { const char *name; void (*run)(void); } cases[] = {
-        {"sequences", sequences}, {"dead-owner", dead_owner}, {"live-owner", live_owner},
+        {"sequences", sequences}, {"torn-append", torn_append}, {"dead-owner", dead_owner}, {"live-owner", live_owner},
         {"ownerless-claimed", run_ownerless_claimed}, {"ownerless-unclaimed", run_ownerless_unclaimed},
         {"ownerless-empty-record", run_ownerless_empty}, {"late-owner", late_owner}, {"announced-breaker", announced_breaker}, {"stale-view", stale_view},
         {"contention-dead-owner", run_contention_dead}, {"contention-ownerless", run_contention_ownerless}};

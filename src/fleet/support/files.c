@@ -165,6 +165,20 @@ int f_write(const char *path, const char *data, size_t size, bool replace) {
     saved = errno; close(dir); errno = saved;
     return status;
 }
+int f_append(int fd, const char *data, size_t size, bool sync) {
+    struct stat st; int saved;
+    if (fstat(fd, &st)) return -1;
+    while (size) {
+        ssize_t n = write(fd, data, size);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { if (!n) errno = EIO; goto cut; }
+        size -= (size_t)n; data += n;
+    }
+    if (!sync || !fsync(fd)) return 0;
+cut:
+    saved = errno; (void)!ftruncate(fd, st.st_size); errno = saved;
+    return -1;
+}
 bool f_name(const char *s) {
     if (!s || !isalnum((unsigned char)*s)) return false;
     for (; *s; s++) if (!isalnum((unsigned char)*s) && !strchr("_.-", *s)) return false;

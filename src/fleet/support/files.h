@@ -26,6 +26,11 @@ int f_write_at(int dir, const char *name, const char *data, size_t size, bool re
 #define F_TEMP_NAME 256
 int f_stage_at(int dir, const char *name, const char *data, size_t size, char temp[F_TEMP_NAME]);
 int f_publish_at(int dir, const char *temp, const char *name, bool replace);
+/* Appends to a log its caller alone appends to (it holds the log's lock):
+ * every byte written, synced first when asked, or the file is cut back to
+ * the length it had and -1 is returned, so a line that could not be written
+ * whole does not stay in the log as a torn one. */
+int f_append(int fd, const char *data, size_t size, bool sync);
 int f_copy(char *dst, size_t size, const char *value);
 /* Formats into dst; -1 when it does not fit. A function, not snprintf at
  * each call site: with fortify on, macOS makes every snprintf a macro with a

@@ -382,7 +382,12 @@ int wdr_event(struct wdr_run *run, const char *step, const char *type, const cha
         wdr_private_touch(file) || take_event_lock(run, lock)) return 1;
     size = format_event(line, sizeof(line), run, next_sequence(file, &run->events), step, type, detail);
     fd = open(file, O_WRONLY | O_APPEND | O_CREAT, 0666);
-    if (fd >= 0) { status = size < sizeof(line) && !write_all(fd, line, size) ? 0 : 1; close(fd); }
+    /* Under the lock this is the only appender: a line that cannot be
+     * written whole is cut off again (f_append), and a failed close counts. */
+    if (fd >= 0) {
+        status = size < sizeof(line) && !f_append(fd, line, size, false) ? 0 : 1;
+        if (close(fd)) status = 1;
+    }
     /* The appended line is counted while no other writer can append. */
     if (status == 0 && run->events.counted) { run->events.size += (off_t)size; run->events.lines++; run->events.last = '\n'; }
     else run->events.counted = false;
