@@ -1,5 +1,6 @@
 #include "fleet/task/task.h"
 #include "fleet/support/files.h"
+#include "fleet/support/process.h"
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -89,16 +90,24 @@ static int64_t realtime_ms(void) {
     if (clock_gettime(CLOCK_REALTIME, &now)) return (int64_t)time(NULL) * 1000;
     return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
 }
-/* Returns after ms, at the deadline, or when a signal or a stop request ends it
- * early: the caller looks at the deadline and the stop request again. */
+/* time() reads a coarse clock that can lag a few milliseconds behind the one
+ * the pause is cut by, so the deadline is judged by the same clock. */
+static bool past(int64_t deadline) { return realtime_ms() >= deadline * 1000; }
+/* Returns after ms, at the deadline, or when a stop request or a stop signal
+ * ends it early: the caller looks at the deadline and the stop request again. */
 static void pause_until(struct task_control *control, long ms, int64_t deadline) {
     while (ms > 0) {
         int64_t left = deadline * 1000 - realtime_ms(); long slice = ms < ADMISSION_SLICE_MS ? ms : ADMISSION_SLICE_MS;
-        struct timespec pause;
+        struct timespec pause, rest;
         if (left <= 0) return;
         if (slice > left) slice = (long)left;
         pause.tv_sec = 0; pause.tv_nsec = slice * 1000000L;
-        if (nanosleep(&pause, NULL)) return;
+        /* A signal that is not a stop (the SIGCHLD of a claim) does not
+         * shorten the pause: only what was slept counts. */
+        if (nanosleep(&pause, &rest)) {
+            if (errno != EINTR || f_stopped) return;
+            slice -= (long)(rest.tv_sec * 1000 + (rest.tv_nsec + 999999L) / 1000000L);
+        }
         ms -= slice;
         if (control->process.stop(control->process.context)) return;
     }
@@ -114,7 +123,7 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
         json_object *reply; int status;
         if (control->process.stop(control->process.context)) return -1;
         if (!name) return -1;
-        if ((int64_t)time(NULL) >= deadline || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
+        if (past(deadline) || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
             f_string_add(state, "failure", "queue_deadline"); return -1;
         }
         if (!strcmp(name, "reserved")) return 0;
@@ -123,7 +132,7 @@ int task_admission_wait(const char *directory, json_object *state, struct task_c
         wait = wait * 2 < ADMISSION_CAP_MS ? wait * 2 : ADMISSION_CAP_MS;
         /* A pause that ended at the deadline or for a stop claims nothing:
          * the checks above decide. */
-        if ((int64_t)time(NULL) >= deadline || control->process.stop(control->process.context)) continue;
+        if (past(deadline) || control->process.stop(control->process.context)) continue;
         reply = invoke(argv); status = observe(directory, state, reply); json_object_put(reply);
         if (status) return -1;
     }
