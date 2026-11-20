@@ -36,8 +36,6 @@ create_dashboard_session() {
         exit_cmd="TMUX=\$TMUX . \"$HYDRA_LIB_DIR/dashboard.sh\" && cmd_dashboard_exit"
     elif [ -n "${HYDRA_BIN_CMD:-}" ] && [ -x "$HYDRA_BIN_CMD" ]; then
         exit_cmd="\"$HYDRA_BIN_CMD\" dashboard-exit"
-    elif [ -x "/usr/local/bin/hydra" ]; then
-        exit_cmd="/usr/local/bin/hydra dashboard-exit"
     else
         exit_cmd="hydra dashboard-exit"
     fi

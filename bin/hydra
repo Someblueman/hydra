@@ -46,7 +46,7 @@ else
 fi
 HYDRA_BIN_PATH="$HYDRA_BIN_DIR/${HYDRA_BIN_PATH##*/}"
 
-# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
+# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
     HYDRA_LIB_DIR="$(cd "$HYDRA_ROOT/lib" && pwd)"
 elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
@@ -55,9 +55,6 @@ elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; th
 elif [ -d "$HYDRA_BIN_DIR/../lib/hydra" ] && [ -f "$HYDRA_BIN_DIR/../lib/hydra/git.sh" ]; then
     # PREFIX install: $PREFIX/bin/hydra -> $PREFIX/lib/hydra
     HYDRA_LIB_DIR="$(cd "$HYDRA_BIN_DIR/../lib/hydra" && pwd)"
-elif [ -d "/usr/local/lib/hydra" ] && [ -f "/usr/local/lib/hydra/git.sh" ]; then
-    # Legacy default prefix
-    HYDRA_LIB_DIR="/usr/local/lib/hydra"
 else
     echo "Error: Cannot find hydra library directory" >&2
     echo "Precondition: libraries must resolve from the binary (source ../lib or PREFIX ../lib/hydra)." >&2
@@ -65,7 +62,6 @@ else
     [ -n "${HYDRA_ROOT:-}" ] && echo "  - $HYDRA_ROOT/lib (HYDRA_ROOT)" >&2
     echo "  - $HYDRA_BIN_DIR/../lib (source checkout)" >&2
     echo "  - $HYDRA_BIN_DIR/../lib/hydra (PREFIX install)" >&2
-    echo "  - /usr/local/lib/hydra (legacy)" >&2
     echo "Next: run bin/hydra from a source checkout, set HYDRA_ROOT to that checkout, or reinstall with PREFIX=\$HOME/.local ./install.sh" >&2
     echo "See README Quick Start." >&2
     exit 1

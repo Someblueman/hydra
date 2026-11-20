@@ -197,6 +197,18 @@ for link in hydra-absolute hydra-relative; do
     assert_contains "$ver_out" "Hydra version" "$link without readlink -f prints the version"
 done
 
+# A binary away from its libraries stops and names where it looked; no other
+# installation on the machine is used in their place.
+cp "$stage/usr/local/bin/hydra" "$stage/links/hydra-copy"
+copy_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/links/hydra-copy" version 2>&1)"
+assert_equal 1 "$?" "a binary without libraries beside it exits 1"
+assert_contains "$copy_out" "Error: Cannot find hydra library directory" "the missing libraries are reported"
+assert_contains "$copy_out" "$stage/links/../lib/hydra (PREFIX install)" "the report names the PREFIX location it tried"
+test_count=$((test_count + 1))
+case "$copy_out" in
+    *legacy*) fail_count=$((fail_count + 1)); echo "[FAIL] no location other than those of the binary is tried"; echo "  Actual: $copy_out" ;;
+    *) pass_count=$((pass_count + 1)); echo "[PASS] no location other than those of the binary is tried" ;;
+esac
 HOME="$home3" PREFIX=/usr/local DESTDIR="$stage" sh "$REPO_ROOT/uninstall.sh" --purge >/dev/null 2>&1 || true
 rm -rf "$stage" "$home3"
 

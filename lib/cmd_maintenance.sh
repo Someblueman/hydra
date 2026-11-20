@@ -102,8 +102,6 @@ cmd_doctor() {
         _layout="source checkout"
     elif [ -f "${HYDRA_BIN_DIR:-}/../lib/hydra/git.sh" ]; then
         _layout="PREFIX install"
-    elif [ "$HYDRA_LIB_DIR" = "/usr/local/lib/hydra" ]; then
-        _layout="legacy /usr/local"
     fi
     echo "  Layout: $_layout"
 
