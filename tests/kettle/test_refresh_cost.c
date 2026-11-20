@@ -176,7 +176,7 @@ static void build_project(const char *name, int heads, char *project, size_t cap
 }
 
 static void open_session(struct kt_session *s, const char *project) {
-    const char *argv[] = {tui, "--hydra", hydra, "--view", "heads", NULL};
+    const char *argv[] = {tui, "--hydra", hydra, "--view", "work", NULL};
     char repo[8192];
     kt_format(repo, sizeof(repo), "%s/repo", project);
     kt_write(calls, "");

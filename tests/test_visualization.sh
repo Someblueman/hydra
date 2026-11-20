@@ -82,7 +82,7 @@ awk -F '\t' '$1=="W" && $3=="visualization-proof" && $4=="succeeded" {run=1}
 "$viz_tui" --hydra "$viz_bin" --data > "$viz_tmp/heads.tsv"
 for viz_size in 40x10 80x24 140x40; do
     "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --workflow-fixture "$viz_tmp/workflows.tsv" \
-        --view workflows --ascii --size "$viz_size" > "$viz_tmp/graph.out"
+        --view overview --ascii --size "$viz_size" > "$viz_tmp/graph.out"
     viz_cols="${viz_size%x*}" viz_rows="${viz_size#*x}"
     awk -v cols="$viz_cols" -v rows="$viz_rows" 'length >= cols {exit 1} END {if (NR!=rows+1) exit 1}' "$viz_tmp/graph.out"
 done
@@ -104,7 +104,7 @@ for viz_bad in cycle missing duplicate empty_dependency duplicate_dependency; do
         {print; if(mode=="duplicate" && $1=="N" && $3=="prepare") print}
     ' "$viz_tmp/workflows.tsv" > "$viz_tmp/bad.tsv"
     if "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --workflow-fixture "$viz_tmp/bad.tsv" \
-        --view workflows >/dev/null 2>&1; then
+        --view overview >/dev/null 2>&1; then
         printf 'FAIL: accepted %s graph\n' "$viz_bad" >&2; exit 1
     fi
 done
@@ -141,7 +141,7 @@ awk -F '\t' '$1=="S" && $3=="build" {start=($7=="-")}
     $1=="S" && $3=="tests" {attempt=($6=="not-a-number" && $8=="-")}
     END {exit !(start && attempt)}' "$viz_tmp/missing-statistics.tsv"
 "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --statistics-fixture "$viz_tmp/missing-statistics.tsv" \
-    --view statistics --ascii --size 140x40 > "$viz_tmp/statistics.out"
+    --view stats --ascii --size 140x40 > "$viz_tmp/statistics.out"
 grep -Fq 'Timing 2/4, Attempts 3/4,' "$viz_tmp/statistics.out"
 grep -Fq 'over 2 timed steps' "$viz_tmp/statistics.out"
 "$viz_build/test-statistics" "$viz_tmp/missing-statistics.tsv" "$viz_run" > "$viz_tmp/metrics.txt"

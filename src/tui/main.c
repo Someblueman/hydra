@@ -21,8 +21,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view work|inbox|hosts|stats] (and the earlier names: heads, detail, coordination,\n"
-          "   overview, workflows, workspace, attention, recovery, statistics)\n"
+          "  [--view work|inbox|hosts|stats, or detail|overview: Work on its Details or Run page]\n"
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--data]\n"
@@ -33,18 +32,26 @@ static void usage(FILE *out) {
           "   [--keys KEYS]... --size COLSxROWS --frames N]\n", out);
 }
 
-/* The four screens by name, and the names of earlier versions: the views
- * that became pages of Work open it on that page, Attention and Recovery
- * open Inbox. *page is the Work page, or -1. */
+/* The four screens by name, and Work on one of its pages: detail (Details)
+ * and overview (Run). *page is the Work page, or -1. A name that is not one
+ * of them is refused; the names of earlier releases that only stood for one
+ * of these are refused with the name to use. */
 static int parse_view(const char *name, int *page) {
     static const struct { const char *name; int view, page; } names[] = {
-        {"work", 7, -1}, {"heads", 7, -1}, {"workspace", 7, -1}, {"detail", 7, WORK_DETAILS},
-        {"coordination", 7, WORK_DETAILS}, {"overview", 7, WORK_RUN}, {"workflows", 7, WORK_RUN},
-        {"inbox", 9, -1}, {"attention", 9, -1}, {"recovery", 9, -1}, {"hosts", 6, -1},
-        {"stats", 8, -1}, {"statistics", 8, -1}};
+        {"work", 7, -1}, {"detail", 7, WORK_DETAILS}, {"overview", 7, WORK_RUN},
+        {"inbox", 9, -1}, {"hosts", 6, -1}, {"stats", 8, -1}};
+    static const char *const renamed[][2] = {
+        {"heads", "work"}, {"workspace", "work"}, {"coordination", "detail"}, {"workflows", "overview"},
+        {"attention", "inbox"}, {"recovery", "inbox"}, {"statistics", "stats"}};
     size_t i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
         if (!strcmp(name, names[i].name)) { *page = names[i].page; return names[i].view; }
+    for (i = 0; i < sizeof(renamed) / sizeof(renamed[0]); i++)
+        if (!strcmp(name, renamed[i][0])) {
+            fprintf(stderr, "hydra-tui: --view %s was removed; use --view %s\n", name, renamed[i][1]);
+            return -1;
+        }
+    fprintf(stderr, "hydra-tui: unknown view '%s'; --view takes work, inbox, hosts, stats, detail or overview\n", name);
     return -1;
 }
 

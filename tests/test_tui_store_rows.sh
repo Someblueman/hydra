@@ -499,8 +499,8 @@ if [ "${1:-}" = --version ]; then printf 'Hydra TUI %s protocol 2\n' "$HYDRA_VER
 printf '%s\n' "$@" > "$HELPER_ARGV"
 HELPER
 chmod +x "$test_root/helper"
-(cd "$repo" && HYDRA_HOME="$home" HYDRA_TUI_BIN="$test_root/helper" HELPER_ARGV="$test_root/helper.argv" "$hydra" tui --view heads) > /dev/null 2>&1
-assert_equal "--hydra $hydra --view heads" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
+(cd "$repo" && HYDRA_HOME="$home" HYDRA_TUI_BIN="$test_root/helper" HELPER_ARGV="$test_root/helper.argv" "$hydra" tui --view work) > /dev/null 2>&1
+assert_equal "--hydra $hydra --view work" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
     "hydra tui starts the helper with no option that chooses a reader: there is one"
 (cd "$repo" && "$tui" --hydra "$hydra" --store) > /dev/null 2> "$test_root/store.err"
 assert_equal "2" "$?" "the removed --store option is refused"

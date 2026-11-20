@@ -282,10 +282,10 @@ static const char *fixture_store(void) {
 
 static void execute_test_tui(const char *tui_path, const char *hydra_path) {
     if (getenv("HYDRA_TEST_PUBLIC_ENTRY")) execl(hydra_path, hydra_path, (char *)NULL);
-    else if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
+    else if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "work", (char *)NULL);
     else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
     else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
-    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
+    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "work", (char *)NULL);
 }
 
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin,

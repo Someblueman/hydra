@@ -133,7 +133,7 @@ static int reads_overlapping(const char *source, int *started) {
 /* Work lists runs once they are read; until then its list says so. */
 static void workflows(void) {
     struct kt_session s;
-    open_view(&s, "heads");
+    open_view(&s, "work");
     U("feature-live", 5);
     U("Reading runs", PROMPT);
     keys_answered(&s, "Work");
@@ -147,7 +147,7 @@ static void workflows(void) {
 static void statistics(void) {
     struct kt_session s;
     int started, most;
-    open_view(&s, "heads");
+    open_view(&s, "work");
     U("feature-live", 5);
     S("4");
     U("Loading statistics...", PROMPT);
@@ -176,7 +176,7 @@ static void statistics(void) {
  * conversation says so until it arrives. */
 static void preview(void) {
     struct kt_session s;
-    open_view(&s, "heads");
+    open_view(&s, "work");
     U("feature-live", 5);
     U("Reading the terminal output...", PROMPT);
     keys_answered(&s, "preview");
@@ -196,7 +196,7 @@ static void preview(void) {
 static void history(void) {
     struct kt_session s;
     double sent;
-    open_view(&s, "heads");
+    open_view(&s, "work");
     U("feature-live", 5);
     S("a");
     U("typing to ", 5);

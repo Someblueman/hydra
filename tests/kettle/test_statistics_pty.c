@@ -162,7 +162,7 @@ static void local_statistics(void) {
  * filters reach the tiles and charts as well as the list. */
 static void workflow_filter(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
     kt_open_terminal(&s, argv, 140, 40, repo);
     U("1 of 8" DOT "newest first");
     U("w workflow");
@@ -195,7 +195,7 @@ static void workflow_filter(void) {
 }
 static void metric_pages(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
     int sizes[][2] = {{140, 40}, {80, 24}, {40, 10}};
     const char *titles[] = {"Queue delay", "Total execution", "Recorded verification", "Owner recoveries"};
     const char *coverage[] = {"known 7/10", "known 4/5", "known 2/3", "known 6/8"};
@@ -245,7 +245,7 @@ static void hosts_heads(struct kt_session *p) {
 static void fleet_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui,       "--hydra", fake,         "--theme", "dark",
-                          "--fleet", "--view",  "statistics", NULL};
+                          "--fleet", "--view",  "stats", NULL};
     kt_open_terminal(&s, argv, 140, 40, repo);
     U("latest fleet response" DOT "all hosts");
     U("2 responded   1 failed   1 reported heads");
@@ -494,7 +494,7 @@ static void cohorts_back(struct kt_session *p) {
 }
 static void remote_cohorts(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "schema 5 fixture environment");
     kt_open_terminal(&s, argv, 140, 40, repo);
     cohorts_runs_page(&s);
