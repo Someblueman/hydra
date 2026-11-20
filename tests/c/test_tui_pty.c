@@ -256,28 +256,43 @@ static void remove_stores(void) {
     if (store_base[0] && getpid() == store_owner) (void)run_command(argv);
 }
 
-static const char *fixture_store(void) {
-    char script[PATH_MAX + 32], rows[PATH_MAX + 32];
-    const char *named = getenv("HYDRA_TUI_FIXTURE"), *temp = getenv("TMPDIR");
-    size_t i;
-    if (!fixture_dir[0] || getenv("HYDRA_FIXTURE_REPO") || getenv("HYDRA_TEST_PUBLIC_ENTRY")) return NULL;
-    if (named) snprintf(rows, sizeof(rows), "%s", named);
-    else snprintf(rows, sizeof(rows), "%s/native-v2.tsv", fixture_dir);
-    for (i = 0; i < store_count; i++) if (!strcmp(stores[i].rows, rows)) return stores[i].path;
-    if (store_count == sizeof(stores) / sizeof(stores[0]) || getpid() != store_owner) return NULL;
-    if (!store_base[0]) {
-        snprintf(store_base, sizeof(store_base), "%s/hydra-pty-store.XXXXXX", temp && temp[0] ? temp : "/tmp");
-        if (!mkdtemp(store_base)) { store_base[0] = '\0'; return NULL; }
-        (void)atexit(remove_stores);
-    }
+/* The rows file the store is built from: HYDRA_TUI_FIXTURE's, or native-v2.tsv's. */
+static void fixture_rows(char rows[PATH_MAX + 32]) {
+    const char *named = getenv("HYDRA_TUI_FIXTURE");
+    if (named) snprintf(rows, PATH_MAX + 32, "%s", named);
+    else snprintf(rows, PATH_MAX + 32, "%s/native-v2.tsv", fixture_dir);
+}
+
+/* The directory that holds every store, made on first use and removed at exit. */
+static bool make_store_base(void) {
+    const char *temp = getenv("TMPDIR");
+    if (store_base[0]) return true;
+    snprintf(store_base, sizeof(store_base), "%s/hydra-pty-store.XXXXXX", temp && temp[0] ? temp : "/tmp");
+    if (!mkdtemp(store_base)) { store_base[0] = '\0'; return false; }
+    (void)atexit(remove_stores);
+    return true;
+}
+
+static const char *build_store(const char *rows) {
+    char script[PATH_MAX + 32];
+    char *argv[5];
     snprintf(script, sizeof(script), "%s/rows-store.sh", fixture_dir);
     snprintf(stores[store_count].rows, sizeof(stores[0].rows), "%s", rows);
     snprintf(stores[store_count].path, sizeof(stores[0].path), "%s/%zu", store_base, store_count);
-    {
-        char *argv[] = {"sh", script, rows, stores[store_count].path, NULL};
-        if (!run_command(argv)) { fprintf(stderr, "cannot build the state store of %s\n", rows); return NULL; }
-    }
+    argv[0] = "sh"; argv[1] = script; argv[2] = (char *)rows; argv[3] = stores[store_count].path; argv[4] = NULL;
+    if (!run_command(argv)) { fprintf(stderr, "cannot build the state store of %s\n", rows); return NULL; }
     return stores[store_count++].path;
+}
+
+static const char *fixture_store(void) {
+    char rows[PATH_MAX + 32];
+    size_t i;
+    if (!fixture_dir[0] || getenv("HYDRA_FIXTURE_REPO") || getenv("HYDRA_TEST_PUBLIC_ENTRY")) return NULL;
+    fixture_rows(rows);
+    for (i = 0; i < store_count; i++) if (!strcmp(stores[i].rows, rows)) return stores[i].path;
+    if (store_count == sizeof(stores) / sizeof(stores[0]) || getpid() != store_owner) return NULL;
+    if (!make_store_base()) return NULL;
+    return build_store(rows);
 }
 
 static void execute_test_tui(const char *tui_path, const char *hydra_path) {
@@ -288,14 +303,8 @@ static void execute_test_tui(const char *tui_path, const char *hydra_path) {
     else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "work", (char *)NULL);
 }
 
-static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin,
-                          const char *store) {
-    char path[4096];
-    const char *old_path = getenv("PATH");
-    const char *fixture_repo, *stack_kb;
-    char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
-    if (!tui_path || !hydra_path) _exit(119);
-    snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
+/* The child's own session and controlling terminal, standard streams on the slave. */
+static void child_terminal(const struct session *session) {
     close(session->master);
     if (setsid() < 0) _exit(120);
 #ifdef TIOCSCTTY
@@ -304,20 +313,34 @@ static void child_session(const struct session *session, const char *tui, const 
     if (dup2(session->slave, STDIN_FILENO) < 0 || dup2(session->slave, STDOUT_FILENO) < 0 ||
         dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
     if (session->slave > STDERR_FILENO) close(session->slave);
+}
+
+/* The working directory and HYDRA_HOME of a fixture store. */
+static void child_enter_store(const char *store) {
+    char place[PATH_MAX];
+    snprintf(place, sizeof(place), "%s/repo", store);
+    if (chdir(place) != 0) _exit(122);
+    snprintf(place, sizeof(place), "%s/home", store);
+    setenv("HYDRA_HOME", place, 1);
+    setenv("HYDRA_TEST_STORE", store, 1);
+}
+
+static void child_environment(const char *fake_bin, const char *store) {
+    char path[4096];
+    const char *old_path = getenv("PATH");
+    const char *fixture_repo;
+    snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
     setenv("TERM", "xterm-256color", 1);
     if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
     fixture_repo = getenv("HYDRA_FIXTURE_REPO");
     if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
-    if (store != NULL) {
-        char place[PATH_MAX];
-        snprintf(place, sizeof(place), "%s/repo", store);
-        if (chdir(place) != 0) _exit(122);
-        snprintf(place, sizeof(place), "%s/home", store);
-        setenv("HYDRA_HOME", place, 1);
-        setenv("HYDRA_TEST_STORE", store, 1);
-    }
+    if (store != NULL) child_enter_store(store);
+}
+
+static void child_limits(void) {
+    const char *stack_kb;
     /* As under nohup or as a background job of a shell without job control. */
     if (getenv("HYDRA_TEST_SIGNALS_IGNORED") != NULL) {
         (void)signal(SIGINT, SIG_IGN); (void)signal(SIGHUP, SIG_IGN);
@@ -329,6 +352,15 @@ static void child_session(const struct session *session, const char *tui, const 
         stack.rlim_cur = stack.rlim_max = (rlim_t)strtoul(stack_kb, NULL, 10) * 1024U;
         if (setrlimit(RLIMIT_STACK, &stack) != 0) _exit(123);
     }
+}
+
+static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin,
+                          const char *store) {
+    char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
+    if (!tui_path || !hydra_path) _exit(119);
+    child_terminal(session);
+    child_environment(fake_bin, store);
+    child_limits();
     execute_test_tui(tui_path, hydra_path);
     _exit(127);
 }
@@ -1418,81 +1450,30 @@ static int selected_tests(const char *only, char **argv) {
     return failures ? 1 : 0;
 }
 
-int main(int argc, char **argv) {
-    char timeout_pids[128]; int special;
-    (void)setvbuf(stdout, NULL, _IOLBF, 0U);
-    test_program = argv[0];
-    special = special_test_mode(argc, argv);
-    if (special >= 0) return special;
-    if (argc != 4) {
-        fprintf(stderr, "usage: test-tui-pty TUI FAKE_HYDRA FAKE_BIN\n");
-        return 2;
-    }
-    {
-        const char *slash = strrchr(argv[2], '/');
-        snprintf(fixture_dir, sizeof(fixture_dir), "%.*s", slash ? (int)(slash - argv[2]) : 1, slash ? argv[2] : ".");
-        store_owner = getpid();
-    }
-    if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
-    if (getenv("HYDRA_TEST_REMOTE_ONLY")) {
-        test_remote_side_by_side(argv[1], argv[2], argv[3]);
-        test_remote_actions(argv[1], argv[2], argv[3]);
-        test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
-        test_inbox_remote_decision(argv[1], argv[2], argv[3]);
-        printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
-        return failures ? 1 : 0;
-    }
-    /* One group of cases by name, for working on it: HYDRA_TEST_ONLY=layout. */
-    if (getenv("HYDRA_TEST_ONLY")) return selected_tests(getenv("HYDRA_TEST_ONLY"), argv);
-    if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
-        test_review_cancellation(argv[1], argv[2], argv[0]);
-        test_fleet_attach(argv[1], argv[2], argv[3]);
-        printf("Native lifecycle tests: %d passed, %d failed\n", tests - failures, failures);
-        return failures ? 1 : 0;
-    }
-    printf("Running native TUI pseudo-terminal tests...\n");
-    test_session_failure();
-    test_themes(argv[1], argv[2], argv[3]);
-    test_mouse(argv[1], argv[2], argv[3]);
-    test_visualization(argv[1], argv[2], argv[3]);
-    test_visualization_short(argv[1], argv[2], argv[3]);
-    test_details_agent_exited(argv[1], argv[2], argv[3]);
-    test_visualization_refresh(argv[1], argv[2], argv[3]);
-    test_visualization_hosts(argv[1], argv[2], argv[3]);
-    test_attention(argv[1], argv[2], argv[3]);
-    test_attention_clients(argv[1], argv[2], argv[3]);
-    test_attention_failure(argv[1], argv[2], argv[3]);
-    test_inbox_decisions(argv[1], argv[2], argv[3]);
-    test_inbox_restart(argv[1], argv[2], argv[3]);
-    test_inbox_land(argv[1], argv[2], argv[3]);
-    test_help_scroll(argv[1], argv[2], argv[3]);
-    test_review_navigation(argv[1], argv[2]);
-    test_review_stale(argv[1], argv[2]);
-    test_review_narrow(argv[1], argv[2]);
-    test_review_cancellation(argv[1], argv[2], argv[0]);
-    test_fleet_attach(argv[1], argv[2], argv[3]);
+static void set_fixture_dir(const char *hydra) {
+    const char *slash = strrchr(hydra, '/');
+    snprintf(fixture_dir, sizeof(fixture_dir), "%.*s", slash ? (int)(slash - hydra) : 1, slash ? hydra : ".");
+    store_owner = getpid();
+}
+
+static int remote_only_tests(char **argv) {
     test_remote_side_by_side(argv[1], argv[2], argv[3]);
     test_remote_actions(argv[1], argv[2], argv[3]);
     test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
     test_inbox_remote_decision(argv[1], argv[2], argv[3]);
-    test_workspace_layout(argv[1], argv[2], argv[3]);
-    test_workspace_enter(argv[1], argv[2], argv[3]);
-    test_small_stack(argv[1], argv[2], argv[3]);
-    test_small_list(argv[1], argv[2], argv[3]);
-    test_interaction(argv[1], argv[2], argv[3]);
-    test_palette(argv[1], argv[2], argv[3]);
-    test_child_signals(argv[1], argv[2], argv[3]);
-    test_recovery_actions(argv[1], argv[2], argv[3]);
-    test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
-    test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
-    test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
-    test_signal_ignored_at_start(argv[1], argv[2], argv[3]);
-    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, false,
-                           "state read", NULL, false,
-                           "narrow terminal fails before raw mode");
-    test_failing_cli(argv[1], argv[3]);
-    snprintf(timeout_pids, sizeof(timeout_pids), "/tmp/hydra-timeout-pids-%ld", (long)getpid());
-    (void)unlink(timeout_pids);
+    printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
+    return failures ? 1 : 0;
+}
+
+static int lifecycle_only_tests(char **argv) {
+    test_review_cancellation(argv[1], argv[2], argv[0]);
+    test_fleet_attach(argv[1], argv[2], argv[3]);
+    printf("Native lifecycle tests: %d passed, %d failed\n", tests - failures, failures);
+    return failures ? 1 : 0;
+}
+
+/* The preflight cases that need a CLI which does not answer, when one is named. */
+static void slow_preflight_tests(char **argv, const char *timeout_pids) {
     (void)setenv("HYDRA_TEST_PID_FILE", timeout_pids, 1);
     if (getenv("HYDRA_TEST_SLOW_HYDRA") != NULL) {
         (void)unlink(timeout_pids);
@@ -1509,10 +1490,93 @@ int main(int argc, char **argv) {
                                "a CLI that closes its output without ending leaves raw mode responsive");
     }
     (void)unsetenv("HYDRA_TEST_PID_FILE");
+}
+
+static void screen_tests(char **argv) {
+    test_themes(argv[1], argv[2], argv[3]);
+    test_mouse(argv[1], argv[2], argv[3]);
+    test_visualization(argv[1], argv[2], argv[3]);
+    test_visualization_short(argv[1], argv[2], argv[3]);
+    test_details_agent_exited(argv[1], argv[2], argv[3]);
+    test_visualization_refresh(argv[1], argv[2], argv[3]);
+    test_visualization_hosts(argv[1], argv[2], argv[3]);
+    test_attention(argv[1], argv[2], argv[3]);
+    test_attention_clients(argv[1], argv[2], argv[3]);
+    test_attention_failure(argv[1], argv[2], argv[3]);
+    test_inbox_decisions(argv[1], argv[2], argv[3]);
+    test_inbox_restart(argv[1], argv[2], argv[3]);
+    test_inbox_land(argv[1], argv[2], argv[3]);
+    test_help_scroll(argv[1], argv[2], argv[3]);
+}
+
+static void review_and_remote_tests(char **argv) {
+    test_review_navigation(argv[1], argv[2]);
+    test_review_stale(argv[1], argv[2]);
+    test_review_narrow(argv[1], argv[2]);
+    test_review_cancellation(argv[1], argv[2], argv[0]);
+    test_fleet_attach(argv[1], argv[2], argv[3]);
+    test_remote_side_by_side(argv[1], argv[2], argv[3]);
+    test_remote_actions(argv[1], argv[2], argv[3]);
+    test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
+    test_inbox_remote_decision(argv[1], argv[2], argv[3]);
+}
+
+static void workspace_and_signal_tests(char **argv) {
+    test_workspace_layout(argv[1], argv[2], argv[3]);
+    test_workspace_enter(argv[1], argv[2], argv[3]);
+    test_small_stack(argv[1], argv[2], argv[3]);
+    test_small_list(argv[1], argv[2], argv[3]);
+    test_interaction(argv[1], argv[2], argv[3]);
+    test_palette(argv[1], argv[2], argv[3]);
+    test_child_signals(argv[1], argv[2], argv[3]);
+    test_recovery_actions(argv[1], argv[2], argv[3]);
+    test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
+    test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
+    test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
+    test_signal_ignored_at_start(argv[1], argv[2], argv[3]);
+}
+
+static void failure_tests(char **argv) {
+    char timeout_pids[128];
+    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, false,
+                           "state read", NULL, false,
+                           "narrow terminal fails before raw mode");
+    test_failing_cli(argv[1], argv[3]);
+    snprintf(timeout_pids, sizeof(timeout_pids), "/tmp/hydra-timeout-pids-%ld", (long)getpid());
     (void)unlink(timeout_pids);
+    slow_preflight_tests(argv, timeout_pids);
+    (void)unlink(timeout_pids);
+}
+
+static int all_tests(char **argv) {
+    printf("Running native TUI pseudo-terminal tests...\n");
+    test_session_failure();
+    screen_tests(argv);
+    review_and_remote_tests(argv);
+    workspace_and_signal_tests(argv);
+    failure_tests(argv);
     test_quit_with_held_output(argv[1], argv[2], argv[3]);
     test_delayed_initial_snapshot(argv[1], argv[2], argv[3]);
     test_crash_report(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);
     return failures == 0 ? 0 : 1;
+}
+
+int main(int argc, char **argv) {
+    int special;
+    (void)setvbuf(stdout, NULL, _IOLBF, 0U);
+    test_program = argv[0];
+    special = special_test_mode(argc, argv);
+    if (special >= 0) return special;
+    if (argc != 4) {
+        fprintf(stderr, "usage: test-tui-pty TUI FAKE_HYDRA FAKE_BIN\n");
+        return 2;
+    }
+    set_fixture_dir(argv[2]);
+    if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
+    if (getenv("HYDRA_TEST_REMOTE_ONLY")) return remote_only_tests(argv);
+    /* One group of cases by name, for working on it: HYDRA_TEST_ONLY=layout. */
+    if (getenv("HYDRA_TEST_ONLY")) return selected_tests(getenv("HYDRA_TEST_ONLY"), argv);
+    if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) return lifecycle_only_tests(argv);
+    return all_tests(argv);
 }
