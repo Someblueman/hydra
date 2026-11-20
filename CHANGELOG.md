@@ -101,6 +101,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `capability_unavailable`; it now prints the host's handshake and exits 0,
   and still reports an unreachable host as `offline`, a host without Hydra as
   `remote_failed` and an incompatible one as `version_mismatch`.
+- Installing a fleet package, importing a bundle, retaining agent output,
+  `hydra remote remove` and `hydra placement undrain` now sync the directory
+  they changed, and report a failed sync (`outcome_unknown` for install and
+  import, `io_failed` otherwise) instead of reporting success.
+- Task acceptance and collection no longer fail on file systems that do not
+  support syncing a directory.
+- A workflow cancellation no longer leaves a torn line in its residual-children
+  record, and the event lock is released when its owner record cannot be
+  written.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
@@ -132,6 +141,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the host's login shell must run a `A | B && C` command line.
 - Multi-host fleet commands no longer wait up to 20 ms after the last host
   has answered.
+- A task queued for host admission retries after a short, growing pause (20 ms
+  up to 1 s) instead of every 200 ms, starting about a quarter as many
+  admission processes while it waits. The queue deadline is still honoured; a
+  freed slot is taken within about a second instead of about 0.2 s.
 - `hydra state verify` finds duplicate branches in one pass per project
   instead of comparing every head with every other.
 - **`hydra list`, `status` and `switch` are much faster:** with five heads,
