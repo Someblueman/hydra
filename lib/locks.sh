@@ -127,7 +127,8 @@ release_lock() {
     candidate="$1"
     if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
         _rl_path="$HYDRA_HOME/locks/$candidate.lock"
-        _rl_pid="$(sed -n '1p' "$_rl_path/pid" 2>/dev/null || true)"
+        _rl_pid=
+        { IFS= read -r _rl_pid < "$_rl_path/pid"; } 2>/dev/null || :
         # Empty PID supports pre-v1 metadata-free locks acquired by this process.
         if [ -z "$_rl_pid" ] || [ "$_rl_pid" = "$$" ]; then
             rm -f "$_rl_path/pid" "$_rl_path/host" \
@@ -217,8 +218,10 @@ atomic_replace() {
 lock_dir_is_stale() {
     _ldis_path="$1"
     [ -d "$_ldis_path" ] || return 1
-    _ldis_pid="$(sed -n '1p' "$_ldis_path/pid" 2>/dev/null || true)"
-    _ldis_owner_host="$(sed -n '1p' "$_ldis_path/host" 2>/dev/null || true)"
+    _ldis_pid=
+    _ldis_owner_host=
+    { IFS= read -r _ldis_pid < "$_ldis_path/pid"; } 2>/dev/null || :
+    { IFS= read -r _ldis_owner_host < "$_ldis_path/host"; } 2>/dev/null || :
     _ldis_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
     case "$_ldis_pid" in ''|*[!0-9]*) return 1 ;; esac
     [ "$_ldis_owner_host" = "$_ldis_host" ] || return 1

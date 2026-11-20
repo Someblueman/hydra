@@ -128,8 +128,16 @@ tmux_snapshot_has_session() {
         return 1
     fi
     if [ -n "${_TMUX_SNAPSHOT_LOADED:-}" ]; then
-        printf '%s\n' "$_TMUX_SNAPSHOT_SESSIONS" | grep -Fqx "$session"
-        return $?
+        # A whole line of the snapshot (what grep -Fqx matched), found by the
+        # shell itself: never a prefix of another session's name.
+        case "
+$_TMUX_SNAPSHOT_SESSIONS
+" in
+            *"
+$session
+"*) return 0 ;;
+        esac
+        return 1
     fi
     tmux_session_exists "$session"
 }

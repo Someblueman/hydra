@@ -25,9 +25,10 @@ get_head_worktree_path() {
     fi
 
     _path_project="$(hydra_get_project_id 2>/dev/null)" || return 1
-    _path_head="$(state_v2_find_head_by_branch "$_path_project" "$_branch" 2>/dev/null)" || return 1
-    _path_head_dir="$(state_v2_head_dir "$_path_project" "$_path_head")" || return 1
-    _path="$(sed -n '1p' "$_path_head_dir/worktree" 2>/dev/null || true)"
+    state_v2_lookup_head "$_path_project" "$_branch" || return 1
+    hydra_valid_id "$STATE_V2_HEAD_ID" || return 1
+    state_v2_read_scalar "$STATE_V2_HEAD_DIR/worktree"
+    _path="$STATE_V2_SCALAR"
     [ -n "$_path" ] || return 1
     printf '%s\n' "$_path"
 }

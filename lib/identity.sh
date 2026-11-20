@@ -42,7 +42,9 @@ hydra_project_identity_file() {
 hydra_get_project_id() {
     _hgpi_file="$(hydra_project_identity_file)" || return 1
     [ -f "$_hgpi_file" ] || return 1
-    _hgpi_id="$(sed -n '1p' "$_hgpi_file")"
+    _hgpi_id=
+    # The first line, read by the shell itself (no sed process).
+    { IFS= read -r _hgpi_id < "$_hgpi_file"; } 2>/dev/null || :
     hydra_valid_id "$_hgpi_id" || return 1
     printf '%s\n' "$_hgpi_id"
 }

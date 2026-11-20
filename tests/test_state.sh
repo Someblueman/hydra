@@ -101,6 +101,54 @@ printf 'observed-exit-zero\n' > "$head_two_dir/completion-policy"
 state_v2_verify
 assert_success $? "repaired required state verifies"
 
+# state_v2_read_scalar gives what "$(sed -n 1p FILE 2>/dev/null || true)" gave.
+scalars="$test_root/scalars"
+mkdir -p "$scalars/directory"
+printf 'plain\n' > "$scalars/plain"
+printf 'first\nsecond\n' > "$scalars/two-lines"
+printf 'value\r\n' > "$scalars/carriage-return"
+printf 'unterminated' > "$scalars/no-newline"
+: > "$scalars/empty"
+printf '\nsecond\n' > "$scalars/empty-first-line"
+printf '  padded  \n' > "$scalars/spaces"
+printf 'back\\slash * ? [x] ~ #\n' > "$scalars/special"
+for scalar_case in plain two-lines carriage-return no-newline empty empty-first-line spaces special \
+    directory missing; do
+    STATE_V2_SCALAR=stale
+    state_v2_read_scalar "$scalars/$scalar_case"
+    assert_equal "0:$(sed -n '1p' "$scalars/$scalar_case" 2>/dev/null || true)" "$?:$STATE_V2_SCALAR" \
+        "the scalar reader agrees with sed for a $scalar_case record"
+done
+state_v2_read_scalar "$scalars/two-lines"
+assert_equal first "$STATE_V2_SCALAR" "the scalar reader returns only the first line"
+state_v2_read_scalar "$scalars/carriage-return"
+assert_equal "$(printf 'value\r')" "$STATE_V2_SCALAR" "the scalar reader keeps a carriage return"
+state_v2_read_scalar "$scalars/no-newline"
+assert_equal unterminated "$STATE_V2_SCALAR" "the scalar reader returns a line that has no newline"
+state_v2_read_scalar "$scalars/spaces"
+assert_equal "  padded  " "$STATE_V2_SCALAR" "the scalar reader keeps leading and trailing spaces"
+STATE_V2_SCALAR=stale
+state_v2_read_scalar "$scalars/missing" 2> "$scalars/stderr"
+assert_equal ":0" "$STATE_V2_SCALAR:$(wc -c < "$scalars/stderr" | tr -d ' ')" \
+    "a missing record reads as empty and prints nothing"
+(
+    # No command can be found, so only the shell itself can do the reading.
+    # shellcheck disable=SC2123
+    PATH=/nonexistent
+    state_v2_read_scalar "$scalars/plain"
+    [ "$STATE_V2_SCALAR" = plain ]
+)
+assert_success $? "the scalar reader starts no process"
+(
+    set -e
+    state_v2_read_scalar "$scalars/missing"
+    state_v2_lookup_head "$project_id" feature-two
+    [ "$STATE_V2_HEAD_ID" = "$head_two" ]
+)
+assert_success $? "a missing record does not stop a set -e caller"
+state_v2_lookup_head "$project_id" no-such-branch
+assert_equal "1::" "$?:$STATE_V2_HEAD_ID:$STATE_V2_HEAD_DIR" "an unknown branch has no head and leaves no stale result"
+
 # Two heads of one project on one branch: each is reported, by branch and
 # project. A branch that only begins like another is not a duplicate.
 head_one_dir="$(state_v2_head_dir "$project_id" "$head_one")"

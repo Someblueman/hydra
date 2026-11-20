@@ -10,7 +10,9 @@ state_v2_init() {
         (umask 077; printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version") || return 1
         chmod 600 "$HYDRA_STATE_V2_ROOT/schema-version" 2>/dev/null || true
     fi
-    [ "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" = "2" ]
+    state_v2_read_scalar "$HYDRA_STATE_V2_ROOT/schema-version"
+    _sv2i_version="$STATE_V2_SCALAR"
+    [ "$_sv2i_version" = "2" ]
 }
 
 state_v2_project_dir() {
@@ -24,6 +26,20 @@ state_v2_head_dir() {
     hydra_valid_id "$_sv2hd_project" || return 1
     hydra_valid_id "$_sv2hd_head" || return 1
     printf '%s/projects/%s/heads/%s\n' "$HYDRA_STATE_V2_ROOT" "$_sv2hd_project" "$_sv2hd_head"
+}
+
+# Read a record's first line without starting a process.
+# Usage: state_v2_read_scalar <file>
+# Sets STATE_V2_SCALAR to the first line of <file> without its newline, which
+# is what "$(sed -n 1p <file> 2>/dev/null || true)" gives: only the first
+# line, a carriage return is kept, and so is a line that ends the file
+# without a newline. A file that is missing or cannot be read gives the empty
+# string. Nothing is printed and the status is always 0, so a call needs no
+# "|| true" under set -e; test the file itself where its absence matters.
+state_v2_read_scalar() {
+    STATE_V2_SCALAR=
+    # read is false at end of file, also after storing an unterminated line.
+    { IFS= read -r STATE_V2_SCALAR < "$1"; } 2>/dev/null || :
 }
 
 state_v2_write_scalar() {
@@ -78,7 +94,9 @@ state_v2_init_project() {
     _sv2ip_lock="project_${_sv2ip_project}"
     acquire_lock "$_sv2ip_lock" "state project init" || return 1
     if [ -d "$_sv2ip_dir" ]; then
-        if [ "$(sed -n '1p' "$_sv2ip_dir/project-id" 2>/dev/null || true)" != "$_sv2ip_project" ] || \
+        state_v2_read_scalar "$_sv2ip_dir/project-id"
+        _sv2ip_recorded="$STATE_V2_SCALAR"
+        if [ "$_sv2ip_recorded" != "$_sv2ip_project" ] || \
            ! hydra_private_mkdir "$_sv2ip_dir/heads" || \
            ! state_v2_write_scalar "$_sv2ip_dir/repo-root" "$_sv2ip_root"; then
             release_lock "$_sv2ip_lock"
@@ -104,19 +122,33 @@ state_v2_init_project() {
     release_lock "$_sv2ip_lock"
 }
 
-state_v2_find_head_by_branch() {
-    _sv2fh_project="$1"
-    _sv2fh_branch="$2"
-    _sv2fh_project_dir="$(state_v2_project_dir "$_sv2fh_project")" || return 1
-    [ -d "$_sv2fh_project_dir/heads" ] || return 1
-    for _sv2fh_dir in "$_sv2fh_project_dir"/heads/head_*; do
-        [ -d "$_sv2fh_dir" ] || continue
-        if [ "$(sed -n '1p' "$_sv2fh_dir/branch" 2>/dev/null || true)" = "$_sv2fh_branch" ]; then
-            basename "$_sv2fh_dir"
+# Find the head record of a branch without printing or starting a process.
+# Usage: state_v2_lookup_head <project-id> <branch>
+# Sets STATE_V2_HEAD_ID and STATE_V2_HEAD_DIR and returns 0; both are empty
+# and the status is 1 when no record carries the branch. Records are taken in
+# name order and the first one with the branch wins, whatever its state: a
+# stopped head keeps its branch, and spawn resumes that record.
+state_v2_lookup_head() {
+    STATE_V2_HEAD_ID=
+    STATE_V2_HEAD_DIR=
+    hydra_valid_id "$1" || return 1
+    [ -d "$HYDRA_STATE_V2_ROOT/projects/$1/heads" ] || return 1
+    for _sv2lh_dir in "$HYDRA_STATE_V2_ROOT/projects/$1"/heads/head_*; do
+        [ -d "$_sv2lh_dir" ] || continue
+        state_v2_read_scalar "$_sv2lh_dir/branch"
+        if [ "$STATE_V2_SCALAR" = "$2" ]; then
+            STATE_V2_HEAD_ID="${_sv2lh_dir##*/}"
+            # shellcheck disable=SC2034 # read by the callers
+            STATE_V2_HEAD_DIR="$_sv2lh_dir"
             return 0
         fi
     done
     return 1
+}
+
+state_v2_find_head_by_branch() {
+    state_v2_lookup_head "$1" "$2" || return 1
+    printf '%s\n' "$STATE_V2_HEAD_ID"
 }
 
 state_v2_create_head() {
