@@ -94,7 +94,11 @@ qualification await sign-in; Claude remote qualification remains deferred.
 GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
 running the installer. `hydra tui` is then unavailable; `hydra list` and
-`hydra switch` work without the native helper.
+`hydra switch` work without the native helper. Workflows are unavailable too:
+`hydra workflow run` and plans need the `hydra-fleet` helper that
+`make build-fleet` builds (there is no shell fallback), so the installer says
+so when it installs none, and `hydra doctor` reports "workflows unavailable".
+Every other command works without it.
 
 Upgrading from 2.5 or earlier? If `hydra init` stops on `.hydra/local.yml`, see
 [project registration](docs/USAGE.md#project-registration-and-shared-config).

@@ -181,18 +181,21 @@ cannot be combined.
   an owner record keeps `.events.lock.watch.<pid>` meanwhile. A writer that is
   killed can leave one of these entries behind; the announcement of a dead
   process does not count and other writers never delete it.
-- A run is driven by one of two run drivers that follow this lock protocol,
-  append the same line format and write the same run files. The native driver,
-  `hydra-fleet workflow-drive`, is the default whenever the `hydra-fleet` that
-  Hydra finds answers `workflow-drive --capability` with `workflow-drive 1`;
-  the shell driver in `lib/workflow_runtime.sh` drives the run without such a
-  helper, or when `HYDRA_NATIVE_DRIVER=0` asks for it (any other value leaves
-  the choice to the probe). The driver's own PID is the run's `owner-pid`.
-  Each drive appends one `run.running` event whose `detail` is `driver=native`
-  or `driver=shell`, and `hydra workflow status` reports the latest (`driver`
-  in the JSON data, `unknown` when no drive recorded one). Step workers,
-  approvals and the other shell parts of a native drive are started by the
-  driver through `hydra workflow --driver-hook`, an internal interface.
+- A run is driven only by the native driver, `hydra-fleet workflow-drive`,
+  which follows this lock protocol and writes the run files. `hydra workflow
+  run` needs the `hydra-fleet` that Hydra finds to answer
+  `workflow-drive --capability` with `workflow-drive 1`; otherwise, and under
+  `HYDRA_NATIVE_DRIVER=0` (the switch that once selected the removed shell
+  driver; no other value has an effect), it exits 1 with one error before any
+  run record exists, and `resume` and `cancel` of a run that needs a driver
+  refuse the same way and change nothing. The driver's own PID is the run's
+  `owner-pid`. Each drive appends one `run.running` event whose `detail` is
+  `driver=native`; a run that a release with the shell driver started carries
+  `driver=shell` events, which stay readable: `hydra workflow status` reports
+  the latest (`driver` in the JSON data, `unknown` when no drive recorded one)
+  and `resume` and `cancel` hand such a run to `hydra-fleet`. Step workers,
+  approvals and the other shell parts of a drive are started by the driver
+  through `hydra workflow --driver-hook`, an internal interface.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.

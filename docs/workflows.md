@@ -92,61 +92,71 @@ trees and reports any residual child. `hydra workflow resume <run-id>` accepts a
 stale or recovery-required run only when its project, base commit, and resolved
 definition still match. Completed attempts are authoritative and are not repeated.
 
-### Run drivers
+### The run driver
 
-The run loop (scheduling, retries, recovery, cancellation and the terminal
-state) has two implementations. They write the same run records: the same
-files and modes, single-line scalars replaced by rename, and `events.jsonl`
-lines with the same fields, order and escaping under the same `.events.lock`.
-`workflow status`, the TUI, statistics, attention, review and retention read
-either driver's runs alike, and a run that one driver left waiting for
-approval can be resumed by the other.
-
-**The native driver is the default.** `hydra-fleet workflow-drive` drives
-`workflow run`, `resume`, `cancel` and plan runs whenever the `hydra-fleet`
-that Hydra finds (`HYDRA_FLEET_BIN`, then the build or install location)
-answers `hydra-fleet workflow-drive --capability` with `workflow-drive 1`, the
-run layout of this release. No setting is needed. Step workers, approval
-requests and decisions, plan checks, repair rounds, the delivery check,
-planning notices and verifier retirement remain the shell code they are, run
-as child processes of the driver. `owner-pid` names the driver process: when
+One implementation runs every workflow: `hydra-fleet workflow-drive`, the
+native run driver. It schedules steps, retries, recovers, cancels and decides
+the terminal state, and writes the run records: files with private modes,
+single-line scalars replaced by rename, and `events.jsonl` lines under
+`.events.lock`. Step workers, approval requests and decisions, plan checks,
+repair rounds, the delivery check, planning notices and verifier retirement
+remain shell code, run as child processes of the driver through the internal
+`hydra workflow --driver-hook`. `owner-pid` names the driver process: when
 `hydra workflow run` or `resume` itself drives the run, that process becomes
 the driver; a plan run drives in a child that outlives the CLI process, and
 `resume` refuses while it lives. The driver wakes as soon as a worker exits
 instead of polling once a second.
 
-**The shell driver is the fallback.** The loop in `lib/workflow_runtime.sh`
-drives a run only when
+**Workflows need the `hydra-fleet` helper.** `hydra workflow run` (plan runs
+included) needs the `hydra-fleet` that Hydra finds (`HYDRA_FLEET_BIN`, then
+`build/hydra-fleet` and `libexec/hydra/hydra-fleet` beside the installed
+`bin/`) to answer `hydra-fleet workflow-drive --capability` with
+`workflow-drive 1`, the run layout of this release. Without one, or with a
+helper built before the native driver or for another run layout, it exits 1
+before it creates any run record, with one error:
 
-- no `hydra-fleet` is installed, or the one found does not pass the probe (a
-  helper from a release before the native driver, or one built for another
-  run layout); or
-- `HYDRA_NATIVE_DRIVER=0` is set, which selects the shell driver even with a
-  capable `hydra-fleet`. That switch is for debugging and for comparing the
-  two drivers.
+```text
+Error: workflows need the hydra-fleet helper, which was not found: workflows are unavailable and nothing was started
+Next: build it with make build-fleet (it needs JSON-C development files and pkg-config) and install it with ./install.sh, which puts it at <prefix>/libexec/hydra/hydra-fleet, or point HYDRA_FLEET_BIN at one
+```
 
-Any other value of `HYDRA_NATIVE_DRIVER`, including the `1` that earlier
-releases needed to opt in to the native driver, leaves the choice to the
-probe. Plans, data manifests, remote task steps, approval steps and agent
-profile steps need `hydra-fleet` themselves, so on an installation without the
-helper the fallback drives plain YAML workflows of commands, gates and heads.
+`validate`, `dry-run`, `show`, `status` and the other commands that only read
+run records work without the helper. `hydra doctor` reports a missing helper
+as `workflows unavailable`, and `install.sh` prints the same when it installs
+no helper (see [fleet setup](FLEET.md)); neither fails.
 
-**Which driver drove a run** is in its record. Each drive appends one
-`run.running` event whose `detail` is `driver=native` or `driver=shell`, so a
-run that was resumed lists every driver that drove it.
-`hydra workflow status <run-id>` shows the latest in its first line, for
-example `Workflow run_...: succeeded (source: recorded, driver: native)`, and
-as `"driver"` in the `--json` data. A run that was never driven, or was last
-driven by a release that did not record its driver, shows no driver in the
-text and `"driver":"unknown"` in the JSON. Include that line in a bug report
-about a run.
+**The shell driver was removed.** Earlier releases drove plain YAML workflows
+with a shell loop when no capable `hydra-fleet` was installed, or when
+`HYDRA_NATIVE_DRIVER=0` asked for it. Those installations can no longer run
+workflows until they build the helper. `HYDRA_NATIVE_DRIVER=0` is refused with
+the error above preceded by a note that the shell driver was removed and so
+`HYDRA_NATIVE_DRIVER=0` no longer selects it; any other value, including the
+`1` that earlier releases needed to opt in, is ignored.
 
-`make test` and `make test-fleet` drive their runs with the default, native
-driver. `make test-shell-driver` repeats the cases that drive runs with
-`HYDRA_NATIVE_DRIVER=0` and then runs `make test-driver-differential`, which
-runs fixtures with both drivers and compares their run records;
-`make test-driver-differential-fast` is the selection of those fixtures that
-pull requests run.
+**Runs that the shell driver started** stay readable. Each drive appends one
+`run.running` event whose `detail` is `driver=native` (or `driver=shell`, from
+a release that had the shell driver), so a run that was resumed lists every
+driver that drove it. `hydra workflow status <run-id>` shows the latest in its
+first line, for example `Workflow run_...: waiting-approval (source: recorded,
+driver: shell)`, and as `"driver"` in the `--json` data; a run never driven, or
+last driven by a release that did not record its driver, shows no driver in
+the text and `"driver":"unknown"` in the JSON. For an unfinished run whose
+latest driver is `shell`, the text adds a line saying that
+`hydra workflow resume <run-id>` continues it with `hydra-fleet`. The shell
+driver wrote the same files, so with `hydra-fleet` installed:
+
+- `resume` continues the run natively: a dead owner is recovered, completed
+  attempts are kept, the events stay numbered 1, 2, ..., and the next
+  `run.running` event says `driver=native`;
+- `cancel` cancels it natively (a live owner of any release records the
+  cancellation itself, as before);
+- without a capable `hydra-fleet`, `resume` and `cancel` print the error above
+  and leave the run exactly as it was: no state change, no event, no
+  cancellation request. Build the helper and repeat the command.
+
+`make test` and `make test-fleet` drive their runs with the native driver;
+`tests/test_workflow_driver.sh` covers the refusal and runs that the shell
+driver started.
 
 ## Verified integration and merge trains
 

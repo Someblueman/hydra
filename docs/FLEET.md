@@ -43,9 +43,12 @@ make test-fleet
 
 JSON-C is linked statically into the fleet executable. Deployed hosts do not need
 `jq`, Python, Go, or a JSON-C shared library. The normal shell-only CLI remains
-available without the fleet executable or its build dependencies. `install.sh`
-copies a prebuilt fleet executable when present; `HYDRA_INSTALL_FLEET=never` skips
-it and `required` refuses an absent executable. Uninstall removes it with the
+available without the fleet executable or its build dependencies, except for
+workflows: `hydra workflow run` and plans are driven by this executable alone.
+`install.sh` copies a prebuilt fleet executable when present; without one (or
+with `HYDRA_INSTALL_FLEET=never`) it finishes and warns that workflows are
+unavailable, `required` refuses an absent executable, and `hydra doctor` reports
+a missing helper as "workflows unavailable". Uninstall removes it with the
 other native helpers. JSON-C's [license](licenses/json-c.txt) travels with packages.
 
 ## Guided remote setup

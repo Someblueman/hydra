@@ -7,6 +7,10 @@ session + one git worktree per branch ("head"). Library code lives in `lib/*.sh`
 tests are POSIX shell scripts in `tests/*.sh` plus C tests in `tests/c/`.
 Optional native helpers are built with `make build-core build-tui build-fleet`;
 fleet additionally needs JSON-C development files and pkg-config at build time.
+`hydra workflow run` is driven only by the native driver in `hydra-fleet`
+(`src/fleet/workflow/workflow_drive*.c`); without a qualifying helper it refuses
+before creating a run record, so every workflow, plan and DAG case needs the
+helper that `make test` builds. The shell driver and its lanes were removed.
 `hydra tui` has no shell fallback: without the `build-tui` helper it prints how to
 get one and exits 1 (`hydra list` and `hydra switch` work without it).
 

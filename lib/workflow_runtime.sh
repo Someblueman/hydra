@@ -475,7 +475,7 @@ workflow_native_driver() {
 # Usage: workflow_drive_native <run-dir> <hydra-fleet> [tail]
 # Hands a run whose drive lock this shell holds to the native driver. When the
 # drive is the last thing this CLI process does ("tail") and no subshell runs
-# it, the process becomes the driver, as the shell driver is that process;
+# it, the process becomes the driver (its PID is the run's owner-pid);
 # otherwise the driver is a child that outlives this shell if it dies.
 workflow_drive_native() {
     # The driver's shell workers keep this shell's errexit setting.
@@ -493,8 +493,7 @@ workflow_drive_native() {
 }
 
 # Usage: workflow_driver_hook <operation> <run-dir> [<argument>...]
-# The parts of a drive that the native driver runs as shell processes, each
-# exactly as the shell driver runs it at the same point.
+# The parts of a drive that the native driver runs as shell processes.
 workflow_driver_hook() {
     _wdh_op="$1" _wdh_dir="$2"
     shift 2
