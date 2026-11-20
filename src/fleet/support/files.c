@@ -138,14 +138,21 @@ failed:
     (void)unlinkat(dir, temp, 0); temp[0] = '\0';
     errno = saved; return -1;
 }
+/* EINVAL: this file system has no directory sync to offer. */
+static int sync_dir_fd(int dir) { return fsync(dir) && errno != EINVAL ? -1 : 0; }
+int f_sync_dir(const char *path) {
+    int dir = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC), status, saved;
+    if (dir < 0) return -1;
+    status = sync_dir_fd(dir); saved = errno; close(dir); errno = saved;
+    return status;
+}
 int f_publish_at(int dir, const char *temp, const char *name, bool replace) {
     int status = replace ? renameat(dir, temp, dir, name) : linkat(dir, temp, dir, name, 0), saved = errno;
     /* A renamed file has left its temporary name; a linked one still has it,
      * and a failed publication leaves only it. */
     if ((status || !replace) && unlinkat(dir, temp, 0) && !status) return -1;
     if (status) { errno = saved; return -1; }
-    /* EINVAL: this file system has no directory sync to offer. */
-    return fsync(dir) && errno != EINVAL ? -1 : 0;
+    return sync_dir_fd(dir);
 }
 int f_write_at(int dir, const char *name, const char *data, size_t size, bool replace) {
     char temp[F_TEMP_NAME];

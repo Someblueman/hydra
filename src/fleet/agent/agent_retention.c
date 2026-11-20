@@ -3,6 +3,7 @@
 #include "fleet/agent/agent.h"
 #include "fleet/task/task.h"
 #include <dirent.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -12,9 +13,11 @@
  * Per-head shell execution locking serializes publication and pruning. */
 int agent_retain(const char *head, const char *run, const struct f_capture *capture) {
     char root[F_PATH], stage[F_PATH], destination[F_PATH], path[F_PATH];
-    struct stat st; int result = -1; bool staged = false;
-    if (!f_name(run) || strncmp(run, "run_", 4) || f_path(root, sizeof(root), head, "agent-payloads") ||
-        f_mkdirs(root) || lstat(root, &st) || !S_ISDIR(st.st_mode) ||
+    struct stat st; int result = -1; bool staged = false, fresh;
+    if (!f_name(run) || strncmp(run, "run_", 4) || f_path(root, sizeof(root), head, "agent-payloads")) return -1;
+    /* A directory made now needs its own entry in HEAD synced as well. */
+    fresh = lstat(root, &st) && errno == ENOENT;
+    if (f_mkdirs(root) || lstat(root, &st) || !S_ISDIR(st.st_mode) ||
         snprintf(stage, sizeof(stage), "%s/.retain.XXXXXX", root) >= (int)sizeof(stage) || !mkdtemp(stage)) return -1;
     staged = true;
     if (f_path(path, sizeof(path), stage, "stdout") || f_write(path, capture->out, capture->out_bytes > AGENT_OUTPUT_LIMIT ? AGENT_OUTPUT_LIMIT : capture->out_bytes, false) ||
@@ -37,7 +40,7 @@ int agent_retain(const char *head, const char *run, const struct f_capture *capt
         if (count <= 10) break;
         if (!*oldest || f_remove_tree(oldest)) goto done;
     }
-    result = task_sync_dir(root);
+    result = task_sync_dir(root) || (fresh && f_sync_dir(head)) ? -1 : 0;
 done:
     if (staged) f_remove_tree(stage);
     return result;

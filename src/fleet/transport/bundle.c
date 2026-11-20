@@ -110,7 +110,15 @@ json_object *f_bundle_import(const char *project, json_object *bundle) {
         if (snprintf(dest, sizeof(dest), "%s/import-%s", parent, strrchr(stage, '/') + 1) >= (int)sizeof(dest)) goto done;
     }
     { struct stat st; if (!lstat(dest, &st) || rename(stage, dest)) goto done; }
-    stage[0] = '\0'; result = json_object_new_object(); f_string_add(result, "path", dest);
+    stage[0] = '\0';
+    /* The files are in place and the import cannot be repeated over them, so
+     * a directory that could not be synced is reported with where they are. */
+    if (f_sync_dir(parent)) {
+        char message[F_PATH + 128];
+        if (f_format(message, sizeof(message), "the import is in place at %s but its directory could not be synced to disk; inspect it before importing again", dest)) goto done;
+        result = f_error("fleet-import", "outcome_unknown", message); goto done;
+    }
+    result = json_object_new_object(); f_string_add(result, "path", dest);
     result = f_success("fleet-import", result);
 done:
     if (stage[0]) f_remove_tree(stage);

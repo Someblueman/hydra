@@ -26,6 +26,10 @@ int f_write_at(int dir, const char *name, const char *data, size_t size, bool re
 #define F_TEMP_NAME 256
 int f_stage_at(int dir, const char *name, const char *data, size_t size, char temp[F_TEMP_NAME]);
 int f_publish_at(int dir, const char *temp, const char *name, bool replace);
+/* Syncs the directory at PATH, as f_write does after its rename: for a caller
+ * that renamed or removed an entry itself. A file system without directory
+ * sync (EINVAL) counts as synced; any other failure is -1 with its errno. */
+int f_sync_dir(const char *path);
 /* Appends to a log its caller alone appends to (it holds the log's lock):
  * every byte written, synced first when asked, or the file is cut back to
  * the length it had and -1 is returned, so a line that could not be written

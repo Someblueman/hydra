@@ -36,9 +36,11 @@ done:
     close(home_fd); return status;
 }
 int task_sync_dir(const char *path) {
-    int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW), status;
+    int fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW), status, saved;
     if (fd < 0) return -1;
-    status = fsync(fd); close(fd); return status;
+    /* EINVAL: no directory sync on this file system, as in f_publish_at. */
+    status = fsync(fd) && errno != EINVAL ? -1 : 0; saved = errno; close(fd); errno = saved;
+    return status;
 }
 /* The directory is opened as task_sync_dir opens it, never through a link,
  * and f_write_at stages, publishes and syncs through that descriptor. */

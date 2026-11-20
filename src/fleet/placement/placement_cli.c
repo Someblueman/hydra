@@ -105,6 +105,8 @@ static json_object *drain(const char *alias, bool drained) {
     if (f_path(dir, sizeof(dir), f_home, "fleet/placement-drained") || f_path(path, sizeof(path), dir, alias) || f_mkdirs(dir)) { json_object_put(data); return f_error("fleet-placement", "io_failed", "cannot open private drain markers"); }
     if (drained) { if (access(path, F_OK) && f_write(path, "drained\n", 8, false)) { json_object_put(data); return f_error("fleet-placement", "io_failed", "cannot record the drain marker"); } }
     else if (unlink(path) && errno != ENOENT) { json_object_put(data); return f_error("fleet-placement", "io_failed", "cannot remove the drain marker"); }
+    /* Also when the marker was already gone: a repeat settles an earlier removal. */
+    else if (f_sync_dir(dir)) { json_object_put(data); return f_error("fleet-placement", "io_failed", "the drain marker was removed but its directory could not be synced"); }
     f_string_add(data, "host", alias); json_object_object_add(data, "drained", json_object_new_boolean(placement_drained(alias)));
     return f_success("fleet-placement-drain", data);
 }

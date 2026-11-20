@@ -125,7 +125,11 @@ json_object *f_remote_cli(int argc, char **argv) {
     if (argc >= 1 && setup_command(argv[0])) return setup_cli(argc, argv);
     if (argc == 1 && !strcmp(argv[0], "list")) return f_success("remote-list", f_remotes());
     if (argc == 2 && !strcmp(argv[0], "remove") && !remote_path(path, argv[1])) {
+        char directory[F_PATH]; bool synced = false;
         if (unlink(path)) return f_error("remote", "io_failed", "cannot remove remote alias");
+        /* The alias is gone; a removal that cannot be synced may come back. */
+        if (!f_copy(directory, sizeof(directory), path) && strrchr(directory, '/')) { *strrchr(directory, '/') = '\0'; synced = !f_sync_dir(directory); }
+        if (!synced) return f_error("remote", "io_failed", "the remote alias was removed but its directory could not be synced; check the alias list");
         return f_success("remote-remove", json_object_new_object());
     }
     if (argc < 3 || strcmp(argv[0], "add") || !f_name(argv[1]) || !f_target(argv[2]) ||
