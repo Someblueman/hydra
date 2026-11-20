@@ -104,11 +104,12 @@ write_scalar "$HYDRA_STATE_V2_ROOT/projects/README" ignored
 echo "Running native core tests..."
 echo "============================"
 
-"$core" validate-state "$HYDRA_STATE_V2_ROOT" > "$test_root/validation.out"
-assert_success $? "native core validates state v2"
+"$core" snapshot "$HYDRA_STATE_V2_ROOT" > "$test_root/validation.out"
+assert_success $? "native core accepts state v2"
 make_head "$project_a" head_bbbbbbbbbbbbbbbb instance_cccccccccccccccc first
-"$core" validate-state "$HYDRA_STATE_V2_ROOT" > /dev/null 2>&1
+"$core" snapshot "$HYDRA_STATE_V2_ROOT" > "$test_root/validation.out" 2> /dev/null
 assert_failure $? "native core rejects duplicate branch identity like shell verification"
+assert_equal "" "$(cat "$test_root/validation.out")" "native core prints nothing for a state it rejects"
 rm -rf "$HYDRA_STATE_V2_ROOT/projects/$project_a/heads/head_bbbbbbbbbbbbbbbb"
 
 events="$test_root/events.jsonl"

@@ -10,7 +10,6 @@
 int hydra_json_write_string(FILE *out, const char *value);
 int hydra_valid_id(const char *value);
 int hydra_read_scalar(const char *path, char *out, size_t out_size);
-int hydra_validate_state(const char *root, FILE *err);
 int hydra_validate_events(const char *path, FILE *err);
 int hydra_write_snapshot(const char *root, FILE *out, FILE *err);
 
