@@ -154,12 +154,34 @@ cannot be combined.
 - A workflow run's `events.jsonl` is appended under the directory lock
   `runs/<run>/.events.lock`, created with `mkdir`, whose `owner-pid` is the
   process ID of the process that writes the event (not of the shell that
-  started it). A writer that finds the lock held removes it only when that
-  process is no longer alive (an unreaped zombie counts as gone); otherwise it
-  retries once a second, giving up after 30 tries. The experimental native run
-  driver (`HYDRA_NATIVE_DRIVER=1`, `hydra-fleet workflow-drive`) appends under
-  the same lock with the same line format and writes the same run files, and
-  its own PID is the run's `owner-pid`.
+  started it). A writer that finds the lock held retries once a second and
+  gives up after 30 tries, leaving its event unrecorded; a lock released in
+  the meantime is retried at once.
+  It breaks the lock only when the lock is stale: its owner is no longer alive
+  (an unreaped zombie counts as gone), or it has no owner record and has
+  stayed unmodified, still without one, over five one-second polls after the
+  writer first saw it (its writer died between creating the lock and
+  recording itself). Two waiting writers cannot both break one stale lock,
+  nor can the slower one delete the lock the faster one has taken since: a
+  breaker announces itself in `.events.lock.breaking.<pid>` beside the lock,
+  gives way to any other live process's announcement, checks again that the
+  lock is still the stale one, renames it to `.events.lock.dead.<pid>` and
+  deletes it under that name. A shell writer that is watching a lock without
+  an owner record keeps `.events.lock.watch.<pid>` meanwhile. A writer that is
+  killed can leave one of these entries behind; the announcement of a dead
+  process does not count and other writers never delete it.
+- A run is driven by one of two run drivers that follow this lock protocol,
+  append the same line format and write the same run files. The native driver,
+  `hydra-fleet workflow-drive`, is the default whenever the `hydra-fleet` that
+  Hydra finds answers `workflow-drive --capability` with `workflow-drive 1`;
+  the shell driver in `lib/workflow_runtime.sh` drives the run without such a
+  helper, or when `HYDRA_NATIVE_DRIVER=0` asks for it (any other value leaves
+  the choice to the probe). The driver's own PID is the run's `owner-pid`.
+  Each drive appends one `run.running` event whose `detail` is `driver=native`
+  or `driver=shell`, and `hydra workflow status` reports the latest (`driver`
+  in the JSON data, `unknown` when no drive recorded one). Step workers,
+  approvals and the other shell parts of a native drive are started by the
+  driver through `hydra workflow --driver-hook`, an internal interface.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.

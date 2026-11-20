@@ -92,30 +92,61 @@ trees and reports any residual child. `hydra workflow resume <run-id>` accepts a
 stale or recovery-required run only when its project, base commit, and resolved
 definition still match. Completed attempts are authoritative and are not repeated.
 
-### Native run driver (experimental)
+### Run drivers
 
-`HYDRA_NATIVE_DRIVER=1` hands the run loop (scheduling, retries, recovery,
-cancellation and the terminal state) to `hydra-fleet workflow-drive` instead of
-the shell driver. It is off by default and experimental. It applies to
-`workflow run`, `resume`, `cancel` and plan runs alike, and only when the
-`hydra-fleet` that Hydra finds (`HYDRA_FLEET_BIN`, then the build or install
-location) answers `workflow-drive --capability` for this run layout; otherwise
-the shell driver drives the run exactly as without the switch.
-
-The native driver writes the same run records as the shell driver: the same
+The run loop (scheduling, retries, recovery, cancellation and the terminal
+state) has two implementations. They write the same run records: the same
 files and modes, single-line scalars replaced by rename, and `events.jsonl`
-lines with the same fields, order and escaping under the same `.events.lock`,
-so `workflow status`, the TUI, statistics, attention, review and retention read
-either driver's runs alike. Step workers, approval requests and decisions,
-plan checks, repair rounds, the delivery check, planning notices and verifier
-retirement remain the shell code they are, run as child processes of the
-driver. `owner-pid` names the driver process: when `hydra workflow run` or
-`resume` itself drives the run, that process becomes the driver; a plan run
-drives in a child that outlives the CLI process, and `resume` refuses while it
-lives. The driver wakes as soon as a worker exits instead of polling once a
-second. `make test-driver-differential` runs fixtures with both drivers and
-compares their run records; `make test-native-driver` repeats the workflow,
-plan and task DAG tests with the switch on.
+lines with the same fields, order and escaping under the same `.events.lock`.
+`workflow status`, the TUI, statistics, attention, review and retention read
+either driver's runs alike, and a run that one driver left waiting for
+approval can be resumed by the other.
+
+**The native driver is the default.** `hydra-fleet workflow-drive` drives
+`workflow run`, `resume`, `cancel` and plan runs whenever the `hydra-fleet`
+that Hydra finds (`HYDRA_FLEET_BIN`, then the build or install location)
+answers `hydra-fleet workflow-drive --capability` with `workflow-drive 1`, the
+run layout of this release. No setting is needed. Step workers, approval
+requests and decisions, plan checks, repair rounds, the delivery check,
+planning notices and verifier retirement remain the shell code they are, run
+as child processes of the driver. `owner-pid` names the driver process: when
+`hydra workflow run` or `resume` itself drives the run, that process becomes
+the driver; a plan run drives in a child that outlives the CLI process, and
+`resume` refuses while it lives. The driver wakes as soon as a worker exits
+instead of polling once a second.
+
+**The shell driver is the fallback.** The loop in `lib/workflow_runtime.sh`
+drives a run only when
+
+- no `hydra-fleet` is installed, or the one found does not pass the probe (a
+  helper from a release before the native driver, or one built for another
+  run layout); or
+- `HYDRA_NATIVE_DRIVER=0` is set, which selects the shell driver even with a
+  capable `hydra-fleet`. That switch is for debugging and for comparing the
+  two drivers.
+
+Any other value of `HYDRA_NATIVE_DRIVER`, including the `1` that earlier
+releases needed to opt in to the native driver, leaves the choice to the
+probe. Plans, data manifests, remote task steps, approval steps and agent
+profile steps need `hydra-fleet` themselves, so on an installation without the
+helper the fallback drives plain YAML workflows of commands, gates and heads.
+
+**Which driver drove a run** is in its record. Each drive appends one
+`run.running` event whose `detail` is `driver=native` or `driver=shell`, so a
+run that was resumed lists every driver that drove it.
+`hydra workflow status <run-id>` shows the latest in its first line, for
+example `Workflow run_...: succeeded (source: recorded, driver: native)`, and
+as `"driver"` in the `--json` data. A run that was never driven, or was last
+driven by a release that did not record its driver, shows no driver in the
+text and `"driver":"unknown"` in the JSON. Include that line in a bug report
+about a run.
+
+`make test` and `make test-fleet` drive their runs with the default, native
+driver. `make test-shell-driver` repeats the cases that drive runs with
+`HYDRA_NATIVE_DRIVER=0` and then runs `make test-driver-differential`, which
+runs fixtures with both drivers and compares their run records;
+`make test-driver-differential-fast` is the selection of those fixtures that
+pull requests run.
 
 ## Verified integration and merge trains
 
