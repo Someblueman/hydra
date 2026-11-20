@@ -147,18 +147,18 @@ static json_object *remote_json(const struct f_remote *remote) {
     json_object_object_add(obj, "multiplex", json_object_new_boolean(remote->multiplex));
     return obj;
 }
+/* The setup directory is opened without following a link and the state is
+ * replaced through it (f_write_at), so a failed write keeps the last state. */
 static int state_write(struct setup_ctx *ctx) {
     char dir[F_PATH], *slash; const char *text; int fd, status;
     json_object_object_add(ctx->state, "remote", remote_json(&ctx->remote));
     json_object_object_add(ctx->state, "updated_at", json_object_new_int64((int64_t)time(NULL)));
     text = json_object_to_json_string_ext(ctx->state, JSON_C_TO_STRING_PLAIN);
-    if (strlen(text) > SETUP_STATE_LIMIT || f_write(ctx->path, text, strlen(text), true) || f_copy(dir, sizeof(dir), ctx->path)) return -1;
-    slash = strrchr(dir, '/');
-    if (!slash) return -1;
+    if (strlen(text) > SETUP_STATE_LIMIT || f_copy(dir, sizeof(dir), ctx->path) || !(slash = strrchr(dir, '/'))) return -1;
     *slash = '\0';
-    fd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    fd = open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) return -1;
-    status = fsync(fd); close(fd);
+    status = f_write_at(fd, slash + 1, text, strlen(text), true); close(fd);
     return status ? -1 : 0;
 }
 static json_object *open_error(struct setup_ctx *ctx, const char *code, const char *message, const char *recovery) {

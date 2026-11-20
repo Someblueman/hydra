@@ -6,9 +6,12 @@
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 const char *f_home, *f_hydra = "hydra";
@@ -53,6 +56,66 @@ static char *read_text(const char *path) {
     char *text = f_read(path, 1 << 20);
     assert(text);
     return text;
+}
+
+/* Every write of at least one byte to a regular file fails (EFBIG) between
+ * the two calls, as on a full disk; nothing is asserted or printed meanwhile. */
+struct write_limit { struct rlimit saved; void (*previous)(int); };
+static void writes_fail(struct write_limit *limit) {
+    struct rlimit none;
+    assert(!getrlimit(RLIMIT_FSIZE, &limit->saved));
+    none = limit->saved; none.rlim_cur = 0;
+    limit->previous = signal(SIGXFSZ, SIG_IGN);
+    assert(limit->previous != SIG_ERR && !setrlimit(RLIMIT_FSIZE, &none));
+}
+static void writes_work(const struct write_limit *limit) {
+    if (setrlimit(RLIMIT_FSIZE, &limit->saved)) abort();
+    (void)signal(SIGXFSZ, limit->previous);
+}
+static size_t entries(const char *dir) {
+    DIR *stream = opendir(dir); size_t count = 0;
+    assert(stream);
+    while (readdir(stream)) count++;
+    closedir(stream); return count;
+}
+/* A setup state that cannot be written: creating one reports
+ * state_unavailable and leaves no state file, and a step that cannot be
+ * recorded fails with the last recorded state still in the file. */
+static void state_write_failure(void) {
+    struct setup_ctx ctx; struct write_limit limit; json_object *error;
+    char path[F_PATH], *before, *after; int step, set; size_t count;
+    use_home("full");
+    ctx.command = NULL;
+    assert(!setup_state_open(&ctx, "probe", "user@host", NULL, SETUP_CREATE));
+    setup_state_close(&ctx);
+    count = entries(setup_dir);
+
+    writes_fail(&limit);
+    ctx.command = NULL;
+    error = setup_state_open(&ctx, "lab", "user@host", NULL, SETUP_CREATE);
+    writes_work(&limit);
+    assert(error && !strcmp(f_string(f_field(error, "error"), "code"), "state_unavailable"));
+    json_object_put(error); setup_state_close(&ctx);
+    state_file(path, "lab", ".json");
+    assert(access(path, F_OK));
+
+    ctx.command = NULL;
+    assert(!setup_state_open(&ctx, "lab", "user@host", NULL, SETUP_CREATE));
+    assert(!setup_state_step(&ctx, "host_key", "done", NULL));
+    before = read_text(path);
+    count = entries(setup_dir);
+    writes_fail(&limit);
+    step = setup_state_step(&ctx, "preflight", "done", NULL);
+    set = setup_state_set(&ctx, "note", json_object_new_string("kept"));
+    writes_work(&limit);
+    assert(step == -1 && set == -1 && entries(setup_dir) == count);
+    after = read_text(path);
+    assert(!strcmp(before, after) && strstr(after, "\"host_key\"") && !strstr(after, "\"preflight\"") && mode_of(path) == 0600);
+    free(before); free(after);
+    assert(!setup_state_step(&ctx, "preflight", "done", NULL));
+    after = read_text(path);
+    assert(strstr(after, "\"preflight\"") && entries(setup_dir) == count);
+    free(after); setup_state_close(&ctx);
 }
 
 static void state_create_and_lock(struct setup_ctx *a) {
@@ -389,6 +452,7 @@ int main(void) {
         state_modes_and_lock();
         state_binding_and_arguments();
         state_invalid_content();
+        state_write_failure();
         plan_gate();
         upgrade_alias_gate();
         assert(realpath(temp, base));
