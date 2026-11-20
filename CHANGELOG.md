@@ -141,6 +141,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the host's login shell must run a `A | B && C` command line.
 - Multi-host fleet commands no longer wait up to 20 ms after the last host
   has answered.
+- The control centre reads each head's record files once per refresh instead
+  of several times: about a third fewer file reads per head and about 20% less
+  time per refresh at 100 heads.
+- The once-per-10-minutes session upkeep pass no longer locks and re-examines
+  heads that have nothing to record. With idle heads it uses about a fifth of
+  the CPU and a sixth of the processes it did (100 heads: 1.8 s to 0.4 s); a
+  pass where every head has work costs about 10% more.
 - A task queued for host admission retries after a short, growing pause (20 ms
   up to 1 s) instead of every 200 ms, starting about a quarter as many
   admission processes while it waits. The queue deadline is still honoured; a
