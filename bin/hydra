@@ -17,11 +17,17 @@ export HYDRA_VERSION
 # Enhanced library detection with multiple fallback paths
 # Try to resolve the real path of the hydra binary
 HYDRA_BIN_PATH="$0"
-if [ -L "$HYDRA_BIN_PATH" ]; then
-    # Follow symlinks if possible (POSIX-compliant approach)
-    if command -v readlink >/dev/null 2>&1; then
-        # Try GNU readlink -f first, then BSD readlink
-        HYDRA_BIN_PATH="$(readlink -f "$HYDRA_BIN_PATH" 2>/dev/null || readlink "$HYDRA_BIN_PATH" 2>/dev/null || echo "$HYDRA_BIN_PATH")"
+if [ -L "$HYDRA_BIN_PATH" ] && command -v readlink >/dev/null 2>&1; then
+    if _hydra_link_target="$(readlink -f "$HYDRA_BIN_PATH" 2>/dev/null)" && [ -n "$_hydra_link_target" ]; then
+        HYDRA_BIN_PATH="$_hydra_link_target"
+    elif _hydra_link_target="$(readlink "$HYDRA_BIN_PATH" 2>/dev/null)" && [ -n "$_hydra_link_target" ]; then
+        # A readlink without -f prints the target as the link stores it, and
+        # a relative target is relative to the link's directory, not to the
+        # caller's.
+        case "$_hydra_link_target" in
+            /*) HYDRA_BIN_PATH="$_hydra_link_target" ;;
+            *) HYDRA_BIN_PATH="$(dirname "$HYDRA_BIN_PATH")/$_hydra_link_target" ;;
+        esac
     fi
 fi
 

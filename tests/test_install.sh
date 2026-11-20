@@ -170,6 +170,33 @@ assert_file "$stage/usr/local/bin/hydra" "DESTDIR stages the binary"
 assert_file "$stage/usr/local/lib/hydra/git.sh" "DESTDIR stages libraries"
 ver_out="$(HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/usr/local/bin/hydra" version 2>&1)"
 assert_success $? "DESTDIR-staged hydra should discover sibling libraries"
+
+# The default prefix is found from the binary, like any other prefix.
+doc_out="$(cd "$home3" && HOME="$home3" HYDRA_HOME="$home3/.hydra" HYDRA_ROOT='' "$stage/usr/local/bin/hydra" doctor 2>&1)"
+assert_contains "$doc_out" "Layout: PREFIX install" "doctor finds the default prefix by the PREFIX rule"
+assert_contains "$doc_out" "Libraries: $stage/usr/local/lib/hydra" "doctor names the staged default-prefix libraries"
+
+# A link to the installed binary leads to the same libraries, whether the
+# link is absolute or relative and whether or not readlink knows -f.
+mkdir "$stage/links" "$stage/shim"
+ln -s "$stage/usr/local/bin/hydra" "$stage/links/hydra-absolute"
+ln -s ../usr/local/bin/hydra "$stage/links/hydra-relative"
+real_readlink="$(command -v readlink)"
+cat > "$stage/shim/readlink" <<EOF
+#!/bin/sh
+# readlink without -f, as on older BSD systems.
+[ "\$1" != -f ] || exit 1
+exec "$real_readlink" "\$@"
+EOF
+chmod +x "$stage/shim/readlink"
+for link in hydra-absolute hydra-relative; do
+    ver_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/links/$link" version 2>&1)"
+    assert_success $? "$link finds the libraries of the binary it points to"
+    ver_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' PATH="$stage/shim:$PATH" "$stage/links/$link" version 2>&1)"
+    assert_success $? "$link finds them without readlink -f"
+    assert_contains "$ver_out" "Hydra version" "$link without readlink -f prints the version"
+done
+
 HOME="$home3" PREFIX=/usr/local DESTDIR="$stage" sh "$REPO_ROOT/uninstall.sh" --purge >/dev/null 2>&1 || true
 rm -rf "$stage" "$home3"
 
