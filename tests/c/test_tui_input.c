@@ -16,7 +16,9 @@ static bool fixture_open(struct fixture *f) {
     f->test = NULL;
     f->app = calloc(1U, sizeof(*f->app));
     if (!f->app) return false;
-    /* Observations fail at once instead of running a real hydra. */
+    /* Observations fail at once instead of running a real hydra, and the
+     * head snapshot cannot start (tui_no_snapshot.c): the model is the one a
+     * case builds. */
     f->app->hydra = "/nonexistent/hydra";
     f->app->cols = 80; f->app->rows = 24;
     f->app->no_color = true;

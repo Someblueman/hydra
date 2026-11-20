@@ -319,12 +319,12 @@ static void watch_report(struct app *app, struct native_activity *a, bool observ
 /* Called on every round of background work, after the head snapshot's: takes
  * what its tmux command said about window activity, when a refresh brought
  * something new, and looks after the children. Only the interactive local
- * control centre that reads the snapshot itself observes. */
+ * control centre observes. */
 void native_activity_tick(struct app *app) {
     struct native_activity *a = app->activity;
     char *text;
     bool observed = false, fresh;
-    if (!app->program || app->fleet || !app->store) return;
+    if (!app->program || app->fleet) return;
     text = snapshot_take_activity(app->snapshot);
     fresh = text != NULL;
     if (!a && text && any_observable(app)) a = app->activity = calloc(1, sizeof(*a));

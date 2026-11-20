@@ -14,6 +14,8 @@
  * key never runs two reads of one source at a time. */
 
 static char root[4096], build[4096], tui[4096], base[4096];
+/* The state store of the fixture heads and its repository (kt_fixture_store). */
+static char store[4096], repo[4096];
 static char hydra[4096], slow[4096], calls[4096];
 
 #define READ_SECONDS "2.5"
@@ -66,6 +68,8 @@ static void fixture(void) {
     kt_paths(root, sizeof(root), build, sizeof(build));
     kt_format(tui, sizeof(tui), "%s/hydra-tui", build);
     kt_temp(base, sizeof(base), "hydra-responsive");
+    kt_format(store, sizeof(store), "%s/store", base);
+    kt_fixture_store(root, NULL, store, repo, sizeof(repo));
     kt_format(path, sizeof(path), "%s/bin", base);
     kt_mkdir(path);
     kt_format(hydra, sizeof(hydra), "%s/hydra", base);
@@ -92,7 +96,7 @@ static void open_view(struct kt_session *s, const char *view) {
     const char *argv[] = {tui, "--hydra", hydra, "--view", view, NULL};
     kt_write(calls, "");
     kt_write(slow, "");
-    kt_open_terminal(s, argv, 140, 40, NULL);
+    kt_open_terminal(s, argv, 140, 40, repo);
 }
 
 /* The key just sent is still being answered by a subprocess; help opens and

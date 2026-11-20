@@ -348,7 +348,7 @@ static void fifty(int cols, int rows) {
 }
 
 int main(void) {
-    char fake[4096], fixture[4096];
+    char fake[4096], home[4096];
     kt_init();
     kt_paths(root, sizeof(root), build, sizeof(build));
     kt_temp(base, sizeof(base), "hydra-onboarding");
@@ -358,11 +358,13 @@ int main(void) {
     kt_format(fixtures, sizeof(fixtures), "%s/tests/fixtures/tui/onboarding", root);
     kt_mkdir(evidence);
     kt_format(fake, sizeof(fake), "%s/fake-hydra-onboarding.sh", fixtures);
-    kt_format(fixture, sizeof(fixture), "%s/tests/fixtures/tui/setup/empty.tsv", root);
+    /* No head: the control centre starts outside a repository, with a
+     * HYDRA_HOME of its own that holds no record. */
+    kt_format(home, sizeof(home), "%s/home", base);
     intent_digest("review-one.json", digest, sizeof(digest));
     setenv("HYDRA_BIN_CMD", fake, 1);
     setenv("HYDRA_ONBOARDING_FAKE", state, 1);
-    setenv("HYDRA_TUI_FIXTURE", fixture, 1);
+    setenv("HYDRA_HOME", home, 1);
     setenv("TERM", "xterm-256color", 1);
     unsetenv("HYDRA_NONINTERACTIVE");
     journey(140, 40);

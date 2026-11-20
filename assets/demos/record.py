@@ -228,7 +228,7 @@ def capture(args: argparse.Namespace) -> int:
     for name in ("NO_COLOR", "TMUX", "TMUX_PANE", "COLUMNS", "LINES"):
         env.pop(name, None)
     env.update(TERM="xterm-256color", HYDRA_TUI_THEME="dark", LANG="C.UTF-8", LC_ALL="C.UTF-8")
-    driver = Recorder([str(args.tui), "--hydra", str(args.hydra), "--store"], args.cells, args.cwd, env,
+    driver = Recorder([str(args.tui), "--hydra", str(args.hydra)], args.cells, args.cwd, env,
                       COLUMNS, ROWS)
     try:
         tour(Tour(driver))

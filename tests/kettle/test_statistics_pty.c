@@ -5,6 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 static char root[4096], build[4096], tui[4096], fake[4096], evidence[4096];
+/* The state store of the fixture heads and its repository (kt_fixture_store). */
+static char store[4096], repo[4096];
 #define U(marker) kt_until(&s, (marker), 3)
 #define S(keys) kt_send(&s, (keys))
 #define HAS(marker) kt_contains(&s, (marker))
@@ -138,7 +140,7 @@ static void local_statistics(void) {
     kt_temp(base, sizeof(base), "hydra-statistics");
     kt_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     /* The second head, its side pane focused and scrolled (Shift-Tab). */
     S("j\033[Zjj");
@@ -161,7 +163,7 @@ static void local_statistics(void) {
 static void workflow_filter(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("1 of 8" DOT "newest first");
     U("w workflow");
     S("w");
@@ -200,7 +202,7 @@ static void metric_pages(void) {
     const char *names[] = {"queue-delay", "total-execution", "recorded-verification",
                            "owner-recoveries"};
     size_t i, j;
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Latest attempts average");
     for (i = 0; i < 3; i++) {
         if (s.screen.cols != sizes[i][0] || s.screen.rows != sizes[i][1])
@@ -244,7 +246,7 @@ static void fleet_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui,       "--hydra", fake,         "--theme", "dark",
                           "--fleet", "--view",  "statistics", NULL};
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("latest fleet response" DOT "all hosts");
     U("2 responded   1 failed   1 reported heads");
     CHECK(row_has(&s, "offline", "failed") && row_has(&s, "offline", "--"), "unknown failed-host heads");
@@ -363,7 +365,7 @@ static void session_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-sessions.tsv", 1), "session fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     S("4");
     session_overview(&s);
@@ -372,7 +374,7 @@ static void session_statistics(void) {
     session_pages(&s);
     kt_close(&s, "q", 0, 0);
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6.tsv", 1), "mixed fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     S("D");
     U("Workflow runs");
@@ -393,7 +395,7 @@ static void session_jump(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-heads.tsv", 1), "head sessions fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     S("D");
     U(BAR "feature-live");
@@ -494,7 +496,7 @@ static void remote_cohorts(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "schema 5 fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     cohorts_runs_page(&s);
     cohorts_rows(&s);
     cohorts_kinds(&s);
@@ -514,6 +516,8 @@ int main(void) {
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
     kt_format(evidence, sizeof(evidence), "%s/build/statistics-evidence", root);
     kt_mkdir(evidence);
+    kt_format(store, sizeof(store), "%s/store", evidence);
+    kt_fixture_store(root, NULL, store, repo, sizeof(repo));
     local_statistics();
     workflow_filter();
     fleet_statistics();
@@ -521,5 +525,9 @@ int main(void) {
     session_statistics();
     session_jump();
     remote_cohorts();
+    {
+        const char *remove[] = {"rm", "-rf", store, NULL};
+        kt_command_ok(NULL, remove);
+    }
     return 0;
 }

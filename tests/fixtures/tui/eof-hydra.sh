@@ -1,7 +1,8 @@
 #!/bin/sh
-# A child that stops producing output but does not exit; every other adapter
-# is simply unavailable.
-case "${1:-}:${2:-}" in tui:--data) ;; *) exit 1 ;; esac
+# A CLI whose answer to the head snapshot's question (the leftover worktrees)
+# closes its output but does not exit; every other command is simply
+# unavailable.
+case "${1:-}:${2:-}" in tui:--orphan-rows) ;; *) exit 1 ;; esac
 exec 1>&-
 sleep 30 &
 child=$!

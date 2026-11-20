@@ -1,7 +1,8 @@
 /* Inbox over the attention read: approvals, results and items Hydra cannot
  * classify are listed with the head snapshot's gates, stopped terminals and
- * recovery findings (fake-hydra's native-v2.tsv: two heads with pending gates,
- * two agents to look at and three repairs besides the folded dead session). */
+ * recovery findings (the store of native-v2.tsv: two heads with a pending
+ * gate each, two stopped terminals with their dead sessions folded in, and
+ * two repairs, a leftover lock and a leftover worktree). */
 static void test_attention(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     if (!result(open_session(&session, tui, hydra, fake_bin, 100, 30) == 0, "open attention terminal")) return;
@@ -12,7 +13,7 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
            "2 opens Inbox, which lists the approval with the gates and the result to review");
     result(wait_for_marker(&session, "Approve S-1: T-1", 1000), "Inbox rows read as sentences");
     result(wait_for_marker(&session, "attempt 1   new", 1000), "a new item says so");
-    result(wait_for_markers(&session, "Agents 2", "Repairs 4", 1000), "stopped terminals and repairs are listed after decisions");
+    result(wait_for_markers(&session, "Agents 2", "Repairs 3", 1000), "stopped terminals and repairs are listed after decisions");
     write_input(session.master, "AB", 2U);
     sleep_ms(150);
     write_input(session.master, "[", 1U);
@@ -94,7 +95,7 @@ static bool write_attention_many(const char *path, size_t count, bool unique) {
     if (written < 0 || (size_t)written >= sizeof(line) || fputs(line, file) == EOF || fclose(file) != 0 || rename(temporary, path) != 0) { unlink(temporary); return false; }
     return true;
 }
-/* The two gates of native-v2.tsv are always among the decisions. */
+/* The two gates of the fixture store are always among the decisions. */
 static void attention_capacity_cases(struct session *session, const char *path) {
     bool wrote;
     wrote = write_attention_many(path, 512U, true); if (wrote) { attention_refresh(session); result(wait_for_marker(session, "Decisions 514", 3000), "512 unique items are accepted"); } else result(false, "512 unique items fixture writes atomically");
@@ -159,7 +160,7 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     result(wait_for_markers(&left, "Decisions 3", "Ready for review 1", 3000) && wait_for_markers(&right, "Decisions 3", "Ready for review 1", 3000), "both clients list the approval and the result");
     write_input(left.master, "s", 1U); result(wait_for_markers(&left, "Seen, but still needs your decision", "Decisions 3", 1500), "a seen approval stays listed until decided"); result(wait_for_marker(&right, "step S-1   attempt 1   new", 1500), "second client is unchanged until it refreshes");
     drain_output(&left); unlink(done); write_reordered_fixture(path, reordered); attention_refresh(&left); result(wait_for_attention_order(&left), "pure reorder applies with unchanged sections"); write_input(left.master, "[", 1U); result(wait_for_marker(&left, "Task        T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "]", 1U);
-    drain_output(&left); unlink(done); write_attention_fixture(path, mutated); attention_refresh(&left); result(wait_for_markers(&left, "Repairs 3", "step S-1   attempt 1   new", 3000), "semantic revision mutation is unseen in applied refresh");
+    drain_output(&left); unlink(done); write_attention_fixture(path, mutated); attention_refresh(&left); result(wait_for_markers(&left, "Repairs 2", "step S-1   attempt 1   new", 3000), "semantic revision mutation is unseen in applied refresh");
     write_attention_fixture(path, "HYDRA_ATTENTION\t1\nITEM\tbroken\n"); drain_output(&left); unlink(done); attention_refresh(&left); result(wait_for_marker(&left, "reading it failed", 3000), "malformed refresh preserves last good snapshot");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\n", "missing END rejects atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\ntrailing\n", "trailing bytes reject atomically");
@@ -167,7 +168,7 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nITEM\tworkflow\tapproval\tother\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nEND\t2\t0\t0\n", "conflicting duplicate rejects atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t1\n", "contradictory END flags reject atomically");
     attention_capacity_cases(&left, path);
-    drain_output(&left); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); attention_refresh(&left); result(wait_for_markers(&left, "Decisions 2", "Repairs 3", 3000), "empty complete snapshot is accepted");
+    drain_output(&left); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); attention_refresh(&left); result(wait_for_markers(&left, "Decisions 2", "Repairs 2", 3000), "empty complete snapshot is accepted");
     write_attention_fixture(path, initial); file = fopen(fail, "w"); if (file) fclose(file); drain_output(&left); unlink(done); attention_refresh(&left); result(wait_for_marker(&left, "reading it failed", 3000), "failed reconnect is explicit unavailable"); unlink(fail);
     result(refresh_until(&right, "Decisions 3", "Ready for review 1", 8000), "second client recovers the restored snapshot");
     drain_output(&left); unlink(done); attention_refresh(&left); result(wait_for_markers(&left, "Decisions 3", "seen   run R-1   step S-1", 3000), "successful LEFT reconnect keeps the seen approval listed");

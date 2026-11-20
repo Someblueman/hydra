@@ -72,6 +72,9 @@ class Capture:
         return env
 
     def flow_env(self, flow: str, state_dir: Path, options: dict) -> dict[str, str]:
+        """The flow's environment. The control centre reads its heads from the
+        state store: the Hosts flows have none (an empty HYDRA_HOME, outside a
+        repository), the others run in the store of native-runs.tsv."""
         if flow.startswith("hosts"):
             (state_dir / "calls.log").write_text("")
             for flag in options.get("flags", []):
@@ -79,13 +82,16 @@ class Capture:
             return {
                 "HYDRA_BIN_CMD": str(ROOT / "tests/fixtures/tui/setup/fake-hydra-setup.sh"),
                 "HYDRA_SETUP_FAKE": str(state_dir),
-                "HYDRA_TUI_FIXTURE": str(ROOT / "tests/fixtures/tui/setup/empty.tsv"),
             }
         (state_dir / "workflow").write_text(str(flows.FIXTURES / "workflow-runs-running.tsv"))
+        store = state_dir.parent / "store"
+        run_command(["sh", str(flows.FIXTURES / "rows-store.sh"), str(flows.FIXTURES / "native-runs.tsv"), str(store)],
+                    ROOT, dict(os.environ))
         return {
             "HYDRA_BIN_CMD": str(HERE / "fake-hydra.sh"),
             "VR_STATE": str(state_dir),
-            "HYDRA_TUI_FIXTURE": str(flows.FIXTURES / "native-runs.tsv"),
+            "HYDRA_HOME": str(store / "home"),
+            "HYDRA_TEST_STORE": str(store),
         }
 
     def session(self, flow: str, theme: str, columns: int, rows: int) -> None:
@@ -99,7 +105,8 @@ class Capture:
         argv = [str(self.prefix / "libexec/hydra/hydra-tui")]
         if flow == "fleet":
             argv.append("--fleet")
-        driver = Driver(argv, self.cells, base, env, columns, rows)
+        repository = base / "store" / "repo"
+        driver = Driver(argv, self.cells, repository if repository.is_dir() else base, env, columns, rows)
 
         def record(flow_name: str, state: str, group: str, markers: list[str], note: str) -> None:
             identifier = f"{flow_name}--{state}--{variant}"

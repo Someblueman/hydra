@@ -507,8 +507,12 @@ printf '%s\n' "$@" > "$HELPER_ARGV"
 HELPER
 chmod +x "$test_root/helper"
 (cd "$repo" && HYDRA_HOME="$home" HYDRA_TUI_BIN="$test_root/helper" HELPER_ARGV="$test_root/helper.argv" "$hydra" tui --view heads) > /dev/null 2>&1
-assert_equal "--hydra $hydra --store --view heads" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
-    "hydra tui tells the helper to read the store itself"
+assert_equal "--hydra $hydra --view heads" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
+    "hydra tui starts the helper with no option that chooses a reader: there is one"
+(cd "$repo" && "$tui" --hydra "$hydra" --store) > /dev/null 2> "$test_root/store.err"
+assert_equal "2" "$?" "the removed --store option is refused"
+assert_equal "hydra-tui: --store was removed: the state store is always read; start it without the option" \
+    "$(cat "$test_root/store.err")" "and the refusal says what to do"
 (cd "$repo" && HYDRA_HOME="$home" "$hydra" tui --orphan-rows extra) > /dev/null 2>&1
 assert_equal "2" "$?" "the leftover-rows entry takes no arguments"
 

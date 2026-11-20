@@ -100,7 +100,7 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
 }
 
 /* What the fixture CLI reported for the invocations of `command` (its first
- * two arguments, "tui:--data"), or for all of them: how many there were, and
+ * two arguments, "tui:--orphan-rows"), or for all of them: how many there were, and
  * how many were started with SIGPIPE at its default (status 141). */
 static void signal_report_count(const char *path, const char *command, unsigned *started, unsigned *standard) {
     char line[256];
@@ -152,7 +152,7 @@ static void test_child_signals(const char *tui, const char *hydra, const char *f
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "child signal test exits cleanly");
     close_session(&session);
-    signal_report_check(report, "tui:--data", "a background read starts with SIGPIPE at its default");
+    signal_report_check(report, "tui:--orphan-rows", "a background read starts with SIGPIPE at its default");
     signal_report_check(report, "status:", "a captured action starts with SIGPIPE at its default");
     signal_report_check(report, "dashboard:", "an action lent the terminal starts with SIGPIPE at its default");
     signal_report_check(report, NULL, "every CLI invocation starts with SIGPIPE at its default");
@@ -167,7 +167,7 @@ static void test_recovery_actions(const char *tui, const char *hydra, const char
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
     write_input(session.master, "\033[<0;20;1M", 10U);
-    (void)wait_for_markers(&session, "Repairs 4", "Approve S-1: T-1", 3000);
+    (void)wait_for_markers(&session, "Repairs 3", "Approve S-1: T-1", 3000);
     write_input(session.master, "jjjjjj", 6U);
     result(wait_for_selected(&session, "Leftover lock", 1000), "a repair is selectable in Inbox");
     drain_output(&session);

@@ -414,7 +414,7 @@ static void literal_keys(void) {
 }
 
 static void open_tui(const char *keys) {
-    const char *argv[] = {f.tui, "--hydra", f.hydra, "--store", NULL};
+    const char *argv[] = {f.tui, "--hydra", f.hydra, NULL};
     if (keys) CHECK(!setenv("HYDRA_TUI_KEYS", keys, 1), "keys file override");
     else unsetenv("HYDRA_TUI_KEYS");
     kt_open_terminal(&s, argv, 140, 40, f.repo);
@@ -528,7 +528,7 @@ static void fixture(void) {
     kt_write(path, "cycles\n");
     hf_commit_init(&f);
     H("spawn", "one", "--no-agent");
-    kt_format(rows, sizeof(rows), "%s", H("tui", "--data"));
+    kt_format(rows, sizeof(rows), "%s", hf_run(&f, NULL, 0, (const char *[]){f.tui, "--hydra", f.hydra, "--data", NULL}));
     for (p = rows; p && strncmp(p, "H\t", 2); p = strchr(p, '\n') ? strchr(p, '\n') + 1 : NULL) {}
     CHECK(p != NULL, "head row");
     p = strchr(p + 2, '\t') + 1;

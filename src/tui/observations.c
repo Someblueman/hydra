@@ -35,12 +35,6 @@ void native_observations_destroy(struct app *app) {
     free(app->observations); app->observations=NULL;
 }
 
-/* The local head snapshot comes from the state store when the CLI that
- * started the control centre said so; remote work is a source of its own. */
-static bool heads_from_store(const struct app *app) {
-    return app->store;
-}
-
 static bool observations_ready(struct app *app) {
     size_t i;
     if (app->observations) return true;
@@ -57,8 +51,8 @@ static void complete_snapshot(struct app *app, FILE *input, bool timed_out) {
     record_snapshot(app,result==0);
     if (!result) new_task_attach(app);
     if (!strcmp(app->notice,"Loading snapshot...")) app->notice[0]='\0';
-    if (result && (timed_out || !complete)) snprintf(app->snapshot_error,sizeof(app->snapshot_error),"%s %s; showing last good snapshot",
-        heads_from_store(app) ? "state read" : "shell data adapter",timed_out ? "timed out" : "failed");
+    if (result && (timed_out || !complete)) snprintf(app->snapshot_error,sizeof(app->snapshot_error),"state read %s; showing last good snapshot",
+        timed_out ? "timed out" : "failed");
 }
 
 /* The remote observation: the fleet stream, read beside the local one. A
@@ -112,8 +106,8 @@ static void observation_accept(struct app *app, size_t source, FILE *input, bool
     app->observations->kept[source].reused=0;
 }
 
-/* Do not refresh what has not changed. With the store readable here, a look
- * at the runs directory says what the CLI's workflow readers would print: a
+/* Do not refresh what has not changed. A look at the runs directory in the
+ * state store says what the CLI's workflow readers would print: a
  * project without runs gets the document they print for it, and runs whose
  * records are unchanged keep the read they have. A run that has not ended is
  * always asked for (its state depends on the clock and on a live owner), and
@@ -143,7 +137,7 @@ static void no_runs_accept(struct app *app, size_t source, const struct store_lo
 /* True when a workflow source needs no CLI read now. asked: the user asked
  * for a fresh read, which unchanged records do not answer. */
 static bool workflow_shortcut(struct app *app, size_t source, bool asked) {
-    const struct store_location *where=heads_from_store(app) ? snapshot_where(app->snapshot) : NULL;
+    const struct store_location *where=snapshot_where(app->snapshot);
     struct store_runs runs;
     bool links=source==OBSERVE_LINKS;
     if (!where || (source!=OBSERVE_WORKFLOWS && !links)) return false;
@@ -164,21 +158,20 @@ static bool workflow_shortcut(struct app *app, size_t source, bool asked) {
 /* The store answers the workflow sources only once the first refresh has
  * found the repository; until then their reads wait for it. */
 static bool location_pending(const struct app *app, size_t source) {
-    return heads_from_store(app) && (source==OBSERVE_WORKFLOWS || source==OBSERVE_LINKS) &&
+    return (source==OBSERVE_WORKFLOWS || source==OBSERVE_LINKS) &&
         !snapshot_where(app->snapshot) && snapshot_active(app->snapshot);
 }
 
+/* Starts the CLI read of a workflow source. */
 static void observation_start(struct app *app, size_t source) {
-    static const char *const commands[][2]={{"tui","--data"},{"workflow","tui-data"},{"workflow","statistics-data"},{"workflow","--workspace-links"}};
-    char *argv[]={(char *)app->hydra,(char *)commands[source][0],(char *)commands[source][1],NULL};
+    static const char *const commands[]={[OBSERVE_WORKFLOWS]="tui-data",[OBSERVE_STATISTICS]="statistics-data",[OBSERVE_LINKS]="--workspace-links"};
+    char *argv[]={(char *)app->hydra,"workflow",(char *)commands[source],NULL};
     app->observations->again[source]=false;
-    if (native_capture_start(&app->observations->jobs[source],argv,observation_budget(app,source))) return;
-    if (source!=OBSERVE_HEADS) { observation_accept(app,source,NULL,false); return; }
-    record_snapshot(app,false); app->notice[0]='\0';
-    copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation");
+    if (!native_capture_start(&app->observations->jobs[source],argv,observation_budget(app,source))) observation_accept(app,source,NULL,false);
 }
 
-/* Starts the read of the state store; it advances on later ticks. */
+/* Starts the read of the head snapshot from the state store; it advances on
+ * later ticks. */
 static void store_start(struct app *app) {
     const struct head *selected=app->selected<app->model.head_count ? &app->model.heads[app->selected] : NULL;
     app->observations->again[OBSERVE_HEADS]=false;
@@ -196,7 +189,7 @@ static bool observation_running(const struct app *app, size_t source) {
 void native_observations_request(struct app *app, size_t source) {
     if (source>=OBSERVE_ATTENTION || (app->fleet && source==OBSERVE_STATISTICS) || !observations_ready(app)) return;
     if (observation_running(app,source) || location_pending(app,source)) app->observations->again[source]=true;
-    else if (source==OBSERVE_HEADS && heads_from_store(app)) store_start(app);
+    else if (source==OBSERVE_HEADS) store_start(app);
     else if (!workflow_shortcut(app,source,true)) observation_start(app,source);
 }
 
@@ -251,8 +244,8 @@ static void remote_source_tick(struct app *app, bool request) {
 
 /* Inbox's badge: attention is read at every refresh while Inbox is shown and
  * every ATTENTION_BADGE_SECONDS otherwise, once a head snapshot arrived, so
- * other screens do not start a CLI read per refresh. With the store readable
- * here, a project without runs is not asked at all off Inbox, nor one whose runs have all ended and whose
+ * other screens do not start a CLI read per refresh. A project without runs
+ * is not asked at all off Inbox, nor one whose runs have all ended and whose
  * records did not change since the last read. */
 #define ATTENTION_BADGE_SECONDS 15
 static unsigned long long attention_stamp;
@@ -264,7 +257,7 @@ bool native_observations_attention_due(struct app *app, time_t last) {
     if (attention_no_runs(app)) return false;
     /* Remote items come with the same stream; the local store says nothing about them. */
     if (app->model.host_count) return true;
-    where=heads_from_store(app) ? snapshot_where(app->snapshot) : NULL;
+    where=snapshot_where(app->snapshot);
     if (!where) return true;
     store_runs(where,&runs);
     if (!runs.count || (runs.settled && last && runs.records==attention_stamp)) return false;
@@ -278,8 +271,8 @@ void native_observations_tick(struct app *app, bool request) {
     native_plan_launch_tick(app,request);
     native_controls_tick(app);
     if (!app->observations && (!request || !observations_ready(app))) return;
-    if (heads_from_store(app)) store_tick(app,request);
-    for (source=heads_from_store(app) ? OBSERVE_WORKFLOWS : OBSERVE_HEADS;source<OBSERVE_ATTENTION;source++) observation_tick(app,source,request);
+    store_tick(app,request);
+    for (source=OBSERVE_WORKFLOWS;source<OBSERVE_ATTENTION;source++) observation_tick(app,source,request);
     remote_source_tick(app,request);
     preview_tick(app);
     native_evidence_tick(app,request);

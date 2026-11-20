@@ -256,8 +256,10 @@ $(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tes
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
-	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+# The loop runs over a model the test builds by hand: no state store is read
+# (tests/c/tui_no_snapshot.c takes the place of the snapshot).
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c tests/c/tui_no_snapshot.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/snapshot.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) $(filter %.o,$^) -o $@
 
 $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@

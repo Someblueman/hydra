@@ -123,17 +123,22 @@ static void test_visualization_refresh(const char *tui, const char *hydra, const
     result(fd >= 0, "create owned refresh-failure marker");
     if (fd < 0) return;
     close(fd); unlink(marker);
-    setenv("HYDRA_TEST_FAIL_FILE", marker, 1);
+    setenv("HYDRA_TEST_TUI_HANG_FILE", marker, 1);
     setenv("HYDRA_TEST_OVERVIEW", "1", 1);
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open refresh visualization terminal");
-    unsetenv("HYDRA_TEST_FAIL_FILE"); unsetenv("HYDRA_TEST_OVERVIEW");
+    unsetenv("HYDRA_TEST_TUI_HANG_FILE"); unsetenv("HYDRA_TEST_OVERVIEW");
     (void)wait_for_marker(&session, "STEP", 1000);
+    /* While the marker exists the CLI does not answer the snapshot's question,
+     * and the refresh runs out of its time (ten seconds). */
     fd = open(marker, O_WRONLY | O_CREAT | O_EXCL, 0600);
     result(fd >= 0, "inject a failed subsequent observation");
     if (fd >= 0) close(fd);
     /* Input activity must not indefinitely postpone refresh. */
-    for (i = 0; i < 25; i++) { write_input(session.master, "j", 1); sleep_ms(100); }
-    result(wait_for_marker(&session, "shell data adapter failed; showing last good snapshot", 2000),
+    for (i = 0; i < 160 && !session_visible(&session, "state read timed out; showing last good snapshot"); i++) {
+        write_input(session.master, "j", 1);
+        (void)wait_for_marker(&session, "state read timed out; showing last good snapshot", 100);
+    }
+    result(session_visible(&session, "state read timed out; showing last good snapshot"),
            "continuous input still refreshes and labels the retained snapshot");
     unlink(marker);
     result(wait_for_marker(&session, "\xe2\x97\x8f live", 4000), "successful observation clears stale state");

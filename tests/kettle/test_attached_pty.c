@@ -93,11 +93,11 @@ static bool pane_title_at(struct kt_session *s, int y, int x, const char *name) 
 int main(void) {
     struct kt_session s;
     char path[4096], one[4096], two[4096], pids[8192], branch[2][256], session[256], head[256],
-        rows[65536], slow[4096], started[4096], observation[4096], adapter[4096], script[32768],
+        rows[65536], slow[4096], started[4096], record[2][2][4096], recorded[2][2][256], script[32768],
         hist_a[8192], hist_after[8192];
     int sizes[][2] = {{80, 24}, {40, 10}, {140, 40}};
     size_t i;
-    const char *observed[] = {"exited exact\n", "exited reported\n", "failed exact\n"};
+    const char *observed[][2] = {{"exited\n", "exact\n"}, {"exited\n", "reported\n"}, {"failed\n", "exact\n"}};
     const char *labels[] = {"shell · exit recorded", "shell · session running", "shell · failure recorded"};
     const long snapshot_delay = (HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS + 999L) / 1000L + 2L;
     kt_init();
@@ -109,18 +109,26 @@ int main(void) {
     H("spawn", "one", "--no-agent");
     H("spawn", "two", "--no-agent");
     kt_format(pids, sizeof(pids), "%s", RUN("tmux", "list-panes", "-a", "-F", "#{pane_pid}"));
-    kt_format(rows, sizeof(rows), "%s", H("tui", "--data"));
+    kt_format(rows, sizeof(rows), "%s", RUN(f.tui, "--hydra", f.hydra, "--data"));
     {
         const char *p = rows;
         int n = 0;
         while (*p && n < 2) {
             const char *next = strchr(p, '\n');
             if (!strncmp(p, "H\t", 2)) {
+                char directory[4096], instance[256];
                 column(p, 1, branch[n], sizeof(branch[n]));
                 if (n == 0) {
                     column(p, 2, session, sizeof(session));
                     column(p, 24, head, sizeof(head));
                 }
+                /* What Hydra observed of the head's instance, in its record. */
+                column(p, 23, directory, sizeof(directory));
+                column(p, 11, instance, sizeof(instance));
+                kt_format(record[n][0], sizeof(record[n][0]), "%s/instances/%s/observed-status", directory, instance);
+                kt_format(record[n][1], sizeof(record[n][1]), "%s/instances/%s/observed-confidence", directory, instance);
+                kt_read(record[n][0], recorded[n][0], sizeof(recorded[n][0]));
+                kt_read(record[n][1], recorded[n][1], sizeof(recorded[n][1]));
                 n++;
             }
             if (!next)
@@ -138,36 +146,46 @@ int main(void) {
           "stale instance refusal");
     kt_format(slow, sizeof(slow), "%s/slow", f.base);
     kt_format(started, sizeof(started), "%s/started", f.base);
-    kt_format(observation, sizeof(observation), "%s/observation-fixture", f.base);
-    kt_format(adapter, sizeof(adapter), "%s/hydra-adapter", f.base);
+    /* The head snapshot asks tmux for the live sessions; it alone asks for
+     * their window activity. While the slow file exists that answer takes
+     * longer than the snapshot may. */
+    kt_format(path, sizeof(path), "%s/slow-bin", f.base);
+    kt_mkdir(path);
+    kt_format(script, sizeof(script), "%s/bin/tmux", f.base);
     setenv("PTY_FIXTURE", f.base, 1);
-    setenv("PTY_HYDRA", f.hydra, 1);
+    setenv("PTY_TMUX", script, 1);
     kt_format(script, sizeof(script),
-              "#!/bin/sh\nif [ \"$1:$2\" = tui:--data ] && [ -f \"$PTY_FIXTURE/slow\" ]; then\n  "
-              "touch \"$PTY_FIXTURE/started\"\n  sleep %ld\nfi\nif [ \"$1:$2\" = tui:--data ] && [ "
-              "-f \"$PTY_FIXTURE/observation-fixture\" ]; then\n  read -r observed confidence < "
-              "\"$PTY_FIXTURE/observation-fixture\"\n  \"$PTY_HYDRA\" \"$@\" | awk -F '\\t' -v "
-              "OFS='\\t' -v observed=\"$observed\" -v confidence=\"$confidence\" '$1==\"H\" "
-              "{$10=observed; $11=confidence} {print}'\n  exit\nfi\nexec \"$PTY_HYDRA\" \"$@\"\n",
+              "#!/bin/sh\nif [ \"${1:-}\" = list-sessions ] && [ -f \"$PTY_FIXTURE/slow\" ]; then\n  "
+              "case \"$*\" in *window_activity*) touch \"$PTY_FIXTURE/started\"; sleep %ld ;; esac\nfi\n"
+              "exec \"$PTY_TMUX\" \"$@\"\n",
               snapshot_delay);
-    kt_write(adapter, script);
-    CHECK(!chmod(adapter, 0755), "adapter mode");
+    kt_format(path, sizeof(path), "%s/slow-bin/tmux", f.base);
+    kt_write(path, script);
+    CHECK(!chmod(path, 0755), "slow tmux mode");
+    kt_format(script, sizeof(script), "%s/slow-bin:%s", f.base, getenv("PATH"));
+    CHECK(!setenv("PATH", script, 1), "slow tmux on PATH");
     kt_format(evidence, sizeof(evidence), "%s/attached-evidence", f.build);
     kt_mkdir(evidence);
-    {
-        const char *argv[] = {f.tui, "--hydra", adapter, NULL};
-        kt_open_terminal(&s, argv, 140, 40, f.repo);
-    }
+    hf_open(&f, &s);
     U("Heads \xe2\x94\x80", 3);
     U("Session     running", 3);
     S("a");
     U("typing to ", 3);
     U("shell · session running", 3);
+    /* Each observation is recorded for both heads, then the recorded one is
+     * put back. */
     for (i = 0; i < 3; i++) {
-        kt_write(observation, observed[i]);
+        size_t n;
+        for (n = 0; n < 2; n++) {
+            kt_write(record[n][0], observed[i][0]);
+            kt_write(record[n][1], observed[i][1]);
+        }
         U(labels[i], 8);
     }
-    CHECK(!unlink(observation), "remove observation fixture");
+    for (i = 0; i < 2; i++) {
+        kt_write(record[i][0], recorded[i][0]);
+        kt_write(record[i][1], recorded[i][1]);
+    }
     U("shell · session running", 8);
     kt_pump(&s, .5);
     S("printf 'one' > attachment-proof\r");

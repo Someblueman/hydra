@@ -475,9 +475,9 @@ tui_native_run() {
         tui_native_report_unavailable
         return 1
     fi
-    # --store: this CLI's state store is the helper's to read in-process; the
-    # helper then asks the CLI only for what the store cannot say.
-    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" --store "$@"; then
+    # The helper reads this CLI's state store in its own process and asks the
+    # CLI only for what the store cannot say.
+    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" "$@"; then
         _tnr_status=0
     else
         _tnr_status=$?

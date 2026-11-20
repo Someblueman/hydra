@@ -25,7 +25,7 @@ static void usage(FILE *out) {
           "   overview, workflows, workspace, attention, recovery, statistics)\n"
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
-          "  [--store|--data]\n"
+          "  [--data]\n"
           "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
           "   [--statistics-fixture FILE] [--attention-fixture FILE]... [--review-fixture FILE]\n"
           "   [--onboarding-fixture FILE [--onboarding-intent FILE]\n"
@@ -185,14 +185,12 @@ static int print_keys_option(struct app *app) {
     return keys->problem[0] ? 1 : 0;
 }
 
-/* Options that only set a flag; false for anything else. --store: the
- * launching CLI's state store may be read here instead of asking that CLI
- * for the head snapshot. --data prints that snapshot and exits. */
+/* Options that only set a flag; false for anything else. --data prints the
+ * head snapshot read from the state store and exits. */
 static bool flag_option(struct app *app, const char *option, bool *print_keys, bool *print_data) {
     if (strcmp(option, "--no-color") == 0) app->no_color = true;
     else if (strcmp(option, "--ascii") == 0) app->ascii = true;
     else if (strcmp(option, "--print-keys") == 0) *print_keys = true;
-    else if (strcmp(option, "--store") == 0) app->store = true;
     else if (strcmp(option, "--data") == 0) *print_data = true;
     else return false;
     return true;
@@ -261,6 +259,10 @@ int main(int argc, char **argv) {
             app.graph_follow = page == WORK_RUN;
         } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view, &page);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
+        else if (strcmp(argv[index], "--store") == 0) {
+            fputs("hydra-tui: --store was removed: the state store is always read; start it without the option\n", stderr);
+            return 2;
+        }
         else if (!flag_option(&app, argv[index], &print_keys, &print_data)) { usage(stderr); return 2; }
     }
     if (print_data) return snapshot_print(app.hydra, stdout);

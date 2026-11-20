@@ -86,4 +86,14 @@ int kt_command(const char *cwd, const char *input, char *out, size_t capacity, d
                const char *const argv[]);
 void kt_command_ok(const char *cwd, const char *const argv[]);
 void kt_paths(char *root, size_t root_capacity, char *build, size_t build_capacity);
+/* The control centre reads its heads from Hydra's state store, so one started
+ * with the fixture hydra (tests/fixtures/tui/fake-hydra.sh) needs the store a
+ * rows fixture describes (tests/fixtures/tui/rows-store.sh). Builds it anew in
+ * the directory store, from rows or, when rows is NULL, native-v2.tsv, and
+ * points HYDRA_HOME, HYDRA_TEST_STORE and PATH (the fixture tmux first, which
+ * lists the store's live sessions) at it. root is the source tree. repo
+ * receives the directory the control centre is started in. The caller removes
+ * store. */
+void kt_fixture_store(const char *root, const char *rows, const char *store, char *repo,
+                      size_t capacity);
 #endif

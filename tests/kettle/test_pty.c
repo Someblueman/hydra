@@ -7,6 +7,8 @@
 #include <string.h>
 #include <unistd.h>
 static char root[4096], build[4096], demo[4096], child[4096], evidence[4096], gate[4096];
+/* The state store of the fixture heads and its repository (kt_fixture_store). */
+static char store[4096], repo[4096];
 static void observer_resize(void) {
     const unsigned char frame[] = "\033[2J\033[H界";
     size_t split;
@@ -169,7 +171,7 @@ static void hydra(void) {
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
     {
         const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
-        kt_open_terminal(&s, argv, 140, 40, NULL);
+        kt_open_terminal(&s, argv, 140, 40, repo);
     }
     kt_until(&s, "Heads \xe2\x94\x80", 3);
     kt_until(&s, "Session     running", 3);
@@ -195,12 +197,13 @@ static void hydra(void) {
     kt_close(&s, "q", 0, 0);
     puts("PASS Hydra: list selection, pane focus and scroll, divider, resize and restoration");
 }
-/* The heads are held back until the case opens the gate, so the workflow
- * arrives first however long either read takes. */
+/* The heads are held back until the case opens the gate (the fixture hydra
+ * holds the part of the snapshot the control centre asks it for), so the
+ * workflow arrives first however long either read takes. */
 static void hydra_startup_open(struct kt_session *s, const char *tui, const char *fake) {
     const char *argv[] = {tui, "--hydra", fake, NULL};
     (void)unlink(gate);
-    kt_open_terminal(s, argv, 140, 40, NULL);
+    kt_open_terminal(s, argv, 140, 40, repo);
     kt_until(s, "Loading snapshot...", 3);
     kt_until(s, "visualization-proof", 3);
     /* The rest of that frame may still be on its way (a macOS PTY takes a
@@ -208,22 +211,25 @@ static void hydra_startup_open(struct kt_session *s, const char *tui, const char
     kt_until(s, "0 heads", 3);
 }
 /* The first head is selected once heads arrive; a move selects the next;
- * when every head goes and comes back, a head is selected again. */
-static void hydra_startup_repopulation(struct kt_session *s, const char *model, const char *data) {
+ * when every head record goes and comes back, a head is selected again. */
+static void hydra_startup_repopulation(struct kt_session *s) {
+    char heads[8192], away[8192];
+    kt_format(heads, sizeof(heads), "%s/home/state/v2/projects/project_00000000000000f1/heads", store);
+    kt_format(away, sizeof(away), "%s.away", heads);
     kt_until(s, "Session     running", 3);
     CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x97\x90 feature-live"), "first head selected when heads arrive");
     kt_send(s, "j");
     kt_until(s, "Session     terminal gone", 3);
     CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x96\xb2 feature-stale"), "single move selects second head");
-    kt_write(model, "HYDRA_TUI\t2\n");
+    CHECK(!rename(heads, away), "every head record goes");
     kt_until(s, "0 heads", 3);
-    kt_write(model, data);
+    CHECK(!rename(away, heads), "the head records come back");
     kt_until(s, "3 heads \xc2\xb7", 3);
     CHECK(kt_contains(s, "\xe2\x96\x8c\xe2\x97\x90 feature-live"), "repopulation selects a head again");
 }
 static void hydra_startup_selection(void) {
     struct kt_session s;
-    char tui[4096], fake[4096], source[4096], model[4096], data[8192], name[64];
+    char tui[4096], fake[4096], name[64];
     /* With no head yet the first run is selected: a move before the heads
      * arrive chooses a run (k keeps the first, j the next) and it stays
      * chosen; Enter only expands the run, and the first head is selected
@@ -235,16 +241,11 @@ static void hydra_startup_selection(void) {
     size_t i;
     kt_format(tui, sizeof(tui), "%s/hydra-tui", build);
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
-    kt_format(source, sizeof(source), "%s/tests/fixtures/tui/native-v2.tsv", root);
-    kt_format(model, sizeof(model), "%s/startup-model.tsv", evidence);
-    kt_read(source, data, sizeof(data));
     kt_format(gate, sizeof(gate), "%s/startup-heads-gate", evidence);
-    CHECK(!setenv("HYDRA_TEST_TUI_GATE", gate, 1) && !setenv("HYDRA_TUI_FIXTURE", model, 1),
-          "configure delayed startup snapshot");
-    kt_write(model, data);
+    CHECK(!setenv("HYDRA_TEST_TUI_GATE", gate, 1), "configure delayed startup snapshot");
     hydra_startup_open(&s, tui, fake);
     kt_write(gate, "");
-    hydra_startup_repopulation(&s, model, data);
+    hydra_startup_repopulation(&s);
     save(&s, "startup-repopulation.html");
     kt_close(&s, "q", 0, 0);
     for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
@@ -260,8 +261,7 @@ static void hydra_startup_selection(void) {
         kt_close(&s, "q", 0, 0);
     }
     (void)unlink(gate);
-    CHECK(!unsetenv("HYDRA_TEST_TUI_GATE") && !unsetenv("HYDRA_TUI_FIXTURE"),
-          "restore startup fixture environment");
+    CHECK(!unsetenv("HYDRA_TEST_TUI_GATE"), "restore startup fixture environment");
     puts("PASS Hydra startup: first head, single move, a run chosen early, repopulation");
 }
 int main(int argc, char **argv) {
@@ -278,8 +278,12 @@ int main(int argc, char **argv) {
     shell_test();
     interruption();
     if (argc == 1) {
+        const char *remove[] = {"rm", "-rf", store, NULL};
+        kt_format(store, sizeof(store), "%s/store", evidence);
+        kt_fixture_store(root, NULL, store, repo, sizeof(repo));
         hydra();
         hydra_startup_selection();
+        kt_command_ok(NULL, remove);
     }
     return 0;
 }
