@@ -53,6 +53,15 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
 json_object *f_request_measured(const struct f_remote *remote, json_object *request,
                                 unsigned seconds, size_t *request_bytes,
                                 size_t *response_bytes, bool *request_complete);
+/* One SSH session for a handshake and then request, which must be one that
+ * only reads on the receiver: the receiver answers it without waiting for
+ * the caller to judge the handshake. *handshake is the handshake's answer and
+ * the return value the request's, each as f_request would return it from a
+ * session of its own and each the caller's. When the handshake fails (host
+ * unreachable, no Hydra on the host, an error envelope) the request was not
+ * answered and its answer is a copy of that failure. seconds bounds the
+ * connection and the whole session. */
+json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned seconds, json_object **handshake);
 /* Borrowed handshake data; shares the fleet observation compatibility gate. */
 bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);

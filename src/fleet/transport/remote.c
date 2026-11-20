@@ -204,10 +204,13 @@ static bool response_valid(json_object *result) {
     if (json_object_get_boolean(f_field(result, "ok"))) return json_object_is_type(f_field(result, "data"), json_type_object);
     return f_string(error, "code") && f_string(error, "message") && f_string(error, "recovery");
 }
-static json_object *measured_response(const struct f_remote *remote, struct f_capture *cap) {
+/* One answer of a completed session, from its text. status is the exit
+ * status that belongs to this answer: a successful answer from a command
+ * that did not exit 0 is not believed. */
+static json_object *session_answer(const struct f_remote *remote, const struct f_capture *cap, const char *text, int status) {
     json_object *result;
-    result = f_parse(cap->out);
-    if (result && cap->status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
+    result = f_parse(text);
+    if (result && status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
     if (!response_valid(result)) {
         json_object_put(result);
         result = f_error("fleet", cap->status ? f_transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
@@ -216,27 +219,68 @@ static json_object *measured_response(const struct f_remote *remote, struct f_ca
     }
     return result;
 }
+/* The receiver command for one request on standard input. With a handshake
+ * first, the same session answers a handshake request (given on the command
+ * line, so standard input still carries only the caller's request) and then,
+ * if that command exited 0, the request: two lines of output. A receiver
+ * without Hydra fails at the first command exactly as it does alone. */
+#define SERVE_COMMAND (F_PATH * 8 + 128)
+static int serve_command(const struct f_remote *remote, bool handshake_first, char *command, size_t size) {
+    char *exe = f_quote(remote->hydra), *home = f_quote(remote->home), *serve = malloc(SERVE_COMMAND); int n = -1;
+    if (exe && home && serve) {
+        n = snprintf(serve, SERVE_COMMAND, "env LC_ALL=C %s%s %s fleet serve", remote->home[0] ? "HYDRA_HOME=" : "", remote->home[0] ? home : "", exe);
+        if (n < 0 || n >= SERVE_COMMAND) n = -1;
+        else if (!handshake_first) n = snprintf(command, size, "%s", serve);
+        else n = snprintf(command, size, "printf '%%s' '{\"protocol\":%d,\"action\":\"handshake\"}' | %s && %s", F_PROTOCOL, serve, serve);
+    }
+    free(exe); free(home); free(serve);
+    return n >= 0 && (size_t)n < size ? 0 : -1;
+}
 json_object *f_request_measured(const struct f_remote *remote, json_object *request, unsigned seconds,
                                  size_t *request_bytes, size_t *response_bytes, bool *request_complete) {
     struct f_capture cap = {0}; json_object *result = NULL;
-    char *exe = f_quote(remote->hydra), *home = f_quote(remote->home); char command[F_PATH * 8 + 128];
-    const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN); int n;
+    char *command = malloc(SERVE_COMMAND);
+    const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN);
     if (request_bytes) *request_bytes = 0;
     if (response_bytes) *response_bytes = 0;
     if (request_complete) *request_complete = false;
-    if (!exe || !home) goto done;
-    n = snprintf(command, sizeof(command), "env LC_ALL=C %s%s %s fleet serve", remote->home[0] ? "HYDRA_HOME=" : "", remote->home[0] ? home : "", exe);
-    if (n < 0 || n >= (int)sizeof(command) || f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) goto done;
+    if (!command || serve_command(remote, false, command, SERVE_COMMAND) ||
+        f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) goto done;
     if (response_bytes) *response_bytes = cap.out_bytes;
     if (request_bytes) *request_bytes = cap.in_bytes;
     if (request_complete) *request_complete = cap.measurement_complete;
-    result = measured_response(remote, &cap);
+    result = session_answer(remote, &cap, cap.out, cap.status);
  done:
-    free(exe); free(home); f_capture_free(&cap);
+    free(command); f_capture_free(&cap);
     return result ? result : f_error("fleet", "transport_failed", "cannot start SSH transport");
 }
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds) {
     return f_request_measured(remote, request, seconds, NULL, NULL, NULL);
+}
+json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned seconds, json_object **handshake) {
+    struct f_capture cap = {0}; json_object *result = NULL;
+    char *command = malloc(SERVE_COMMAND * 2 + 96), *line;
+    const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN);
+    *handshake = NULL;
+    if (!command || serve_command(remote, true, command, SERVE_COMMAND * 2 + 96) ||
+        f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) {
+        *handshake = f_error("fleet", "transport_failed", "cannot start SSH transport");
+        goto done;
+    }
+    /* Each answer is one line: plain JSON holds no raw newline. The session's
+     * exit status is the request's. A handshake line that was ended is the
+     * whole answer of a command the session got past, so it is judged on its
+     * own; one that was not ended is judged with the status of the session,
+     * as a session of its own would be. */
+    line = strchr(cap.out, '\n');
+    if (line) *line++ = '\0';
+    *handshake = session_answer(remote, &cap, cap.out, line ? 0 : cap.status);
+    if (json_object_get_boolean(f_field(*handshake, "ok"))) result = session_answer(remote, &cap, line ? line : "", cap.status);
+ done:
+    free(command); f_capture_free(&cap);
+    /* Without a handshake there is no second answer: the request's answer
+     * is the handshake's failure. */
+    return result ? result : f_parse(json_object_to_json_string_ext(*handshake, JSON_C_TO_STRING_PLAIN));
 }
 /* Hydra 2.x, 3.x and 4.x all speak fleet protocol 1 over state 2; features
  * are negotiated by capability, not by version. */
@@ -247,25 +291,34 @@ bool f_handshake_compatible(json_object *data) {
         version && (!strncmp(version, "2.", 2) || !strncmp(version, "3.", 2) || !strncmp(version, "4.", 2)) &&
         json_object_is_type(f_field(data, "capabilities"), json_type_array);
 }
+/* Every action observed here only reads on the receiver (handshake, list,
+ * overview, doctor), so the handshake and the action share one SSH session
+ * (f_request_observed). The answer is judged as before: a failed handshake
+ * is returned as it is, an incompatible receiver is version_mismatch, and an
+ * action the receiver does not advertise is capability_unavailable whatever
+ * the receiver answered to it. */
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds) {
-    json_object *req = json_object_new_object(), *res, *data, *caps;
-    json_object_object_add(req, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(req, "action", "handshake");
-    res = f_request(remote, req, seconds); data = f_field(res, "data"); caps = f_field(data, "capabilities");
-    if (!json_object_get_boolean(f_field(res, "ok"))) goto done;
+    json_object *req = json_object_new_object(), *res = NULL, *handshake = NULL, *data, *caps;
+    bool only = !strcmp(action, "handshake");
+    json_object_object_add(req, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(req, "action", action);
+    if (only) handshake = f_request(remote, req, seconds);
+    else res = f_request_observed(remote, req, seconds, &handshake);
+    data = f_field(handshake, "data"); caps = f_field(data, "capabilities");
+    if (!json_object_get_boolean(f_field(handshake, "ok"))) { json_object_put(res); res = handshake; handshake = NULL; goto done; }
     if (!f_handshake_compatible(data)) {
         json_object_put(res); res = f_error("fleet", "version_mismatch", "remote Hydra or fleet protocol is incompatible"); goto done;
     }
-    if (strcmp(action, "handshake")) {
+    if (only) { res = handshake; handshake = NULL; }
+    else {
         size_t i; bool supported = false;
         for (i = 0; i < json_object_array_length(caps); i++) {
             json_object *cap = json_object_array_get_idx(caps, i);
             if (json_object_is_type(cap, json_type_string) && !strcmp(json_object_get_string(cap), action)) supported = true;
         }
-        if (!supported) { json_object_put(res); res = f_error("fleet", "capability_unavailable", "remote lacks required capability"); goto done; }
-        json_object_put(res); f_string_add(req, "action", action);
-        res = f_request(remote, req, seconds);
+        if (!supported) { json_object_put(res); res = f_error("fleet", "capability_unavailable", "remote lacks required capability"); }
     }
 done:
+    json_object_put(handshake);
     if (!strcmp(action, "list") && json_object_get_boolean(f_field(res, "ok")) && !json_object_is_type(f_field(f_field(res, "data"), "heads"), json_type_array)) {
         json_object_put(res); res = f_error("fleet", "invalid_response", "snapshot heads must be an array");
     }
