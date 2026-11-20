@@ -28,11 +28,15 @@ schedule_dir() {
     printf '%s/%s\n' "$SCHEDULE_ROOT" "$1"
 }
 
+# As with acquire_lock, the owner recorded is the shell process that calls
+# this and later schedule_unlock, which in a subshell is not $$.
 schedule_lock() {
     _sl_name="schedule_${POOL_PROJECT}_$1"
     _sl_i=0
+    lock_load_self_pid || _LOCK_SELF_PID="$$"
+    _sl_owner="$_LOCK_SELF_PID"
     while :; do
-        try_lock "$_sl_name" "schedule $1" && return 0
+        lock_take "$_sl_name" "schedule $1" "$_sl_owner" && return 0
         remove_stale_lock_dir "$HYDRA_HOME/locks/$_sl_name.lock" 2>/dev/null && continue
         _sl_i=$((_sl_i + 1))
         [ "$_sl_i" -lt "${HYDRA_POOL_LOCK_TRIES:-200}" ] || break

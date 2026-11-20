@@ -61,12 +61,16 @@ pool_lock_name() {
 
 # The coordinator lock. Stale locks of dead local owners are removed first;
 # a held lock is waited for briefly and then refused (a failed mutation).
+# As with acquire_lock, the owner recorded is the shell process that calls
+# this and later pool_unlock, which in a subshell is not $$.
 pool_lock() {
     _pl_name="$(pool_lock_name "$1")"
     _pl_tries="${HYDRA_POOL_LOCK_TRIES:-200}"
     _pl_i=0
+    lock_load_self_pid || _LOCK_SELF_PID="$$"
+    _pl_owner="$_LOCK_SELF_PID"
     while :; do
-        try_lock "$_pl_name" "pool $1" && return 0
+        lock_take "$_pl_name" "pool $1" "$_pl_owner" && return 0
         remove_stale_lock_dir "$HYDRA_HOME/locks/$_pl_name.lock" 2>/dev/null && continue
         _pl_i=$((_pl_i + 1))
         [ "$_pl_i" -lt "$_pl_tries" ] || break
