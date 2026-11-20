@@ -72,6 +72,29 @@ static double admission_claim_cost(const char *script) {
     }
     return 2 * worst;
 }
+static void admission_never_frees(const char *dir, double cost) {
+    json_object *state = json_object_new_object(); long claims; double elapsed, late; int status;
+    /* A slot that never frees up: the claims come at 20, 60, 140, 300, 620,
+     * 1260 and 2260 ms at the earliest, so a wait of up to 3 s takes at most
+     * 7 (200 ms pauses took 14); it ends at the deadline, not before it, and
+     * not more than one claim after it. */
+    f_string_add(state, "admission_id", "x");
+    status = admission_run(dir, 1000000, 3, 0, state, &claims, &elapsed, &late);
+    if (claims < 1 || claims > 7 || late < 0 || late > cost + 0.35) fprintf(stderr, "admission: claims %ld, %.3f s past the deadline (a claim costs %.3f s)\n", claims, late, cost);
+    assert(status == -1 && !strcmp(f_string(state, "failure"), "queue_deadline"));
+    assert(claims >= 1 && claims <= 7 && late >= 0 && late <= cost + 0.35);
+    json_object_put(state);
+}
+static void admission_stopped(const char *dir, double cost) {
+    json_object *state = json_object_new_object(); long claims; double elapsed, late; int status;
+    /* A stop request ends a long pause within a slice (100 ms) and the claim
+     * that may be running, not after the pause. */
+    f_string_add(state, "admission_id", "x");
+    status = admission_run(dir, 1000000, 30, 1.5, state, &claims, &elapsed, &late);
+    if (elapsed >= 1.5 + cost + 0.35) fprintf(stderr, "admission: stopped after %.3f s (a claim costs %.3f s)\n", elapsed, cost);
+    assert(status == -1 && !f_string(state, "failure") && elapsed >= 1.5 && elapsed < 1.5 + cost + 0.35);
+    json_object_put(state);
+}
 static void admission_wait(const char *home) {
     char dir[F_PATH], script[F_PATH]; json_object *state; long claims; double elapsed, late, cost; int status; const char *saved = f_hydra;
     static const char fake[] =
@@ -97,24 +120,8 @@ static void admission_wait(const char *home) {
     json_object_put(state);
     cost = admission_claim_cost(script);
 
-    /* A slot that never frees up: the claims come at 20, 60, 140, 300, 620,
-     * 1260 and 2260 ms at the earliest, so a wait of up to 3 s takes at most
-     * 7 (200 ms pauses took 14); it ends at the deadline, not before it, and
-     * not more than one claim after it. */
-    state = json_object_new_object(); f_string_add(state, "admission_id", "x");
-    status = admission_run(dir, 1000000, 3, 0, state, &claims, &elapsed, &late);
-    if (claims < 1 || claims > 7 || late < 0 || late > cost + 0.35) fprintf(stderr, "admission: claims %ld, %.3f s past the deadline (a claim costs %.3f s)\n", claims, late, cost);
-    assert(status == -1 && !strcmp(f_string(state, "failure"), "queue_deadline"));
-    assert(claims >= 1 && claims <= 7 && late >= 0 && late <= cost + 0.35);
-    json_object_put(state);
-
-    /* A stop request ends a long pause within a slice (100 ms) and the claim
-     * that may be running, not after the pause. */
-    state = json_object_new_object(); f_string_add(state, "admission_id", "x");
-    status = admission_run(dir, 1000000, 30, 1.5, state, &claims, &elapsed, &late);
-    if (elapsed >= 1.5 + cost + 0.35) fprintf(stderr, "admission: stopped after %.3f s (a claim costs %.3f s)\n", elapsed, cost);
-    assert(status == -1 && !f_string(state, "failure") && elapsed >= 1.5 && elapsed < 1.5 + cost + 0.35);
-    json_object_put(state);
+    admission_never_frees(dir, cost);
+    admission_stopped(dir, cost);
 
     f_hydra = saved;
     assert(!f_remove_tree(dir));
