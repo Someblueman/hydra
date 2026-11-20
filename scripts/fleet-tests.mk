@@ -70,7 +70,8 @@ FLEET_CASES = shell-task-acceptance \
 	shell-remote-setup \
 	native-fleet-assets \
 	native-placement \
-	shell-remote-provision
+	shell-remote-provision \
+	native-workflow-drive
 
 # Shell cases run through scripts/run-shell-test.sh like make test: private
 # TMPDIR/TMUX_TMPDIR, no inherited TMUX, and native binaries from BUILD_DIR.
@@ -109,6 +110,9 @@ fleet-case-native-plan:
 
 fleet-case-native-plan-expansion:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-plan-expansion
+
+fleet-case-native-workflow-drive:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-workflow-drive
 
 fleet-case-native-workflow-schedule:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$(FLEET_CASE_PREFIX)$@" env $(BUILD_DIR)/test-workflow-schedule

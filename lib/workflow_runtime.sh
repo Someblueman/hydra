@@ -15,27 +15,125 @@ workflow_atomic_scalar() {
     state_v2_write_scalar "$1" "$2"
 }
 
+# The event lock is the directory <run>/.events.lock, taken with
+# hydra_exclusive_mkdir; its owner-pid names the process that writes. The
+# native driver (take_event_lock in src/fleet/workflow/workflow_drive_io.c)
+# takes and breaks it by the same rules.
+
+# True when a live process other than this one has announced, in
+# <lock>.breaking.<pid>, that it is breaking the lock. An announcement counts
+# only while its process lives; a dead one is left alone, as its PID may name
+# a new process that has just announced under the same name.
+# Usage: workflow_event_lock_breaker <lock> <own-announcement>
+workflow_event_lock_breaker() {
+    for _welk_claim in "$1".breaking.*; do
+        [ "$_welk_claim" != "$2" ] || continue
+        [ -f "$_welk_claim" ] || continue
+        if workflow_pid_alive "${_welk_claim##*.breaking.}"; then return 0; fi
+    done
+    return 1
+}
+
+# True while the lock is the one a waiting writer judged stale: it still names
+# the dead owner the writer read or, for a lock without an owner record, has
+# not been modified since the writer made its watch file. A lock taken in the
+# meantime names a live owner or is a newer directory.
+# Usage: workflow_event_lock_stale <lock> <owner-pid|''> <watch-file>
+workflow_event_lock_stale() {
+    [ -d "$1" ] || return 1
+    [ "$(sed -n '1p' "$1/owner-pid" 2>/dev/null || true)" = "$2" ] || return 1
+    if [ -n "$2" ]; then
+        if workflow_pid_alive "$2"; then return 1; fi
+        return 0
+    fi
+    [ -f "$3" ] && [ -z "$(find "$1" -prune -newer "$3" 2>/dev/null)" ]
+}
+
+# Breaks a lock whose owner died, or that was abandoned without an owner
+# record. Checking the owner and then deleting the directory is not enough: of
+# two waiting writers that both saw the stale lock, the slower would delete
+# the lock the faster had taken in between, and both would append an event
+# with the same sequence number. So, as remove_stale_lock_dir (lib/locks.sh):
+#   1. Announce: create <lock>.breaking.<pid of this process> beside the lock.
+#   2. Give way to any other live announcement. Of two breakers at least one
+#      sees the other, because each announces before it looks; when both give
+#      way, both try again.
+#   3. Check again that the lock is the stale one (workflow_event_lock_stale).
+#      No other breaker is past step 2, so a lock that is stale now stays this
+#      one until step 4.
+#   4. Rename the directory away, which frees the name in one step, and delete
+#      it under its new name.
+# Usage: workflow_event_lock_break <lock> <owner-pid|''> <watch-file> <own-pid>
+# Returns: 0 when this process removed the lock, 1 otherwise
+workflow_event_lock_break() {
+    _welb_claim="$1.breaking.$4"
+    (umask 077; : > "$_welb_claim") 2>/dev/null || return 1
+    _welb_status=1
+    if ! workflow_event_lock_breaker "$1" "$_welb_claim" && workflow_event_lock_stale "$1" "$2" "$3"; then
+        _welb_grave="$1.dead.$4"
+        rm -rf "$_welb_grave"
+        if mv "$1" "$_welb_grave" 2>/dev/null; then _welb_status=0; fi
+        rm -rf "$_welb_grave"
+    fi
+    rm -f "$_welb_claim"
+    return "$_welb_status"
+}
+
 workflow_event() {
     _we_dir="$1" _we_step="$2" _we_type="$3" _we_detail="${4:-}"
     _we_file="$_we_dir/events.jsonl"
     _we_lock="$_we_dir/.events.lock"
     _we_tries=0
     hydra_private_touch "$_we_file" || return 1
-    while ! (umask 077; hydra_exclusive_mkdir "$_we_lock") 2>/dev/null; do
-        _we_lock_pid="$(sed -n '1p' "$_we_lock/owner-pid" 2>/dev/null || true)"
-        if [ -n "$_we_lock_pid" ] && ! workflow_pid_alive "$_we_lock_pid"; then
-            rm -rf "$_we_lock"
-            continue
-        fi
-        _we_tries=$((_we_tries + 1))
-        [ "$_we_tries" -lt 30 ] || return 1
-        sleep 1
-    done
-    # The lock names the process that writes, which recovery above tests for
+    # The lock names the process that writes, which recovery below tests for
     # life. In a subshell $$ would name the top-level process instead: a
     # writer whose parent exited would lose its live lock to recovery, and a
-    # dead writer's lock would be kept while that parent lived.
+    # dead writer's lock would be kept while that parent lived. It is known
+    # before the lock is taken, so the lock is without an owner record only
+    # for as long as writing the record takes.
     _we_pid="$(exec sh -c 'printf %s "$PPID"')"
+    _we_ownerless=0
+    _we_watch=""
+    while ! (umask 077; hydra_exclusive_mkdir "$_we_lock") 2>/dev/null; do
+        _we_lock_pid="$(sed -n '1p' "$_we_lock/owner-pid" 2>/dev/null || true)"
+        if [ -n "$_we_lock_pid" ]; then
+            _we_ownerless=0
+            # The owner died holding the lock: break it and try again at once.
+            if ! workflow_pid_alive "$_we_lock_pid" &&
+                workflow_event_lock_break "$_we_lock" "$_we_lock_pid" "" "$_we_pid"; then
+                continue
+            fi
+        elif [ -d "$_we_lock" ]; then
+            # No owner record: the writer is between creating the lock and
+            # recording itself, or it died there and nothing will ever release
+            # the lock. It is abandoned once it has stayed unmodified, still
+            # without a record, over five polls after it was first seen; the
+            # watch file made at that first sight is what "unmodified since"
+            # is measured against.
+            if [ "$_we_ownerless" -gt 0 ] && [ -n "$(find "$_we_lock" -prune -newer "$_we_watch" 2>/dev/null)" ]; then
+                _we_ownerless=0
+            fi
+            if [ "$_we_ownerless" -eq 0 ]; then
+                _we_watch="$_we_lock.watch.$_we_pid"
+                rm -f "$_we_watch"
+                (umask 077; : > "$_we_watch") 2>/dev/null || true
+            fi
+            _we_ownerless=$((_we_ownerless + 1))
+            if [ "$_we_ownerless" -gt 5 ] && workflow_event_lock_break "$_we_lock" "" "$_we_watch" "$_we_pid"; then
+                _we_ownerless=0
+                continue
+            fi
+        fi
+        _we_tries=$((_we_tries + 1))
+        if [ "$_we_tries" -ge 30 ]; then
+            [ -z "$_we_watch" ] || rm -f "$_we_watch"
+            return 1
+        fi
+        # A held lock is waited for a second at a time; one released since
+        # the failed try is tried again at once.
+        [ ! -d "$_we_lock" ] || sleep 1
+    done
+    [ -z "$_we_watch" ] || rm -f "$_we_watch"
     (umask 077; printf '%s\n' "$_we_pid" > "$_we_lock/owner-pid")
     _we_seq="$(awk 'END { print NR + 1 }' "$_we_file" 2>/dev/null || printf 1)"
     _we_now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

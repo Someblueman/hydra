@@ -26,6 +26,9 @@ struct wdr_policy { char *id, *classes, *delay; };
 
 struct wdr_child { pid_t pid; bool exited; };
 
+/* How much of events.jsonl this driver has counted: see next_sequence. */
+struct wdr_events { bool counted; dev_t dev; ino_t ino; off_t size; long lines; char last; };
+
 struct wdr_run {
     const char *dir;
     char *graph;
@@ -41,6 +44,7 @@ struct wdr_run {
     size_t child_count, child_capacity;
     bool woken;
     char root[F_PATH];
+    struct wdr_events events;
 };
 
 /* workflow_drive_io.c: run files, scalars and events. */
