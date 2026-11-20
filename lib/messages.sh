@@ -176,21 +176,6 @@ _message_write_receipt_locked() {
     fi
 }
 
-message_write_receipt() {
-    _mwr_branch="$1"
-    _mwr_id="$2"
-    _mwr_status="$3"
-    _mwr_instance="$4"
-    _mwr_dir="$(get_message_dir "$_mwr_branch")"
-    _mwr_lock="$(get_message_lock "$_mwr_branch")"
-    acquire_lock "$_mwr_lock" "message receipt update" || return 1
-    if ! _message_write_receipt_locked "$_mwr_dir" "$_mwr_id" "$_mwr_status" "$_mwr_instance"; then
-        release_lock "$_mwr_lock"
-        return 1
-    fi
-    release_lock "$_mwr_lock"
-}
-
 recv_messages() {
     branch=""
     peek=0
@@ -350,34 +335,6 @@ messages_safe_point() (
     done
 )
 
-# Count pending messages for a branch
-# Usage: count_messages <branch>
-# Returns: Count on stdout
-count_messages() {
-    branch="${1:-}"
-
-    if [ -z "$branch" ]; then
-        echo "0"
-        return
-    fi
-
-    msg_dir="$(get_message_dir "$branch")" || return 1
-    queue_dir="$msg_dir/queue"
-
-    if [ ! -d "$queue_dir" ]; then
-        echo "0"
-        return
-    fi
-
-    # Count files in queue directory
-    count=0
-    for f in "$queue_dir"/*; do
-        [ -f "$f" ] && count=$((count + 1))
-    done
-
-    echo "$count"
-}
-
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -391,26 +348,6 @@ get_current_branch() {
         return 1
     fi
     get_branch_for_session "$current_session"
-}
-
-# Clean up old messages (archive older than N days)
-# Usage: cleanup_old_messages [days]
-# Returns: 0 always
-cleanup_old_messages() {
-    days="${1:-7}"
-    msg_base="${HYDRA_HOME:-$HOME/.hydra}"
-
-    if [ ! -d "$msg_base" ]; then
-        return 0
-    fi
-
-    # Find and remove archived messages older than N days
-    find "$msg_base" -path "*/messages/archive/*" -type f -mtime +"$days" -delete 2>/dev/null || true
-
-    # Remove empty directories
-    find "$msg_base" -path "*/messages/*" -type d -empty -delete 2>/dev/null || true
-
-    return 0
 }
 
 # Clean up messages for a dead session

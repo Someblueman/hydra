@@ -226,28 +226,6 @@ test_recv_messages() {
     cleanup_test_env
 }
 
-test_count_messages() {
-    echo "Testing count_messages..."
-    setup_test_env
-
-    # Setup
-    ensure_message_dir "count-test"
-    msg_dir="$(get_message_dir "count-test")"
-    echo "msg1" > "$msg_dir/queue/1_a_1"
-    echo "msg2" > "$msg_dir/queue/2_b_2"
-    echo "msg3" > "$msg_dir/queue/3_c_3"
-
-    result=$(count_messages "count-test")
-    assert_equal "3" "$result" "count_messages returns correct count"
-
-    # Test empty queue
-    ensure_message_dir "empty-test"
-    result=$(count_messages "empty-test")
-    assert_equal "0" "$result" "count_messages returns 0 for empty queue"
-
-    cleanup_test_env
-}
-
 test_typed_message_receipts() {
     echo "Testing typed safe-point messages and receipts..."
     setup_test_env
@@ -346,7 +324,6 @@ test_get_message_dir
 test_ensure_message_dir
 test_send_message
 test_recv_messages
-test_count_messages
 test_typed_message_receipts
 
 echo ""
