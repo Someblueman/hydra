@@ -152,18 +152,29 @@ release_session_lock() {
 }
 
 # Acquire a lock with retries, then fail closed.
-# Usage: acquire_lock <name>
+# Usage: acquire_lock <name> [operation]
 # HYDRA_LOCK_RETRIES (default 5). Sleep 0.05s between tries when supported.
+# The operation is recorded in the lock for diagnostics. A lock whose recorded
+# owner is a dead process on this host (a holder that was interrupted or
+# killed never releases) is broken and the try repeated at once. A lock owned
+# by a live process, by another host, or without a complete owner record is
+# never broken, however long it has been held.
 # Returns: 0 if acquired, 1 if not
 acquire_lock() {
     _al_name="$1"
+    _al_operation="${2:-$1}"
     _al_retries="${HYDRA_LOCK_RETRIES:-5}"
     _al_i=0
     case "$_al_retries" in
         ''|*[!0-9]*) _al_retries=5 ;;
     esac
     while [ "$_al_i" -lt "$_al_retries" ]; do
-        if try_lock "$_al_name"; then
+        if try_lock "$_al_name" "$_al_operation"; then
+            return 0
+        fi
+        if [ -n "${HYDRA_HOME:-}" ] &&
+            remove_stale_lock_dir "$HYDRA_HOME/locks/$_al_name.lock" 2>/dev/null &&
+            try_lock "$_al_name" "$_al_operation"; then
             return 0
         fi
         _al_i=$((_al_i + 1))
@@ -214,18 +225,79 @@ lock_dir_is_stale() {
     ! kill -0 "$_ldis_pid" 2>/dev/null
 }
 
-# Remove a lock only after rechecking stale-owner evidence.
+# True when another live process on this host has announced that it is
+# breaking this lock.
+# Usage: lock_breaker_active <lock-directory> <own-claim-file>
+lock_breaker_active() {
+    for _lba_claim in "$1".breaking.*; do
+        [ "$_lba_claim" != "$2" ] || continue
+        [ -f "$_lba_claim" ] || continue
+        _lba_pid="${_lba_claim##*.breaking.}"
+        case "$_lba_pid" in ''|*[!0-9]*) continue ;; esac
+        if kill -0 "$_lba_pid" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Break a lock whose owner is a dead process on this host.
 # Usage: remove_stale_lock_dir <lock-directory>
+# Returns: 0 when this caller removed the lock, 1 otherwise
+#
+# Checking the owner and then deleting the directory is not enough: of two
+# callers that both saw the dead owner, the slower one would delete the lock
+# the faster one, or anybody else, acquired in between. As the .claim of
+# hydra_exclusive_mkdir decides who created a lock, a claim decides who may
+# break one:
+#   1. Announce: create <lock>.breaking.<pid of this process> next to the lock.
+#   2. Look for other announcements. One from a live process means that
+#      process may be at step 3 or 4, so withdraw and report failure. Of two
+#      breakers at least one sees the other, because each announces before it
+#      looks; when both withdraw, their callers retry.
+#   3. Check the owner again. No other breaker is past step 2 and a dead owner
+#      releases nothing, so a lock that is stale now stays this one until
+#      step 4. A lock acquired since the first look has a live owner and is
+#      left alone.
+#   4. Rename the directory out of the way, which frees the name in one step,
+#      and delete it under its new name.
+# The claim lies beside the lock, never in it, so a live owner's record and
+# its release are not touched. A breaker that dies leaves its claim behind;
+# a claim counts only while its process is alive, and a dead one is harmless
+# and is never deleted by others (its PID may belong to a new process that
+# has just announced under the same name). Only a lock whose recorded host is
+# this one gets as far as a claim, so the PID in a claim's name is a local one.
 remove_stale_lock_dir() {
     _rsld_path="$1"
+    [ -n "${HYDRA_HOME:-}" ] || return 1
     case "$_rsld_path" in
         "$HYDRA_HOME"/locks/*.lock) ;;
         *) return 1 ;;
     esac
     lock_dir_is_stale "$_rsld_path" || return 1
-    rm -f "$_rsld_path/pid" "$_rsld_path/host" "$_rsld_path/created_at" \
-        "$_rsld_path/operation" "$_rsld_path/head_id" "$_rsld_path/run_id" "$_rsld_path/.claim" 2>/dev/null || true
-    rmdir "$_rsld_path" 2>/dev/null
+    # $$ stays the main shell's PID in a subshell; the claim has to name the
+    # process that makes it, which is the parent of this command substitution.
+    _rsld_self="$(exec sh -c 'echo "$PPID"' 2>/dev/null)"
+    case "$_rsld_self" in ''|*[!0-9]*) return 1 ;; esac
+    _rsld_claim="$_rsld_path.breaking.$_rsld_self"
+    (umask 077; : > "$_rsld_claim") 2>/dev/null || return 1
+    _rsld_status=1
+    if ! lock_breaker_active "$_rsld_path" "$_rsld_claim" && lock_dir_is_stale "$_rsld_path"; then
+        _rsld_grave="$_rsld_path.dead.$_rsld_self"
+        if mv -f "$_rsld_path" "$_rsld_grave" 2>/dev/null; then
+            _rsld_status=0
+            # A leftover directory of that name received the lock as a
+            # subdirectory; both levels are emptied of what a lock holds.
+            for _rsld_dir in "$_rsld_grave/${_rsld_path##*/}" "$_rsld_grave"; do
+                [ -d "$_rsld_dir" ] || continue
+                rm -f "$_rsld_dir/pid" "$_rsld_dir/host" "$_rsld_dir/created_at" "$_rsld_dir/operation" \
+                    "$_rsld_dir/head_id" "$_rsld_dir/run_id" "$_rsld_dir/.claim" 2>/dev/null || true
+                rmdir "$_rsld_dir" 2>/dev/null || true
+            done
+        fi
+    fi
+    rm -f "$_rsld_claim"
+    return "$_rsld_status"
 }
 
 # Clean up locks provably owned by a dead process on this host.
