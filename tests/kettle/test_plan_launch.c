@@ -354,9 +354,10 @@ int main(void) {
         end = kt_now() + 6;
         while (!kt_contains(&s, "This revision was already submitted") && kt_now() < end)
             kt_pump(&s, .001);
-        if (!kt_contains(&s, "This revision was already submitted"))
-            fprintf(stderr, "the refusal was %sin the output since E\n",
-                    strstr(s.raw + mark, "already submitted") ? "" : "never ");
+        if (!kt_contains(&s, "This revision was already submitted")) {
+            fprintf(stderr, "the refusal was %sin the output since E; the screen:\n%s\n",
+                    strstr(s.raw + mark, "already submitted") ? "" : "never ", kt_text(&s));
+        }
         U("This revision was already submitted", 0);
     }
     CHECK(!kt_contains(&s, "Execute plan"), "duplicate launch form refused");
