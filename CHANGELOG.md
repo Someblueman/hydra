@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-21
+
+Hydra 5.0.0 is a reliability and performance release. It fixes defects that
+could end the wrong head's session, replace state with an empty file on a full
+disk, or leave a lock held by a dead process, and it makes the native helpers
+the paths that run: `hydra snapshot` answers from `hydra-core`, workflow runs
+are driven by `hydra-fleet`, and the control centre has one reader of local
+head data. With five heads `hydra list` and `hydra status` answer in about
+25 ms instead of about 700 ms, a snapshot of 60 heads takes about 50 ms
+instead of about 4 s, and opening the control centre no longer starts a shell
+process for every head. Fleet records are written durably, and read-only
+remote operations open one SSH connection instead of two. Hosts running Hydra
+2.x to 5.x keep speaking the same fleet protocol. This is a major release:
+compatibility paths for Hydra 1.x and 2.5 data, the shell workflow driver,
+`HYDRA_MAX_SESSIONS` and `hydra queue`, old view names and unbound key action
+names are removed. The entries marked **Breaking** below say what to change.
+
 ### Breaking
 - **`hydra state migrate` is removed.** It only deleted the Hydra 1.x session
   map (`~/.hydra/map`) and the 1.9 `compat-map` files, which no release since
@@ -2862,7 +2879,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/Someblueman/hydra/compare/v4.0.0...v5.0.0
 [4.0.0]: https://github.com/Someblueman/hydra/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Someblueman/hydra/compare/v2.9.0...v3.0.0
 [2.9.0]: https://github.com/Someblueman/hydra/compare/v2.8.0...v2.9.0

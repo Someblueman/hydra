@@ -10,7 +10,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
     HOME="$(cd ~ && pwd)"
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
-HYDRA_VERSION="4.0.0"
+HYDRA_VERSION="5.0.0"
 export HYDRA_VERSION
 
 # Source helper libraries

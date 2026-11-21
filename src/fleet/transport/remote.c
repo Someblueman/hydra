@@ -326,13 +326,14 @@ json_object *f_request_observed(const struct f_remote *remote, json_object *requ
      * is the handshake's failure. */
     return result ? result : f_parse(json_object_to_json_string_ext(*handshake, JSON_C_TO_STRING_PLAIN));
 }
-/* Hydra 2.x, 3.x and 4.x all speak fleet protocol 1 over state 2; features
- * are negotiated by capability, not by version. */
+/* Hydra 2.x to 5.x all speak fleet protocol 1 over state 2; features are
+ * negotiated by capability, not by version. */
 bool f_handshake_compatible(json_object *data) {
     const char *version = f_string(data, "hydra_version");
     return f_number_is(data, "fleet_protocol", F_PROTOCOL) && f_number_is(data, "state_schema", 2) &&
         f_number_is(data, "event_schema", 1) && f_number_is(data, "json_schema", 1) &&
-        version && (!strncmp(version, "2.", 2) || !strncmp(version, "3.", 2) || !strncmp(version, "4.", 2)) &&
+        version && (!strncmp(version, "2.", 2) || !strncmp(version, "3.", 2) || !strncmp(version, "4.", 2) ||
+        !strncmp(version, "5.", 2)) &&
         json_object_is_type(f_field(data, "capabilities"), json_type_array);
 }
 json_object *f_handshake_judged(const struct f_remote *remote, json_object *handshake) {
