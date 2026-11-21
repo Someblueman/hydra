@@ -271,7 +271,7 @@ static bool plan_keys_say_why(void) {
     bool ok = fixture_open(&f);
     if (!ok) { fixture_close(&f); return false; }
     one_head(f.app);
-    f.app->inbox = calloc(1U, sizeof(*f.app->inbox));
+    if (!f.app->inbox) f.app->inbox = calloc(1U, sizeof(*f.app->inbox));
     ok = f.app->inbox && unreadable_proposal(script, sizeof(script));
     if (!ok) { fixture_close(&f); return false; }
     f.app->hydra = script;
