@@ -1151,7 +1151,9 @@ static void test_quit_with_held_output(const char *tui, const char *hydra, const
     (void)unlink(pids);
     if (!result(pipe_holder_session(&session, tui, hydra, fake_bin, pids), "open held-output terminal")) return;
     result(wait_for_raw(&session), "held output reaches raw mode");
-    holder = pipe_holder_started(pids, 5000);
+    /* The holder is started by the CLI the first refresh runs, after raw mode
+     * and after git and the store read: the same wait as the capture owner's. */
+    holder = pipe_holder_started(pids, CAPTURE_OWNER_START_MS);
     result(holder > 0, "a descendant outside the read's session holds its output");
     write_input(session.master, "q", 1U);
     asked = monotonic_ms();
