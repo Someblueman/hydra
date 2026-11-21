@@ -15,6 +15,8 @@ HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make te
 export HYDRA_FLEET_BIN
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
+# shellcheck source=/dev/null
+. "$root/tests/workflow_plan_explain.sh"
 cleanup() {
     workflow_task_fixture_quiesce || return 1
     if [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" = 1 ]; then printf 'Plan task evidence: %s\n' "$fixture" >&2; return 0; fi
@@ -28,7 +30,7 @@ cleanup() {
     else printf 'Plan task evidence: %s\n' "$fixture" >&2; fi
 }
 test_code=0
-trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
+trap 'test_code=$?; if [ "$test_code" != 0 ]; then workflow_plan_task_explain "$test_code" || :; fi; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
@@ -112,6 +114,8 @@ code=0
 "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run.out" 2> "$fixture/run.err" || code=$?
 run="$(sed -n '1p' "$fixture/run.out")"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+# shellcheck disable=SC2034 # read by workflow_plan_task_explain
+explain_reason="the plan run finished; checking the outcome of the plan run (mode $mode)"
 if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
     if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_resume; fi
     if [ "${HYDRA_TEST_PLAN_REUSE:-0}" = 1 ]; then workflow_plan_reuse_assert; else workflow_plan_repair_assert; fi

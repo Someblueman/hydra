@@ -46,28 +46,13 @@ if grep -q '\''"attempt":2'\'' "$HYDRA_TASK_INPUT_DIR/repair"; then verdict=pass
         mv "$fixture/check" check.sh
     fi
 }
-# A run that never started a repair round ends without repair-round (round 1
-# has no file). Say what the run did instead of failing on a missing file: the
-# fixture is removed with the job, so this output is all a CI log keeps.
-workflow_plan_repair_explain() {
-    : "${run_dir:?}" "${code:?}" "${fixture:?}"
-    {
-        printf 'plan repair case %s: the run ended with exit code %s and no repair round\n' "$HYDRA_TEST_PLAN_REPAIR" "$code"
-        printf 'run state: %s\n' "$(cat "$run_dir/state" 2>/dev/null || printf unreadable)"
-        for step_dir in "$run_dir"/steps/*; do
-            [ -d "$step_dir" ] || continue
-            printf 'step %s: state=%s attempts=%s\n' "${step_dir##*/}" "$(cat "$step_dir/state" 2>/dev/null)" "$(cat "$step_dir/attempts" 2>/dev/null)"
-        done
-        for file in repair-pending.json cancel-requested; do [ ! -e "$run_dir/$file" ] || printf 'present: %s\n' "$file"; done
-        printf -- '--- run.out\n'; cat "$fixture/run.out" 2>/dev/null
-        printf -- '--- run.err\n'; cat "$fixture/run.err" 2>/dev/null
-        printf -- '--- events\n'; cat "$run_dir/events.jsonl" 2>/dev/null
-    } >&2
-}
 workflow_plan_repair_assert() {
     : "${run_dir:?}" "${code:?}" "${root:?}" "${run:?}"
     if [ "$HYDRA_TEST_PLAN_REPAIR" != crash ] && [ ! -e "$run_dir/repair-round" ]; then
-        workflow_plan_repair_explain
+        # A run that never started a repair round has no repair-round file.
+        # The fixture's EXIT trap prints the run's evidence (workflow_plan_explain.sh).
+        # shellcheck disable=SC2034 # read by workflow_plan_task_explain
+        explain_reason="plan repair case $HYDRA_TEST_PLAN_REPAIR: the run ended with exit code $code and no repair round"
         exit 1
     fi
     if [ "$HYDRA_TEST_PLAN_REPAIR" = crash ]; then
