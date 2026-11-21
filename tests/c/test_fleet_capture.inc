@@ -56,15 +56,26 @@ static long capture_clock_ms(void) {
     assert(!clock_gettime(CLOCK_MONOTONIC, &ts));
     return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
-/* A child that closes both streams and exits a little later is reaped when
- * it exits, not a whole polling tick (50 ms) after the streams closed. The
- * fastest of several runs is judged, so a busy machine does not fail the
- * case; with a fixed tick every run takes at least that tick. */
-static void capture_prompt_reap(void) {
-    char *command[] = {(char *)"sh", (char *)"-c", (char *)"exec 1>&- 2>&-; sleep 0.01; exit 5", NULL};
+/* The wait for a child that closed its streams starts short and doubles up
+ * to the 50 ms tick, so a child that exits soon is reaped soon. */
+static void capture_reap_schedule(void) {
+    long pause = f_reap_pause_us(0), total = pause;
+    int steps = 1;
+    assert(pause > 0 && pause <= 200);
+    while (pause < 50000L) {
+        long next = f_reap_pause_us(pause);
+        assert(next == pause * 2 || next == 50000L);
+        pause = next; total += pause; steps++;
+    }
+    assert(steps >= 8 && total > 50000L);
+    assert(f_reap_pause_us(50000L) == 50000L && f_reap_pause_us(-5) == f_reap_pause_us(0));
+    assert(f_reap_pause_us(1L << 40) == 50000L);
+}
+/* The fastest of several runs of a command, in ms. */
+static long capture_fastest(char *const command[], int runs) {
     long best = -1;
     int i;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < runs; i++) {
         struct f_capture cap = {0};
         long started = capture_clock_ms(), elapsed;
         assert(!f_run(command, NULL, 0, 30, &cap));
@@ -73,8 +84,26 @@ static void capture_prompt_reap(void) {
         f_capture_free(&cap);
         if (best < 0 || elapsed < best) best = elapsed;
     }
-    if (best >= 40) fprintf(stderr, "capture: the fastest of 10 runs of a child that exits 10 ms after closing its streams took %ld ms\n", best);
-    assert(best < 40);
+    return best;
+}
+/* A child that closes both streams and exits a little later is reaped when
+ * it exits, not a whole polling tick (50 ms) after the streams closed. The
+ * same child that keeps its streams open is the baseline: it is reaped as
+ * soon as it exits, and its time holds what starting a process costs on this
+ * machine, so only the wait after the streams closed is compared. The
+ * fastest of several runs of each is used, so a busy machine does not fail
+ * the case. With a fixed tick the closed child takes at least 40 ms more
+ * than the baseline (the tick less the 10 ms it sleeps); this one takes a
+ * few ms more, and the bound is half of the tick's cost. */
+static void capture_prompt_reap(void) {
+    char *closed[] = {(char *)"sh", (char *)"-c", (char *)"exec 1>&- 2>&-; sleep 0.01; exit 5", NULL};
+    char *open[] = {(char *)"sh", (char *)"-c", (char *)"sleep 0.01; exit 5", NULL};
+    long baseline = capture_fastest(open, 10), best = capture_fastest(closed, 10);
+    capture_reap_schedule();
+    if (best - baseline >= 20)
+        fprintf(stderr, "capture: a child that exits 10 ms after closing its streams took %ld ms, %ld ms more than one that keeps them open\n",
+                best, best - baseline);
+    assert(best - baseline < 20);
 }
 static bool capture_stop_second(void *context) {
     int *calls = context;

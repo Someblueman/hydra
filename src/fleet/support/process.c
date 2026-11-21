@@ -125,11 +125,18 @@ static void exited_grace(pid_t pid, struct capture_stream streams[2], long *exit
  * before the grace period has run. */
 #define TICK_MS 50
 #define REAP_FIRST_US 100L
+/* The wait that follows one of previous microseconds (0 before the first):
+ * short first, then doubled up to the tick. Pure, so the schedule can be
+ * tested without a clock. */
+long f_reap_pause_us(long previous) {
+    if (previous <= 0) return REAP_FIRST_US;
+    return previous * 2 < TICK_MS * 1000L ? previous * 2 : TICK_MS * 1000L;
+}
 static void reap_pause(long *wait_us) {
     struct timespec pause;
+    *wait_us = f_reap_pause_us(*wait_us);
     pause.tv_sec = 0; pause.tv_nsec = *wait_us * 1000L;
     (void)nanosleep(&pause, NULL);
-    *wait_us = *wait_us * 2 < TICK_MS * 1000L ? *wait_us * 2 : TICK_MS * 1000L;
 }
 /* The child between fork and exec: its own process group, default signals,
  * the input file and the two pipes as its standard streams. */
@@ -162,7 +169,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
     pid_t pid = -1; FILE *in = NULL;
     long exited_at = -1; bool child_started = false;
     struct stopping stopping = {0, 0L, false};
-    long reap_wait = REAP_FIRST_US;
+    long reap_wait = 0;
     memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
     if (!stream_init(&streams[0], &cap->out) || !stream_init(&streams[1], &cap->err) || !(in = tmpfile())) goto done;
     if (control && control->stop && control->stop(control->context)) { cap->cancelled = true; cap->status = 130; result = 0; goto done; }
