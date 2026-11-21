@@ -131,6 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Y`/`F`, Work `E`/`F`) no longer does nothing when the plan cannot be
   opened: if its head is no longer listed or its draft cannot be read, the
   status line says which plan, and that nothing was approved or sent back.
+- In the control centre, a plan key the Plan page offers (`E` approve, `F`
+  request changes, ...) pressed while the list or another pane has focus now
+  says it works in the Plan pane and that Tab moves there. Before, it did
+  nothing.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
