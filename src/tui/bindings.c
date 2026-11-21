@@ -172,6 +172,23 @@ void key_perform(struct app *app, enum key_action action) {
     else if (key) input_character(app, (char)key);
 }
 
+/* A key the Plan page offers in words (E approve, F request changes, ...) but
+ * that the focused pane does not take is not dropped without a word: the
+ * notice says which pane it works in. Only a key that applies to the
+ * selection now is named, so it is the one the page shows. */
+static void plan_key_elsewhere(struct app *app, const struct kt_event *e) {
+    const struct kt_binding *binding = NULL;
+    struct kt_keymap_state probe;
+    enum key_chain_id chain = key_chain(app);
+    char chord[96];
+    if (app->view != 7 || chain == KEY_CHAIN_WORK_PLAN || chain > KEY_CHAIN_WORK_RUN || work_page(app) != WORK_PLAN) return;
+    kt_keymap_reset(&probe);
+    if (kt_keymap_feed(&native_keys(app)->map, &probe, KEY_SCOPE_WORK_PLAN, e, &binding) != KT_KEY_ACTION ||
+        !key_applies(app, (enum key_action)binding->action)) return;
+    (void)kt_chord_format(&binding->chords[0], chord, sizeof(chord));
+    notice_set(app, "%s (%s) works in the Plan pane; Tab moves there", chord, binding->label);
+}
+
 /* A key the help leaves alone closes it and then acts where help was open,
  * as any key did before help had keys of its own. */
 bool key_dispatch(struct app *app, const struct kt_event *e) {
@@ -188,6 +205,7 @@ bool key_dispatch(struct app *app, const struct kt_event *e) {
     match = kt_keymap_feed(&k->map, &k->view_state, chain, e, &binding);
     if (match == KT_KEY_PENDING || match == KT_KEY_ABANDONED) return true;
     if (match == KT_KEY_ACTION) { key_perform(app, (enum key_action)binding->action); return true; }
+    if (match == KT_KEY_UNBOUND) plan_key_elsewhere(app, e);
     if (!app->help) return false;
     app->help = false; app->help_scroll = 0;
     return key_dispatch(app, e);

@@ -295,6 +295,42 @@ static bool plan_keys_say_why(void) {
     return ok;
 }
 
+/* The Plan page offers E and F in words. With the list focused they are not
+ * bound, and the footer does not offer them, but the key is not dropped
+ * without a word: the notice says the key works in the Plan pane. A key the
+ * Plan pane does not offer for this selection (V, with no plan loaded) and
+ * an ordinary unbound key stay silent. */
+static bool plan_key_on_list_says_where(void) {
+    struct fixture f;
+    char script[512] = "";
+    bool ok = fixture_open(&f);
+    if (!ok) { fixture_close(&f); return false; }
+    one_head(f.app);
+    if (!f.app->inbox) f.app->inbox = calloc(1U, sizeof(*f.app->inbox));
+    ok = f.app->inbox && unreadable_proposal(script, sizeof(script));
+    if (!ok) { fixture_close(&f); return false; }
+    f.app->hydra = script;
+    f.app->inbox->plan_count = 1U;
+    copy_text(f.app->inbox->plans[0].branch, TEXT, "feature-one");
+    work_focus_page(f.app, WORK_PLAN);
+    work_focus_list(f.app);
+    f.app->notice[0] = '\0';
+    type(&f, "E");
+    ok = strstr(f.app->notice, "E (approve) works in the Plan pane") && !f.app->result_open && !f.app->modal_count;
+    f.app->notice[0] = '\0';
+    type(&f, "F");
+    ok = ok && strstr(f.app->notice, "F (request changes) works in the Plan pane");
+    f.app->notice[0] = '\0';
+    type(&f, "V");
+    ok = ok && !f.app->notice[0];
+    type(&f, "w");
+    ok = ok && !f.app->notice[0];
+    native_plan_destroy(f.app);
+    (void)unlink(script);
+    fixture_close(&f);
+    return ok;
+}
+
 /* Keys that arrive together cost one frame, and the frame after a resize
  * erases nothing. */
 static bool frames_are_few(void) {
@@ -344,6 +380,7 @@ int main(void) {
         {prompt_takes_input, "a prompt reads its text through the loop; paste cannot submit"},
         {dialogs_default_to_cancel, "a question defaults to Cancel and Esc closes a form without submitting"},
         {plan_keys_say_why, "a plan key that cannot open its published plan says why instead of doing nothing"},
+        {plan_key_on_list_says_where, "a plan key pressed with the list focused says which pane takes it"},
         {frames_are_few, "a burst of keys is one frame; a resize erases nothing"}
     };
     size_t i;
