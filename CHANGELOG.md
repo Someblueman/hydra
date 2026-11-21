@@ -127,6 +127,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A workflow cancellation no longer leaves a torn line in its residual-children
   record, and the event lock is released when its owner record cannot be
   written.
+- In the control centre, approving or sending back a published plan (Inbox
+  `Y`/`F`, Work `E`/`F`) no longer does nothing when the plan cannot be
+  opened: if its head is no longer listed or its draft cannot be read, the
+  status line says which plan, and that nothing was approved or sent back.
 - `hydra-fleet` exits non-zero when its output cannot be written.
 - Short Git and remote commands run by `hydra-fleet` no longer occasionally
   stall for 50 ms after the command has finished.
