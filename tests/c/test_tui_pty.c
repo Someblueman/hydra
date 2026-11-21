@@ -123,6 +123,13 @@ static bool pids_gone(const char *path) {
  * container's) collect orphans on a schedule of a second or two rather than at
  * once. The TUI reaps only its own child, so "gone" is checked within a bound. */
 #define PIDS_GONE_GRACE_MS 3000L
+/* Raw mode comes first; the capture owner exists only after the first refresh
+ * has located the repository (one git process), read the store and started the
+ * CLI, and on a loaded or cold machine that takes well over a second. Waiting
+ * returns the moment the owner has recorded itself, so the bound only decides
+ * how long a TUI that never starts the capture is waited for, and it equals
+ * the 12 s these cases already allow a state read. */
+#define CAPTURE_OWNER_START_MS 12000L
 static bool pids_gone_within(const char *path, long timeout_ms) {
     long long deadline=monotonic_ms()+timeout_ms;
     while (!pids_gone(path)) {
@@ -1043,7 +1050,7 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
     if (expected == 0) {
         result(wait_for_raw(&session), message);
         if (quit_while_running) {
-            result(wait_for_file(pid_file, 1000), "early quit observes a live capture owner");
+            result(wait_for_file(pid_file, CAPTURE_OWNER_START_MS), "early quit observes a live capture owner");
             write_input(session.master, "q", 1U);
             result(wait_for_exit(&session) == 0, "early quit stops the active capture");
             result(pids_gone_within(pid_file, PIDS_GONE_GRACE_MS), "early quit removes the capture owner and descendant");
