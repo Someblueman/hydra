@@ -27,64 +27,6 @@ get_hydra_worktree_parent() {
     dirname "$repo_root"
 }
 
-# Get the legacy v1 path prefix for hydra worktrees (parent/hydra-).
-# A matching directory name is not evidence that Hydra created a worktree;
-# orphan detection uses worktree_orphan_rows (identity-scoped heads) instead.
-# Usage: get_hydra_worktree_prefix [repo_root]
-# Returns: Prefix path on stdout
-get_hydra_worktree_prefix() {
-    repo_root="${1:-}"
-    if [ -z "$repo_root" ]; then
-        repo_root="$(get_repo_root)" || return 1
-    fi
-    parent_dir="$(dirname "$repo_root")"
-    printf '%s' "$parent_dir/hydra-"
-}
-
-# Calculate worktree path for a branch
-# Usage: get_worktree_path_for_branch <branch>
-# Returns: Worktree path on stdout
-# Note: Does not verify the path exists
-get_worktree_path_for_branch() {
-    branch="$1"
-    if [ -z "$branch" ]; then
-        echo "Error: Branch name required" >&2
-        return 1
-    fi
-    repo_root="$(get_repo_root)" || return 1
-    prefix="$(get_hydra_worktree_prefix "$repo_root")"
-    printf '%s%s' "$prefix" "$branch"
-}
-
-# Extract branch name from a hydra worktree path
-# Usage: branch_from_hydra_worktree_path <path> [repo_root]
-# Returns: Branch name on stdout, 1 if not a hydra worktree path
-branch_from_hydra_worktree_path() {
-    path="$1"
-    repo_root="${2:-}"
-    if [ -z "$path" ]; then
-        return 1
-    fi
-    if [ -z "$repo_root" ]; then
-        repo_root="$(get_repo_root 2>/dev/null)" || return 1
-    fi
-    prefix="$(get_hydra_worktree_prefix "$repo_root")"
-    case "$path" in
-        "$prefix"*)
-            printf '%s' "${path#"$prefix"}"
-            return 0
-            ;;
-    esac
-    return 1
-}
-
-# Check if a path is a hydra worktree directory
-# Usage: is_hydra_worktree_path <path> [repo_root]
-# Returns: 0 if hydra worktree path, 1 otherwise
-is_hydra_worktree_path() {
-    branch_from_hydra_worktree_path "$1" "${2:-}" >/dev/null 2>&1
-}
-
 # Normalize a path to absolute form
 # Usage: normalize_path <path>
 # Returns: Normalized absolute path on stdout

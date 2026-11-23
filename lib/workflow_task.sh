@@ -15,53 +15,14 @@ workflow_task_bindings_match() {
     grep -q '^task_args' "$1/graph.tsv" || return 0
     workflow_task_tool verify "$1" >/dev/null
 }
-workflow_task_resume() {
-    while IFS="$(printf '\t')" read -r _wtr_tag _wtr_id _wtr_rest; do
-        [ "$_wtr_tag" = task_args ] || continue
-        _wtr_sd="$1/steps/$_wtr_id"
-        rm -f "$_wtr_sd/cancel-reconciled"
-        [ ! -f "$1/cancel-requested" ] || continue
-        if workflow_plan_expired "$1"; then continue; fi
-        if [ "$(sed -n '1p' "$_wtr_sd/state")" = waiting-remote ]; then
-            workflow_task_start "$1" "$_wtr_id" || return 1
-        fi
-    done < "$1/graph.tsv"
-}
-# Usage: workflow_task_start <run-dir> <step> [<attempt>]
-# Given an attempt number, as the native driver's worker, runs that attempt's
-# worker in the foreground; the driver recorded the start itself.
-workflow_task_start() {
-    _wts_run="$1" _wts_id="$2" _wts_sd="$1/steps/$2"
-    if [ -n "${3:-}" ]; then workflow_task_worker "$1" "$2" "$3"; return; fi
-    _wts_number="$(sed -n '1p' "$_wts_sd/attempts")"
-    [ "$_wts_number" -gt 0 ] || _wts_number=1
-    _wts_attempt="$_wts_sd/attempt-$_wts_number"
-    (umask 077; mkdir -p "$_wts_attempt") || return 1
-    workflow_atomic_scalar "$_wts_sd/attempts" "$_wts_number"
-    # Measure the first coordinator dispatch for a new attempt. Reconciliation
-    # must not replace an original timestamp or invent history for old receipts.
-    if [ ! -d "$_wts_attempt/remote" ] && [ ! -e "$_wts_attempt/started-at" ]; then
-        _wts_started="$(date +%s)"
-        workflow_atomic_scalar "$_wts_attempt/started-at" "$_wts_started" || return 1
-        workflow_atomic_scalar "$_wts_sd/started-at" "$_wts_started" || return 1
-        if [ "$_wts_number" -eq 1 ]; then
-            workflow_atomic_scalar "$_wts_sd/initial-started-at" "$_wts_started" || return 1
-        fi
-    fi
-    workflow_atomic_scalar "$_wts_sd/state" running
-    workflow_event "$_wts_run" "$_wts_id" step.running task_reconciliation
-    ( workflow_task_worker "$_wts_run" "$_wts_id" "$_wts_number" ) &
-    workflow_atomic_scalar "$_wts_sd/worker-pid" "$!"
-}
 # Usage: workflow_task_worker <run-dir> <step> <attempt>
-# The worker of one task attempt, in a subshell or a process of its own.
+# The worker of one task attempt, a process of its own started by the driver.
 workflow_task_worker() {
     _wts_run="$1" _wts_id="$2" _wts_number="$3" _wts_sd="$1/steps/$2"
     _wts_attempt="$_wts_sd/attempt-$_wts_number"
     # Remote task records are Hydra evidence; no local user command runs here.
     umask 077
     _wts_pid=""
-    trap 'workflow_wake_driver' 0
     trap '[ -z "$_wts_pid" ] || operations_signal_tree "$_wts_pid" TERM' HUP INT TERM
     if ! workflow_bindings_match "$_wts_run"; then
         workflow_atomic_scalar "$_wts_sd/state" recovery-required
@@ -111,57 +72,4 @@ workflow_task_worker() {
     case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" "$_wts_number" ;; esac
     workflow_atomic_scalar "$_wts_sd/state" "$_wts_state"
     workflow_event "$_wts_run" "$_wts_id" "step.$_wts_state" task_observation
-}
-workflow_waiting_state() {
-    # One pass counts steps waiting for approval, waiting on remote work,
-    # active (running or retrying), and ready.
-    _wws_counts="$(WORKFLOW_RUN_DIR="$1" awk -F '\t' '
-        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
-        $1 == "step" {
-            state = ""; file = dir "/steps/" $2 "/state"
-            getline state < file; close(file)
-            if (state == "waiting-approval") approval++
-            else if (state == "waiting-remote") remote++
-            else if (state == "running" || state == "retrying") active++
-            else if (state == "ready") ready++
-        }
-        END { print approval + 0, remote + 0, active + 0, ready + 0 }' "$1/graph.tsv")" || return 1
-    read -r _wws_approval _wws_remote _wws_active _wws_ready <<EOF
-$_wws_counts
-EOF
-    [ "$((_wws_approval + _wws_remote))" -gt 0 ] || return 1
-    [ "$_wws_active" -eq 0 ] || return 1
-    if [ "$_wws_ready" -gt 0 ]; then
-        [ "$_wws_remote" -ge "$(sed -n '1p' "$1/parallelism")" ] || return 1
-    fi
-    _wws_state=waiting-approval
-    [ "$_wws_remote" -eq 0 ] || _wws_state=waiting-remote
-    workflow_atomic_scalar "$1/state" "$_wws_state"
-    workflow_event "$1" "" "run.$(printf '%s' "$_wws_state" | tr '-' '_')"
-}
-workflow_task_cancel() {
-    _wtc_id="$(basename "$2")"
-    awk -F '\t' -v id="$_wtc_id" '$1=="task_args" && $2==id {found=1} END {exit !found}' "$1/graph.tsv" || return 1
-    case "$3" in
-        waiting-remote)
-            if [ ! -f "$2/cancel-reconciled" ]; then
-                workflow_atomic_scalar "$2/cancel-reconciled" 1
-                workflow_task_start "$1" "$_wtc_id"
-            fi
-            ;;
-        running) : ;; # The native observer sends the bound cancellation request.
-        *) return 1 ;;
-    esac
-}
-
-workflow_next_step() {
-    if [ -f "$1/tasks.json" ]; then workflow_task_tool next "$1"; return $?; fi
-    # The first ready step in graph order, found in one pass.
-    WORKFLOW_RUN_DIR="$1" awk -F '\t' '
-        BEGIN { dir = ENVIRON["WORKFLOW_RUN_DIR"] }
-        $1 == "step" {
-            state = ""; file = dir "/steps/" $2 "/state"
-            getline state < file; close(file)
-            if (state == "ready") { print $2; exit }
-        }' "$1/graph.tsv"
 }

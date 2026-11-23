@@ -28,8 +28,7 @@ static int action_spawn(char *const argv[], pid_t *pid, int *fd) {
         result = errno; close(pipes[0]); close(pipes[1]); free(envp); return result;
     }
     posix_spawn_file_actions_init(&actions);
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+    child_spawn_attributes(&attributes, POSIX_SPAWN_SETPGROUP);
     posix_spawnattr_setpgroup(&attributes, 0);
     posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
     posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);

@@ -26,7 +26,7 @@ test_send_keys_uses_primary_pane() {
     send_keys_to_session "hydra-feat" "claude"
     assert_success $? "send_keys_to_session should succeed against stub"
 
-    if grep -q "send-keys -t hydra-feat:0.0 claude" "$log"; then
+    if grep -q "send-keys -t =hydra-feat:0.0 claude" "$log"; then
         echo "[PASS] Agent/startup keys go to session:0.0"
         pass_count=$((pass_count + 1))
     else
@@ -127,7 +127,7 @@ test_send_keys_ignores_stale_snapshot() {
     send_keys_to_session "hydra-new" "claude"
     assert_success $? "send_keys should see a session created after the snapshot"
 
-    if grep -q "send-keys -t hydra-new:0.0 claude" "$log"; then
+    if grep -q "send-keys -t =hydra-new:0.0 claude" "$log"; then
         echo "[PASS] send-keys reached the newly created session"
         pass_count=$((pass_count + 1))
     else
@@ -165,6 +165,9 @@ test_broadcast_session_qualified_pane() {
     export HYDRA_HOME HYDRA_STATE_V2_ROOT TEST_PROJECT_ID
     # shellcheck disable=SC2317,SC2329
     hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+    # The libraries resolve the project through this loader.
+    # shellcheck disable=SC2034,SC2317,SC2329
+    hydra_load_project_id() { HYDRA_LOADED_PROJECT_ID="$TEST_PROJECT_ID"; }
     state_v2_create_head "$TEST_PROJECT_ID" b1 hydra-a - - 100 - - "$TEST_HOME/repo" >/dev/null
     state_v2_create_head "$TEST_PROJECT_ID" b2 hydra-b - - 100 - - "$TEST_HOME/repo" >/dev/null
 
@@ -175,9 +178,9 @@ test_broadcast_session_qualified_pane() {
 
     cmd_broadcast --pane hydra-a:0.1 "echo hi" >/dev/null
 
-    hits="$(grep -c 'send-keys -t hydra-a:0.1' "$log" || true)"
+    hits="$(grep -c 'send-keys -t =hydra-a:0.1' "$log" || true)"
     assert_equal "1" "$hits" "session-qualified --pane sends once to that session"
-    if grep -q 'send-keys -t hydra-b' "$log"; then
+    if grep -q 'send-keys -t =*hydra-b' "$log"; then
         echo "[FAIL] session-qualified --pane must not target other sessions"
         fail_count=$((fail_count + 1))
     else
@@ -189,7 +192,7 @@ test_broadcast_session_qualified_pane() {
     # One rejected delivery must not erase the successful send or return success.
     # shellcheck disable=SC2317,SC2329
     tmux() {
-        if [ "$1" = send-keys ] && [ "$3" = hydra-b:0.1 ]; then return 1; fi
+        if [ "$1" = send-keys ] && [ "$3" = =hydra-b:0.1 ]; then return 1; fi
         command tmux "$@"
     }
     result="$(cmd_broadcast --pane 0.1 'echo partial' 2>/dev/null)"

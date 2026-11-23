@@ -8,7 +8,7 @@
 integration_plan_run() {
     _ipr_dir="$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/workflows/runs" || return 1
     for _ipr_run in "$_ipr_dir"/run_*; do
-        [ -f "$_ipr_run/compiled.json" ] && [ -f "$_ipr_run/plan-roles.tsv" ] || continue
+        if [ ! -f "$_ipr_run/compiled.json" ] || [ ! -f "$_ipr_run/plan-roles.tsv" ]; then continue; fi
         awk -F '\t' -v head="$1" '$3 == "spawn" && $4 == head { found = 1 } END { exit !found }' "$_ipr_run/plan-roles.tsv" || continue
         printf '%s\t%s\n' "$(sed -n '1p' "$_ipr_run/created-at" 2>/dev/null || true)" "$_ipr_run"
     done | LC_ALL=C sort | tail -n 1 | cut -f2-

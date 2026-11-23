@@ -46,7 +46,7 @@ static void plan_confirm_execution(struct app *app) {
         return;
     }
     if (!app->plan || app->plan->revision!=revision || strcmp(app->plan->digest,digest) || !native_plan_launch(app,digest))
-        snprintf(app->notice,sizeof(app->notice),"Execution not submitted: the draft, policy or validation changed after review of revision %u. Validate again with V.",revision);
+        notice_set(app, "Execution not submitted: the draft, policy or validation changed after review of revision %u. Validate again with V.",revision);
 }
 
 void native_plan_execute(struct app *app) {
@@ -117,6 +117,6 @@ void native_plan_request_changes(struct app *app) {
     native_plan_returned(app->plan);
     head=native_plan_head(app,branch);
     if (head && native_plan_converse(app,head,text,false,true))
-        snprintf(app->notice,sizeof(app->notice),"Returned. Feedback typed into %.100s's conversation; review it and press Enter to send.",branch);
-    else snprintf(app->notice,sizeof(app->notice),"Returned. Feedback saved in %.100s's planning/feedback; its conversation could not be opened.",branch);
+        notice_set(app, "Returned. Feedback typed into %.100s's conversation; review it and press Enter to send.",branch);
+    else notice_set(app, "Returned. Feedback saved in %.100s's planning/feedback; its conversation could not be opened.",branch);
 }

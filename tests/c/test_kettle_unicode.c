@@ -28,41 +28,61 @@ static void ascii(void) {
     assert(cells[3].glyph == 'e' && cells[4].glyph == 'e' && cells[4].combining_count == 0 && cells[5].glyph == '!');
 }
 
-int main(void) {
-    struct kt_cell cells[24], old[24];
-    struct kt_canvas c, view;
-    struct kt_presenter p;
-    FILE *out = tmpfile();
-    long before;
-    char buffer[128];
+static void widths(void) {
     uint32_t cp;
-    assert(out && kt_init(&c, cells, 24, 8, 3, true));
     assert(kt_utf8_decode("\xf0\x9f", 2, &cp) == 0);
     assert(kt_utf8_decode("\xf0\x80\x80\x80", 4, &cp) == 1 && cp == '?');
     assert(kt_codepoint_width(0x754c) == 2);
     assert(kt_codepoint_width(0x301) == 0);
     assert(kt_codepoint_width(0x202e) == -1); /* bidi control */
-    kt_text(&c, (struct kt_rect){0,0,8,1}, "caf\xc3\xa9 \xe7\x95\x8c", KT_BASE);
-    assert(cells[3].glyph == 0xe9 && cells[5].width == 2 && cells[6].width == 0);
-    kt_text(&c, (struct kt_rect){7,0,1,1}, "e\xcc\x81", KT_BASE);
-    assert(cells[7].glyph == 'e' && cells[7].combining[0] == 0x301);
+    /* Printable ASCII is narrow without a table lookup; its neighbours are not. */
+    for (cp = 0; cp < 0xa0; cp++) assert(kt_codepoint_width(cp) == (cp >= 32 && cp < 0x7f ? 1 : -1));
+    assert(kt_codepoint_width(0xa0) == 1 && kt_codepoint_width(0xad) == -1); /* soft hyphen */
+}
+
+/* A narrow write over a wide continuation damages the cell, and the next
+ * presentation repaints it. */
+static void overwrite_damage(struct kt_canvas *c, struct kt_cell *cells, FILE *out) {
+    struct kt_cell old[24];
+    struct kt_presenter p;
+    long before;
+    char buffer[128];
     assert(kt_present_init(&p, old, 24));
-    assert(kt_present(&p, &c, out, NULL));
+    assert(kt_present(&p, c, out, NULL));
     before = ftell(out);
-    kt_put(&c, 6, 0, 'x', KT_SELECTED); /* overwrite wide continuation */
+    kt_put(c, 6, 0, 'x', KT_SELECTED); /* overwrite wide continuation */
     assert(cells[5].glyph == ' ' && cells[5].width == 1 && cells[6].glyph == 'x');
-    assert(kt_present(&p, &c, out, NULL));
+    assert(kt_present(&p, c, out, NULL));
     assert(fseek(out, before, SEEK_SET) == 0);
     memset(buffer, 0, sizeof(buffer));
     assert(fread(buffer, 1, sizeof(buffer)-1, out) > 0);
     assert(strstr(buffer, "\033[1;6H x"));
-    assert(kt_canvas_view(&view, &c, (struct kt_rect){2,1,3,2}));
+}
+
+/* A view clips writes to its rectangle. */
+static void clipped_view(struct kt_canvas *c, struct kt_cell *cells) {
+    struct kt_canvas view;
+    assert(kt_canvas_view(&view, c, (struct kt_rect){2,1,3,2}));
     kt_text(&view, (struct kt_rect){0,0,100,1}, "abcdef", KT_BASE);
     assert(cells[10].glyph == 'a' && cells[12].glyph == 'c' && cells[13].glyph == ' ');
     kt_text(&view, (struct kt_rect){0,1,3,1}, "\xe7\x95\x8cX", KT_BASE);
     assert(cells[18].width == 2 && cells[20].glyph == 'X' && cells[21].glyph == ' ');
     kt_clear(&view, KT_BASE);
     assert(cells[10].glyph == ' ' && cells[18].glyph == ' ' && cells[7].glyph == 'e');
+}
+
+int main(void) {
+    struct kt_cell cells[24];
+    struct kt_canvas c;
+    FILE *out = tmpfile();
+    assert(out && kt_init(&c, cells, 24, 8, 3, true));
+    widths();
+    kt_text(&c, (struct kt_rect){0,0,8,1}, "caf\xc3\xa9 \xe7\x95\x8c", KT_BASE);
+    assert(cells[3].glyph == 0xe9 && cells[5].width == 2 && cells[6].width == 0);
+    kt_text(&c, (struct kt_rect){7,0,1,1}, "e\xcc\x81", KT_BASE);
+    assert(cells[7].glyph == 'e' && cells[7].combining[0] == 0x301);
+    overwrite_damage(&c, cells, out);
+    clipped_view(&c, cells);
     clusters();
     ascii();
     fclose(out);

@@ -80,9 +80,8 @@ struct app {
     /* Configurable keys; read through native_keys(), which fills the defaults. */
     struct native_keys keys;
     /* The local head snapshot read from the state store in this process
-     * (snapshot.h), when the launching CLI said its store may be read. */
+     * (snapshot.h). */
     struct native_snapshot *snapshot;
-    bool store;
     /* Onboarding operator view (H5); allocated when first opened from Hosts. */
     struct native_onboarding *onboarding;
     /* Lazily allocated interpreter for read-only captured output. */

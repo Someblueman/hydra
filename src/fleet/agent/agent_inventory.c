@@ -58,10 +58,17 @@ const char *agent_inventory_location(json_object *row) {
     if (!strcmp(status, "recorded")) return absolute(f_string(row, "recorded"));
     return !strcmp(status, "found_off_path") ? off_path(row) : NULL;
 }
+/* The inventory only reads on the receiver (hydra agent locate --json), so
+ * it is asked for in the handshake's SSH session and used only if that
+ * handshake advertises it. */
 json_object *agent_remote_inventory(const struct f_remote *remote, unsigned seconds) {
-    json_object *reply, *data, *copy = NULL;
-    if (!agent_remote_capability(remote, "agent-inventory", seconds)) return NULL;
-    reply = agent_remote_request(remote, "agent-inventory", NULL, seconds > 120 ? seconds : 120);
+    json_object *request = json_object_new_object(), *reply, *data, *copy = NULL;
+    json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL));
+    f_string_add(request, "action", "agent-inventory");
+    json_object_object_add(request, "args", json_object_new_array());
+    reply = f_request_if_capable(remote, "agent-inventory", request, seconds, seconds > 120 ? seconds : 120);
+    json_object_put(request);
+    if (!reply) return NULL;
     data = f_field(reply, "data");
     if (json_object_get_boolean(f_field(reply, "ok")) && f_string(data, "schema") && !strcmp(f_string(data, "schema"), "agent-inventory") &&
         f_number_is(data, "schema_version", 1) && array(f_field(data, "agents")) && json_object_deep_copy(data, &copy, NULL)) copy = NULL;

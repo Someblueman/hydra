@@ -157,7 +157,8 @@ for _path in "$clean_path" "$dirty_path" "$user_sibling" "$user_legacy" "$user_i
     fi
 done
 
-tui_rows="$(PATH="$test_root/du-count:$PATH" "$HYDRA_BIN" tui --data | grep '^R	orphan-worktree')"
+# The rows the control centre asks the CLI for while a leftover could exist.
+tui_rows="$(PATH="$test_root/du-count:$PATH" "$HYDRA_BIN" tui --orphan-rows | grep '^R	orphan-worktree')"
 case "$tui_rows" in
     *"R	orphan-worktree	gone-clean ($clean_path), "[0-9]*"iB	$clean_path	exact	hydra gc --policy orphaned --dry-run"*)
         assert_success 0 "TUI reports the clean leftover worktree, its size and a read-only gc review" ;;
@@ -169,7 +170,7 @@ for _path in "$user_sibling" "$user_legacy" "$user_in_root"; do
     lacks "$_path" "$tui_rows" "TUI does not flag user worktree $(basename "$_path")"
 done
 first_calls="$(wc -c < "$test_root/du-calls" | tr -d ' ')"
-PATH="$test_root/du-count:$PATH" "$HYDRA_BIN" tui --data >/dev/null
+PATH="$test_root/du-count:$PATH" "$HYDRA_BIN" tui --orphan-rows >/dev/null
 assert_equal "$first_calls" "$(wc -c < "$test_root/du-calls" | tr -d ' ')" "TUI refreshes reuse cached sizes instead of re-measuring"
 tui_action="$(printf '%s\n' "$tui_rows" | sed -n '1p' | awk -F '	' '{print $6}')"
 # shellcheck disable=SC2086

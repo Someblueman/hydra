@@ -13,11 +13,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-/* The store half of the local head snapshot (store.h). Every rule here is the
- * shell reader's (lib/tui_native.sh and what it calls), field for field: what
- * a missing file reads as, which directory a branch name selects, how a
- * record that does not split into its columns is reported. Where the shell
- * reads a path built from an empty variable, the same path is read here. */
+/* The store half of the local head snapshot (store.h). Its rules were fixed,
+ * field for field, against the shell reader it replaced (`hydra tui --data`,
+ * since removed) and are pinned by the rows recorded from that reader
+ * (tests/test_tui_store_rows.sh): what a missing file reads as, which
+ * directory a branch name selects, how a record that does not split into its
+ * columns is reported. Where the shell read a path built from an empty
+ * variable, the same path is read here; the comments that say "as find
+ * walks" or "as awk counts" name the rule a helper keeps. */
 
 #define WALK_DEPTH 16
 
@@ -262,6 +265,136 @@ void store_cache_free(struct store_cache *cache) {
     memset(cache, 0, sizeof(*cache));
 }
 
+/* ---- one read of each record file ---------------------------------------- */
+
+/* A head's record files are each read once per snapshot, by whichever of the
+ * row, the head's binding and the malformed-state check asks first; the later
+ * askers get the same text. Nothing is kept between snapshots: the store is
+ * written by other processes, and a cache of it would need its own
+ * invalidation. */
+enum head_field { F_BRANCH, F_DESIRED, F_SESSION, F_PROFILE, F_GROUP, F_CREATED, F_DEPENDENCIES, F_PR, F_CURRENT,
+                  F_HEAD_ID, F_COUNT };
+static const char *const head_field_names[F_COUNT] = {"/branch", "/desired-state", "/session", "/profile", "/group",
+                                                      "/created-at", "/dependencies", "/pr", "/current-instance",
+                                                      "/head-id"};
+enum instance_field { I_ID, I_SESSION, I_DECLARED, I_OBSERVED, I_CONFIDENCE, I_COUNT };
+static const char *const instance_field_names[I_COUNT] = {"/instance-id", "/session", "/declared-outcome",
+                                                          "/observed-status", "/observed-confidence"};
+
+/* The first line of a file, or that it could not be read. */
+struct cached_line { char state; char *text; }; /* state: 0 not read, 1 read, 2 unreadable */
+
+/* A terminal-mode file as the checks over it need it. */
+struct mode_file {
+    bool read, regular, has_bytes, first_ok, interactive, headless;
+    char first[STORE_TEXT];
+};
+
+struct head_files {
+    struct cached_line line[F_COUNT];
+    struct mode_file mode;
+    struct cached_line instance_line[I_COUNT];
+    struct mode_file instance_mode;
+};
+
+/* The first line of the file at path, read the first time it is asked for. */
+static bool line_get(struct cached_line *c, const char *path, char *out, size_t size) {
+    if (!c->state) {
+        char text[STORE_TEXT];
+        bool ok = first_line(path, text, sizeof(text));
+        if (!(c->text = strdup(text))) { text_copy(out, size, text); return ok; }
+        c->state = ok ? 1 : 2;
+    }
+    text_copy(out, size, c->text);
+    return c->state == 1;
+}
+
+/* What one line of a terminal-mode file says; the first line is also kept. */
+static void mode_note_line(struct mode_file *m, const char *line, size_t stop, bool first) {
+    size_t used = 0, i;
+    if (stop == 11U && !memcmp(line, "interactive", 11U)) m->interactive = true;
+    if (stop == 8U && !memcmp(line, "headless", 8U)) m->headless = true;
+    if (!first) return;
+    for (i = 0; i < stop && i < STORE_PATH; i++)
+        if (line[i] && used + 1U < sizeof(m->first)) m->first[used++] = line[i];
+    m->first[used] = '\0';
+}
+
+static void mode_scan(FILE *file, struct mode_file *m) {
+    char *line = NULL;
+    size_t capacity = 0, count = 0;
+    ssize_t length;
+    while ((length = getline(&line, &capacity, file)) >= 0) {
+        size_t stop = (size_t)length;
+        if (stop > 0 && line[stop - 1] == '\n') stop--;
+        mode_note_line(m, line, stop, !count++);
+    }
+    free(line);
+}
+
+/* One read gives what has_bytes, is_file, first_line and lines_equal each
+ * asked of a terminal-mode file. */
+static void mode_load(const char *path, struct mode_file *m) {
+    struct stat info;
+    FILE *file;
+    int fd = path[0] ? open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC) : -1;
+    memset(m, 0, sizeof(*m));
+    m->read = true;
+    if (fd < 0) {
+        if (path[0] && stat(path, &info) == 0) { m->regular = S_ISREG(info.st_mode); m->has_bytes = info.st_size > 0; }
+        return;
+    }
+    if (fstat(fd, &info) != 0) { close(fd); return; }
+    m->regular = S_ISREG(info.st_mode);
+    m->has_bytes = info.st_size > 0;
+    file = m->regular ? fdopen(fd, "rb") : NULL;
+    if (!file) {
+        close(fd);
+        m->first_ok = first_line(path, m->first, sizeof(m->first));
+        return;
+    }
+    m->first_ok = true;
+    mode_scan(file, m);
+    fclose(file);
+}
+
+static void files_clear(struct head_files *f) {
+    size_t i;
+    for (i = 0; i < F_COUNT; i++) free(f->line[i].text);
+    for (i = 0; i < I_COUNT; i++) free(f->instance_line[i].text);
+    memset(f, 0, sizeof(*f));
+}
+
+static bool head_line(struct head_files *f, const char *directory, enum head_field field, char *out, size_t size) {
+    char path[STORE_PATH];
+    path_join(path, sizeof(path), directory, head_field_names[field]);
+    return line_get(&f->line[field], path, out, size);
+}
+
+static const struct mode_file *head_mode(struct head_files *f, const char *directory) {
+    char path[STORE_PATH];
+    if (!f->mode.read) {
+        path_join(path, sizeof(path), directory, "/terminal-mode");
+        mode_load(path, &f->mode);
+    }
+    return &f->mode;
+}
+
+static bool instance_line(struct head_files *f, const char *directory, enum instance_field field, char *out, size_t size) {
+    char path[STORE_PATH];
+    path_join(path, sizeof(path), directory, instance_field_names[field]);
+    return line_get(&f->instance_line[field], path, out, size);
+}
+
+static const struct mode_file *instance_mode(struct head_files *f, const char *directory) {
+    char path[STORE_PATH];
+    if (!f->instance_mode.read) {
+        path_join(path, sizeof(path), directory, "/terminal-mode");
+        mode_load(path, &f->instance_mode);
+    }
+    return &f->instance_mode;
+}
+
 /* ---- the project and its head directories -------------------------------- */
 
 struct reader {
@@ -271,8 +404,11 @@ struct reader {
     char project_dir[STORE_PATH], heads_dir[STORE_PATH], queue_dir[STORE_PATH];
     /* head_* directories in glob order, and the branch each one records. */
     char **names, **branches;
+    struct head_files *files; /* one per directory */
     size_t count;
 };
+
+#define NO_HEAD ((size_t)-1)
 
 struct text { char *bytes; size_t length, capacity; bool failed; };
 
@@ -335,11 +471,12 @@ static bool reader_list(struct reader *r) {
     size_t i;
     if (!reader_names(r)) return false;
     r->branches = calloc(r->count ? r->count : 1U, sizeof(*r->branches));
-    if (!r->branches) return false;
+    r->files = calloc(r->count ? r->count : 1U, sizeof(*r->files));
+    if (!r->branches || !r->files) return false;
     for (i = 0; i < r->count; i++) {
         char path[STORE_PATH], branch[STORE_TEXT];
         path_child(path, sizeof(path), r->heads_dir, r->names[i]);
-        first_line_at(path, "/branch", branch, sizeof(branch));
+        (void)head_line(&r->files[i], path, F_BRANCH, branch, sizeof(branch));
         if (!(r->branches[i] = strdup(branch))) return false;
     }
     return true;
@@ -347,8 +484,12 @@ static bool reader_list(struct reader *r) {
 
 static void reader_free(struct reader *r) {
     size_t i;
-    for (i = 0; i < r->count; i++) { free(r->names[i]); if (r->branches) free(r->branches[i]); }
-    free(r->names); free(r->branches);
+    for (i = 0; i < r->count; i++) {
+        free(r->names[i]);
+        if (r->branches) free(r->branches[i]);
+        if (r->files) files_clear(&r->files[i]);
+    }
+    free(r->names); free(r->branches); free(r->files);
 }
 
 /* The project this repository is, and where its records are. */
@@ -398,32 +539,32 @@ static void second_field(const char *record, char *out, size_t size) {
 
 /* The first directory, in glob order, that records this branch: stopped and
  * malformed records included. */
-static const char *branch_directory(const struct reader *r, const char *branch) {
+static size_t branch_directory(const struct reader *r, const char *branch) {
     size_t i;
-    for (i = 0; branch[0] && i < r->count; i++) if (!strcmp(r->branches[i], branch)) return r->names[i];
-    return NULL;
+    for (i = 0; branch[0] && i < r->count; i++) if (!strcmp(r->branches[i], branch)) return i;
+    return NO_HEAD;
 }
 
-static void dash_field(const char *directory, const char *name, char *out, size_t size) {
-    first_line_at(directory, name, out, size);
+static void dash_field(struct head_files *f, const char *directory, enum head_field field, char *out, size_t size) {
+    (void)head_line(f, directory, field, out, size);
     if (!out[0]) text_copy(out, size, "-");
 }
 
 /* An active head's record as one line: branch session profile group
  * created-at dependencies pr. False for a stopped or incomplete record. */
-static bool head_record(const char *directory, char *record, size_t size) {
+static bool head_record(struct head_files *f, const char *directory, char *record, size_t size) {
     char state[STORE_TEXT], branch[STORE_TEXT], session[STORE_TEXT];
     char profile[STORE_TEXT], group[STORE_TEXT], created[STORE_TEXT], needs[STORE_TEXT], pr[STORE_TEXT];
-    first_line_at(directory, "/desired-state", state, sizeof(state));
+    (void)head_line(f, directory, F_DESIRED, state, sizeof(state));
     if (strcmp(state, "running") && strcmp(state, "headless") && strcmp(state, "stopping")) return false;
-    first_line_at(directory, "/branch", branch, sizeof(branch));
-    first_line_at(directory, "/session", session, sizeof(session));
+    (void)head_line(f, directory, F_BRANCH, branch, sizeof(branch));
+    (void)head_line(f, directory, F_SESSION, session, sizeof(session));
     if (!branch[0] || !session[0]) return false;
-    dash_field(directory, "/profile", profile, sizeof(profile));
-    dash_field(directory, "/group", group, sizeof(group));
-    dash_field(directory, "/created-at", created, sizeof(created));
-    dash_field(directory, "/dependencies", needs, sizeof(needs));
-    dash_field(directory, "/pr", pr, sizeof(pr));
+    dash_field(f, directory, F_PROFILE, profile, sizeof(profile));
+    dash_field(f, directory, F_GROUP, group, sizeof(group));
+    dash_field(f, directory, F_CREATED, created, sizeof(created));
+    dash_field(f, directory, F_DEPENDENCIES, needs, sizeof(needs));
+    dash_field(f, directory, F_PR, pr, sizeof(pr));
     (void)snprintf(record, size, "%s %s %s %s %s %s %s", branch, session, profile, group, created, needs, pr);
     return true;
 }
@@ -431,22 +572,23 @@ static bool head_record(const char *directory, char *record, size_t size) {
 /* Binds the row to the directory its branch selects. A directory whose name
  * is not a valid identity keeps the name and no location; one that no longer
  * records the branch is dropped. */
-static void head_bind(const struct reader *r, struct store_head *h, const char *record) {
+static void head_bind(const struct reader *r, struct store_head *h, const char *record, struct head_files **f) {
     char first[STORE_TEXT], recorded[STORE_TEXT];
-    const char *directory;
     (void)snprintf(first, sizeof(first), "%.*s", (int)strcspn(record + strspn(record, " "), " "),
                    record + strspn(record, " "));
     text_copy(h->mode, sizeof(h->mode), "interactive");
-    directory = branch_directory(r, first);
-    if (!directory) return;
-    text_copy(h->head_id, sizeof(h->head_id), directory);
-    if (r->project[0] && store_valid_id(h->head_id))
-        store_path(h->head_dir, sizeof(h->head_dir), "%s/projects/%s/heads/%s", r->where->state_root, r->project, h->head_id);
-    if (!h->head_dir[0]) return;
-    first_line_at(h->head_dir, "/branch", recorded, sizeof(recorded));
+    {
+        size_t at = branch_directory(r, first);
+        if (at == NO_HEAD) return;
+        text_copy(h->head_id, sizeof(h->head_id), r->names[at]);
+        if (r->project[0] && store_valid_id(h->head_id))
+            store_path(h->head_dir, sizeof(h->head_dir), "%s/projects/%s/heads/%s", r->where->state_root, r->project, h->head_id);
+        if (!h->head_dir[0]) return;
+        *f = &r->files[at];
+    }
+    (void)head_line(*f, h->head_dir, F_BRANCH, recorded, sizeof(recorded));
     if (strcmp(recorded, h->branch)) { h->head_id[0] = '\0'; h->head_dir[0] = '\0'; return; }
-    first_line_at(h->head_dir, "/terminal-mode", recorded, sizeof(recorded));
-    if (!strcmp(recorded, "headless")) text_copy(h->mode, sizeof(h->mode), "headless");
+    if (!strcmp(head_mode(*f, h->head_dir)->first, "headless")) text_copy(h->mode, sizeof(h->mode), "headless");
 }
 
 static bool all_digits(const char *text, size_t length) {
@@ -472,20 +614,16 @@ static void agent_exit(const char *directory, char *out, size_t size) {
 }
 
 /* What the current instance declared and what Hydra observed of it. */
-static void head_instance(struct store_head *h) {
-    char path[STORE_PATH], directory[STORE_PATH], value[STORE_TEXT];
-    first_line_at(h->head_dir, "/current-instance", h->instance, sizeof(h->instance));
-    path_join(path, sizeof(path), h->head_dir, "/desired-state");
-    if (!first_line(path, h->desired, sizeof(h->desired))) text_copy(h->desired, sizeof(h->desired), "unavailable");
-    path_join(path, sizeof(path), h->head_dir, "/profile");
-    if (first_line(path, value, sizeof(value))) text_copy(h->profile, sizeof(h->profile), value);
+static void head_instance(struct store_head *h, struct head_files *f) {
+    char directory[STORE_PATH], value[STORE_TEXT];
+    (void)head_line(f, h->head_dir, F_CURRENT, h->instance, sizeof(h->instance));
+    if (!head_line(f, h->head_dir, F_DESIRED, h->desired, sizeof(h->desired))) text_copy(h->desired, sizeof(h->desired), "unavailable");
+    if (head_line(f, h->head_dir, F_PROFILE, value, sizeof(value))) text_copy(h->profile, sizeof(h->profile), value);
     store_path(directory, sizeof(directory), "%s/instances/%s", h->head_dir, h->instance);
     if (!is_directory(directory)) return;
-    first_line_at(directory, "/declared-outcome", h->declared, sizeof(h->declared));
-    path_join(path, sizeof(path), directory, "/observed-status");
-    if (!first_line(path, h->observed, sizeof(h->observed))) text_copy(h->observed, sizeof(h->observed), "unavailable");
-    path_join(path, sizeof(path), directory, "/observed-confidence");
-    if (!first_line(path, h->confidence, sizeof(h->confidence))) text_copy(h->confidence, sizeof(h->confidence), "unavailable");
+    (void)instance_line(f, directory, I_DECLARED, h->declared, sizeof(h->declared));
+    if (!instance_line(f, directory, I_OBSERVED, h->observed, sizeof(h->observed))) text_copy(h->observed, sizeof(h->observed), "unavailable");
+    if (!instance_line(f, directory, I_CONFIDENCE, h->confidence, sizeof(h->confidence))) text_copy(h->confidence, sizeof(h->confidence), "unavailable");
     agent_exit(directory, h->agent_exit, sizeof(h->agent_exit));
 }
 
@@ -611,6 +749,8 @@ static void head_adapter(const struct reader *r, struct store_head *h) {
 static void head_read(const struct reader *r, const char *state_source, char *record, struct store_head *h) {
     char *words[7] = {"", "", "", "", "", "", ""}, *rest = "";
     char whole[STORE_TEXT * 8];
+    struct head_files local, *files = &local;
+    memset(&local, 0, sizeof(local));
     memset(h, 0, sizeof(*h));
     text_copy(whole, sizeof(whole), record);
     second_field(whole, h->live_key, sizeof(h->live_key));
@@ -626,25 +766,28 @@ static void head_read(const struct reader *r, const char *state_source, char *re
     text_copy(h->desired, sizeof(h->desired), "unavailable");
     text_copy(h->agent_exit, sizeof(h->agent_exit), "-");
     text_copy(h->source, sizeof(h->source), state_source);
-    head_bind(r, h, whole);
+    /* A head bound to no directory reads the paths its empty directory
+     * names, once each, through a scratch set of records. */
+    head_bind(r, h, whole, &files);
     if (h->head_id[0]) {
-        head_instance(h);
+        head_instance(h, files);
         head_counts(r, h);
         text_copy(h->source, sizeof(h->source), h->head_dir);
         make_safe(h->source);
     }
+    files_clear(&local);
     head_adapter(r, h);
 }
 
 /* ---- recovery findings the store alone decides --------------------------- */
 
-static bool mode_file_valid(const char *path) {
-    return !is_file(path) || lines_equal(path, "interactive") || lines_equal(path, "headless");
+/* A terminal-mode file that is absent, or has an exact mode line. */
+static bool mode_valid(const struct mode_file *m) {
+    return !m->regular || m->interactive || m->headless;
 }
 
-static void recorded_mode(const char *path, char *out, size_t size) {
-    if (has_bytes(path)) (void)first_line(path, out, size);
-    else text_copy(out, size, "interactive");
+static void mode_recorded(const struct mode_file *m, char *out, size_t size) {
+    text_copy(out, size, m->has_bytes ? m->first : "interactive");
 }
 
 /* A session of "-" belongs to headless records, and only to them. */
@@ -654,39 +797,39 @@ static bool session_fits(const char *mode, const char *session) {
     return true;
 }
 
-static bool head_fields_valid(const char *directory, const char *id, const char *branch, const char *mode) {
-    char path[STORE_PATH], value[STORE_TEXT], session[STORE_TEXT];
-    first_line_at(directory, "/head-id", value, sizeof(value));
+static bool head_fields_valid(struct head_files *f, const char *directory, const char *id, const char *branch, const char *mode) {
+    char value[STORE_TEXT], session[STORE_TEXT];
+    (void)head_line(f, directory, F_HEAD_ID, value, sizeof(value));
     if (!store_valid_id(id) || strcmp(value, id)) return false;
-    first_line_at(directory, "/session", session, sizeof(session));
+    (void)head_line(f, directory, F_SESSION, session, sizeof(session));
     if (!branch[0] || !session[0]) return false;
-    path_join(path, sizeof(path), directory, "/terminal-mode");
-    return mode_file_valid(path) && session_fits(mode, session);
+    return mode_valid(head_mode(f, directory)) && session_fits(mode, session);
 }
 
-static bool instance_fields_valid(const char *directory, const char *instance, const char *mode) {
-    char instance_dir[STORE_PATH], path[STORE_PATH], value[STORE_TEXT], instance_mode[STORE_TEXT];
+static bool instance_fields_valid(struct head_files *f, const char *directory, const char *instance, const char *mode) {
+    char instance_dir[STORE_PATH], value[STORE_TEXT], recorded[STORE_TEXT];
+    const struct mode_file *file;
     store_path(instance_dir, sizeof(instance_dir), "%s/instances/%s", directory, instance);
     if (!store_valid_id(instance) || !is_directory(instance_dir)) return false;
-    first_line_at(instance_dir, "/instance-id", value, sizeof(value));
-    path_join(path, sizeof(path), instance_dir, "/terminal-mode");
-    if (strcmp(value, instance) || !mode_file_valid(path)) return false;
-    recorded_mode(path, instance_mode, sizeof(instance_mode));
-    first_line_at(instance_dir, "/session", value, sizeof(value));
-    return !strcmp(instance_mode, mode) && session_fits(instance_mode, value);
+    (void)instance_line(f, instance_dir, I_ID, value, sizeof(value));
+    file = instance_mode(f, instance_dir);
+    if (strcmp(value, instance) || !mode_valid(file)) return false;
+    mode_recorded(file, recorded, sizeof(recorded));
+    (void)instance_line(f, instance_dir, I_SESSION, value, sizeof(value));
+    return !strcmp(recorded, mode) && session_fits(recorded, value);
 }
 
 /* Head directories whose records do not form a valid head. */
 static void invalid_heads(const struct reader *r, struct text *out) {
     size_t i;
     for (i = 0; r->project_dir[0] && i < r->count; i++) {
-        char directory[STORE_PATH], path[STORE_PATH], branch[STORE_TEXT], instance[STORE_TEXT], mode[STORE_TEXT];
+        char directory[STORE_PATH], branch[STORE_TEXT], instance[STORE_TEXT], mode[STORE_TEXT];
+        struct head_files *f = &r->files[i];
         path_child(directory, sizeof(directory), r->heads_dir, r->names[i]);
-        first_line_at(directory, "/branch", branch, sizeof(branch));
-        first_line_at(directory, "/current-instance", instance, sizeof(instance));
-        path_join(path, sizeof(path), directory, "/terminal-mode");
-        recorded_mode(path, mode, sizeof(mode));
-        if (head_fields_valid(directory, r->names[i], branch, mode) && instance_fields_valid(directory, instance, mode)) continue;
+        (void)head_line(f, directory, F_BRANCH, branch, sizeof(branch));
+        (void)head_line(f, directory, F_CURRENT, instance, sizeof(instance));
+        mode_recorded(head_mode(f, directory), mode, sizeof(mode));
+        if (head_fields_valid(f, directory, r->names[i], branch, mode) && instance_fields_valid(f, directory, instance, mode)) continue;
         if (!branch[0]) text_copy(branch, sizeof(branch), r->names[i]);
         make_safe(branch); make_safe(directory);
         text_add(out, "R\tmalformed-state\t%s\t%s\texact\thydra state verify\n", branch, directory);
@@ -841,7 +984,7 @@ static void read_notifications(const struct reader *r, struct store_snapshot *s)
     FILE *file;
     char *line = NULL;
     size_t capacity = 0;
-    /* Outside a repository the shell reader names the file by an empty directory. */
+    /* Outside a repository the file is named by an empty directory. */
     if (r->where->common[0]) path_join(s->notification_source, sizeof(s->notification_source), r->where->common, "/hydra/notifications");
     else text_copy(s->notification_source, sizeof(s->notification_source), "/notifications");
     file = has_bytes(s->notification_source) ? fopen(s->notification_source, "rb") : NULL;
@@ -872,7 +1015,7 @@ static bool read_heads(const struct reader *r, struct store_snapshot *s) {
     for (i = 0; i < r->count; i++) {
         char directory[STORE_PATH], record[STORE_TEXT * 8];
         path_child(directory, sizeof(directory), r->heads_dir, r->names[i]);
-        if (!head_record(directory, record, sizeof(record))) continue;
+        if (!head_record(&r->files[i], directory, record, sizeof(record))) continue;
         if (!heads_add(s, &capacity)) return false;
         head_read(r, s->state_source, record, &s->heads[s->head_count]);
         /* A record of spaces alone names no branch and is not a row. */

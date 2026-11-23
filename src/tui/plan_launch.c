@@ -51,8 +51,8 @@ bool native_plan_launch_failed(const struct native_plan *p) {
 /* A launch that ended without a run: the owner's reason, and that the user may launch again. */
 static void launch_failed_notice(struct app *app, const struct native_plan *p, const char *exit_code) {
     if (p->launch_failure[0])
-        snprintf(app->notice,sizeof(app->notice),"Launch of revision %u failed; nothing ran, E launches it again: %.180s",p->launched_revision,p->launch_failure);
-    else snprintf(app->notice,sizeof(app->notice),"Launch of revision %u failed with exit %.16s; nothing ran, E launches it again.",p->launched_revision,exit_code);
+        notice_set(app, "Launch of revision %u failed; nothing ran, E launches it again: %.180s",p->launched_revision,p->launch_failure);
+    else notice_set(app, "Launch of revision %u failed with exit %.16s; nothing ran, E launches it again.",p->launched_revision,exit_code);
 }
 
 /* Applies one launch status record; a new run receipt notifies the planner. */
@@ -61,7 +61,7 @@ static void launch_record(struct app *app, struct native_plan *p, char **fields)
     copy_text(p->launch_state,sizeof(p->launch_state),fields[2]);
     if (!strcmp(fields[3],"-")) {
         if (changed && native_plan_launch_failed(p)) launch_failed_notice(app,p,fields[4]);
-        else if (changed) snprintf(app->notice,sizeof(app->notice),"Launch %s / no run receipt / exit %s. No automatic retry.",fields[2],fields[4]);
+        else if (changed) notice_set(app, "Launch %s / no run receipt / exit %s. No automatic retry.",fields[2],fields[4]);
         return;
     }
     if (strcmp(p->launched_run,fields[3])) {
@@ -69,7 +69,7 @@ static void launch_record(struct app *app, struct native_plan *p, char **fields)
         copy_text(p->launched_run,sizeof(p->launched_run),fields[3]);
         native_plan_notify_started(app);
     }
-    if (changed) snprintf(app->notice,sizeof(app->notice),"Run %s / launch owner %s / exit %s",fields[3],fields[2],fields[4]);
+    if (changed) notice_set(app, "Run %s / launch owner %s / exit %s",fields[3],fields[2],fields[4]);
 }
 
 /* An optional F record after a launch without a run: code, message and

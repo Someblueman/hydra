@@ -56,7 +56,7 @@ Failure has:
 `schema_version`, `ok`, `command`, and the matching `data` or `error` member are
 required. Error `code`, `message`, and `recovery` are required strings. Envelope v1 is
 used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
-`queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
+`lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
 `collision`, `resource`, `gate`, `du`, `snapshot`, `pool`, and `schedule` where their
 help documents `--json`.
 
@@ -80,19 +80,73 @@ the project's recorded worktree root whose head record is gone. `hydra gc --poli
 orphaned` is the only detector; doctor, cleanup, `du` and Recovery reuse it. Other
 worktrees, including `hydra-<branch>` siblings, are never candidates.
 
-The seven-field global map and project `compat-map` are not 2.0 runtime formats.
-Before migration, finish or stop active mutations, preserve local work, then run
-`hydra state verify` and `hydra state migrate --dry-run`. The dry run must report
-authoritative state v2 as verified. Run `hydra state migrate`, then
-`hydra state verify`; retain the generated backup path printed by migration.
-For a 1.9 rollback, use that exact path:
-`hydra state rollback "$HOME/.hydra/backups/state-YYYYMMDDTHHMMSS-PID"`, then
-`hydra state verify`. Rollback restores state and obsolete projections only; it does
-not replay commands or restore active owners.
+`hydra state backup` copies `$HYDRA_HOME/state` to
+`$HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>/state` and prints that
+directory. It also writes an empty `map.absent` there, which only Hydra 4.0.0
+looks for: 4.0.0 refuses to roll back a backup without it. `hydra state
+rollback <that directory>` replaces the state tree with the copy while it holds
+the rollback, project, state and event locks, and fails without changing
+anything when a writer is active or the backup has no `state` directory.
+Rollback restores records only; it does not replay commands or restore active
+owners. Run `hydra state verify` afterwards.
+
+Hydra 1.x kept sessions in `$HYDRA_HOME/map`, and 1.9 kept a `compat-map`
+projection in each project record. No release since 2.0 reads either, and they
+are ignored wherever they remain: beside or inside a store, and in a backup,
+whose `map` copy (4.0.0 made one) is not restored. `hydra state migrate`, which
+deleted them in 2.0 to 4.0.0, is removed; delete the files by hand to be rid of
+them.
 
 Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.
+A lock under `$HYDRA_HOME/locks` records the host and the process that holds it,
+which for a section run in a subshell is that subshell. A lock whose holder died
+on this host is taken over by the next writer, one at a time; a lock held by a
+live process, by another host, or without that record is never broken.
 Head history remains after teardown with `desired-state=stopped`.
+
+### Snapshot
+
+`hydra snapshot [--json]` prints one line and exits 0:
+
+```json
+{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":"project_…","head_id":"head_…","branch":"feature-x","desired_state":"running","current_instance":"instance_…"}]}}
+```
+
+`projects` counts the project records; `heads` holds every head of every project,
+ordered by project ID and then head ID. A snapshot is printed only for a store
+whose schema, project, head and current-instance records pass the record checks of
+`hydra state verify` (event logs are not read). For any other store the command
+prints the verifier's diagnostics on stderr, nothing on stdout, and exits 1.
+
+Two implementations produce this output, byte for byte: the read-only `hydra-core`
+helper and the shell. The command uses the helper when one qualifies and the shell
+implementation otherwise, without saying so. A helper qualifies when all of these
+hold:
+
+- It is the file `HYDRA_CORE` names or, with `HYDRA_CORE` unset, `build/hydra-core`
+  or `libexec/hydra/hydra-core` beside the directory that holds `hydra`, and it is
+  executable.
+- A scratch directory can be created under `TMPDIR` (default `/tmp`).
+- `hydra-core --protocol-version` prints exactly `1`, and `hydra-core --version`
+  prints exactly `Hydra core <version> protocol 1` with the CLI's own version.
+- `hydra-core snapshot <state root>` exits 0 and prints exactly one line of the
+  shape above.
+- Each of those three calls ends within `HYDRA_CORE_TIMEOUT_SECONDS` (default `2`).
+  A call that overruns is terminated together with its process tree.
+
+In every other case the shell implementation runs, and its output, diagnostics and
+exit status are the command's. That includes a store the helper refuses: the helper
+refuses every store the shell verifier refuses, so the fallback changes how long
+the command takes and never its verdict.
+
+`--native` does the same and also writes `hydra: native snapshot fallback: <reason>`
+to stderr when the helper was not used. The reasons are `helper-unavailable`,
+`helper-not-executable`, `scratch-unavailable`, `protocol-timeout`,
+`protocol-failure`, `protocol-skew`, `version-timeout`, `version-failure`,
+`version-skew`, `snapshot-timeout`, `snapshot-failure` and `malformed-output`.
+`--shell` uses the shell implementation and never runs the helper. The two options
+cannot be combined.
 
 ## Events, lifecycle, and completion
 
@@ -111,12 +165,37 @@ Head history remains after teardown with `desired-state=stopped`.
 - A workflow run's `events.jsonl` is appended under the directory lock
   `runs/<run>/.events.lock`, created with `mkdir`, whose `owner-pid` is the
   process ID of the process that writes the event (not of the shell that
-  started it). A writer that finds the lock held removes it only when that
-  process is no longer alive (an unreaped zombie counts as gone); otherwise it
-  retries once a second, giving up after 30 tries. The experimental native run
-  driver (`HYDRA_NATIVE_DRIVER=1`, `hydra-fleet workflow-drive`) appends under
-  the same lock with the same line format and writes the same run files, and
-  its own PID is the run's `owner-pid`.
+  started it). A writer that finds the lock held retries once a second and
+  gives up after 30 tries, leaving its event unrecorded; a lock released in
+  the meantime is retried at once.
+  It breaks the lock only when the lock is stale: its owner is no longer alive
+  (an unreaped zombie counts as gone), or it has no owner record and has
+  stayed unmodified, still without one, over five one-second polls after the
+  writer first saw it (its writer died between creating the lock and
+  recording itself). Two waiting writers cannot both break one stale lock,
+  nor can the slower one delete the lock the faster one has taken since: a
+  breaker announces itself in `.events.lock.breaking.<pid>` beside the lock,
+  gives way to any other live process's announcement, checks again that the
+  lock is still the stale one, renames it to `.events.lock.dead.<pid>` and
+  deletes it under that name. A shell writer that is watching a lock without
+  an owner record keeps `.events.lock.watch.<pid>` meanwhile. A writer that is
+  killed can leave one of these entries behind; the announcement of a dead
+  process does not count and other writers never delete it.
+- A run is driven only by the native driver, `hydra-fleet workflow-drive`,
+  which follows this lock protocol and writes the run files. `hydra workflow
+  run` needs the `hydra-fleet` that Hydra finds to answer
+  `workflow-drive --capability` with `workflow-drive 1`; otherwise, and under
+  `HYDRA_NATIVE_DRIVER=0` (the switch that once selected the removed shell
+  driver; no other value has an effect), it exits 1 with one error before any
+  run record exists, and `resume` and `cancel` of a run that needs a driver
+  refuse the same way and change nothing. The driver's own PID is the run's
+  `owner-pid`. Each drive appends one `run.running` event whose `detail` is
+  `driver=native`; a run that a release with the shell driver started carries
+  `driver=shell` events, which stay readable: `hydra workflow status` reports
+  the latest (`driver` in the JSON data, `unknown` when no drive recorded one)
+  and `resume` and `cancel` hand such a run to `hydra-fleet`. Step workers,
+  approvals and the other shell parts of a drive are started by the driver
+  through `hydra workflow --driver-hook`, an internal interface.
 - Declared outcome, observed provider status, and tmux liveness are independent.
 - Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
   Session disappearance alone is not task completion.
@@ -165,14 +244,19 @@ Head history remains after teardown with `desired-state=stopped`.
   interval extends it; a later one starts a new interval. When the oldest
   interval is dropped, or a damaged file is set aside as `coverage.corrupt.<epoch>`,
   `unknown-before` moves forward: time before it is unknown, not unobserved.
-- The control centre started by `hydra tui` (`hydra-tui --store`) is the
-  observer. Its 2-second refresh already runs one `tmux list-sessions` for the
+- The control centre started by `hydra tui` is the observer (the fleet entry,
+  `hydra fleet tui`, is not). Its 2-second refresh already runs one `tmux list-sessions` for the
   head snapshot; that call also names every session's window activity times
   (`#{W:#{window_activity} }`), so observing adds no process. A local
   interactive head is quiet after 10 seconds without output and active once
   output has continued for 4 seconds. Only a change starts a recorder (at most
   two at a time, retried with backoff when refused), and `adapter watch` runs
-  every 10 seconds while it observes. A head therefore records at most two
+  every 10 seconds while it observes. A state equal to the instance's
+  `activity-state` is not a change: the observer reads that record itself, so
+  a control centre that opens on heads observed before starts a recorder only
+  for those whose state differs from the recorded one. A head with no recorded
+  state gets its first record at most one head per refresh; `since` says when
+  the state began, so the wait does not move it. A head therefore records at most two
   changes per 14 seconds (about 35 an hour for a working agent, 514 at worst).
   `adapter activity` and `adapter watch` also maintain the project's sessions
   at most once every 600 seconds (64 heads per pass, taken in turn), which keeps
@@ -606,12 +690,16 @@ head rows, extends `T` with connection/freshness fields, and adds bounded `O` ta
 rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
 versions fail closed. This adapter is not a general automation API.
 
-`hydra tui --data` (the shell reader) is the reference for the local snapshot. The
-control centre started by `hydra tui` (`hydra-tui --store`) does not run it for each
-refresh: it reads the same state v2 records in its own process and writes the same
-rows, then parses them as it parses the shell reader's. `hydra-tui --hydra PATH --data`
-prints that read, and `make test-parity` (`tests/test_tui_store_parity.sh`) requires
-it to equal `hydra tui --data` byte for byte over records of every kind. Three facts
+The control centre has one reader of the local snapshot: `hydra-tui` reads the
+state v2 records in its own process, writes them as the rows above and parses
+those, at every start (`hydra tui`, bare `hydra` and `hydra fleet tui` alike).
+The shell reader `hydra tui --data` and the helper option `--store`, which chose
+between the two readers, were removed: `hydra tui --data` is an unknown option
+(exit 2) and `hydra-tui --store` is refused with a message that says so (exit
+2). `hydra-tui --hydra PATH --data` prints the read, and `make test-parity`
+(`tests/test_tui_store_rows.sh`) requires it to equal, byte for byte, the rows
+recorded in `tests/fixtures/tui/store-rows` for records of every kind; those
+rows were written from the shell reader while the two readers agreed. Three facts
 are not in the store. Live sessions come from one `tmux list-sessions` per refresh;
 its answer also carries each session's window activity times, which the snapshot
 rows do not use and the activity observer does (see `activity.changed`).
@@ -621,8 +709,9 @@ since it was read and the selected head's, plus the four least recently read oth
 so a count can lag an edit that touched neither by a few refreshes. Leftover
 worktrees are described by the private `hydra tui --orphan-rows`, which prints only
 those `R` rows and is run only while a `head_<id>` directory under the project's
-worktree root has no head record. A helper started without `--store` asks its
-`--hydra` command for `tui --data`, as before. With `--store` the helper also answers
+worktree root has no head record. A refresh whose commands do not answer within
+ten seconds keeps the last good snapshot, marked `state read timed out`; a CLI
+that fails does not fail the snapshot. The helper also answers
 the workflow projection and the workspace links itself when the project records no
 run, keeps the workspace links while no run was added or removed and no recorded
 graph changed, and keeps the workflow projection while every run has ended and its
@@ -683,16 +772,26 @@ projection, not an automation API.
 Plain `hydra tui` runs the native control centre and has no fallback interface.
 Without a qualified `hydra-tui` helper it prints how to obtain one and exits 1;
 an unexpected helper exit status is reported on one line and returned after the
-terminal is restored. `hydra tui --basic` is rejected as a usage error (exit 2).
+terminal is restored. An option `hydra tui` does not know, such as the `--basic`
+and `--native` of earlier releases, is a usage error (exit 2).
 `hydra tui --capabilities --json` keeps its fields and reports
 `"fallback_mode":"none"` and `"basic":false`. The control centre has four
 screens, Work, Inbox, Hosts and Stats; `hydra tui --view work|inbox|hosts|stats`
-opens one, and the view names of earlier releases (`heads`, `workspace`,
-`detail`, `coordination`, `overview`, `workflows`, `attention`, `recovery`,
-`statistics`) are still accepted and open the screen, or the Work page, that
-replaced them. Keys files (`HYDRA_TUI_KEYS`, `$HYDRA_HOME/tui/keys.conf`) written
-for earlier releases still load: every action name they may contain is still
-known, and actions whose job moved are live nowhere. Native mutations execute
+opens one, and `--view detail` and `--view overview` open Work on its Details
+and Run page. The view names of earlier releases that only stood for one of
+these (`heads`, `workspace`, `coordination`, `workflows`, `attention`,
+`recovery`, `statistics`) are refused (exit 2) with the name to use, as in
+`hydra-tui: --view heads was removed; use --view work`; any other name is refused
+with the list of names. Keys files (`HYDRA_TUI_KEYS`, `$HYDRA_HOME/tui/keys.conf`)
+keep the action names of the current table. A line that names an action of an
+earlier release that no longer exists (the ones `--print-keys` marked "no longer
+used": `statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+`views.next`, `view.5` to `view.9`, `view.cycle` and the like) is refused with
+the action that does its job now, as in `line 12: statistics.page was removed;
+use statistics.page-previous and statistics.page-next (and 3 more removed
+actions; --print-keys lists the current ones)`; the file's other lines apply.
+The old screen letters (`view.workspace`, `view.attention`, `view.hosts`,
+`view.stats`) are current names. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `hydra tui --attention-data` (internal), which merges `workflow
 attention-data` with `fleet attention-data` (when remote aliases are registered)
@@ -1179,7 +1278,11 @@ execution deduplication lock. An execution owner (exec, gates, heads, resume, an
 workflow steps through them) waits for a busy admission lock up to its queue deadline
 (`HYDRA_ADMISSION_QUEUE_SECONDS`, default 60, or the task's queue seconds) for its
 request, claims, and release; other callers, such as `hydra admission status`, give
-up after about 2 seconds with `state_unavailable`.
+up after about 2 seconds with `state_unavailable`. The lock
+(`$HYDRA_HOME/admission/lock`) records the process and host that hold it. A lock
+whose holder died on this host is taken over by the next admission command, one
+waiter at a time; a lock held by a live process, by another host, or without
+that record is never broken, and waiting for it ends as above.
 
 Admission records are `$HYDRA_HOME/admission/<id>.request`. Every admission
 command that scans them (status, request, inspect, claim, cancel, unknown,

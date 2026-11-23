@@ -239,7 +239,9 @@ hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # install, dependencies, and first-run readiness
 hydra doctor --fix-permissions # remove group/other write from your own Hydra state
-hydra snapshot --native # explicitly try the optional read-only native helper
+hydra snapshot          # canonical state JSON: the native helper when one is installed, else the shell
+hydra snapshot --native # the same, and say on stderr why the helper was not used
+hydra snapshot --shell  # the shell implementation only; never runs the helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
@@ -507,7 +509,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 - `default`: Single full-screen pane
 - `dev`: Two panes (editor ~70% left, terminal right)
 - `full`: Three panes (editor top-left, terminal top-right, logs bottom)
-- Cycle in-session with `Ctrl-L`.
+- Cycle in-session with `hydra cycle-layout`.
 
 ## Configuration
 
@@ -526,8 +528,8 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
 | `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
 | `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
-| `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
-| `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
+| `HYDRA_CORE` | `hydra-core` executable to use instead of the one installed beside the CLI. `hydra snapshot` uses it only if it qualifies ([Snapshot](CONTRACTS.md#snapshot)); naming a file that does not exist keeps `snapshot` on the shell implementation |
+| `HYDRA_CORE_TIMEOUT_SECONDS` | Time allowed for each of the three `hydra-core` calls of `hydra snapshot` (default `2`); a call that overruns is stopped and the shell implementation answers |
 | `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
 | `HYDRA_TUI_KEYS` | Keys file for the native TUI instead of `$HYDRA_HOME/tui/keys.conf` (see [TUI keys](#tui-keys)) |
 
@@ -539,8 +541,8 @@ keymaps, accessibility, and recovery are documented in
 the native helpers.
 
 Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
-Existing 1.9 installations should review the state backup and migration guidance
-in [Contracts](CONTRACTS.md) before removing their backup.
+Files that Hydra 1.x left in `$HYDRA_HOME` are ignored;
+[Contracts](CONTRACTS.md#durable-state-v2) names them.
 
 ### TUI keys
 
@@ -587,10 +589,17 @@ screen: `output.*` (a command's output), `help.*`, `review.*` and `inbox.*`,
 Onboarding page), `heads.*`, `head.*`, `workspace.*`, `work.*`, `workflows.*`
 (the Run page), `plan.*`, `run.*`, `task.new`, `view.*`, `views.*` and `app.*`. The footer
 and `?` help are generated from it, so they always name the keys in effect.
-Names of earlier releases stay in the table so their keys files load: rows
-whose job moved are marked `(no longer used)` and are live nowhere, and
 `view.workspace`, `view.attention`, `view.hosts` and `view.stats` (`W`, `I`,
-`H`, `D`) are the one-release old keys of the four screens.
+`H`, `D`) are the one-release old keys of the four screens. The table holds
+only actions that do something: the names of earlier releases whose job moved
+(`statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+`views.next`, `view.5` to `view.9` and the like, which `--print-keys` used to
+mark "no longer used") are gone. A keys file that still names one starts with a
+notice that names the first such line and the action to use instead, for
+example `keys.conf line 12: statistics.page was removed; use
+statistics.page-previous and statistics.page-next (and 3 more removed actions;
+--print-keys lists the current ones); other lines applied`. Delete those lines
+(or start again from `hydra tui --print-keys`) to clear it.
 
 To change the keys, write a keys file at `$HYDRA_HOME/tui/keys.conf` (default
 `~/.hydra/tui/keys.conf`), or name one in `HYDRA_TUI_KEYS`. `hydra tui --print-keys`
@@ -663,12 +672,21 @@ existing file. The template runs nothing by itself, and every host still has to
 approve the exact content with `hydra init --trust` before setup commands,
 startup commands, or repository workflows execute.
 
-Earlier releases left a generated `.hydra/config.yml` stub and `.hydra/local.yml`
-in the tree and added an `.git/info/exclude` rule for the latter. The next
-`hydra init` removes exactly those generated files and that rule, imports a
-differing `worktree_root` from `local.yml` into the host record, and reports the
-migration once. Tracked files and any `.hydra/config.yml` with real content are
-never removed.
+Hydra 2.5 and earlier kept the worktree root in `.hydra/local.yml`, and releases
+up to 4.0.0 imported it. This release does not read that file. Where the host
+already has a worktree root recorded, or `--worktree-root` gives one, the file
+changes nothing and is ignored. Only where neither is the case does `hydra init`
+exit 1, before it registers anything:
+
+```
+Error: .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this release does not read
+Next: run 'hydra init' with Hydra 4.0.0 first, which imports its worktree root, or delete the file
+```
+
+The file is never part of the approved configuration, tracked or not. The
+`.hydra/config.yml` stub those releases generated (`version`, `profile`, an
+empty `setup:`) is ordinary configuration now: `hydra init` keeps it, and it
+needs `hydra init --trust` like any other configuration under `.hydra/`.
 
 ## YAML Config (optional)
 
@@ -768,11 +786,11 @@ default; `t` (or "Theme" in `:`) cycles dark, light and your terminal's colours,
 and `--theme` and `--ascii` choose at start. Only changed cells are repainted, so
 idle refreshes do not flicker.
 
-`--view` opens a screen by name (`work`, `inbox`, `hosts`, `stats`). The names of
-earlier releases still work and open the page that replaced them: `heads` and
-`workspace` open Work, `detail` and `coordination` its Details page, `overview`
-and `workflows` its Run page, `attention` and `recovery` Inbox, `statistics`
-Stats. Session states use plain words (`running`, `terminal gone`, `stopped`,
+`--view` opens a screen by name (`work`, `inbox`, `hosts`, `stats`), or Work on
+one of its pages: `detail` (Details) and `overview` (Run). The other names of
+earlier releases were removed and are refused with the name to use: `heads` and
+`workspace` are `work`, `coordination` is `detail`, `workflows` is `overview`,
+`attention` and `recovery` are `inbox`, `statistics` is `stats`. Session states use plain words (`running`, `terminal gone`, `stopped`,
 `unknown`); internal tokens stay behind `d` (technical details).
 
 One interaction model applies everywhere Hydra has the keys:
@@ -785,7 +803,7 @@ One interaction model applies everywhere Hydra has the keys:
 | `Up` / `Down`, `j` / `k` | Select, or scroll a pane that scrolls; PgUp/PgDn page |
 | `Enter` | Open or activate the selection; it never approves, removes or runs anything |
 | `Esc` | One step back: close the top dialog, clear the filter, give focus back to the list, return to the screen a jump came from; it never quits |
-| `:` | Command palette: every action and CLI command (diff, claims, queue, approvals...), searchable, output shown in place |
+| `:` | Command palette: every action and CLI command (diff, claims, approvals...), searchable, output shown in place |
 | `ctrl+r` | Read everything again now |
 | `?`, `q` | Help for where you are, quit (agents keep running) |
 | `t` | Theme |
@@ -973,7 +991,7 @@ is always beside the list, and the details, the plan and the run are pages of
 the pane next to it. Approvals, failed checks, results to review, stopped
 terminals and leftover worktrees are all in Inbox, and you act on them there
 without typing a request ID. Read-only commands from `:` (diff, claims,
-queue...) open inside Hydra.
+scopes...) open inside Hydra.
 
 | Key | Was | Now |
 |-----|-----|-----|
@@ -998,7 +1016,8 @@ queue...) open inside Hydra.
 | `Y` / `N` | approve / reject after typing the request ID and the word | approve / reject from a dialog (`y` confirms) |
 | `i` `f` `l` `t` `p` `o` in review | IDs, references, supply a log, transcript or PR, follow a reference | Technical and References pages; `+` adds a reference; Enter opens the selected one |
 
-`keys.conf` files of earlier releases keep working: their action names still
-load, the three `workspace.layout.*` actions keep their chords with the new page
-meaning, and actions whose job moved are kept by name but live nowhere
-(`--print-keys` marks them "no longer used").
+A `keys.conf` of an earlier release keeps its current actions: the three
+`workspace.layout.*` actions keep their chords with the new page meaning. The
+actions whose job moved no longer exist; a line that names one is reported at
+start-up with the action that replaced it, and the other lines apply (see
+[TUI keys](#tui-keys)).

@@ -5,6 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 static char root[4096], build[4096], tui[4096], fake[4096], evidence[4096];
+/* The state store of the fixture heads and its repository (kt_fixture_store). */
+static char store[4096], repo[4096];
 #define U(marker) kt_until(&s, (marker), 3)
 #define S(keys) kt_send(&s, (keys))
 #define HAS(marker) kt_contains(&s, (marker))
@@ -31,6 +33,11 @@ static bool row_has(struct kt_session *s, const char *marker, const char *also) 
 #define PU(marker) kt_until(p, (marker), 3)
 #define PS(keys) kt_send(p, (keys))
 #define PHAS(marker) kt_contains(p, (marker))
+/* A marker that must go away: waits for the redraw that removes it. */
+static void until_gone(struct kt_session *s, const char *marker) {
+    double end = kt_now() + 3;
+    while (kt_contains(s, marker) && kt_now() < end) kt_pump(s, .05);
+}
 
 static void runs_overview(struct kt_session *p) {
     PU("Workflow runs");
@@ -73,7 +80,7 @@ static void runs_filter_evidence(struct kt_session *p) {
     PU("all recorded" DOT "all workflows");
     CHECK(PHAS("Run evidence"), "clearing the filter keeps the evidence open");
     PS("\033");
-    kt_pump(p, .2);
+    until_gone(p, "Run evidence");
     CHECK(!PHAS("Run evidence"), "the second Esc closes the evidence");
 }
 
@@ -112,7 +119,7 @@ static void runs_stale(struct kt_session *p, const char *failure) {
     CHECK(PHAS("95.0s"), "last good statistics retained");
     CHECK(!unlink(failure), "remove failure trigger");
     PS(CTRL_R);
-    kt_pump(p, .25);
+    until_gone(p, "\xe2\x96\xb2 stale");
     CHECK(!PHAS("\xe2\x96\xb2 stale"), "refresh recovers");
 }
 
@@ -138,10 +145,18 @@ static void local_statistics(void) {
     kt_temp(base, sizeof(base), "hydra-statistics");
     kt_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
+    /* The heads can arrive after the frame (the first one lists only the
+     * runs), and a late list moves the selection to its first head, so the
+     * keys wait until the head rows are listed and each step until its effect. */
+    U("feature-unavailab");
     /* The second head, its side pane focused and scrolled (Shift-Tab). */
-    S("j\033[Zjj");
+    S("j");
+    U("feature-stale \xe2\x94\x80");
+    S("\033[Z");
+    U("esc back");
+    S("jj");
     kt_pump(&s, .2);
     CHECK(HAS("feature-stale \xe2\x94\x80") && HAS("esc back"), "Work selection and focus setup");
     S("4");
@@ -160,8 +175,8 @@ static void local_statistics(void) {
  * filters reach the tiles and charts as well as the list. */
 static void workflow_filter(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("1 of 8" DOT "newest first");
     U("w workflow");
     S("w");
@@ -193,14 +208,14 @@ static void workflow_filter(void) {
 }
 static void metric_pages(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
     int sizes[][2] = {{140, 40}, {80, 24}, {40, 10}};
     const char *titles[] = {"Queue delay", "Total execution", "Recorded verification", "Owner recoveries"};
     const char *coverage[] = {"known 7/10", "known 4/5", "known 2/3", "known 6/8"};
     const char *names[] = {"queue-delay", "total-execution", "recorded-verification",
                            "owner-recoveries"};
     size_t i, j;
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Latest attempts average");
     for (i = 0; i < 3; i++) {
         if (s.screen.cols != sizes[i][0] || s.screen.rows != sizes[i][1])
@@ -243,8 +258,8 @@ static void hosts_heads(struct kt_session *p) {
 static void fleet_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui,       "--hydra", fake,         "--theme", "dark",
-                          "--fleet", "--view",  "statistics", NULL};
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+                          "--fleet", "--view",  "stats", NULL};
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("latest fleet response" DOT "all hosts");
     U("2 responded   1 failed   1 reported heads");
     CHECK(row_has(&s, "offline", "failed") && row_has(&s, "offline", "--"), "unknown failed-host heads");
@@ -260,7 +275,7 @@ static void fleet_statistics(void) {
     S("0");
     kt_resize(&s, 80, 14);
     S("k");
-    kt_pump(&s, .1);
+    U(BAR "empty");
     CHECK(HAS(BAR "empty"), "selection scrolls into view");
     S("j");
     U(BAR "offline");
@@ -312,7 +327,7 @@ static void session_filters(struct kt_session *p) {
     PS("\r");
     PU("A headless head has no terminal to observe");
     PS("\033");
-    kt_pump(p, .2);
+    until_gone(p, "Session evidence");
     CHECK(!PHAS("Session evidence"), "Esc closes the evidence");
     PS("0/docs\r");
     PU("all recorded" DOT "docs");
@@ -337,7 +352,7 @@ static void session_evidence(struct kt_session *p) {
     PS("\033\033");
     /* The selection stays on the session the evidence showed. */
     PU("2 of 5");
-    kt_pump(p, .2);
+    until_gone(p, "Session evidence");
     CHECK(!PHAS("Session evidence"), "Esc clears the filter, then closes the evidence");
 }
 
@@ -363,7 +378,7 @@ static void session_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-sessions.tsv", 1), "session fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     S("4");
     session_overview(&s);
@@ -372,7 +387,7 @@ static void session_statistics(void) {
     session_pages(&s);
     kt_close(&s, "q", 0, 0);
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6.tsv", 1), "mixed fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
     S("D");
     U("Workflow runs");
@@ -393,8 +408,9 @@ static void session_jump(void) {
     struct kt_session s;
     const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v6-heads.tsv", 1), "head sessions fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     U("Heads \xe2\x94\x80");
+    U("feature-unavailab");
     S("D");
     U(BAR "feature-live");
     S("\r");
@@ -492,9 +508,9 @@ static void cohorts_back(struct kt_session *p) {
 }
 static void remote_cohorts(void) {
     struct kt_session s;
-    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "stats", NULL};
     CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "schema 5 fixture environment");
-    kt_open_terminal(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, repo);
     cohorts_runs_page(&s);
     cohorts_rows(&s);
     cohorts_kinds(&s);
@@ -514,6 +530,8 @@ int main(void) {
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
     kt_format(evidence, sizeof(evidence), "%s/build/statistics-evidence", root);
     kt_mkdir(evidence);
+    kt_format(store, sizeof(store), "%s/store", evidence);
+    kt_fixture_store(root, NULL, store, repo, sizeof(repo));
     local_statistics();
     workflow_filter();
     fleet_statistics();
@@ -521,5 +539,9 @@ int main(void) {
     session_statistics();
     session_jump();
     remote_cohorts();
+    {
+        const char *remove[] = {"rm", "-rf", store, NULL};
+        kt_command_ok(NULL, remove);
+    }
     return 0;
 }

@@ -68,7 +68,7 @@ cmd_tail() {
         trap 'echo ""; echo "---"; echo "Stopped tailing."; exit 0' INT
         last_output=""
         while true; do
-            current_output="$(tmux capture-pane -t "$session" -p -S -"$lines" 2>/dev/null || true)"
+            current_output="$(tmux capture-pane -t "$(tmux_exact_target "$session")" -p -S -"$lines" 2>/dev/null || true)"
             if [ "$current_output" != "$last_output" ]; then
                 # Clear screen and show new output
                 printf '\033[2J\033[H'
@@ -81,7 +81,7 @@ cmd_tail() {
     else
         # One-shot capture
         echo "=== $branch ($session) - last $lines lines ==="
-        tmux capture-pane -t "$session" -p -S -"$lines" 2>/dev/null || true
+        tmux capture-pane -t "$(tmux_exact_target "$session")" -p -S -"$lines" 2>/dev/null || true
     fi
 }
 
@@ -188,7 +188,7 @@ cmd_broadcast() {
                 fi
             fi
             echo "  Sending to $branch ($session) via $_target..."
-            if tmux send-keys -t "$_target" "$command_text" Enter; then
+            if tmux send-keys -t "$(tmux_exact_target "$_target")" "$command_text" Enter; then
                 count=$((count + 1))
             else
                 echo "  Failed to send to $branch ($session) via $_target" >&2
@@ -282,7 +282,7 @@ cmd_wait_idle() {
         fi
         if _session_exists_cached "$session"; then
             echo "$start_time" > "$tmpdir/$session.time"
-            tmux capture-pane -t "$session" -p 2>/dev/null | cksum > "$tmpdir/$session.hash"
+            tmux capture-pane -t "$(tmux_exact_target "$session")" -p 2>/dev/null | cksum > "$tmpdir/$session.hash"
         fi
     done
 
@@ -313,7 +313,7 @@ cmd_wait_idle() {
             fi
 
             # Get current output hash
-            current_hash="$(tmux capture-pane -t "$session" -p 2>/dev/null | cksum)"
+            current_hash="$(tmux capture-pane -t "$(tmux_exact_target "$session")" -p 2>/dev/null | cksum)"
             last_hash="$(cat "$tmpdir/$session.hash" 2>/dev/null || echo "")"
 
             if [ "$current_hash" != "$last_hash" ]; then

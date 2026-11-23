@@ -51,7 +51,7 @@ void plan_action_approve(struct app *app) {
         return;
     }
     app->plan->approved_revision = app->plan->revision;
-    snprintf(app->notice, sizeof(app->notice), "Approved revision %u; validating it, then it runs", app->plan->revision);
+    notice_set(app, "Approved revision %u; validating it, then it runs", app->plan->revision);
 }
 
 /* An approved revision runs once its validation is ready; any other outcome
@@ -63,10 +63,10 @@ void plan_actions_tick(struct app *app) {
     revision = p->approved_revision;
     p->approved_revision = 0;
     if (p->state == PLAN_READY && p->revision == revision && native_plan_launch(app, p->digest)) {
-        snprintf(app->notice, sizeof(app->notice), "Revision %u validated and submitted", revision);
+        notice_set(app, "Revision %u validated and submitted", revision);
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Revision %u did not run: %s", revision,
+    notice_set(app, "Revision %u did not run: %s", revision,
              p->revision != revision ? "the draft changed after approval" :
              p->state == PLAN_INVALID ? "validation found problems (F sends them to the agent)" : "validation did not complete");
 }
@@ -121,27 +121,37 @@ bool plan_action_published(const char *planning, struct stat *draft) {
     return stat(path, &returned) != 0;
 }
 
-/* The published plan becomes the plan on screen in Work, its head selected. */
-static bool published_loaded(struct app *app, const char *branch) {
+/* The published plan becomes the plan on screen in Work, its head selected.
+ * The key that asked never goes unanswered: when the plan cannot be opened,
+ * the notice says so and that nothing was done (the plan of another head is
+ * never decided in its place). */
+static bool published_loaded(struct app *app, const char *branch, const char *outcome) {
     const struct head *h = head_for_branch(app, branch);
-    if (app->fleet || !h || !native_workspace_init(app)) return false;
+    if (app->fleet || !h || !native_workspace_init(app)) {
+        notice_set(app, "The plan of %.100s cannot be opened here: its head is not listed now; %s", branch, outcome);
+        return false;
+    }
     app->run_row = false;
     app->selected = (size_t)(h - app->model.heads);
     if (app->plan && !strcmp(app->plan->proposal_head, branch) && !native_plan_changed(app->plan)) return true;
-    return native_plan_proposal_load(app, branch);
+    if (native_plan_proposal_load(app, branch)) return true;
+    /* A refusal with its own report (the result viewer, a malformed answer)
+     * already said why; an unreadable draft did not. */
+    if (!app->notice[0] && !app->result_open) notice_set(app, "The plan of %.100s could not be read; %s", branch, outcome);
+    return false;
 }
 
 /* Y on "Plan ready": the plan is read under the guided policy and approved
  * exactly as plan_action_approve approves it (one confirmation; nothing runs
  * without it, and a revision that changes first does not run). */
 void plan_action_approve_published(struct app *app, const char *branch) {
-    if (!published_loaded(app, branch)) return;
+    if (!published_loaded(app, branch, "nothing was approved.")) return;
     plan_action_approve(app);
 }
 
 /* F on "Plan ready": feedback for that exact revision. */
 void plan_action_return_published(struct app *app, const char *branch) {
-    if (!published_loaded(app, branch)) return;
+    if (!published_loaded(app, branch, "nothing was sent back.")) return;
     plan_action_request_changes(app);
 }
 
@@ -162,6 +172,6 @@ void plan_action_return_failure(struct app *app, const char *branch, const char 
              "hydra workflow plan propose <draft.json>.", what, run, feedback);
     h = native_plan_head(app, branch);
     if (h && native_plan_converse(app, h, text, false, true))
-        snprintf(app->notice, sizeof(app->notice), "Typed into %.100s's conversation; review it and press Enter to send.", branch);
-    else snprintf(app->notice, sizeof(app->notice), "%.100s's conversation could not be opened; nothing was sent.", branch);
+        notice_set(app, "Typed into %.100s's conversation; review it and press Enter to send.", branch);
+    else notice_set(app, "%.100s's conversation could not be opened; nothing was sent.", branch);
 }

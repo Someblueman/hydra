@@ -88,7 +88,7 @@ event_emit() {
     case "$_ee_type" in ''|*[!a-z0-9._-]*) return 1 ;; esac
     case "$_ee_payload" in \{*\}) ;; *) return 1 ;; esac
     _ee_file="$(event_file_for_head "$_ee_project" "$_ee_head")" || return 1
-    hydra_private_mkdir "$(dirname "$_ee_file")" || return 1
+    hydra_private_mkdir "${_ee_file%/*}" || return 1
     hydra_private_touch "$_ee_file" || return 1
     _ee_lock="events_${_ee_project}_${_ee_head}"
     acquire_lock "$_ee_lock" "event append" || return 1
@@ -258,7 +258,7 @@ _event_repair_file_locked() {
             _erf_expected="$_erf_sequence"
         fi
         [ "$_erf_sequence" = "$_erf_expected" ] || break
-        printf '%s\n' "$_erf_line" >> "$_erf_tmp"
+        printf '%s\n' "$_erf_line" >> "$_erf_tmp" || { rm -f "$_erf_tmp"; return 1; }
         _erf_expected=$((_erf_expected + 1))
     done < "$_erf_file"
     _erf_backup="$_erf_file.corrupt.$(date +%s)"
@@ -427,19 +427,4 @@ _event_expire_archive() {
         rm -f "$_eea_tmp"; return 1
     fi
     rm -f "$_eea_archive" "$_eea_meta"
-}
-
-event_retain_file() {
-    _ert_file="$1"
-    _ert_max="$2"
-    _ert_project="$3"
-    _ert_head="$4"
-    hydra_valid_id "$_ert_project" || return 1
-    hydra_valid_id "$_ert_head" || return 1
-    _ert_lock="events_${_ert_project}_${_ert_head}"
-    acquire_lock "$_ert_lock" "event retention" "$_ert_head" || return 1
-    _event_retain_file_locked "$_ert_file" "$_ert_max" "$_ert_project" "$_ert_head"
-    _ert_status=$?
-    release_lock "$_ert_lock"
-    return "$_ert_status"
 }

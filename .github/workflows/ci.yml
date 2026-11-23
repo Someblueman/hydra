@@ -15,6 +15,8 @@ jobs:
   lint:
     name: Lint POSIX Compliance
     runs-on: ubuntu-latest
+    # Every job has a timeout of about three times its usual duration.
+    timeout-minutes: 5
     
     steps:
     - uses: actions/checkout@v4
@@ -31,6 +33,7 @@ jobs:
     name: C analysis and complexity ceiling
     # Match the reviewed Darwin baseline; Linux native/sanitizer coverage remains below.
     runs-on: macos-latest
+    timeout-minutes: 25
     steps:
     - uses: actions/checkout@v4
     - name: Install pinned analysis dependencies
@@ -52,6 +55,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 20
     
     steps:
     - uses: actions/checkout@v4
@@ -84,6 +88,7 @@ jobs:
     # Ubuntu's default umask; hosted runners otherwise use 022.
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 25
 
     steps:
     - uses: actions/checkout@v4
@@ -112,6 +117,7 @@ jobs:
     name: Shell Compatibility
     runs-on: ${{ matrix.os }}
     needs: lint
+    timeout-minutes: 5
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -144,6 +150,7 @@ jobs:
     name: Native Core and TUI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: lint
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -204,6 +211,7 @@ jobs:
     name: Native sanitizers (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: lint
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -220,18 +228,36 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: brew install tmux shellcheck json-c pkg-config
 
+    # The lanes share build/sanitize, so each object is compiled once. The
+    # fleet lane runs in the fleet job below.
     - name: Run sanitizer tests
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics
+        make sanitize SANITIZE_LANES="core tui workspace attached plan-workspace statistics"
+
+  opt-levels:
+    name: Warnings at every optimisation level
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 10
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Compile every native source at -O0, -Og, -O1, -O2, -O3 and -Os
+      run: make -j"$(nproc)" check-opt-levels
 
 
   fleet:
     name: Fleet ${{ matrix.mode }} (${{ matrix.os }}, ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
     needs: lint
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -301,6 +327,7 @@ jobs:
     name: U10 loopback onboarding through the control centre
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v4
@@ -332,6 +359,7 @@ jobs:
     name: Static fleet helper (linux-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     needs: lint
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -377,18 +405,39 @@ jobs:
         path: dist/
         if-no-files-found: error
 
+    # A release branch has no row for its version until the release PR pins
+    # the digests this job builds, so on a release branch a missing row is a
+    # notice that prints the row to commit, not a failure. A pinned row that
+    # does not match the rebuilt helper still fails, and so does a missing row
+    # on a tag; release.yml verifies the pushed tag again.
     - name: Match the pinned release digest (release branches)
       if: startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')
       run: |
         version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' src/fleet/fleet.h)"
-        sh scripts/check-fleet-assets.sh --verify release/fleet-assets.tsv "$version" \
-          linux-${{ matrix.arch }} dist/hydra-fleet-linux-${{ matrix.arch }}
+        test -n "$version"
+        platform="linux-${{ matrix.arch }}"
+        binary="dist/hydra-fleet-$platform"
+        sh scripts/check-fleet-assets.sh release/fleet-assets.tsv
+        pinned="$(awk -F '\t' -v v="$version" -v p="$platform" 'NR > 1 && $1 == v && $2 == p { print $3 }' release/fleet-assets.tsv)"
+        case "$GITHUB_REF" in
+          refs/heads/release/*)
+            if [ -z "$pinned" ]; then
+              digest="$(sha256sum "$binary" | awk '{print $1}')"
+              row="$(printf '%s\t%s\t%s\thydra-fleet-%s-%s' "$version" "$platform" "$digest" "$version" "$platform")"
+              echo "::notice title=No digest pinned for hydra-fleet $version $platform::release/fleet-assets.tsv has no row for $version $platform yet; nothing was compared. Commit this CI-built row before tagging: $row"
+              printf '%s\n' "$row"
+              exit 0
+            fi
+            ;;
+        esac
+        sh scripts/check-fleet-assets.sh --verify release/fleet-assets.tsv "$version" "$platform" "$binary"
 
   release-gate:
     name: release-gate
     if: ${{ always() }}
-    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, fleet, fleet-static, u10-loopback]
+    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, opt-levels, fleet, fleet-static, u10-loopback]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - name: Require every full qualification job
       run: |
@@ -400,5 +449,6 @@ jobs:
         test "${{ needs.compatibility.result }}" = success
         test "${{ needs.native.result }}" = success
         test "${{ needs.sanitize.result }}" = success
+        test "${{ needs.opt-levels.result }}" = success
         test "${{ needs.fleet.result }}" = success
         test "${{ needs.fleet-static.result }}" = success

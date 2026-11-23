@@ -171,7 +171,7 @@ _hydra() {
                     _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'
                     ;;
                 snapshot)
-                    _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
+                    _arguments '--native[Say on stderr why the native helper was not used]' '--shell[Use the shell implementation, never the native helper]' '--json[Output canonical JSON]'
                     ;;
                 doctor)
                     _arguments '--fix[Auto-fix detected issues]' '--fix-permissions[Remove group/other write from your own Hydra state]'
@@ -183,7 +183,7 @@ _hydra() {
                     _arguments '1:subcommand:(list create show edit delete)'
                     ;;
                 state)
-                    _arguments '1:subcommand:(verify backup migrate rollback)'
+                    _arguments '1:subcommand:(verify backup rollback)'
                     ;;
                 events)
                     _arguments '1:subcommand:(verify tail filter retain repair)'
@@ -250,7 +250,7 @@ _hydra_commands() {
         'switch:Switch to a different head'
         'kill:Remove a worktree and its tmux session'
         'regenerate:Restore tmux sessions for existing worktrees'
-        'state:Verify, back up, migrate, or roll back durable state'
+        'state:Verify, back up, or roll back durable state'
         'events:Verify, tail, filter, retain, or repair head events'
         'status:Show health status of all heads'
         'doctor:Check system performance'
@@ -270,7 +270,6 @@ _hydra_commands() {
         'tail:View output from a session'
         'broadcast:Send a command to sessions'
         'wait-idle:Wait for sessions to become idle'
-        'queue:Inspect or process the spawn queue'
         'pool:File-backed task pools with sealed bounded expansions'
         'schedule:Host-timer schedules that submit work with a dedup token'
     )

@@ -17,8 +17,12 @@ set -eu
 while [ "$#" -gt 2 ]; do shift; done
 if [ -n "${HYDRA_TEST_OFFLINE_FILE:-}" ] && [ -f "$HYDRA_TEST_OFFLINE_FILE" ]; then exit 255; fi
 request="$(cat)"
+handshake='{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":["overview"]}}'
+# An observation asks for the handshake on the command line and for its
+# action on standard input: one session, two answers.
+case "$2" in *'"action":"handshake"'*) printf '%s\n' "$handshake" ;; esac
 case "$request" in
-  *'"action":"handshake"'*) printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":["overview"]}}' ;;
+  *'"action":"handshake"'*) printf '%s\n' "$handshake" ;;
   *)
     if [ -n "${HYDRA_TEST_MALFORMED:-}" ]; then printf '%s\n' '{malformed'; exit 0; fi
     cat "$HYDRA_TEST_ATTENTION_FIXTURE" > "/tmp/hydra-attention.$$"

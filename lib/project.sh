@@ -49,7 +49,9 @@ project_config_hash() (
     trap 'exit 143' TERM
     trap 'exit 129' HUP
     # Validate names before newline serialization. Do not follow links or ignore
-    # nested local.yml files: only the root host-local record is exempt.
+    # nested local.yml files: only the root one is exempt. Hydra 2.5 and
+    # earlier wrote that file per host, so an approval never covered it, and
+    # a repository that still has it must not read as changed.
     find "$_pch_dir" -exec sh -c '
         excluded="$1/local.yml"; shift
         cr="$(printf "\r")"
@@ -113,6 +115,21 @@ project_worktree_path() {
     fi
     _pwp_root="$(project_worktree_root "$_pwp_project")" || return 1
     printf '%s/%s\n' "$_pwp_root" "$_pwp_head"
+}
+
+# The worktree of the head recorded for a branch: its stored path, else the
+# path under this host's worktree root. "hydra path" prints the same.
+# Usage: project_branch_worktree <branch>
+project_branch_worktree() {
+    _pbw_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _pbw_head="$(state_v2_find_head_by_branch "$_pbw_project" "$1" 2>/dev/null)" || return 1
+    _pbw_dir="$(state_v2_head_dir "$_pbw_project" "$_pbw_head")" || return 1
+    _pbw_stored="$(sed -n '1p' "$_pbw_dir/worktree" 2>/dev/null || true)"
+    if [ -n "$_pbw_stored" ]; then
+        printf '%s\n' "$_pbw_stored"
+    else
+        project_worktree_path "$_pbw_project" "$_pbw_head"
+    fi
 }
 
 project_activate_state_v2() {

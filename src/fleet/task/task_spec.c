@@ -140,9 +140,8 @@ json_object *task_spec(json_object *input, bool prepared) {
 bad:
     json_object_put(out); return NULL;
 }
-int task_json_hash(json_object *object, const char *scratch, char digest[65]) {
+int task_json_hash(json_object *object, char digest[65]) {
     const char *text = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
-    (void)scratch;
     if (!text) return -1;
     f_sha256_text(text, strlen(text), digest);
     return 0;

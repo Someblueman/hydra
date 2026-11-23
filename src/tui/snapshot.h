@@ -12,7 +12,8 @@ struct store_location;
  * need not be asked again. */
 struct native_snapshot;
 
-/* hydra is the CLI used for the rows only the shell reader can produce. */
+/* hydra is the CLI asked for the rows it alone can produce (leftover
+ * worktrees). */
 struct native_snapshot *snapshot_new(const char *hydra);
 void snapshot_free(struct native_snapshot *s);
 

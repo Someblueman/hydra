@@ -134,7 +134,7 @@ json_object *task_prepare(const char *source, const char *input_source, json_obj
         json_object_put(validated);
     }
     error = "io_failed";
-    if (task_json_hash(spec, scratch, hash)) goto clean;
+    if (task_json_hash(spec, hash)) goto clean;
     f_string_add(package, "spec_sha256", hash);
     error = "package_too_large";
     if (strlen(json_object_to_json_string_ext(package, JSON_C_TO_STRING_PLAIN)) > TASK_PACKAGE_LIMIT) goto clean;
@@ -157,7 +157,7 @@ json_object *task_inspect(json_object *package) {
         !(spec = task_spec(f_field(package, "spec"), true)) || !json_object_is_type(payload, json_type_array)) goto done;
     manifest = f_field(spec, "inputs");
     if (json_object_array_length(manifest) != json_object_array_length(payload) || !mkdtemp(scratch)) goto done;
-    if (task_json_hash(spec, scratch, hash) || strcmp(hash, digest) || f_path(path, sizeof(path), scratch, "source.bundle") ||
+    if (task_json_hash(spec, hash) || strcmp(hash, digest) || f_path(path, sizeof(path), scratch, "source.bundle") ||
         f_hex_write(path, hex, 0600) || f_hash(path, hash) || strcmp(hash, f_string(f_field(spec, "source"), "bundle_sha256"))) goto clean;
     for (i = 0; i < json_object_array_length(manifest); i++) {
         json_object *file = json_object_array_get_idx(manifest, i);

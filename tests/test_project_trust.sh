@@ -23,32 +23,28 @@ mv "$fixture/changed.yml" .hydra/workflows/local.yml
 "$root/bin/hydra" workflow validate local > "$fixture/result" 2>&1
 assert_failure $? "nested local.yml change invalidates trust"
 "$root/bin/hydra" init --no-agent --trust >/dev/null || exit 1
-# Leftovers from an earlier init: an untracked stub and host-local record.
-printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
+# The root .hydra/local.yml that Hydra 2.5 and earlier wrote per host is no
+# part of the approved content: adding, changing or deleting it leaves the
+# approval as it is, and with a worktree root recorded init ignores it.
 printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
-printf '.hydra/local.yml\n' >> "$(git rev-parse --git-common-dir)/info/exclude"
-"$root/bin/hydra" init --no-agent --trust >/dev/null || exit 1
-if [ ! -e .hydra/config.yml ] && [ ! -e .hydra/local.yml ]; then
-    assert_success 0 "generated stub files from an earlier init are removed"
-else
-    assert_success 1 "generated stub files from an earlier init are removed"
-fi
 "$root/bin/hydra" workflow validate local >/dev/null 2>&1
-assert_success $? "reviewed workflows stay approved after migration"
-# A third-line mismatch must not let awk's END turn rejection into success.
-for third in '# Keep my setup' '' 'setup:'; do
-    printf 'version: 1\nprofile: none\n%s\nsetup:\n  - echo project-setup\n' "$third" > .hydra/config.yml
-    cp .hydra/config.yml "$fixture/config-before"
-    "$root/bin/hydra" init --no-agent >/dev/null || exit 1
-    cmp -s .hydra/config.yml "$fixture/config-before"
-    assert_success $? "init preserves real untracked configuration with third line '$third'"
-done
+assert_success $? "adding a root local.yml leaves the approval standing"
+"$root/bin/hydra" init --no-agent > "$fixture/result" 2>&1
+assert_success $? "init ignores a root local.yml when a worktree root is recorded"
+grep -Fq "Repository config trusted." "$fixture/result"
+assert_success $? "init still reports the approval"
+printf 'version: 1\nworktree_root: %s\n' "$fixture/another-root" > .hydra/local.yml
+"$root/bin/hydra" workflow validate local >/dev/null 2>&1
+assert_success $? "changing a root local.yml leaves the approval standing"
+rm .hydra/local.yml
+"$root/bin/hydra" workflow validate local >/dev/null 2>&1
+assert_success $? "deleting a root local.yml leaves the approval standing"
+# A config.yml of the shape earlier releases generated is never removed.
 printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
-git add .hydra/config.yml
+cp .hydra/config.yml "$fixture/config-before"
 "$root/bin/hydra" init --no-agent >/dev/null || exit 1
-test -f .hydra/config.yml
-assert_success $? "init preserves even a generated-shaped file when tracked"
-git rm --cached -q .hydra/config.yml
+cmp -s .hydra/config.yml "$fixture/config-before"
+assert_success $? "init preserves an untracked generated-shaped config.yml"
 rm .hydra/config.yml
 cp .hydra/workflows/local.yml "$fixture/external.yml"
 ln -s "$fixture/external.yml" .hydra/workflows/linked.yml

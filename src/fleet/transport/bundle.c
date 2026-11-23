@@ -92,26 +92,45 @@ done:
     json_object_put(bundle);
     return result ? result : f_error("fleet-export", "invalid_bundle", "select declarative .hydra files or a terminal workflow run; links and live records are excluded");
 }
+/* Writes each file of a bundle under the stage directory. */
+static int import_files(json_object *files, const char *kind, const char *stage) {
+    size_t i;
+    for (i = 0; i < json_object_array_length(files); i++) {
+        json_object *file = json_object_array_get_idx(files, i); const char *rel = f_string(file, "path"), *hex = f_string(file, "hex");
+        char path[F_PATH], dir[F_PATH];
+        if (!(strcmp(kind, "config") ? history_path(rel) : config_path(rel)) || !hex || f_path(path, sizeof(path), stage, rel)) return -1;
+        f_copy(dir, sizeof(dir), path); *strrchr(dir, '/') = '\0';
+        if (f_mkdirs(dir) || f_hex_write(path, hex, 0600)) return -1;
+    }
+    return 0;
+}
+/* The answer once the files are in place and the import cannot be repeated
+ * over them: a directory that could not be synced is reported with where
+ * they are. NULL when that report does not fit. */
+static json_object *import_placed(const char *parent, const char *dest) {
+    json_object *result;
+    if (f_sync_dir(parent)) {
+        char message[F_PATH + 128];
+        if (f_format(message, sizeof(message), "the import is in place at %s but its directory could not be synced to disk; inspect it before importing again", dest)) return NULL;
+        return f_error("fleet-import", "outcome_unknown", message);
+    }
+    result = json_object_new_object(); f_string_add(result, "path", dest);
+    return f_success("fleet-import", result);
+}
 json_object *f_bundle_import(const char *project, json_object *bundle) {
     const char *kind = f_string(bundle, "kind"); json_object *files = f_field(bundle, "files"), *result = NULL;
-    char stage[F_PATH] = "", dest[F_PATH], parent[F_PATH]; size_t i;
+    char stage[F_PATH] = "", dest[F_PATH], parent[F_PATH];
     if (!kind || (strcmp(kind, "config") && strcmp(kind, "history")) || !f_number_is(bundle, "schema_version", 1) || !json_object_is_type(files, json_type_array) || json_object_array_length(files) > 256) goto done;
     if (!strcmp(kind, "config")) { if (f_copy(parent, sizeof(parent), project) || f_path(dest, sizeof(dest), project, ".hydra")) goto done; }
     else { if (f_path(parent, sizeof(parent), f_home, "fleet/history") || f_mkdirs(parent)) goto done; dest[0] = '\0'; }
     if (snprintf(stage, sizeof(stage), "%s/.fleet-import.XXXXXX", parent) >= (int)sizeof(stage) || !mkdtemp(stage)) { stage[0] = '\0'; goto done; }
-    for (i = 0; i < json_object_array_length(files); i++) {
-        json_object *file = json_object_array_get_idx(files, i); const char *rel = f_string(file, "path"), *hex = f_string(file, "hex");
-        char path[F_PATH], dir[F_PATH];
-        if (!(strcmp(kind, "config") ? history_path(rel) : config_path(rel)) || !hex || f_path(path, sizeof(path), stage, rel)) goto done;
-        f_copy(dir, sizeof(dir), path); *strrchr(dir, '/') = '\0';
-        if (f_mkdirs(dir) || f_hex_write(path, hex, 0600)) goto done;
-    }
+    if (import_files(files, kind, stage)) goto done;
     if (!strcmp(kind, "history")) {
         if (snprintf(dest, sizeof(dest), "%s/import-%s", parent, strrchr(stage, '/') + 1) >= (int)sizeof(dest)) goto done;
     }
     { struct stat st; if (!lstat(dest, &st) || rename(stage, dest)) goto done; }
-    stage[0] = '\0'; result = json_object_new_object(); f_string_add(result, "path", dest);
-    result = f_success("fleet-import", result);
+    stage[0] = '\0';
+    result = import_placed(parent, dest);
 done:
     if (stage[0]) f_remove_tree(stage);
     return result ? result : f_error("fleet-import", "invalid_bundle", "refusing unsafe bundle or existing configuration; imports never restore live state or trust");

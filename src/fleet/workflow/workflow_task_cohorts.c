@@ -149,12 +149,14 @@ static bool decimal(const char *text_value, uint64_t maximum, uint64_t *value) {
     }
     *value = total; return true;
 }
-static bool latest_attempt(const char *step, unsigned *attempts) {
-    char path[F_PATH], *text_value; uint64_t value; bool ok = false;
-    if (f_path(path, sizeof(path), step, "attempts") || !(text_value = f_read(path, 32))) return false;
+/* The step's recorded number of attempts; 0 when it has none or the record
+ * is missing, unreadable or out of range. */
+static unsigned latest_attempt(const char *step) {
+    char path[F_PATH], *text_value; uint64_t value; unsigned attempts = 0;
+    if (f_path(path, sizeof(path), step, "attempts") || !(text_value = f_read(path, 32))) return 0;
     text_value[strcspn(text_value, "\n")] = '\0';
-    if (decimal(text_value, COHORT_ATTEMPTS, &value)) { *attempts = (unsigned)value; ok = true; }
-    free(text_value); return ok;
+    if (decimal(text_value, COHORT_ATTEMPTS, &value)) attempts = (unsigned)value;
+    free(text_value); return attempts;
 }
 static void step_row(const char *run, const char *id, json_object *binding) {
     char steps[F_PATH], step[F_PATH], name[40], remote[F_PATH]; unsigned attempts; int root, child, attempt, directory;
@@ -163,7 +165,7 @@ static void step_row(const char *run, const char *id, json_object *binding) {
     if (root < 0) return;
     child = task_owned_directory(root, id, false); close(root);
     if (child < 0) return;
-    if (!latest_attempt(step, &attempts) || !attempts) { close(child); return; }
+    if (!(attempts = latest_attempt(step))) { close(child); return; }
     snprintf(name, sizeof(name), "attempt-%u", attempts);
     attempt = task_owned_directory(child, name, false); close(child);
     if (attempt < 0) return;

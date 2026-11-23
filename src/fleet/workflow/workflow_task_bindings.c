@@ -85,8 +85,8 @@ static int bindings_write(const char *run, json_object *record) {
     char path[F_PATH], hash[65];
     if (digest_field(record, run, "graph.tsv") || digest_field(record, run, "data.json") ||
         task_write_json(run, "tasks.json", record, false) || f_path(path, sizeof(path), run, "tasks.json") || f_hash(path, hash) ||
-        f_path(path, sizeof(path), run, "tasks-sha256") || f_write(path, hash, 64, false)) return -1;
-    return task_sync_dir(run);
+        task_write_file(run, "tasks-sha256", hash, 64, false)) return -1;
+    return 0;
 }
 int wt_initialize(const char *run, const char *source) {
     char path[F_PATH], root[F_PATH], *graph = NULL, *line, *save = NULL;

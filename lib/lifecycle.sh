@@ -3,13 +3,20 @@
 
 lifecycle_load_head() {
     _llh_branch="$1"
-    LIFECYCLE_PROJECT_ID="$(hydra_get_project_id 2>/dev/null)" || return 1
-    LIFECYCLE_HEAD_ID="$(state_v2_find_head_by_branch "$LIFECYCLE_PROJECT_ID" "$_llh_branch" 2>/dev/null)" || {
+    LIFECYCLE_PROJECT_ID=
+    hydra_load_project_id 2>/dev/null || return 1
+    LIFECYCLE_PROJECT_ID="$HYDRA_LOADED_PROJECT_ID"
+    if ! state_v2_lookup_head "$LIFECYCLE_PROJECT_ID" "$_llh_branch"; then
+        LIFECYCLE_HEAD_ID=
         echo "Error: no Hydra head for branch '$_llh_branch'" >&2
         return 1
-    }
-    LIFECYCLE_HEAD_DIR="$(state_v2_head_dir "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID")" || return 1
-    LIFECYCLE_INSTANCE_ID="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/current-instance" 2>/dev/null || true)"
+    fi
+    LIFECYCLE_HEAD_ID="$STATE_V2_HEAD_ID"
+    LIFECYCLE_HEAD_DIR=
+    hydra_valid_id "$LIFECYCLE_HEAD_ID" || return 1
+    LIFECYCLE_HEAD_DIR="$STATE_V2_HEAD_DIR"
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/current-instance"
+    LIFECYCLE_INSTANCE_ID="$STATE_V2_SCALAR"
     hydra_valid_id "$LIFECYCLE_INSTANCE_ID" || {
         echo "Error: head '$_llh_branch' has no valid current instance" >&2
         return 1
@@ -22,14 +29,26 @@ lifecycle_load_head() {
 }
 
 lifecycle_read() {
-    _lr_path="$1"
-    sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/$_lr_path" 2>/dev/null || true
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/$1"
+    _lr_value="$STATE_V2_SCALAR"
+    [ -z "$_lr_value" ] || printf '%s\n' "$_lr_value"
+}
+
+# Sets LIFECYCLE_TERMINAL_MODE to the loaded head's terminal mode. A record
+# without one (written before optional terminals) is interactive.
+_lifecycle_load_terminal_mode() {
+    LIFECYCLE_TERMINAL_MODE=interactive
+    if [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && [ -r "$LIFECYCLE_HEAD_DIR/terminal-mode" ]; then
+        state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/terminal-mode"
+        LIFECYCLE_TERMINAL_MODE="$STATE_V2_SCALAR"
+    fi
 }
 
 _lifecycle_load_head_locked() {
     _llhl_branch="$1"
     _llhl_operation="$2"
-    _llhl_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    hydra_load_project_id 2>/dev/null || return 1
+    _llhl_project="$HYDRA_LOADED_PROJECT_ID"
     # Resolve the head before waiting so the shared project lock is held only
     # to recheck it; a head that does not resolve yet is loaded under the lock.
     _llhl_preloaded=0
@@ -54,8 +73,11 @@ _lifecycle_load_head_locked() {
 # Under the state lock: the preloaded head still carries the branch, and its
 # current instance (which may have changed while waiting) is reloaded.
 _lifecycle_recheck_head() {
-    [ "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/branch" 2>/dev/null || true)" = "$1" ] || return 1
-    _lrh_instance="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/current-instance" 2>/dev/null || true)"
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/branch"
+    _lrh_branch="$STATE_V2_SCALAR"
+    [ "$_lrh_branch" = "$1" ] || return 1
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/current-instance"
+    _lrh_instance="$STATE_V2_SCALAR"
     hydra_valid_id "$_lrh_instance" && [ -d "$LIFECYCLE_HEAD_DIR/instances/$_lrh_instance" ] || return 1
     LIFECYCLE_INSTANCE_ID="$_lrh_instance"
     LIFECYCLE_INSTANCE_DIR="$LIFECYCLE_HEAD_DIR/instances/$_lrh_instance"
@@ -194,35 +216,69 @@ lifecycle_set_observed() {
         "{\"status\":\"$(json_escape "$_lso_status")\",\"confidence\":\"$(json_escape "$_lso_confidence")\",\"exit_code\":$_lso_exit_json}" >/dev/null
 }
 
-lifecycle_liveness() {
-    _ll_branch="$1"
-    lifecycle_load_head "$_ll_branch" || return 1
-    _ll_session="$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/session" 2>/dev/null || true)"
-    _ll_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
-    if [ "$_ll_mode" = headless ] || [ "$_ll_session" = - ]; then
+# True when tmux has a session of exactly this name.
+# Usage: _lifecycle_session_live <session> [snapshot]
+# With "snapshot", a batched tmux snapshot that an observing command loaded
+# (tmux_load_snapshot) answers: the name has to be one whole line of it.
+# Otherwise tmux is asked, with "=name:", its exact session match. Neither
+# form accepts a session that the name is only a prefix of. (Inline: fleet-local
+# loads this file without lib/tmux.sh and its tmux_exact_target.)
+_lifecycle_session_live() {
+    if [ "${2:-}" = snapshot ] && [ -n "${_TMUX_SNAPSHOT_LOADED:-}" ]; then
+        case "
+${_TMUX_SNAPSHOT_SESSIONS:-}
+" in
+            *"
+$1
+"*) return 0 ;;
+        esac
+        return 1
+    fi
+    tmux has-session -t "=$1:" 2>/dev/null
+}
+
+# Sets LIFECYCLE_LIVENESS (live, stopped or unavailable) for the head that
+# lifecycle_load_head loaded. Prints nothing.
+# Usage: _lifecycle_load_liveness [snapshot]
+_lifecycle_load_liveness() {
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/session"
+    _ll_session="$STATE_V2_SCALAR"
+    _lifecycle_load_terminal_mode
+    if [ "$LIFECYCLE_TERMINAL_MODE" = headless ] || [ "$_ll_session" = - ]; then
         # A terminal-free worker is observed through its owner evidence, never
         # through tmux. A workspace-only head has no owner and is unavailable,
         # not live; missing tmux is therefore not a dead worker.
-        _ll_observed="$(lifecycle_read observed-status)"
-        _ll_pid="$(lifecycle_read pid)"
+        state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status"
+        _ll_observed="$STATE_V2_SCALAR"
+        state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/pid"
+        _ll_pid="$STATE_V2_SCALAR"
         case "$_ll_observed" in
             starting|running)
-                case "$_ll_pid" in ''|*[!0-9]*) printf 'unavailable\n' ;; *)
-                    if kill -0 "$_ll_pid" 2>/dev/null; then printf 'live\n'; else printf 'unavailable\n'; fi
+                case "$_ll_pid" in ''|*[!0-9]*) LIFECYCLE_LIVENESS=unavailable ;; *)
+                    if kill -0 "$_ll_pid" 2>/dev/null; then LIFECYCLE_LIVENESS=live; else LIFECYCLE_LIVENESS=unavailable; fi
                 ;; esac
                 ;;
-            idle|unavailable) printf 'unavailable\n' ;;
-            *) printf 'stopped\n' ;;
+            idle|unavailable) LIFECYCLE_LIVENESS=unavailable ;;
+            *) LIFECYCLE_LIVENESS=stopped ;;
         esac
         return 0
     fi
-    if [ -n "$_ll_session" ] && tmux has-session -t "$_ll_session" 2>/dev/null; then
-        printf 'live\n'
+    if [ -n "$_ll_session" ] && _lifecycle_session_live "$_ll_session" "${1:-}"; then
+        LIFECYCLE_LIVENESS=live
     else
-        printf 'stopped\n'
+        LIFECYCLE_LIVENESS=stopped
     fi
 }
 
+lifecycle_liveness() {
+    lifecycle_load_head "$1" || return 1
+    _lifecycle_load_liveness
+    printf '%s\n' "$LIFECYCLE_LIVENESS"
+}
+
+# One row's lifecycle for list and status: the head is loaded once, and an
+# interactive head's liveness comes from the command's tmux snapshot when it
+# loaded one (a live probe otherwise).
 lifecycle_snapshot() {
     _ls_branch="$1"
     LIFECYCLE_SNAPSHOT_INSTANCE=""
@@ -237,13 +293,19 @@ lifecycle_snapshot() {
         return 0
     fi
     LIFECYCLE_SNAPSHOT_INSTANCE="$LIFECYCLE_INSTANCE_ID"
-    LIFECYCLE_SNAPSHOT_TERMINAL_MODE="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
-    LIFECYCLE_SNAPSHOT_OUTCOME="$(lifecycle_read declared-outcome)"
-    LIFECYCLE_SNAPSHOT_OBSERVED="$(lifecycle_read observed-status)"
-    LIFECYCLE_SNAPSHOT_CONFIDENCE="$(lifecycle_read observed-confidence)"
-    LIFECYCLE_SNAPSHOT_LIVENESS="$(lifecycle_liveness "$_ls_branch" 2>/dev/null || echo unavailable)"
-    LIFECYCLE_SNAPSHOT_POLICY="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/completion-policy" 2>/dev/null || true)"
-    if lifecycle_completion_satisfied "$_ls_branch"; then LIFECYCLE_SNAPSHOT_COMPLETE=true; fi
+    _lifecycle_load_terminal_mode
+    LIFECYCLE_SNAPSHOT_TERMINAL_MODE="$LIFECYCLE_TERMINAL_MODE"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/declared-outcome"
+    LIFECYCLE_SNAPSHOT_OUTCOME="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status"
+    LIFECYCLE_SNAPSHOT_OBSERVED="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-confidence"
+    LIFECYCLE_SNAPSHOT_CONFIDENCE="$STATE_V2_SCALAR"
+    _lifecycle_load_liveness snapshot
+    LIFECYCLE_SNAPSHOT_LIVENESS="$LIFECYCLE_LIVENESS"
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/completion-policy"
+    LIFECYCLE_SNAPSHOT_POLICY="$STATE_V2_SCALAR"
+    if _lifecycle_completion_loaded; then LIFECYCLE_SNAPSHOT_COMPLETE=true; fi
     export LIFECYCLE_SNAPSHOT_INSTANCE LIFECYCLE_SNAPSHOT_OUTCOME
     export LIFECYCLE_SNAPSHOT_OBSERVED LIFECYCLE_SNAPSHOT_CONFIDENCE
     export LIFECYCLE_SNAPSHOT_LIVENESS LIFECYCLE_SNAPSHOT_POLICY LIFECYCLE_SNAPSHOT_COMPLETE
@@ -251,12 +313,20 @@ lifecycle_snapshot() {
 }
 
 lifecycle_completion_satisfied() {
-    _lcs_branch="$1"
-    lifecycle_load_head "$_lcs_branch" || return 1
-    _lcs_policy="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/completion-policy" 2>/dev/null || true)"
-    _lcs_outcome="$(lifecycle_read declared-outcome)"
-    _lcs_observed="$(lifecycle_read observed-status)"
-    _lcs_exit="$(lifecycle_read observed-exit-code)"
+    lifecycle_load_head "$1" || return 1
+    _lifecycle_completion_loaded
+}
+
+# True when the head that lifecycle_load_head loaded meets its completion policy.
+_lifecycle_completion_loaded() {
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/completion-policy"
+    _lcs_policy="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/declared-outcome"
+    _lcs_outcome="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status"
+    _lcs_observed="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/observed-exit-code"
+    _lcs_exit="$STATE_V2_SCALAR"
     case "${_lcs_policy:-declared-done}" in
         declared|declared-done) [ "$_lcs_outcome" = "done" ] ;;
         observed-exit-zero) [ "$_lcs_observed" = exited ] && [ "$_lcs_exit" = 0 ] ;;
@@ -436,14 +506,14 @@ lifecycle_archive_transcript() {
     chmod 700 "$_lat_dir" 2>/dev/null || true
     _lat_tmp="$(mktemp_adjacent "$_lat_dir/$LIFECYCLE_INSTANCE_ID.txt")" || return 1
     if [ "$_lat_policy" = redacted ]; then
-        tmux capture-pane -p -S -2000 -t "$_lat_session:0.0" 2>/dev/null | \
+        tmux capture-pane -p -S -2000 -t "=$_lat_session:0.0" 2>/dev/null | \
             sed -e 's/\([A-Za-z_][A-Za-z0-9_]*TOKEN=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*SECRET=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*PASSWORD=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/\([A-Za-z_][A-Za-z0-9_]*KEY=\)[^ ]*/\1[REDACTED]/g' \
                 -e 's/sk-[A-Za-z0-9_-][A-Za-z0-9_-]*/[REDACTED]/g' | tail -c "$_lat_max" > "$_lat_tmp"
     else
-        tmux capture-pane -p -S -2000 -t "$_lat_session:0.0" 2>/dev/null | tail -c "$_lat_max" > "$_lat_tmp"
+        tmux capture-pane -p -S -2000 -t "=$_lat_session:0.0" 2>/dev/null | tail -c "$_lat_max" > "$_lat_tmp"
     fi
     chmod 600 "$_lat_tmp" 2>/dev/null || true
     atomic_replace "$_lat_dir/$LIFECYCLE_INSTANCE_ID.txt" "$_lat_tmp" || return 1
@@ -465,8 +535,10 @@ lifecycle_prepare_teardown() {
     _lpt_session="$2"
     _lpt_policy="${3:-none}"
     lifecycle_load_head "$_lpt_branch" || return 0
-    _lpt_repo="$(sed -n '1p' "$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/repo-root" 2>/dev/null || true)"
-    _lpt_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+    state_v2_read_scalar "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/repo-root"
+    _lpt_repo="$STATE_V2_SCALAR"
+    state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/worktree"
+    _lpt_worktree="$STATE_V2_SCALAR"
     run_hook pre-teardown "$_lpt_worktree" "$_lpt_repo" "$_lpt_session" "$_lpt_branch"
     lifecycle_archive_transcript "$_lpt_branch" "$_lpt_session" "$_lpt_policy" || return 1
     lifecycle_write_head_scalar "$_lpt_branch" desired-state stopping || return 1
@@ -478,11 +550,13 @@ lifecycle_finish_teardown() {
     _lft_branch="$1"
     _lft_session="$2"
     lifecycle_load_head "$_lft_branch" || return 0
-    _lft_repo="$(sed -n '1p' "$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/repo-root" 2>/dev/null || true)"
+    state_v2_read_scalar "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/repo-root"
+    _lft_repo="$STATE_V2_SCALAR"
     lifecycle_write_head_scalar "$_lft_branch" desired-state stopped || return 1
     lifecycle_set_observed "$_lft_branch" exited hydra exact || return 1
     if [ -f "$LIFECYCLE_INSTANCE_DIR/admission-id" ]; then
-        _lft_admission="$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/admission-id")"
+        state_v2_read_scalar "$LIFECYCLE_INSTANCE_DIR/admission-id"
+        _lft_admission="$STATE_V2_SCALAR"
         "$HYDRA_BIN_PATH" admission release "$_lft_admission" --confirmed >/dev/null || return 1
     fi
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.torn-down hydra local '{}' >/dev/null || return 1

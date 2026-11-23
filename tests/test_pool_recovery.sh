@@ -84,8 +84,9 @@ beta=$!
 wait "$alpha"; alpha_code=$?
 wait "$beta"; beta_code=$?
 # A loop that fails says why only in its own output: show it.
-[ "$alpha_code" -eq 0 ] && [ "$beta_code" -eq 0 ] ||
+if [ "$alpha_code" -ne 0 ] || [ "$beta_code" -ne 0 ]; then
     { printf -- '--- alpha (exit %s)\n' "$alpha_code"; cat "$base/alpha.json"; printf -- '--- beta (exit %s)\n' "$beta_code"; cat "$base/beta.json"; } >&2
+fi
 assert_success "$alpha_code" "the first worker loop exits cleanly"
 assert_success "$beta_code" "the second worker loop exits cleanly"
 assert_equal 4 "$(cat "$base/alpha.json" "$base/beta.json" | grep -o '"outcome":"succeeded"' | wc -l | tr -d ' ')" "two workers execute every task exactly once"
@@ -185,9 +186,7 @@ evidence_dir="$(pool_path evidence)"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run_id" | sed -n '1p')"
 assert_equal succeeded "$(sed -n '1p' "$run_dir/state" 2>/dev/null)" "the workflow run record succeeded"
 assert_equal "$run_id" "$(sed -n '1p' "$evidence_dir/tasks/one/attempt-1/run-id")" "the attempt binds the run ID"
-sleep 1 &
-dead_pid=$!
-wait "$dead_pid"
+dead_pid="$(test_dead_pid)"
 out="$("$HYDRA_BIN" pool claim evidence --worker gone --owner-pid "$dead_pid" --json)"
 assert_equal two "$(json_field "$out" task_id)" "a second workflow task is claimed by a dead owner"
 printf '%s\n' "$run_id" > "$evidence_dir/tasks/two/attempt-1/run-id"

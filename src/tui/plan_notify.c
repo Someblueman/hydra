@@ -59,7 +59,7 @@ static void notify(struct app *app, const char *key, const char *text) {
     struct head *h=planning_instance(app);
     if (!h || !notice_once(app->plan,key)) return;
     if (!native_plan_converse(app,h,text,true,false))
-        snprintf(app->notice,sizeof(app->notice),"Run notice not typed into %.100s; its inbox holds the recorded notice",h->branch);
+        notice_set(app, "Run notice not typed into %.100s; its inbox holds the recorded notice",h->branch);
 }
 
 void native_plan_notify_started(struct app *app) {

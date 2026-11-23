@@ -88,16 +88,25 @@ done:
     if (!access(checkhome, F_OK) && f_remove_tree(checkhome)) ok = false;
     return ok;
 }
+/* An installation counts once its entry in PARENT is on disk. The directory
+ * is complete and qualified where it stands, so a failed sync is neither a
+ * failed install nor a finished one: the caller learns the outcome is unknown
+ * and runs the same install again, which finds the directory and syncs. */
+static json_object *synced(json_object *result, const char *parent) {
+    if (!result || !json_object_get_boolean(f_field(result, "ok")) || !f_sync_dir(parent)) return result;
+    json_object_put(result);
+    return f_error("fleet-bootstrap", "outcome_unknown", "the installation is in place but its directory could not be synced to disk; run the same install again to confirm it");
+}
 json_object *f_install(json_object *package, const char *digest, const char *prefix) {
     char dest[F_PATH], parent[F_PATH], stage[F_PATH] = ""; struct stat st; json_object *result = NULL;
     if (!package_valid(package, digest) || destination(digest, prefix, dest)) goto done;
-    if (!lstat(dest, &st)) return f_install_check(package, digest, prefix);
     if (f_copy(parent, sizeof(parent), dest) || !strrchr(parent, '/')) goto done;
     *strrchr(parent, '/') = '\0';
+    if (!lstat(dest, &st)) return synced(f_install_check(package, digest, prefix), parent);
     if (f_mkdirs(parent) || snprintf(stage, sizeof(stage), "%s/.install.XXXXXX", parent) >= (int)sizeof(stage) || !mkdtemp(stage)) { stage[0] = '\0'; goto done; }
     if (write_files(f_field(package, "files"), stage) || !qualify_stage(stage)) goto done;
-    if (!lstat(dest, &st)) result = f_install_check(package, digest, prefix);
-    else if (!rename(stage, dest)) { stage[0] = '\0'; result = installed_result(dest, digest); }
+    if (!lstat(dest, &st)) result = synced(f_install_check(package, digest, prefix), parent);
+    else if (!rename(stage, dest)) { stage[0] = '\0'; result = synced(installed_result(dest, digest), parent); }
 done:
     if (stage[0]) f_remove_tree(stage);
     return result ? result : f_error("fleet-bootstrap", "install_failed", "package paths, executable platform, or exact destination failed validation");

@@ -33,6 +33,40 @@ static void projection_digest(const char *projection, char *out, size_t capacity
     memcpy(out, p, (size_t)(end - p));
     out[end - p] = 0;
 }
+/* The footer offers E (the bullet keeps the page's own "E approve..." out). */
+#define FOOTER_OFFERS_E "E approve \xe2\x80\xa2"
+/* Whether the selected row (marked with a left half block) is the run's worker. */
+static bool worker_selected(struct kt_session *s) {
+    const char *mark = strstr(kt_text(s), "\xe2\x96\x8c"), *end = mark ? strchr(mark, '\n') : NULL;
+    const char *worker = mark ? strstr(mark, "worker") : NULL;
+    return worker && (!end || worker < end);
+}
+/* Pumps until the screen has the footer of the Plan pane on the run's worker:
+ * the planning head's row is replaced by the worker's some time after the
+ * receipt is observed (longer on a slow machine), and E means something else
+ * until then. */
+static void wait_plan_pane_on_worker(struct kt_session *s) {
+    double end = kt_now() + 30;
+    while (!(worker_selected(s) && kt_contains(s, FOOTER_OFFERS_E)) && kt_now() < end)
+        kt_pump(s, .01);
+    if (!(worker_selected(s) && kt_contains(s, FOOTER_OFFERS_E)))
+        fprintf(stderr, "the worker was never selected with E offered; the screen:\n%s\n", kt_text(s));
+    CHECK(worker_selected(s) && kt_contains(s, FOOTER_OFFERS_E), "worker selected and E offered");
+}
+/* Presses E and waits for the answer, as long as a slow machine may take. If
+ * it never comes, say whether it was ever drawn. */
+static void press_e_expect(struct kt_session *s, const char *answer) {
+    size_t mark = s->raw_size;
+    double end;
+    kt_send(s, "E");
+    end = kt_now() + 6;
+    while (!kt_contains(s, answer) && kt_now() < end)
+        kt_pump(s, .001);
+    if (!kt_contains(s, answer))
+        fprintf(stderr, "'%s' was %sin the output since E; the screen:\n%s\n", answer,
+                strstr(s->raw + mark, answer) ? "" : "never ", kt_text(s));
+    kt_until(s, answer, 0);
+}
 static void save(struct kt_session *s, const char *name, int width, int height) {
     char path[4096];
     kt_format(path, sizeof(path), "%s/%s-%dx%d.html", evidence, name, width, height);
@@ -344,21 +378,21 @@ int main(void) {
     U(expected, 10);
     CHECK(!state_is(run_dir, "succeeded") && !state_is(run_dir, "failed"),
           "receipt observed during execution");
-    {
-        /* The refusal is looked for after every read, for longer than a
-         * key normally takes: on the macOS runner the answer once took more
-         * than 3 s. If it never comes, say whether it was ever drawn. */
-        size_t mark = s.raw_size;
-        double end;
-        S("E");
-        end = kt_now() + 6;
-        while (!kt_contains(&s, "This revision was already submitted") && kt_now() < end)
-            kt_pump(&s, .001);
-        if (!kt_contains(&s, "This revision was already submitted"))
-            fprintf(stderr, "the refusal was %sin the output since E\n",
-                    strstr(s.raw + mark, "already submitted") ? "" : "never ");
-        U("This revision was already submitted", 0);
-    }
+    /* E is pressed in a state that holds still: the Plan pane on the run's
+     * worker, with the footer offering E. Before that the selection moves
+     * from the planning head to the worker at a time that depends on the
+     * machine, and the keys of the pane change with it. */
+    wait_plan_pane_on_worker(&s);
+    press_e_expect(&s, "This revision was already submitted");
+    /* With the list focused the footer does not offer E, and E says which pane
+     * it works in instead of doing nothing; Tab twice is back on the Plan pane. */
+    S("\033");
+    U("collapse/expand", 6);
+    CHECK(!kt_contains(&s, FOOTER_OFFERS_E), "the list's footer does not offer E");
+    press_e_expect(&s, "works in the Plan pane");
+    S("\t\t");
+    U(FOOTER_OFFERS_E, 6);
+    press_e_expect(&s, "This revision was already submitted");
     CHECK(!kt_contains(&s, "Execute plan"), "duplicate launch form refused");
     kt_close(&s, "q", 0, 0);
     CHECK(!kt_exists(compiled), "UI temp snapshot cleaned");

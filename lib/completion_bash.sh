@@ -27,7 +27,7 @@ _hydra_completion() {
         fi
     fi
 
-    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue pool schedule"
+    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle pool schedule"
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == remote && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
         case ${COMP_WORDS[2]:-} in
@@ -162,7 +162,7 @@ _hydra_completion() {
         schedule) COMPREPLY=($(compgen -W "add list remove run-now status --json" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
-        snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
+        snapshot) COMPREPLY=($(compgen -W "--native --shell --json" -- ${cur})); return 0 ;;
         tui) COMPREPLY=($(compgen -W "--capabilities" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or kill options
@@ -296,7 +296,7 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--reason --dry-run --apply" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ snapshot ]]; then
-        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --shell --json" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[1]}" == doctor ]]; then
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--fix --fix-permissions" -- ${cur})); return 0 ;; esac
@@ -310,7 +310,7 @@ _hydra_completion() {
             return 0
             ;;
         state)
-            COMPREPLY=($(compgen -W "verify backup migrate rollback" -- ${cur}))
+            COMPREPLY=($(compgen -W "verify backup rollback" -- ${cur}))
             return 0
             ;;
         events)

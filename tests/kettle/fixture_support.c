@@ -209,3 +209,26 @@ void kt_paths(char *root, size_t root_capacity, char *build, size_t build_capaci
     else
         kt_format(build, build_capacity, "%s/%s", root, selected ? selected : "build");
 }
+void kt_fixture_store(const char *root, const char *rows, const char *store, char *repo,
+                      size_t capacity) {
+    char script[4096], source[4096], bin[4096], home[4096], path[32768];
+    const char *search = getenv("PATH");
+    const char *remove[] = {"rm", "-rf", store, NULL};
+    const char *build[] = {"sh", script, source, store, NULL};
+    kt_format(script, sizeof(script), "%s/tests/fixtures/tui/rows-store.sh", root);
+    if (rows)
+        kt_format(source, sizeof(source), "%s", rows);
+    else
+        kt_format(source, sizeof(source), "%s/tests/fixtures/tui/native-v2.tsv", root);
+    kt_command_ok(NULL, remove);
+    kt_command_ok(NULL, build);
+    kt_format(repo, capacity, "%s/repo", store);
+    kt_format(home, sizeof(home), "%s/home", store);
+    kt_format(bin, sizeof(bin), "%s/tests/fixtures/tui/fake-bin", root);
+    CHECK(!setenv("HYDRA_HOME", home, 1) && !setenv("HYDRA_TEST_STORE", store, 1),
+          "fixture store environment");
+    if (!search || strncmp(search, bin, strlen(bin)) || search[strlen(bin)] != ':') {
+        kt_format(path, sizeof(path), "%s:%s", bin, search ? search : "");
+        CHECK(!setenv("PATH", path, 1), "fixture tmux on PATH");
+    }
+}

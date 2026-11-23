@@ -8,7 +8,10 @@
 CC ?= cc
 AR ?= ar
 CFLAGS ?= -O2
-CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra -Werror -pedantic -Isrc
+# Warnings are errors for developers and CI. A build on a user's machine
+# (install.sh) passes WERROR= so a newer compiler's new warning cannot break it.
+WERROR ?= -Werror
+CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra $(WERROR) -pedantic -Isrc
 BUILD_DIR ?= build
 # Build and analysis share recursive discovery so domain directories cannot
 # silently omit native sources from the quality gate.
@@ -17,10 +20,31 @@ NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
 # src/kettle/tools holds standalone programs with their own main(); they
 # link the library but are never part of it.
 KETTLE_SOURCES = $(filter-out src/kettle/tools/%,$(filter src/kettle/%.c,$(NATIVE_SOURCES)))
+# Shared code is compiled once per BUILD_DIR. Tests and examples link these
+# objects (kettle through its archive) instead of recompiling the sources.
+KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
+KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
+KETTLE_LIB = $(BUILD_DIR)/libkettle.a
+CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics_cli.c
+CORE_STATS_OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(CORE_STATS_SOURCES))
+TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
+STATS_EXPORT_OBJECTS = $(TUI_DATA_OBJECTS) $(BUILD_DIR)/hydra_statistics_export.o $(BUILD_DIR)/hydra_statistics_export_cohorts.o
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Sanitizer diagnostics must fail a case even when its output is captured.
 export UBSAN_OPTIONS ?= halt_on_error=1
+
+# hydra-tui draws Unicode only when the locale's character set is UTF-8 and
+# falls back to ASCII glyphs otherwise; the TUI and PTY suites compare the
+# Unicode frames. A caller's UTF-8 locale is kept. Under any other locale these
+# targets run with LC_ALL set to the first installed of C.UTF-8 and en_US.UTF-8
+# (macOS releases without C.UTF-8); with neither installed nothing changes.
+TUI_TEST_LOCALE := $(shell if [ "$$(locale charmap 2>/dev/null)" != UTF-8 ]; then locale -a 2>/dev/null | awk '{ name = tolower($$0); sub(/utf-8$$/, "utf8", name) } name == "c.utf8" { c = $$0 } name == "en_us.utf8" { e = $$0 } END { print (c != "" ? c : e) }'; fi)
+TUI_TEST_TARGETS = test-tui test-tui-pty test-tui-smoke test-statistics test-program-pty test-workspace-pty \
+	test-attached-pty test-plan-workspace test-fleet-controls test-fleet-recovery test-visualization
+ifneq ($(TUI_TEST_LOCALE),)
+$(TUI_TEST_TARGETS): export LC_ALL := $(TUI_TEST_LOCALE)
+endif
 
 # Installation prefix (no root required when writable)
 PREFIX ?= /usr/local
@@ -51,9 +75,8 @@ test: $(SHELL_TEST_PREREQS)
 # heuristics. Shared prerequisites are built before any stateful test starts.
 FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust deps tmux lifecycle
 FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
-.PHONY: test-fast
 test-fast:
-	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS)
+	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS) $(BUILD_DIR)/test-libhydra $(TUI_TEST_BINS) $(KETTLE_TEST_BINS)
 	@$(MAKE) lint
 	@echo "Running fast shell tests..."
 	@for name in $(FAST_SHELL_TESTS); do \
@@ -95,55 +118,49 @@ build-tui: $(BUILD_DIR)/hydra-tui
 .PHONY: test-kettle example-kettle example-workspace example-counter example-themes example-components test-workspace-pty test-program-pty test-visualization sanitize-workspace
 test-visualization: build-tui test-kettle $(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
-$(BUILD_DIR)/test-kettle: tests/c/test_kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle.c $(KETTLE_SOURCES) -o $@
+# Kettle is compiled once (the $(BUILD_DIR)/kettle/%.o rule below) and archived.
+# Its tests and examples link the archive, so each takes only the members it
+# references; hydra-tui does the same.
+$(KETTLE_LIB): $(KETTLE_OBJECTS)
+	rm -f $@
+	$(AR) rcs $@ $(KETTLE_OBJECTS)
 
-$(BUILD_DIR)/test-kettle-present: tests/c/test_kettle_present.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_present.c $(KETTLE_SOURCES) -o $@
+# One translation unit per binary (an example's test #includes its example).
+# The compiler writes $@.d, so every header, .inc and included .c is tracked;
+# the recipe therefore compiles only the first .c prerequisite, the source named
+# on the lines below (the $@.d files are read after them).
+KETTLE_UNIT_TESTS = kettle kettle-present kettle-style kettle-draw kettle-unicode kettle-terminal kettle-input kettle-keymap kettle-program kettle-components kettle-widgets
+KETTLE_EXAMPLE_TESTS = $(addprefix $(BUILD_DIR)/test-kettle-,counter themes components-example)
+KETTLE_EXAMPLE_BINS = $(addprefix $(BUILD_DIR)/kettle-,example counter themes components)
+KETTLE_LINKED_BINS = $(addprefix $(BUILD_DIR)/test-,$(KETTLE_UNIT_TESTS)) $(KETTLE_EXAMPLE_TESTS) $(KETTLE_EXAMPLE_BINS) $(BUILD_DIR)/kettle-program-fixture
+KETTLE_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,$(KETTLE_UNIT_TESTS)) $(BUILD_DIR)/test-kettle-workspace $(KETTLE_EXAMPLE_TESTS)
 
-$(BUILD_DIR)/test-kettle-style: tests/c/test_kettle_style.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_style.c $(KETTLE_SOURCES) -o $@
+$(foreach n,$(KETTLE_UNIT_TESTS),$(eval $(BUILD_DIR)/test-$(n): tests/c/test_$(subst -,_,$(n)).c))
+# The counter, themes and components examples' own tests, written with the headless driver.
+$(BUILD_DIR)/test-kettle-counter: examples/counter_test.c
+$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c
+$(BUILD_DIR)/test-kettle-components-example: examples/components_test.c
+$(BUILD_DIR)/kettle-example: examples/kettle.c
+$(BUILD_DIR)/kettle-counter: examples/counter.c
+$(BUILD_DIR)/kettle-themes: examples/themes.c
+$(BUILD_DIR)/kettle-components: examples/components.c
+# A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
+$(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c
+$(KETTLE_EXAMPLE_TESTS) $(KETTLE_EXAMPLE_BINS): KETTLE_INCLUDES = -Isrc/kettle
 
-$(BUILD_DIR)/test-kettle-draw: tests/c/test_kettle_draw.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_draw.c $(KETTLE_SOURCES) -o $@
+$(KETTLE_LINKED_BINS): $(KETTLE_LIB) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(KETTLE_INCLUDES) -MMD -MP -MF $@.d -MT $@ $(firstword $(filter %.c,$^)) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/test-kettle-workspace: tests/c/test_kettle_workspace.c src/kettle/workspace.c src/kettle/workspace.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_workspace.c src/kettle/workspace.c -o $@
+# workspace.c stands alone: this case links that one object, not the archive.
+$(BUILD_DIR)/test-kettle-workspace: tests/c/test_kettle_workspace.c $(BUILD_DIR)/kettle/workspace.o
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_kettle_workspace.c $(BUILD_DIR)/kettle/workspace.o -o $@
 
-$(BUILD_DIR)/test-kettle-unicode: tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) src/kettle/kettle.h src/kettle/unicode_tables.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_unicode.c $(KETTLE_SOURCES) -o $@
+$(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c examples/workspace_demo.h $(KETTLE_HEADERS) $(KETTLE_LIB)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle $(filter %.c,$^) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/test-kettle-terminal: tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) src/kettle/terminal.h src/kettle/terminal_internal.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_terminal.c $(KETTLE_SOURCES) -o $@
+-include $(KETTLE_LINKED_BINS:%=%.d) $(BUILD_DIR)/test-kettle-workspace.d
 
-$(BUILD_DIR)/test-kettle-input: tests/c/test_kettle_input.c $(KETTLE_SOURCES) src/kettle/input.h src/kettle/tree.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_input.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-keymap: tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) src/kettle/keymap.h src/kettle/input.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) -o $@
-
-# The runtime: headless driver cases, then real child processes on a private PTY.
-$(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_program.c $(KETTLE_SOURCES) -o $@
-
-# The counter example's own test, written with the headless driver.
-$(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter_test.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes_test.c $(KETTLE_SOURCES) -o $@
-
-# Components: pure parts drawn into a canvas, then interaction under the headless driver.
-$(BUILD_DIR)/test-kettle-components: tests/c/test_kettle_components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_components.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-widgets: tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_widgets.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/test-kettle-components-example: examples/components_test.c examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components_test.c $(KETTLE_SOURCES) -o $@
-
-test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example
+test-kettle: $(KETTLE_TEST_BINS)
 	$(BUILD_DIR)/test-kettle
 	$(BUILD_DIR)/test-kettle-present
 	$(BUILD_DIR)/test-kettle-style
@@ -160,25 +177,6 @@ test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_D
 	$(BUILD_DIR)/test-kettle-widgets
 	$(BUILD_DIR)/test-kettle-components-example
 
-$(BUILD_DIR)/kettle-example: examples/kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/kettle.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) examples/workspace_demo.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-counter: examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-themes: examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes.c $(KETTLE_SOURCES) -o $@
-
-$(BUILD_DIR)/kettle-components: examples/components.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/components.c $(KETTLE_SOURCES) -o $@
-
-# A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
-$(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c $(KETTLE_SOURCES) | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/kettle/program_fixture.c $(KETTLE_SOURCES) -o $@
-
 test-program-pty: $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/kettle-components
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-program-pty"
 
@@ -188,16 +186,13 @@ $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 test-workspace-pty: test-program-pty example-workspace build-tui $(BUILD_DIR)/test-workspace-child
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
 
-$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c -o $@
+$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.h $(TUI_DATA_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c $(TUI_DATA_OBJECTS) -o $@
 
-.PHONY: test-statistics sanitize-statistics
+.PHONY: test-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
 	$(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-statistics-pty"
-
-sanitize-statistics:
-	@$(MAKE) BUILD_DIR=build/statistics-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-statistics
 
 example-workspace: $(BUILD_DIR)/kettle-workspace
 
@@ -218,13 +213,16 @@ $(BUILD_DIR)/libhydra.o: src/libhydra.c src/libhydra.h | $(BUILD_DIR)
 $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 	$(AR) rcs $@ $<
 
-CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics_cli.c
+# The statistics sources are compiled once and shared by hydra-core, hydra-tui
+# and both statistics tests.
+$(CORE_STATS_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a $(CORE_STATS_SOURCES) src/hydra_statistics.h
-	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_SOURCES) $(BUILD_DIR)/libhydra.a -o $@
+$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h src/hydra_statistics.h $(CORE_STATS_OBJECTS) $(BUILD_DIR)/libhydra.a
+	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_OBJECTS) $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c -o $@
+$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.h $(STATS_EXPORT_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c $(STATS_EXPORT_OBJECTS) -o $@
 
 .PHONY: test-statistics-export
 test-statistics-export: build-core $(BUILD_DIR)/test-statistics-export
@@ -238,21 +236,16 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
-KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
-TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
-
 $(BUILD_DIR)/kettle/%.o: src/kettle/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(TUI_DATA_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
+# Linking the archive rather than every object leaves out kettle code the app
+# never references (unused components, the headless test driver).
+$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TUI_DATA_OBJECTS) $(KETTLE_LIB)
+	$(CC) $(CORE_CFLAGS) $(TUI_OBJECTS) $(TUI_DATA_OBJECTS) $(KETTLE_LIB) -o $@
 
-$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS)
-	$(CC) $(CORE_CFLAGS) $^ -o $@
-
--include $(TUI_OBJECTS:.o=.d) $(KETTLE_OBJECTS:.o=.d) $(TUI_DATA_OBJECTS:.o=.d)
+-include $(TUI_OBJECTS:.o=.d) $(KETTLE_OBJECTS:.o=.d) $(CORE_STATS_OBJECTS:.o=.d)
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
@@ -263,8 +256,10 @@ $(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tes
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
-	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+# The loop runs over a model the test builds by hand: no state store is read
+# (tests/c/tui_no_snapshot.c takes the place of the snapshot).
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c tests/c/tui_no_snapshot.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/snapshot.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) $(filter %.o,$^) -o $@
 
 $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
@@ -273,11 +268,15 @@ $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/
 test-tui-actions: $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-actions
 
-$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h src/tui/plan_draft.c src/tui/plan_draft.h src/tui/setup_json.c src/tui/setup_json.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
+# These two link only the named app objects, already compiled for hydra-tui.
+TUI_PLANNING_OBJECTS = $(addprefix $(BUILD_DIR)/tui/,task_name.o plan_diagnostics.o plan_summary.o plan_draft.o setup_json.o)
+$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c $(TUI_PLANNING_OBJECTS)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_tui_planning.c $(TUI_PLANNING_OBJECTS) -o $@
 
-$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(KETTLE_OBJECTS)
-	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(KETTLE_OBJECTS) -o $@
+$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c $(BUILD_DIR)/tui/transcript.o $(KETTLE_OBJECTS)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -MF $@.d -MT $@ tests/c/test_tui_transcript.c $(BUILD_DIR)/tui/transcript.o $(KETTLE_OBJECTS) -o $@
+
+-include $(BUILD_DIR)/test-tui-planning.d $(BUILD_DIR)/test-tui-transcript.d
 
 $(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
@@ -291,7 +290,8 @@ $(BUILD_DIR)/test-tui-setup-upgrade: tests/c/test_tui_setup_upgrade.c $(KETTLE_O
 $(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-keymap $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-setup-upgrade $(BUILD_DIR)/test-tui-onboarding
+TUI_TEST_BINS = $(addprefix $(BUILD_DIR)/test-tui-,input keymap actions planning transcript setup setup-upgrade onboarding)
+test-tui: build-tui $(TUI_TEST_BINS)
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-keymap
 	$(BUILD_DIR)/test-tui-actions
@@ -326,23 +326,50 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 
 test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
-	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_parity.sh
+	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_rows.sh
 
 test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
-sanitize-core:
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
+# Sanitizer lanes. Every lane compiles with the same flags, so they share one
+# tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
+# ordinary test goals below run by a sub-make with that BUILD_DIR and CFLAGS.
+# `make sanitize` runs the lanes in SANITIZE_LANES, in order, in one sub-make;
+# `make sanitize-<lane>` runs one. Because the tree is shared, do not run
+# several sanitize-<lane> goals under one `make -j`; use
+# `make sanitize SANITIZE_LANES="core tui"` instead.
+SANITIZE_DIR = $(BUILD_DIR)/sanitize
+SANITIZE_CFLAGS = -O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer
+SANITIZE_ARGS = BUILD_DIR="$(SANITIZE_DIR)" CFLAGS="$(SANITIZE_CFLAGS)"
+SANITIZE_LANES ?= core tui fleet workspace attached plan-workspace statistics
+SANITIZE_GOALS_core = test-c
+SANITIZE_GOALS_tui = test-tui-smoke
+SANITIZE_GOALS_fleet = test-fleet
+SANITIZE_GOALS_workspace = test-kettle test-workspace-pty
+SANITIZE_GOALS_attached = test-attached-pty
+SANITIZE_GOALS_plan-workspace = test-plan-workspace
+SANITIZE_GOALS_statistics = test-statistics
+# Fleet cases package the deployable helper from the ordinary build: sanitizer
+# debug data exceeds the wire limit. Only fleet cases read this variable.
+SANITIZE_FLEET_ENV = HYDRA_TEST_PACKAGE_BINARY="$(abspath $(BUILD_DIR))/hydra-fleet"
 
-sanitize-tui:
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build-tui
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build/sanitize/test-tui-input build/sanitize/test-tui-actions
-	@build/sanitize/test-tui-input
-	@build/sanitize/test-tui-actions
-	@build/sanitize/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
+# The TUI subset the sanitizer lane runs: two unit suites and a headless render.
+.PHONY: test-tui-smoke
+test-tui-smoke: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions
+	@$(BUILD_DIR)/test-tui-input
+	@$(BUILD_DIR)/test-tui-actions
+	@$(BUILD_DIR)/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
+
+.PHONY: sanitize-fleet sanitize-attached sanitize-plan-workspace sanitize-statistics
+sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics: sanitize-%:
+	@$(MAKE) $(SANITIZE_ARGS) $(SANITIZE_GOALS_$*)
+
+sanitize-fleet: build-fleet
+	$(SANITIZE_FLEET_ENV) $(MAKE) $(SANITIZE_ARGS) test-fleet
 
 sanitizer: sanitize-core
 
-sanitize: sanitize-core sanitize-tui sanitize-fleet sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics
+sanitize: $(if $(filter fleet,$(SANITIZE_LANES)),build-fleet)
+	@$(if $(filter fleet,$(SANITIZE_LANES)),$(SANITIZE_FLEET_ENV)) $(MAKE) $(SANITIZE_ARGS) $(foreach lane,$(SANITIZE_LANES),$(if $(SANITIZE_GOALS_$(lane)),$(SANITIZE_GOALS_$(lane)),$(error unknown sanitizer lane '$(lane)')))
 
 bench-core: build-core
 	@sh scripts/bench-core.sh
@@ -385,7 +412,11 @@ bench:
 clean:
 	@echo "Cleaning temporary files..."
 	@find . -name "*~" -o -name "*.swp" -o -name ".*.swp" | xargs rm -f
-	@rm -rf build
+	@dir="$(abspath $(BUILD_DIR))"; \
+	case "$(CURDIR)/" in "$${dir%/}/"*) \
+		echo "Error: refusing to remove BUILD_DIR='$(BUILD_DIR)': it is or contains this checkout" >&2; exit 1 ;; \
+	esac; \
+	rm -rf "$$dir"
 	@echo "Clean complete"
 
 # Install hydra to $(PREFIX)/bin and $(PREFIX)/lib/hydra
@@ -420,31 +451,35 @@ dev-setup:
 
 # Display help
 help:
-	@echo "Hydra Makefile targets:"
+	@echo "Hydra Makefile targets (outputs go to BUILD_DIR, default ./build):"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
-	@echo "  make test      - Run the shell-only test suite"
-	@echo "  make test-fast - Run the fixed PR feedback test selection"
+	@echo "  make test      - Build the three native helpers and test fixtures, then run the shell test suite (workflow runs are driven by hydra-fleet)"
+	@echo "  make test-fast - Run the fixed PR feedback test selection (lint, fast shell cases, native unit tests)"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
-	@echo "  make test-native-driver - Workflow, plan and DAG cases with HYDRA_NATIVE_DRIVER=1, then test-driver-differential"
-	@echo "  make test-driver-differential - Run each driver fixture with both run drivers and compare the run records"
 	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
 	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
+	@echo "  make build-fleet - Build the optional fleet coordinator (needs JSON-C development files and pkg-config)"
 	@echo "  make test-c    - Run native library unit tests"
+	@echo "  make test-kettle - Run the kettle terminal library unit tests"
+	@echo "  make test-fleet - Run fleet acceptance (TEST_JOBS workers, FLEET_SHARD=all|odd|even)"
 	@echo "  make build-plan-precompile - Build native finite-example planner"
 	@echo "  make test-tui  - Run deterministic native TUI acceptance"
 	@echo "  make test-tui-pty - Run real pseudo-terminal safety and input acceptance"
-	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
-	@echo "  make test-all  - Run shell/native, install, parity, and onboarding acceptance"
-	@echo "  make sanitize  - Run supported native sanitizer tests"
+	@echo "  make test-parity - Verify shell/native core parity and the control centre's rows from the state store"
+	@echo "  make test-all  - Run shell/native, fleet, install, parity, and onboarding acceptance"
+	@echo "  make sanitize  - Run the sanitizer lanes in BUILD_DIR/sanitize (SANITIZE_LANES=\"core tui ...\" selects)"
+	@echo "  make sanitize-<lane> - One lane: core, tui, fleet, workspace, attached, plan-workspace or statistics"
+	@echo "  make check-opt-levels - Compile every native source at -O0, -Og, -O1, -O2, -O3 and -Os with warnings as errors"
+	@echo "  make quality-c - Run clang-tidy analysis and the complexity ceiling (test-quality-c checks the policy)"
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
 	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
 	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
 	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
-	@echo "  make clean     - Remove temporary files"
+	@echo "  make clean     - Remove editor temporary files and BUILD_DIR"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"
 	@echo "  make test-install - Fresh-prefix install/uninstall tests"
@@ -494,7 +529,7 @@ $(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
-FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan plan-expansion remote-setup agent-recipes fleet-assets placement)
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule workflow-drive agent-profile agent-auth plan plan-expansion remote-setup agent-recipes fleet-assets placement)
 
 $(BUILD_DIR)/fleet/%.o: src/fleet/%.c
 	@mkdir -p "$(@D)"
@@ -530,6 +565,7 @@ $(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c
 $(BUILD_DIR)/test-plan: tests/c/test_plan.c
 $(BUILD_DIR)/test-plan-expansion: tests/c/test_plan_expansion.c tests/c/test_plan_expansion_cases.inc
 $(BUILD_DIR)/test-workflow-schedule: tests/c/test_workflow_schedule.c
+$(BUILD_DIR)/test-workflow-drive: tests/c/test_workflow_drive.c
 $(BUILD_DIR)/test-remote-setup: tests/c/test_remote_setup.c
 $(BUILD_DIR)/test-agent-recipes: tests/c/test_agent_recipes.c
 $(BUILD_DIR)/test-fleet-assets: tests/c/test_fleet_assets.c
@@ -597,11 +633,6 @@ test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-evaluate"
 
 
-.PHONY: sanitize-fleet
-sanitize-fleet: build-fleet
-	# Exercise packaging with the deployable binary; sanitizer debug data exceeds the wire limit.
-	HYDRA_TEST_PACKAGE_BINARY="$(abspath $(BUILD_DIR))/hydra-fleet" $(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
-
 # C analysis and reviewed complexity ceiling; use the native build flags.
 CLANG_TIDY ?= scripts/clang-tidy.sh
 QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
@@ -618,21 +649,64 @@ quality-c:
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
 
-.PHONY: test-attached-pty sanitize-attached
+# Compile-only check of every native source at each optimisation level. Some
+# warnings (uninitialised use, truncation, bounds) depend on the optimiser, and
+# sanitizer, debug and packager builds do not use the default -O2. Warnings are
+# always errors here. Nothing is linked or kept: a unit leaves only the
+# diagnostics of a failed compile under $(BUILD_DIR)/opt-levels, and every
+# failure is reported before the target fails. Run it with -j.
+OPT_LEVELS ?= O0 Og O1 O2 O3 Os
+OPT_CHECK_DIR = $(BUILD_DIR)/opt-levels
+OPT_CHECK_UNITS = $(foreach level,$(OPT_LEVELS),$(addprefix opt-check/$(level)/,$(NATIVE_SOURCES)))
+# A unit is opt-check/<level>/<source>.
+OPT_CHECK_LEVEL = $(word 2,$(subst /, ,$@))
+OPT_CHECK_SOURCE = $(patsubst opt-check/$(OPT_CHECK_LEVEL)/%,%,$@)
+.PHONY: check-opt-levels opt-check-reset $(OPT_CHECK_UNITS)
+# Diagnostics left by an earlier run must not be reported again.
+opt-check-reset:
+	@mkdir -p "$(OPT_CHECK_DIR)"
+	@find "$(OPT_CHECK_DIR)" -type f -name '*.err' -exec rm -f {} +
+
+$(OPT_CHECK_UNITS): | opt-check-reset
+	@out="$(OPT_CHECK_DIR)/$(OPT_CHECK_LEVEL)/$(OPT_CHECK_SOURCE)"; mkdir -p "$${out%/*}"; \
+	if $(CC) $(CORE_CFLAGS) -Werror $(FLEET_JSON_CFLAGS) -$(OPT_CHECK_LEVEL) -c $(OPT_CHECK_SOURCE) -o "$$out.o" 2>"$$out.err"; then \
+		rm -f "$$out.err"; \
+	fi; \
+	rm -f "$$out.o"
+
+check-opt-levels: $(OPT_CHECK_UNITS)
+	@failed="$$(find "$(OPT_CHECK_DIR)" -type f -name '*.err' | LC_ALL=C sort)"; \
+	if [ -z "$$failed" ]; then \
+		echo "check-opt-levels: $(words $(NATIVE_SOURCES)) sources compile without warnings at $(addprefix -,$(OPT_LEVELS))"; \
+		exit 0; \
+	fi; \
+	for log in $$failed; do \
+		unit="$${log#$(OPT_CHECK_DIR)/}"; unit="$${unit%.err}"; \
+		echo "== -$${unit%%/*} $${unit#*/}"; cat "$$log"; \
+	done; \
+	echo "check-opt-levels: failing sites ($(CC), warnings as errors):"; \
+	for log in $$failed; do \
+		unit="$${log#$(OPT_CHECK_DIR)/}"; unit="$${unit%.err}"; \
+		grep -E '^[^ :]+:[0-9]+:[0-9]+: (fatal error|error|warning):' "$$log" | \
+			awk -v level="$${unit%%/*}" -v source="$${unit#*/}" ' \
+				{ found = 1; printf "  -%s %s%s\n", level, (index($$0, source ":") == 1 ? "" : source ": in "), $$0 } \
+				END { if (!found) printf "  -%s %s: failed without a located diagnostic (see above)\n", level, source }'; \
+	done; \
+	exit 1
+
+.PHONY: test-attached-pty
 test-attached-pty: build-tui
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attached-pty"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-terminal-restore"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-interactive-loop"
-sanitize-attached:
-	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 
 .PHONY: test-kettle-export
 test-kettle-export:
 	sh tests/kettle/test_export.sh
 
-.PHONY: test-plan-workspace sanitize-plan-workspace
+.PHONY: test-plan-workspace
 test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-workspace"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-launch"
@@ -640,14 +714,6 @@ test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-assets"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-runs-heads"
-sanitize-plan-workspace:
-	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace
-
-sanitize-workspace:
-	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
-
-$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-components $(BUILD_DIR)/test-kettle-widgets $(BUILD_DIR)/test-kettle-components-example $(BUILD_DIR)/kettle-components: $(KETTLE_HEADERS)
-
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery

@@ -7,7 +7,34 @@
 int f_path(char *dst, size_t size, const char *a, const char *b);
 int f_mkdirs(const char *path);
 char *f_read(const char *path, size_t limit);
+/* The one durable write. The bytes go to a new private (0600) file beside
+ * the destination; only when every byte is written, synced and the file is
+ * closed is it renamed over the destination (replace) or linked into place
+ * (never over an existing file, errno EEXIST), and the directory is synced
+ * last. On failure the temporary file is removed, the destination keeps what
+ * it held and -1 is returned with errno of the step that failed. The one
+ * failure that leaves the new bytes in place is a directory that could not
+ * be synced after the rename or link. */
 int f_write(const char *path, const char *data, size_t size, bool replace);
+/* As f_write for NAME in an open directory, which the caller opened as it
+ * trusts it (O_NOFOLLOW, ownership checks) and keeps. */
+int f_write_at(int dir, const char *name, const char *data, size_t size, bool replace);
+/* The two halves of f_write_at, for a writer that must look at the
+ * destination once more between them. Stage leaves a synced, closed
+ * temporary file named in temp (empty after failure); publish consumes it
+ * whether it succeeds or not. */
+#define F_TEMP_NAME 256
+int f_stage_at(int dir, const char *name, const char *data, size_t size, char temp[F_TEMP_NAME]);
+int f_publish_at(int dir, const char *temp, const char *name, bool replace);
+/* Syncs the directory at PATH, as f_write does after its rename: for a caller
+ * that renamed or removed an entry itself. A file system without directory
+ * sync (EINVAL) counts as synced; any other failure is -1 with its errno. */
+int f_sync_dir(const char *path);
+/* Appends to a log its caller alone appends to (it holds the log's lock):
+ * every byte written, synced first when asked, or the file is cut back to
+ * the length it had and -1 is returned, so a line that could not be written
+ * whole does not stay in the log as a torn one. */
+int f_append(int fd, const char *data, size_t size, bool sync);
 int f_copy(char *dst, size_t size, const char *value);
 /* Formats into dst; -1 when it does not fit. A function, not snprintf at
  * each call site: with fortify on, macOS makes every snprintf a macro with a

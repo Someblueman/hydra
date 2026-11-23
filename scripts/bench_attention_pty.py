@@ -137,7 +137,7 @@ class Session:
             str(hydra),
             "--fleet",
             "--view",
-            "attention",
+            "inbox",
             "--ascii",
             "--no-color",
         ]

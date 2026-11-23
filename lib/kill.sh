@@ -24,10 +24,11 @@ get_head_worktree_path() {
         return 1
     fi
 
-    _path_project="$(hydra_get_project_id 2>/dev/null)" || return 1
-    _path_head="$(state_v2_find_head_by_branch "$_path_project" "$_branch" 2>/dev/null)" || return 1
-    _path_head_dir="$(state_v2_head_dir "$_path_project" "$_path_head")" || return 1
-    _path="$(sed -n '1p' "$_path_head_dir/worktree" 2>/dev/null || true)"
+    hydra_load_project_id 2>/dev/null || return 1
+    state_v2_lookup_head "$HYDRA_LOADED_PROJECT_ID" "$_branch" || return 1
+    hydra_valid_id "$STATE_V2_HEAD_ID" || return 1
+    state_v2_read_scalar "$STATE_V2_HEAD_DIR/worktree"
+    _path="$STATE_V2_SCALAR"
     [ -n "$_path" ] || return 1
     printf '%s\n' "$_path"
 }
@@ -116,7 +117,7 @@ _kill_teardown() {
         echo "  Headless execution has no tmux session; completing durable teardown..."
     elif tmux_session_exists "$_td_session"; then
         echo "  Killing tmux session '$_td_session'..."
-        if ! tmux kill-session -t "$_td_session" 2>/dev/null; then
+        if ! tmux kill-session -t "$(tmux_exact_target "$_td_session")" 2>/dev/null; then
             echo "  Failed to kill tmux session '$_td_session'" >&2
             _unlock_head_state
             return 1
@@ -178,12 +179,6 @@ kill_single_head() {
 
     if ! _kill_teardown "$branch" "$session"; then
         return 1
-    fi
-
-    # Process pending spawn queue after successful kill (best-effort)
-    # This allows queued spawns to proceed now that capacity is available
-    if command -v process_spawn_queue >/dev/null 2>&1; then
-        process_spawn_queue >/dev/null 2>&1 || true
     fi
 
     return 0
@@ -272,10 +267,6 @@ EOF
     done <<EOF
 $mappings
 EOF
-
-    if command -v process_spawn_queue >/dev/null 2>&1; then
-        process_spawn_queue >/dev/null 2>&1 || true
-    fi
 
     # Summary
     echo ""

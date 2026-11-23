@@ -266,7 +266,7 @@ _cmd_resume_abort() {
     _cra_branch="$1"
     _cra_session="$2"
     if [ "$_cra_session" != - ]; then
-        tmux kill-session -t "$_cra_session" 2>/dev/null || true
+        tmux kill-session -t "$(tmux_exact_target "$_cra_session")" 2>/dev/null || true
         release_session_lock "$_cra_session" 2>/dev/null || true
     fi
     lifecycle_abort_new_instance "$_cra_branch" 2>/dev/null || {
@@ -305,7 +305,7 @@ cmd_resume() {
     _cr_old_dir="$LIFECYCLE_INSTANCE_DIR"
     _cr_old_session="$(sed -n '1p' "$_cr_old_dir/session" 2>/dev/null || true)"
     _cr_terminal_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
-    if [ "$_cr_terminal_mode" != headless ] && [ -n "$_cr_old_session" ] && tmux has-session -t "$_cr_old_session" 2>/dev/null; then
+    if [ "$_cr_terminal_mode" != headless ] && [ -n "$_cr_old_session" ] && tmux has-session -t "$(tmux_exact_target "$_cr_old_session")" 2>/dev/null; then
         echo "Error: head '$_cr_branch' is already live in $_cr_old_session" >&2
         return 1
     fi

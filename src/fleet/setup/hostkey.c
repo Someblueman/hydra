@@ -165,7 +165,7 @@ static int append_line(const char *path, const char *line) {
     memcpy(buffer + n, line, length); n += length; buffer[n++] = '\n';
     if (write(fd, buffer, n) == (ssize_t)n && !fsync(fd)) status = 0;
 done:
-    close(fd);
+    if (close(fd)) status = -1;
     return status;
 }
 

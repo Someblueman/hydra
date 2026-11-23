@@ -2,6 +2,15 @@
 
 if [ -n "${HYDRA_REVIEW_CALLS:-}" ]; then printf '%s\n' "$@" '---' >> "$HYDRA_REVIEW_CALLS"; fi
 
+# How this command was started, one line per invocation. A shell that sends
+# itself SIGPIPE ends by it (status 141) only when it was started with the
+# default disposition: an ignored signal is inherited, and a POSIX shell
+# cannot stop ignoring it. Needs no /proc.
+if [ -n "${HYDRA_TEST_SIGNAL_REPORT:-}" ]; then
+    sh -c 'kill -s PIPE $$; exit 0'
+    printf '%s:%s pipe=%s\n' "${1:-}" "${2:-}" "$?" >> "$HYDRA_TEST_SIGNAL_REPORT"
+fi
+
 case "${1:-}:${2:-}" in
     workflow:review-data|fleet:review-data)
         if [ -n "${HYDRA_REVIEW_STARTED:-}" ]; then : > "$HYDRA_REVIEW_STARTED"; fi
@@ -118,8 +127,13 @@ case "${1:-}:${2:-}" in
         printf 'END\t%s\n' "$(wc -l < "$HYDRA_TEST_SEEN_FILE" | tr -d ' ')"
         rmdir "$seen_lock"
         ;;
-    tui:--data)
-        if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
+    tui:--orphan-rows)
+        # The one part of the head snapshot the control centre asks the CLI
+        # for: the leftover worktrees of the fixture store (rows-store.sh). It
+        # is asked at every refresh of a store that could hold one, so holding
+        # it back holds the snapshot back, and not answering while the hang
+        # file exists makes the snapshot run out of time.
+        if [ -n "${HYDRA_TEST_TUI_HANG_FILE:-}" ] && [ -f "$HYDRA_TEST_TUI_HANG_FILE" ]; then exec sleep 30; fi
         if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi
         # A case that must see other data first holds the heads back until it
         # creates this file (at most 10 s).
@@ -129,12 +143,7 @@ case "${1:-}:${2:-}" in
                 sleep 0.05; gate_wait=$((gate_wait + 1))
             done
         fi
-        if [ -n "${HYDRA_TUI_FIXTURE:-}" ]; then
-            cat "$HYDRA_TUI_FIXTURE"
-        else
-            fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
-            cat "$fixture_dir/native-v2.tsv"
-        fi
+        [ ! -f "${HYDRA_TEST_STORE:-}/leftovers.tsv" ] || cat "$HYDRA_TEST_STORE/leftovers.tsv"
         ;;
     dashboard:)
         printf '%s\n' "FAKE DASHBOARD"
@@ -170,7 +179,7 @@ case "${1:-}:${2:-}" in
         printf '\n'
         case "$*" in 'gc --policy orphaned --apply --path '*) [ $# -eq 6 ] && printf 'removed-orphan\t%s\n' "$6" ;; esac
         ;;
-    switch:*|regenerate:*|status:*|claim:list|collision:*|scope:show|queue:*|resource:status|diff:*|gate:status|doctor:*)
+    switch:*|regenerate:*|status:*|claim:list|collision:*|scope:show|resource:status|diff:*|gate:status|doctor:*)
         printf 'FAKE ACTION'
         printf ' <%s>' "$@"
         printf '\n'

@@ -74,7 +74,9 @@ static bool preview_start(struct app *app, const struct head *h) {
     char *pane[] = {(char *)"tmux", (char *)"capture-pane", (char *)"-p", (char *)"-e", (char *)"-J",
                     (char *)"-S", (char *)"-40", (char *)"-t", target, NULL};
     char *step[] = {(char *)app->hydra, (char *)"tui", (char *)"--head-output", (char *)h->branch, NULL};
-    snprintf(target, sizeof(target), "%s:0.0", h->session);
+    /* "=" makes tmux match the session name exactly; without it a head whose
+     * name begins another's would show that head's pane. */
+    snprintf(target, sizeof(target), "=%s:0.0", h->session);
     o->preview_again = false;
     o->preview_headless = head_headless(h);
     copy_text(o->preview_branch, sizeof(o->preview_branch), h->branch);

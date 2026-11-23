@@ -212,12 +212,12 @@ SCRIPT
 
     TMUX=inside TMUX_LOG="$tmux_log" PATH="$fake_bin:$PATH" \
         "$HYDRA_BIN" switch feature/direct
-    assert_contains "$(sed -n '1p' "$tmux_log")" "switch-client -t target-session" \
+    assert_contains "$(sed -n '1p' "$tmux_log")" "switch-client -t =target-session:" \
         "Direct switch targets the selected branch inside tmux"
 
     TMUX='' TMUX_LOG="$tmux_log" PATH="$fake_bin:$PATH" \
         "$HYDRA_BIN" switch feature/direct
-    assert_contains "$(sed -n '2p' "$tmux_log")" "attach-session -t target-session" \
+    assert_contains "$(sed -n '2p' "$tmux_log")" "attach-session -t =target-session:" \
         "Direct switch attaches to the selected branch outside tmux"
 
     cleanup_test_env "$test_dir"

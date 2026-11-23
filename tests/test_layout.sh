@@ -56,102 +56,6 @@ test_cycle_layout() {
     assert_failure $? "cycle_layout should fail when not in tmux session"
 }
 
-# Test save_layout parameter validation
-test_save_layout_validation() {
-    echo "Testing save_layout parameter validation..."
-    
-    # Test empty session name
-    save_layout "" 2>/dev/null
-    assert_failure $? "save_layout should fail with empty session name"
-    
-    # Test without HYDRA_HOME
-    old_home="$HYDRA_HOME"
-    unset HYDRA_HOME
-    save_layout "test-session" 2>/dev/null
-    assert_failure $? "save_layout should fail when HYDRA_HOME is not set"
-    
-    # Restore HYDRA_HOME
-    HYDRA_HOME="$old_home"
-    export HYDRA_HOME
-}
-
-# Test restore_layout parameter validation
-test_restore_layout_validation() {
-    echo "Testing restore_layout parameter validation..."
-    
-    # Test empty session name
-    restore_layout "" 2>/dev/null
-    assert_failure $? "restore_layout should fail with empty session name"
-    
-    # Test without HYDRA_HOME
-    old_home="$HYDRA_HOME"
-    unset HYDRA_HOME
-    restore_layout "test-session" 2>/dev/null
-    assert_failure $? "restore_layout should fail when HYDRA_HOME is not set"
-    
-    # Restore HYDRA_HOME
-    HYDRA_HOME="$old_home"
-    export HYDRA_HOME
-}
-
-# Test restore_layout with non-existent file
-test_restore_layout_no_file() {
-    echo "Testing restore_layout with non-existent layout file..."
-    
-    # Set up temporary HYDRA_HOME
-    temp_home="$(test_mktemp_dir)"
-    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
-    HYDRA_HOME="$temp_home"
-    export HYDRA_HOME
-    
-    # Should succeed even if no layout file exists
-    restore_layout "non-existent-session" 
-    assert_success $? "restore_layout should succeed when no layout file exists"
-    
-    # Cleanup
-    rm -rf "$temp_home"
-    trap - EXIT INT TERM
-    unset HYDRA_HOME
-}
-
-# Test setup_layout_hotkeys parameter validation
-test_setup_layout_hotkeys_validation() {
-    echo "Testing setup_layout_hotkeys parameter validation..."
-
-    # Test empty session name
-    setup_layout_hotkeys "" 2>/dev/null
-    assert_failure $? "setup_layout_hotkeys should fail with empty session name"
-
-    # Test that HYDRA_DISABLE_HOTKEYS skips hotkey binding and returns success
-    HYDRA_DISABLE_HOTKEYS=1 setup_layout_hotkeys "test-session" 2>/dev/null
-    assert_success $? "setup_layout_hotkeys should succeed when HYDRA_DISABLE_HOTKEYS is set"
-}
-
-# Test layout save/restore integration
-test_layout_save_restore() {
-    echo "Testing layout save/restore integration..."
-    
-    # Set up temporary HYDRA_HOME
-    temp_home="$(test_mktemp_dir)"
-    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
-    HYDRA_HOME="$temp_home"
-    export HYDRA_HOME
-    
-    # Create test layout file
-    mkdir -p "$HYDRA_HOME/layouts"
-    echo "test-layout-string" > "$HYDRA_HOME/layouts/test-session"
-    
-    # Test restore with existing file
-    restore_layout "test-session" 2>/dev/null
-    # Should not fail even if tmux command fails (layout file exists)
-    assert_success $? "restore_layout should succeed with existing layout file"
-    
-    # Cleanup
-    rm -rf "$temp_home"
-    trap - EXIT INT TERM
-    unset HYDRA_HOME
-}
-
 # Run all tests
 echo "Running layout.sh unit tests..."
 echo "=================================="
@@ -159,11 +63,6 @@ echo "=================================="
 test_apply_layout_validation
 test_get_current_layout
 test_cycle_layout
-test_save_layout_validation
-test_restore_layout_validation
-test_restore_layout_no_file
-test_setup_layout_hotkeys_validation
-test_layout_save_restore
 
 echo "=================================="
 echo "Test Results:"

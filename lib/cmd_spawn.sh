@@ -381,71 +381,14 @@ $_csp_instructions"
         return $?
     fi
 
-    # Check resource limits before spawning
-    if is_limit_enabled; then
-        # Calculate total sessions to spawn
-        total_to_spawn="$count"
-        if [ -n "$agents_spec" ]; then
-            # Count total from agents spec (e.g., "claude:2,aider:1" = 3)
-            total_to_spawn=0
-            # Parse spec and sum counts
-            _spec="$agents_spec"
-            while [ -n "$_spec" ]; do
-                _item="${_spec%%,*}"
-                _agent_count="${_item#*:}"
-                if [ "$_agent_count" != "$_item" ]; then
-                    total_to_spawn=$((total_to_spawn + _agent_count))
-                else
-                    total_to_spawn=$((total_to_spawn + 1))
-                fi
-                if [ "$_spec" = "$_item" ]; then
-                    break
-                fi
-                _spec="${_spec#*,}"
-            done
-        fi
-
-        if would_exceed_limit "$total_to_spawn"; then
-            max="$(get_max_sessions)"
-            current="$(get_active_session_count)"
-            available="$(get_available_capacity)"
-
-            echo "Session limit reached: $current/$max active sessions" >&2
-
-            if [ "$available" -gt 0 ] && [ "$available" -lt "$total_to_spawn" ]; then
-                echo "Can only spawn $available of requested $total_to_spawn sessions" >&2
-            fi
-
-            # Prompt to queue spawns (only in interactive mode)
-            if [ -t 0 ] && [ -t 1 ]; then
-                printf "Queue spawn request(s) for later? [y/N] "
-                read -r response
-                case "$response" in
-                    [yY][eE][sS]|[yY])
-                        # Queue the spawn(s)
-                        if [ -n "$agents_spec" ]; then
-                            queue_mixed_spawns "$branch" "$agents_spec" "$group" "$layout"
-                            echo "Queued $total_to_spawn spawn(s). Run 'hydra queue' to view pending."
-                        elif [ "$total_to_spawn" -eq 1 ]; then
-                            queue_spawn "$branch" "$ai_tool" "$group" "$layout" "50" >/dev/null
-                            echo "Queued spawn for '$branch'. Run 'hydra queue' to view pending."
-                        else
-                            queue_bulk_spawns "$branch" "$total_to_spawn" "$ai_tool" "$group" "$layout"
-                            echo "Queued $total_to_spawn spawn(s). Run 'hydra queue' to view pending."
-                        fi
-                        return 0
-                        ;;
-                    *)
-                        echo "Aborted" >&2
-                        exit 1
-                        ;;
-                esac
-            else
-                echo "Error: Cannot spawn - session limit reached (non-interactive mode)" >&2
-                exit 1
-            fi
-        fi
-    fi
+    # HYDRA_MAX_SESSIONS was removed; say so once instead of ignoring it silently.
+    case "${HYDRA_MAX_SESSIONS:-}" in
+        ''|0) ;;
+        *)
+            echo "Warning: HYDRA_MAX_SESSIONS is no longer supported and is ignored" >&2
+            echo "Next: set the host limit with 'hydra admission configure'" >&2
+            ;;
+    esac
 
     # If agents spec is provided, delegate to bulk spawn with mixed agents
     if [ -n "$agents_spec" ]; then
@@ -539,7 +482,7 @@ spawn_print_context() {
     _spc_session="$2"
     _spc_profile="$3"
     _spc_verb="${4:-created}"
-    _spc_worktree="$(spawn_worktree_for_branch "$_spc_branch" 2>/dev/null || true)"
+    _spc_worktree="$(project_branch_worktree "$_spc_branch" 2>/dev/null || true)"
     _spc_agent="$_spc_profile"
     case "$_spc_agent" in ''|none|-) _spc_agent="none (plain shell)" ;; esac
     echo "Head '$_spc_branch' $_spc_verb; it keeps running in the background."
@@ -564,20 +507,6 @@ spawn_human_path() {
             esac
             ;;
     esac
-}
-
-# Resolve the worktree Hydra recorded for a branch's head.
-# Usage: spawn_worktree_for_branch <branch>
-spawn_worktree_for_branch() {
-    _swfb_project="$(hydra_get_project_id 2>/dev/null)" || return 1
-    _swfb_head="$(state_v2_find_head_by_branch "$_swfb_project" "$1" 2>/dev/null)" || return 1
-    _swfb_dir="$(state_v2_head_dir "$_swfb_project" "$_swfb_head")" || return 1
-    _swfb_stored="$(sed -n '1p' "$_swfb_dir/worktree" 2>/dev/null || true)"
-    if [ -n "$_swfb_stored" ]; then
-        printf '%s\n' "$_swfb_stored"
-    else
-        project_worktree_path "$_swfb_project" "$_swfb_head"
-    fi
 }
 
 # Detect durable head state for a branch without mutating anything.
@@ -626,7 +555,7 @@ spawn_report_existing_head() {
 spawn_resume_existing() {
     _sre_branch="$1"
     _sre_dry="$2"
-    _sre_worktree="$(spawn_worktree_for_branch "$_sre_branch" 2>/dev/null || true)"
+    _sre_worktree="$(project_branch_worktree "$_sre_branch" 2>/dev/null || true)"
     _sre_mode="$(get_terminal_mode_for_branch "$_sre_branch" 2>/dev/null || echo interactive)"
     if [ -n "$_sre_dry" ]; then
         echo "Hydra spawn plan (no changes will be made)"

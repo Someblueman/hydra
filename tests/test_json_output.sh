@@ -254,9 +254,6 @@ test_versioned_command_envelopes() {
     output="$("$HYDRA_BIN" status --json)"
     assert_envelope "$output" status true "status success uses JSON v1"
 
-    output="$("$HYDRA_BIN" queue --json)"
-    assert_envelope "$output" queue true "queue success uses JSON v1"
-
     output="$("$HYDRA_BIN" group status empty --json)"
     assert_envelope "$output" "group status" true "group status success uses JSON v1"
 
@@ -269,11 +266,6 @@ test_versioned_command_envelopes() {
     recv_code="${recv_code:-0}"
     if [ "$recv_code" -ne 0 ]; then assert_success 0 "recv JSON error exits nonzero"; else assert_success 1 "recv JSON error exits nonzero"; fi
     assert_envelope "$output" recv false "recv failure uses JSON v1"
-
-    output="$("$HYDRA_BIN" queue remove absent --json 2>/dev/null)" || queue_code=$?
-    queue_code="${queue_code:-0}"
-    if [ "$queue_code" -ne 0 ]; then assert_success 0 "queue JSON error exits nonzero"; else assert_success 1 "queue JSON error exits nonzero"; fi
-    assert_envelope "$output" queue false "queue failure uses JSON v1"
 
     output="$("$HYDRA_BIN" lifecycle absent --json 2>/dev/null)" || lifecycle_code=$?
     lifecycle_code="${lifecycle_code:-0}"
@@ -311,11 +303,6 @@ test_versioned_command_envelopes() {
     assert_envelope "$output" exec false "exec validation failure uses JSON v1"
 
     mkdir -p "$_TEST_DIR/not-a-repo"
-    output="$(cd "$_TEST_DIR/not-a-repo" && "$HYDRA_BIN" queue --json 2>/dev/null)" || queue_project_code=$?
-    queue_project_code="${queue_project_code:-0}"
-    if [ "$queue_project_code" -ne 0 ]; then assert_success 0 "projectless queue JSON exits nonzero"; else assert_success 1 "projectless queue JSON exits nonzero"; fi
-    assert_envelope "$output" queue false "projectless queue failure uses JSON v1"
-
     output="$(cd "$_TEST_DIR/not-a-repo" && "$HYDRA_BIN" init --json 2>/dev/null)" || init_code=$?
     init_code="${init_code:-0}"
     if [ "$init_code" -ne 0 ]; then assert_success 0 "init JSON error exits nonzero"; else assert_success 1 "init JSON error exits nonzero"; fi
@@ -346,11 +333,6 @@ main() {
     test_json_escape_matches_bytewise
 
     # Unit tests for JSON helpers
-    test_json_kv
-    test_json_kv_with_quotes
-    test_json_kv_num
-    test_json_kv_bool
-    test_json_kv_null
     test_json_envelopes
 
     # Integration tests

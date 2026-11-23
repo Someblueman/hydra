@@ -108,174 +108,26 @@ int hydra_valid_id(const char *value) {
     return 1;
 }
 
+/* Reads a scalar record: a regular file that holds exactly one line with no
+ * carriage return and no NUL, the rule of state_v2_scalar_valid in
+ * lib/state_v2.sh. The line may be empty and may lack its newline. */
 int hydra_read_scalar(const char *path, char *out, size_t out_size) {
+    struct stat status;
     FILE *file;
     size_t length;
-    int extra;
+    int failed;
     if (path == NULL || out == NULL || out_size < 2U) return -1;
+    if (stat(path, &status) != 0 || !S_ISREG(status.st_mode)) return -1;
     file = fopen(path, "rb");
     if (file == NULL) return -1;
-    if (fgets(out, (int)out_size, file) == NULL) {
-        fclose(file);
-        return -1;
-    }
-    length = strlen(out);
-    if (length > 0U && out[length - 1U] == '\n') out[--length] = '\0';
-    if (length > 0U && out[length - 1U] == '\r') out[--length] = '\0';
-    extra = fgetc(file);
+    length = fread(out, 1U, out_size, file);
+    failed = ferror(file);
     fclose(file);
-    if (extra != EOF || strchr(out, '\n') != NULL || strchr(out, '\r') != NULL) return -1;
-    return 0;
-}
-
-static int hydra_validate_head(const char *head_path, const char *head_name, FILE *err) {
-    char path[PATH_MAX];
-    char value[HYDRA_SCALAR_MAX];
-    char instance_path[PATH_MAX];
-    if (!hydra_valid_id(head_name) || strncmp(head_name, "head_", 5U) != 0) {
-        fprintf(err, "invalid head id: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), head_path, "head-id") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 || strcmp(value, head_name) != 0) {
-        fprintf(err, "invalid head-id record: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), head_path, "branch") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 || value[0] == '\0') {
-        fprintf(err, "invalid branch record: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), head_path, "session") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 || value[0] == '\0') {
-        fprintf(err, "invalid session record: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), head_path, "current-instance") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 || !hydra_valid_id(value) ||
-        strncmp(value, "instance_", 9U) != 0) {
-        fprintf(err, "invalid current instance: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_instance_path(instance_path, sizeof(instance_path), head_path, value) != 0 ||
-        !hydra_is_dir(instance_path)) {
-        fprintf(err, "missing current instance: %s\n", head_name);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), instance_path, "instance-id") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 ||
-        strcmp(value, strrchr(instance_path, '/') + 1) != 0) {
-        fprintf(err, "invalid instance record: %s\n", head_name);
-        return -1;
-    }
-    return 0;
-}
-
-struct hydra_branch_record {
-    char id[HYDRA_SCALAR_MAX];
-    char branch[HYDRA_SCALAR_MAX];
-};
-static int hydra_validate_unique_branches(const char *heads_path, FILE *err) {
-    DIR *heads = opendir(heads_path);
-    struct dirent *entry;
-    struct hydra_branch_record *records = NULL;
-    size_t count = 0U, capacity = 0U, i, j;
-    int result = -1;
-    if (heads == NULL) return -1;
-    while ((entry = readdir(heads)) != NULL) {
-        char head_path[PATH_MAX], branch_path[PATH_MAX];
-        if (entry->d_name[0] == '.' || strncmp(entry->d_name, "head_", 5U) != 0) continue;
-        if (count == capacity) {
-            size_t next;
-            void *grown;
-            if (capacity > (size_t)-1 / 2U / sizeof(*records)) goto done;
-            next = capacity == 0U ? 16U : capacity * 2U;
-            grown = realloc(records, next * sizeof(*records));
-            if (grown == NULL) goto done;
-            records = grown; capacity = next;
-        }
-        if (hydra_copy(records[count].id, sizeof(records[count].id), entry->d_name) != 0 ||
-            hydra_path(head_path, sizeof(head_path), heads_path, entry->d_name) != 0 ||
-            !hydra_is_dir(head_path) ||
-            hydra_path(branch_path, sizeof(branch_path), head_path, "branch") != 0 ||
-            hydra_read_scalar(branch_path, records[count].branch, sizeof(records[count].branch)) != 0) goto done;
-        count++;
-    }
-    /* Preserve directory-order diagnostics and the lexicographic pair rule.
-     * Compare the collected scalars in memory instead of reopening every head. */
-    for (i = 0U; i < count; i++) {
-        for (j = 0U; j < count; j++) {
-            if (strcmp(records[j].id, records[i].id) <= 0) continue;
-            if (strcmp(records[i].branch, records[j].branch) == 0) {
-                fprintf(err, "duplicate branch identity: %s\n", records[i].branch);
-                goto done;
-            }
-        }
-    }
-    result = 0;
-done:
-    free(records); closedir(heads); return result;
-}
-
-int hydra_validate_state(const char *root, FILE *err) {
-    char path[PATH_MAX];
-    char value[HYDRA_SCALAR_MAX];
-    DIR *projects;
-    struct dirent *project_entry;
-    if (hydra_path(path, sizeof(path), root, "schema-version") != 0 ||
-        hydra_read_scalar(path, value, sizeof(value)) != 0 || strcmp(value, "2") != 0) {
-        fputs("unsupported or missing state schema\n", err);
-        return -1;
-    }
-    if (hydra_path(path, sizeof(path), root, "projects") != 0 || (projects = opendir(path)) == NULL) {
-        fputs("missing projects directory\n", err);
-        return -1;
-    }
-    while ((project_entry = readdir(projects)) != NULL) {
-        char project_path[PATH_MAX];
-        char heads_path[PATH_MAX], record_path[PATH_MAX];
-        DIR *heads;
-        struct dirent *head_entry;
-        if (project_entry->d_name[0] == '.') continue;
-        if (hydra_path(project_path, sizeof(project_path), path, project_entry->d_name) != 0) {
-            closedir(projects);
-            return -1;
-        }
-        if (!hydra_is_dir(project_path) || strncmp(project_entry->d_name, "project_", 8U) != 0) continue;
-        if (!hydra_valid_id(project_entry->d_name)) {
-            fprintf(err, "invalid project id: %s\n", project_entry->d_name);
-            closedir(projects);
-            return -1;
-        }
-        if (hydra_path(record_path, sizeof(record_path), project_path, "project-id") != 0 ||
-            hydra_read_scalar(record_path, value, sizeof(value)) != 0 ||
-            strcmp(value, project_entry->d_name) != 0 ||
-            hydra_path(record_path, sizeof(record_path), project_path, "repo-root") != 0 ||
-            hydra_read_scalar(record_path, value, sizeof(value)) != 0 || value[0] == '\0' ||
-            hydra_path(heads_path, sizeof(heads_path), project_path, "heads") != 0 ||
-            (heads = opendir(heads_path)) == NULL) {
-            fprintf(err, "invalid project record: %s\n", project_entry->d_name);
-            closedir(projects);
-            return -1;
-        }
-        while ((head_entry = readdir(heads)) != NULL) {
-            char head_path[PATH_MAX];
-            if (head_entry->d_name[0] == '.') continue;
-            if (strncmp(head_entry->d_name, "head_", 5U) != 0) continue;
-            if (hydra_path(head_path, sizeof(head_path), heads_path, head_entry->d_name) != 0 ||
-                hydra_validate_head(head_path, head_entry->d_name, err) != 0) {
-                closedir(heads);
-                closedir(projects);
-                return -1;
-            }
-        }
-        closedir(heads);
-        if (hydra_validate_unique_branches(heads_path, err) != 0) {
-            closedir(projects);
-            return -1;
-        }
-    }
-    closedir(projects);
+    if (failed || length == 0U || length == out_size) return -1;
+    if (out[length - 1U] == '\n') length--;
+    out[length] = '\0';
+    if (memchr(out, '\n', length) != NULL || memchr(out, '\r', length) != NULL ||
+        memchr(out, '\0', length) != NULL) return -1;
     return 0;
 }
 
@@ -333,6 +185,205 @@ int hydra_validate_events(const char *path, FILE *err) {
     return 0;
 }
 
+/* ---- state v2 ------------------------------------------------------------
+ * A snapshot is written only for a store that state_v2_verify in
+ * lib/state_v2.sh accepts: the CLI falls back to the shell implementation when
+ * this one refuses, so every rule here is that verifier's rule or a stricter
+ * one, never a looser one. Event logs are not read: `hydra snapshot` does not
+ * verify them either. */
+
+static int hydra_scalar_at(const char *directory, const char *name, char *out, size_t out_size) {
+    char path[PATH_MAX];
+    return hydra_path(path, sizeof(path), directory, name) == 0 ? hydra_read_scalar(path, out, out_size) : -1;
+}
+
+static int hydra_scalars_valid(const char *directory, const char *const *names, size_t count) {
+    char value[HYDRA_SCALAR_MAX];
+    size_t index;
+    for (index = 0U; index < count; index++) {
+        if (hydra_scalar_at(directory, names[index], value, sizeof(value)) != 0) return 0;
+    }
+    return 1;
+}
+
+static int hydra_is_file_at(const char *directory, const char *name) {
+    char path[PATH_MAX];
+    struct stat status;
+    return hydra_path(path, sizeof(path), directory, name) == 0 && stat(path, &status) == 0 &&
+           S_ISREG(status.st_mode);
+}
+
+/* The optional terminal-mode record: 0 for interactive (also when the record
+ * is absent), 1 for headless, -1 when it holds anything else. */
+static int hydra_terminal_mode(const char *directory) {
+    char path[PATH_MAX];
+    char value[32];
+    struct stat status;
+    if (hydra_path(path, sizeof(path), directory, "terminal-mode") != 0) return -1;
+    if (stat(path, &status) != 0) return errno == ENOENT ? 0 : -1;
+    if (hydra_read_scalar(path, value, sizeof(value)) != 0) return -1;
+    if (strcmp(value, "interactive") == 0) return 0;
+    return strcmp(value, "headless") == 0 ? 1 : -1;
+}
+
+/* A headless head or instance has the session "-"; an interactive one has not. */
+static int hydra_session_fits(const char *session, int headless) {
+    return (strcmp(session, "-") == 0) == (headless != 0);
+}
+
+/* Head identity records: id, branch, desired state and completion policy.
+ * Returns what is wrong, or NULL. */
+static const char *hydra_load_head_identity(const char *head_path, struct hydra_head_record *record) {
+    char value[HYDRA_SCALAR_MAX];
+    if (!hydra_valid_id(record->head_id)) return "head id";
+    if (hydra_scalar_at(head_path, "head-id", value, sizeof(value)) != 0 ||
+        strcmp(value, record->head_id) != 0) return "head-id";
+    if (hydra_scalar_at(head_path, "branch", record->branch, sizeof(record->branch)) != 0 ||
+        record->branch[0] == '\0') return "branch";
+    if (hydra_scalar_at(head_path, "desired-state", value, sizeof(value)) != 0 ||
+        (strcmp(value, "running") != 0 && strcmp(value, "headless") != 0 &&
+         strcmp(value, "stopping") != 0 && strcmp(value, "stopped") != 0) ||
+        hydra_copy(record->desired_state, sizeof(record->desired_state), value) != 0) return "desired-state";
+    if (hydra_scalar_at(head_path, "completion-policy", value, sizeof(value)) != 0 ||
+        (strcmp(value, "declared-done") != 0 && strcmp(value, "observed-exit-zero") != 0 &&
+         strcmp(value, "either") != 0)) return "completion-policy";
+    return NULL;
+}
+
+/* The head's own records, its terminal mode (*headless) and its session and
+ * current instance. Returns what is wrong, or NULL. */
+static const char *hydra_load_head_records(const char *head_path, struct hydra_head_record *record, int *headless) {
+    static const char *const head_scalars[] = {
+        "profile", "group", "created-at", "dependencies", "pr", "worktree", "base-ref"
+    };
+    char value[HYDRA_SCALAR_MAX];
+    if (!hydra_scalars_valid(head_path, head_scalars, sizeof(head_scalars) / sizeof(head_scalars[0])) ||
+        !hydra_is_file_at(head_path, "task") || !hydra_is_file_at(head_path, "scopes")) return "required records";
+    *headless = hydra_terminal_mode(head_path);
+    if (*headless < 0) return "terminal-mode";
+    if (hydra_scalar_at(head_path, "session", value, sizeof(value)) != 0 || value[0] == '\0' ||
+        !hydra_session_fits(value, *headless)) return "session";
+    if (hydra_scalar_at(head_path, "current-instance", value, sizeof(value)) != 0 ||
+        !hydra_valid_id(value) || strncmp(value, "instance_", 9U) != 0 ||
+        hydra_copy(record->current_instance, sizeof(record->current_instance), value) != 0) return "current-instance";
+    return NULL;
+}
+
+/* The current instance's directory and records. Returns what is wrong, or NULL. */
+static const char *hydra_load_instance(const char *head_path, const struct hydra_head_record *record, int headless) {
+    static const char *const instance_scalars[] = {
+        "started-at", "observed-status", "observed-source", "observed-confidence",
+        "observed-at", "observed-exit-code", "provider-session-id"
+    };
+    char value[HYDRA_SCALAR_MAX];
+    char instance_path[PATH_MAX];
+    if (hydra_instance_path(instance_path, sizeof(instance_path), head_path, record->current_instance) != 0 ||
+        !hydra_is_dir(instance_path)) return "current instance directory";
+    if (hydra_scalar_at(instance_path, "instance-id", value, sizeof(value)) != 0 ||
+        strcmp(value, record->current_instance) != 0) return "instance-id";
+    if (hydra_terminal_mode(instance_path) != headless) return "instance terminal-mode";
+    if (hydra_scalar_at(instance_path, "session", value, sizeof(value)) != 0 ||
+        !hydra_session_fits(value, headless)) return "instance session";
+    if (!hydra_scalars_valid(instance_path, instance_scalars,
+                             sizeof(instance_scalars) / sizeof(instance_scalars[0]))) return "instance records";
+    return NULL;
+}
+
+/* Verifies one head and its current instance and fills the fields a snapshot
+ * prints; record->head_id is already set. Returns what is wrong, or NULL. */
+static const char *hydra_load_head(const char *head_path, struct hydra_head_record *record) {
+    const char *problem;
+    int headless;
+    problem = hydra_load_head_identity(head_path, record);
+    if (problem == NULL) problem = hydra_load_head_records(head_path, record, &headless);
+    if (problem == NULL) problem = hydra_load_instance(head_path, record, headless);
+    return problem;
+}
+
+struct hydra_heads {
+    struct hydra_head_record *records;
+    size_t count;
+    size_t capacity;
+};
+
+static struct hydra_head_record *hydra_heads_next(struct hydra_heads *heads) {
+    if (heads->count == heads->capacity) {
+        size_t next = heads->capacity == 0U ? 16U : heads->capacity * 2U;
+        void *grown;
+        if (heads->capacity > (size_t)-1 / 2U / sizeof(*heads->records)) return NULL;
+        grown = realloc(heads->records, next * sizeof(*heads->records));
+        if (grown == NULL) return NULL;
+        heads->records = (struct hydra_head_record *)grown;
+        heads->capacity = next;
+    }
+    memset(&heads->records[heads->count], 0, sizeof(*heads->records));
+    return &heads->records[heads->count];
+}
+
+/* Reads one entry of a project's heads directory into the next record.
+ * Returns 1 for an entry that is not a head, 0 once it is verified and
+ * -1 when it is refused (the reason is on err when there is one). */
+static int hydra_load_head_entry(const char *heads_path, const char *name, const char *project_id,
+                                 struct hydra_heads *heads, FILE *err) {
+    char head_path[PATH_MAX];
+    struct hydra_head_record *record;
+    const char *problem;
+    if (strncmp(name, "head_", 5U) != 0) return 1;
+    if (hydra_path(head_path, sizeof(head_path), heads_path, name) != 0) return -1;
+    if (!hydra_is_dir(head_path)) return 1;
+    record = hydra_heads_next(heads);
+    if (record == NULL) return -1;
+    if (hydra_copy(record->project_id, sizeof(record->project_id), project_id) != 0 ||
+        hydra_copy(record->head_id, sizeof(record->head_id), name) != 0) {
+        problem = "head id";
+    } else {
+        problem = hydra_load_head(head_path, record);
+    }
+    if (problem != NULL) {
+        fprintf(err, "invalid head record: %s (%s)\n", name, problem);
+        return -1;
+    }
+    heads->count++;
+    return 0;
+}
+
+/* Refuses two heads on one branch among the records from first on. */
+static int hydra_check_branches(const struct hydra_heads *heads, size_t first, FILE *err) {
+    size_t left, right;
+    for (left = first; left < heads->count; left++) {
+        for (right = left + 1U; right < heads->count; right++) {
+            if (strcmp(heads->records[left].branch, heads->records[right].branch) == 0) {
+                fprintf(err, "duplicate branch identity: %s\n", heads->records[left].branch);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Reads every head of one project in a single walk of its heads directory,
+ * then refuses two heads on one branch among the records it collected. */
+static int hydra_load_project_heads(const char *project_path, const char *project_id,
+                                    struct hydra_heads *heads, FILE *err) {
+    char heads_path[PATH_MAX];
+    DIR *directory;
+    struct dirent *entry;
+    size_t first = heads->count;
+    if (hydra_path(heads_path, sizeof(heads_path), project_path, "heads") != 0 ||
+        (directory = opendir(heads_path)) == NULL) {
+        fprintf(err, "invalid project record: %s\n", project_id);
+        return -1;
+    }
+    while ((entry = readdir(directory)) != NULL) {
+        if (hydra_load_head_entry(heads_path, entry->d_name, project_id, heads, err) < 0) {
+            closedir(directory);
+            return -1;
+        }
+    }
+    closedir(directory);
+    return hydra_check_branches(heads, first, err);
+}
+
 static int hydra_compare_heads(const void *left, const void *right) {
     const struct hydra_head_record *a = (const struct hydra_head_record *)left;
     const struct hydra_head_record *b = (const struct hydra_head_record *)right;
@@ -340,97 +391,85 @@ static int hydra_compare_heads(const void *left, const void *right) {
     return project != 0 ? project : strcmp(a->head_id, b->head_id);
 }
 
-static int hydra_collect_heads(const char *root, struct hydra_head_record **records_out,
-                               size_t *count_out, size_t *projects_out, FILE *err) {
+/* One entry of the projects directory. Returns 1 for an entry that is not a
+ * project, 0 once it and its heads are verified and -1 when it is refused
+ * (the reason is on err when there is one). */
+static int hydra_load_project(const char *projects_path, const char *name, struct hydra_heads *heads, FILE *err) {
+    char project_path[PATH_MAX];
+    char value[HYDRA_SCALAR_MAX];
+    if (strncmp(name, "project_", 8U) != 0) return 1;
+    if (hydra_path(project_path, sizeof(project_path), projects_path, name) != 0) return -1;
+    if (!hydra_is_dir(project_path)) return 1;
+    if (!hydra_valid_id(name)) {
+        fprintf(err, "invalid project id: %s\n", name);
+        return -1;
+    }
+    if (hydra_scalar_at(project_path, "project-id", value, sizeof(value)) != 0 ||
+        strcmp(value, name) != 0 ||
+        hydra_scalar_at(project_path, "repo-root", value, sizeof(value)) != 0 || value[0] == '\0') {
+        fprintf(err, "invalid project record: %s\n", name);
+        return -1;
+    }
+    return hydra_load_project_heads(project_path, name, heads, err);
+}
+
+static void hydra_heads_discard(struct hydra_heads *heads) {
+    free(heads->records);
+    heads->records = NULL;
+    heads->count = heads->capacity = 0U;
+}
+
+/* Verifies the store and collects its heads in project, then head order. On
+ * failure nothing is returned and the reason is on err. */
+static int hydra_load_state(const char *root, struct hydra_heads *heads, size_t *projects_out, FILE *err) {
     char projects_path[PATH_MAX];
+    char value[HYDRA_SCALAR_MAX];
     DIR *projects;
-    struct dirent *project_entry;
-    struct hydra_head_record *records = NULL;
-    size_t count = 0U;
-    size_t capacity = 0U;
+    struct dirent *entry;
     size_t project_count = 0U;
+    int loaded;
+    if (hydra_scalar_at(root, "schema-version", value, sizeof(value)) != 0 || strcmp(value, "2") != 0) {
+        fputs("unsupported or missing state schema\n", err);
+        return -1;
+    }
     if (hydra_path(projects_path, sizeof(projects_path), root, "projects") != 0 ||
-        (projects = opendir(projects_path)) == NULL) return -1;
-    while ((project_entry = readdir(projects)) != NULL) {
-        char project_path[PATH_MAX];
-        char heads_path[PATH_MAX];
-        DIR *heads;
-        struct dirent *head_entry;
-        if (project_entry->d_name[0] == '.') continue;
-        if (hydra_path(project_path, sizeof(project_path), projects_path, project_entry->d_name) != 0) {
-            closedir(projects); free(records); return -1;
-        }
-        if (!hydra_is_dir(project_path) || strncmp(project_entry->d_name, "project_", 8U) != 0) continue;
-        if (!hydra_valid_id(project_entry->d_name)) continue;
-        project_count++;
-        if (hydra_path(heads_path, sizeof(heads_path), project_path, "heads") != 0 ||
-            (heads = opendir(heads_path)) == NULL) {
+        (projects = opendir(projects_path)) == NULL) {
+        fputs("missing projects directory\n", err);
+        return -1;
+    }
+    while ((entry = readdir(projects)) != NULL) {
+        loaded = hydra_load_project(projects_path, entry->d_name, heads, err);
+        if (loaded < 0) {
             closedir(projects);
-            free(records);
+            hydra_heads_discard(heads);
             return -1;
         }
-        while ((head_entry = readdir(heads)) != NULL) {
-            struct hydra_head_record *record;
-            char head_path[PATH_MAX];
-            char scalar_path[PATH_MAX];
-            if (strncmp(head_entry->d_name, "head_", 5U) != 0) continue;
-            if (count == capacity) {
-                if (capacity > (size_t)-1 / 2U / sizeof(*records)) {
-                    closedir(heads); closedir(projects); free(records); return -1;
-                }
-                size_t next = capacity == 0U ? 16U : capacity * 2U;
-                void *grown = realloc(records, next * sizeof(*records));
-                if (grown == NULL) {
-                    closedir(heads); closedir(projects); free(records); return -1;
-                }
-                records = (struct hydra_head_record *)grown;
-                capacity = next;
-            }
-            record = &records[count];
-            memset(record, 0, sizeof(*record));
-            if (hydra_copy(record->project_id, sizeof(record->project_id), project_entry->d_name) != 0 ||
-                hydra_copy(record->head_id, sizeof(record->head_id), head_entry->d_name) != 0 ||
-                hydra_path(head_path, sizeof(head_path), heads_path, head_entry->d_name) != 0 ||
-                hydra_path(scalar_path, sizeof(scalar_path), head_path, "branch") != 0 ||
-                hydra_read_scalar(scalar_path, record->branch, sizeof(record->branch)) != 0 ||
-                hydra_path(scalar_path, sizeof(scalar_path), head_path, "desired-state") != 0 ||
-                hydra_read_scalar(scalar_path, record->desired_state, sizeof(record->desired_state)) != 0 ||
-                hydra_path(scalar_path, sizeof(scalar_path), head_path, "current-instance") != 0 ||
-                hydra_read_scalar(scalar_path, record->current_instance, sizeof(record->current_instance)) != 0) {
-                fprintf(err, "cannot read snapshot head: %s\n", head_entry->d_name);
-                closedir(heads); closedir(projects); free(records); return -1;
-            }
-            count++;
-        }
-        closedir(heads);
+        if (loaded == 0) project_count++;
     }
     closedir(projects);
-    if (count > 1U) qsort(records, count, sizeof(*records), hydra_compare_heads);
-    *records_out = records;
-    *count_out = count;
+    if (heads->count > 1U) qsort(heads->records, heads->count, sizeof(*heads->records), hydra_compare_heads);
     *projects_out = project_count;
     return 0;
 }
 
 int hydra_write_snapshot(const char *root, FILE *out, FILE *err) {
-    struct hydra_head_record *records = NULL;
-    size_t count = 0U;
+    struct hydra_heads heads = {NULL, 0U, 0U};
     size_t projects = 0U;
     size_t index;
-    if (hydra_validate_state(root, err) != 0 ||
-        hydra_collect_heads(root, &records, &count, &projects, err) != 0) return -1;
+    if (hydra_load_state(root, &heads, &projects, err) != 0) return -1;
     fprintf(out, "{\"schema_version\":1,\"ok\":true,\"command\":\"snapshot\",\"data\":{\"state_schema\":2,\"projects\":%lu,\"heads\":[",
             (unsigned long)projects);
-    for (index = 0U; index < count; index++) {
+    for (index = 0U; index < heads.count; index++) {
+        const struct hydra_head_record *record = &heads.records[index];
         if (index > 0U) fputc(',', out);
-        fputs("{\"project_id\":", out); hydra_json_write_string(out, records[index].project_id);
-        fputs(",\"head_id\":", out); hydra_json_write_string(out, records[index].head_id);
-        fputs(",\"branch\":", out); hydra_json_write_string(out, records[index].branch);
-        fputs(",\"desired_state\":", out); hydra_json_write_string(out, records[index].desired_state);
-        fputs(",\"current_instance\":", out); hydra_json_write_string(out, records[index].current_instance);
+        fputs("{\"project_id\":", out); hydra_json_write_string(out, record->project_id);
+        fputs(",\"head_id\":", out); hydra_json_write_string(out, record->head_id);
+        fputs(",\"branch\":", out); hydra_json_write_string(out, record->branch);
+        fputs(",\"desired_state\":", out); hydra_json_write_string(out, record->desired_state);
+        fputs(",\"current_instance\":", out); hydra_json_write_string(out, record->current_instance);
         fputc('}', out);
     }
-    free(records);
-    if (fputs("]}}\n", out) == EOF || ferror(out)) return -1;
+    free(heads.records);
+    if (fputs("]}}\n", out) == EOF || fflush(out) != 0 || ferror(out)) return -1;
     return 0;
 }

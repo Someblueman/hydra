@@ -105,7 +105,7 @@ json_object *task_result_verify(json_object *envelope) {
         !identity(f_string(state, "run_id"), "run_") || !(spec = task_spec(f_field(result, "spec"), true)) ||
         !task_hex(f_string(result, "bundle_sha256"), 64) || !mkdtemp(scratch)) goto done;
     staged = true;
-    if (task_json_hash(result, scratch, hash) || strcmp(hash, digest) || task_json_hash(spec, scratch, hash) || strcmp(hash, f_string(receipt, "spec_sha256")) ||
+    if (task_json_hash(result, hash) || strcmp(hash, digest) || task_json_hash(spec, hash) || strcmp(hash, f_string(receipt, "spec_sha256")) ||
         heads_valid(heads, strlen(f_string(f_field(spec, "source"), "commit"))) ||
         files_valid(f_field(result, "artifacts"), f_field(spec, "outputs"), heads, (size_t)json_object_get_int(f_field(f_field(spec, "limits"), "artifact_bytes")), scratch) ||
         files_valid(f_field(result, "evidence"), NULL, heads, TASK_FILE_LIMIT, scratch) || task_result_bindings(result, scratch) ||

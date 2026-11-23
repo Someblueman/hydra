@@ -186,7 +186,7 @@ static void source_pairs(struct pen *p, const struct onb_candidate *c) {
     for (i = 0; i < c->source_count; i++) {
         const struct onb_source_ref *r = &c->sources[i];
         onb_age_text(r->age_seconds, age, sizeof(age));
-        snprintf(text, sizeof(text), "%s %s as %s (%s, %s old when observed%s%s%s%s)", r->kind, r->locator, r->name, r->freshness, age,
+        text_set(text, sizeof(text), "%s %s as %s (%s, %s old when observed%s%s%s%s)", r->kind, r->locator, r->name, r->freshness, age,
                  r->scope[0] ? ", scope " : "", r->scope, r->client[0] ? ", client " : "", r->client);
         pen_pair(p, i ? "" : "Provenance", text, KT_BASE);
         if (r->labels[0]) pen_pair(p, "Labels", r->labels, KT_BASE);
@@ -298,7 +298,7 @@ static void changed_names(struct pen *p, const struct onb_source_report *r) {
     for (i = 0; i < r->added_n; i++) pen_pair(p, i ? "" : "Added", r->added[i], KT_SUCCESS);
     for (i = 0; i < r->removed_n; i++) pen_pair(p, i ? "" : "Removed", r->removed[i], KT_WARNING);
     for (i = 0; i < r->changed_n; i++) {
-        snprintf(text, sizeof(text), "%s: %s -> %s", r->changed[i].name, r->changed[i].previous_target[0] ? r->changed[i].previous_target : "(same target)", r->changed[i].target);
+        text_set(text, sizeof(text), "%s: %s -> %s", r->changed[i].name, r->changed[i].previous_target[0] ? r->changed[i].previous_target : "(same target)", r->changed[i].target);
         pen_pair(p, i ? "" : "Changed", text, KT_WARNING);
     }
 }

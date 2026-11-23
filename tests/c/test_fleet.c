@@ -4,11 +4,23 @@
 #include "fleet/transport/remote.h"
 #include "fleet/transport/server.h"
 #include "fleet/transport/bundle.h"
+#include "fleet/enrollment/enrollment.h"
+#include "fleet/enrollment/receiver.h"
+#include "fleet/placement/placement.h"
+#include "fleet/revocation/revocation.h"
+#include "fleet/task/task.h"
+#include "fleet/agent/agent.h"
+#include "fleet/workflow/workflow_drive.h"
 #include "fleet/fleet.h"
 #include <assert.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 const char *f_home, *f_hydra;
@@ -93,18 +105,21 @@ static void json_utf8(void) {
 #include "test_fleet_discovery.inc"
 #include "test_fleet_sha256.inc"
 #include "test_fleet_capture.inc"
-/* Hydra 2.x, 3.x and 4.x share fleet protocol 1; other majors are refused. */
+#include "test_fleet_durable.inc"
+#include "test_fleet_syncs.inc"
+#include "test_fleet_admission.inc"
+/* Hydra 2.x to 5.x share fleet protocol 1; other majors are refused. */
 static void handshake_versions(void) {
-    const char *accepted[] = {"2.1.0", "3.0.0", "4.0.0"}, *refused[] = {"1.9.0", "5.0.0", "40.0.0"};
+    const char *accepted[] = {"2.1.0", "3.0.0", "4.0.0", "5.0.0"}, *refused[] = {"1.9.0", "6.0.0", "50.0.0"};
     size_t i;
-    for (i = 0; i < 6; i++) {
-        const char *version = i < 3 ? accepted[i] : refused[i - 3];
+    for (i = 0; i < 7; i++) {
+        const char *version = i < 4 ? accepted[i] : refused[i - 4];
         char text[256];
         json_object *data;
         (void)snprintf(text, sizeof(text), "{\"hydra_version\":\"%s\",\"fleet_protocol\":1,\"state_schema\":2,"
                        "\"event_schema\":1,\"json_schema\":1,\"capabilities\":[]}", version);
         assert((data = f_parse(text)));
-        assert(f_handshake_compatible(data) == (i < 3));
+        assert(f_handshake_compatible(data) == (i < 4));
         json_object_put(data);
     }
 }
@@ -117,6 +132,20 @@ int main(void) {
     capture_streams();
     sha256_vectors(dir);
     capture_growth(dir);
+    durable_writes(dir);
+    durable_helper(dir);
+    durable_append(dir);
+    durable_remote_alias(dir);
+    durable_enrollment(dir);
+    durable_task_records(dir);
+    durable_collection(dir);
+    durable_markers(dir);
+    sync_helper(dir);
+    sync_install(dir);
+    sync_import(dir);
+    sync_retain(dir);
+    sync_removals(dir);
+    admission_wait(dir);
     handshake_versions();
     assert(!f_parse("{broken}")); assert(!f_parse("{} {}")); assert(!f_parse("{\"a\":NaN}"));
     obj = f_parse("{\"a\":\"x\\u0000y\"}"); assert(obj && !f_string(obj, "a")); json_object_put(obj);
@@ -127,6 +156,8 @@ int main(void) {
     assert(cap.status == 0 && cap.in_bytes == 13 && cap.input_complete && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
     capture_partial_input();
     capture_exited_leader();
+    capture_prompt_reap(dir);
+    capture_closed_guarantees();
     ssh_reasons();
     assert(!f_run(hang, NULL, 0, 1, &cap) && cap.timeout && cap.status == 124); f_capture_free(&cap);
     bundle = json_object_new_object(); files = json_object_new_array(); file = json_object_new_object();

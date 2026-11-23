@@ -107,8 +107,12 @@ assert_success $? "owner crash leaves the serialized target lock for recovery"
 "$HYDRA_BIN" integrate resume "$crash_run" >/dev/null
 assert_success $? "stale assembling integration removes its stale lock and resumes"
 assert_equal verified "$(sed -n '1p' "$crash_dir/state")" "crash recovery revalidates the integration"
-kill -0 "$(sed -n '1p' "$test_root/crash-child")" 2>/dev/null
-assert_failure $? "crash recovery terminates the abandoned gate descendant"
+# shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+crash_child_gone() { ! kill -0 "$1" 2>/dev/null; }
+# The killed owner's gate descendant is orphaned, so it stays visible to
+# kill -0 until init reaps it, which can take about a second.
+WAIT_FOR_TIMEOUT=10 wait_for "the abandoned gate descendant to be gone" crash_child_gone "$(sed -n '1p' "$test_root/crash-child")"
+assert_success $? "crash recovery terminates the abandoned gate descendant"
 "$HYDRA_BIN" integrate cleanup "$crash_run" --apply >/dev/null
 
 mutation_output="$("$HYDRA_BIN" integrate verified --base "$base_commit" --target main --execute --gate 'touch gate-output; false' 2>/dev/null)"

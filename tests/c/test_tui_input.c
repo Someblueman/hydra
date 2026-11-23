@@ -7,6 +7,8 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "../../src/tui/internal.h"
+#include "../../src/tui/attention.h"
+#include "../../src/tui/inbox.h"
 #include "../../src/kettle/testing.h"
 
 struct fixture { struct app *app; struct kt_test *test; };
@@ -16,7 +18,9 @@ static bool fixture_open(struct fixture *f) {
     f->test = NULL;
     f->app = calloc(1U, sizeof(*f->app));
     if (!f->app) return false;
-    /* Observations fail at once instead of running a real hydra. */
+    /* Observations fail at once instead of running a real hydra, and the
+     * head snapshot cannot start (tui_no_snapshot.c): the model is the one a
+     * case builds. */
     f->app->hydra = "/nonexistent/hydra";
     f->app->cols = 80; f->app->rows = 24;
     f->app->no_color = true;
@@ -242,6 +246,91 @@ static bool prompt_takes_input(void) {
     return ok;
 }
 
+/* A hydra that answers a proposal request with files that do not exist: the
+ * plan cannot be read, and nothing else says so. */
+static bool unreadable_proposal(char *path, size_t size) {
+    static const char script[] = "#!/bin/sh\nprintf 'HYDRA_PLAN_PROPOSAL\\t1\\nP\\t/nonexistent/draft.json\\t/nonexistent/policy.json\\n'\n";
+    const char *dir = getenv("TMPDIR");
+    int fd;
+    snprintf(path, size, "%s/hydra-input-plan.XXXXXX", dir && dir[0] ? dir : "/tmp");
+    fd = mkstemp(path);
+    if (fd < 0) return false;
+    if (write(fd, script, sizeof(script) - 1U) != (ssize_t)(sizeof(script) - 1U) || fchmod(fd, 0700) || close(fd)) {
+        (void)unlink(path);
+        return false;
+    }
+    return true;
+}
+
+/* A plan key is never dropped without a word: a published plan that cannot be
+ * opened (its head is not listed, or its files cannot be read) says so, and
+ * nothing is approved or sent back. */
+static bool plan_keys_say_why(void) {
+    struct fixture f;
+    char script[512] = "";
+    bool ok = fixture_open(&f);
+    if (!ok) { fixture_close(&f); return false; }
+    one_head(f.app);
+    if (!f.app->inbox) f.app->inbox = calloc(1U, sizeof(*f.app->inbox));
+    ok = f.app->inbox && unreadable_proposal(script, sizeof(script));
+    if (!ok) { fixture_close(&f); return false; }
+    f.app->hydra = script;
+    f.app->inbox->plan_count = 1U;
+    copy_text(f.app->inbox->plans[0].branch, TEXT, "feature-one");
+    work_focus_page(f.app, WORK_PLAN);
+    type(&f, "E");
+    ok = f.app->notice[0] && !f.app->result_open && !f.app->modal_count && !strstr(f.app->notice, "malformed");
+    f.app->notice[0] = '\0';
+    type(&f, "F");
+    ok = ok && f.app->notice[0] && !f.app->result_open && !f.app->modal_count;
+    f.app->notice[0] = '\0';
+    plan_action_approve_published(f.app, "no-such-head");
+    ok = ok && f.app->notice[0] && strstr(f.app->notice, "no-such-head");
+    f.app->notice[0] = '\0';
+    plan_action_return_published(f.app, "no-such-head");
+    ok = ok && f.app->notice[0] && strstr(f.app->notice, "no-such-head");
+    native_plan_destroy(f.app);
+    (void)unlink(script);
+    fixture_close(&f);
+    return ok;
+}
+
+/* The Plan page offers E and F in words. With the list focused they are not
+ * bound, and the footer does not offer them, but the key is not dropped
+ * without a word: the notice says the key works in the Plan pane. A key the
+ * Plan pane does not offer for this selection (V, with no plan loaded) and
+ * an ordinary unbound key stay silent. */
+static bool plan_key_on_list_says_where(void) {
+    struct fixture f;
+    char script[512] = "";
+    bool ok = fixture_open(&f);
+    if (!ok) { fixture_close(&f); return false; }
+    one_head(f.app);
+    if (!f.app->inbox) f.app->inbox = calloc(1U, sizeof(*f.app->inbox));
+    ok = f.app->inbox && unreadable_proposal(script, sizeof(script));
+    if (!ok) { fixture_close(&f); return false; }
+    f.app->hydra = script;
+    f.app->inbox->plan_count = 1U;
+    copy_text(f.app->inbox->plans[0].branch, TEXT, "feature-one");
+    work_focus_page(f.app, WORK_PLAN);
+    work_focus_list(f.app);
+    f.app->notice[0] = '\0';
+    type(&f, "E");
+    ok = strstr(f.app->notice, "E (approve) works in the Plan pane") && !f.app->result_open && !f.app->modal_count;
+    f.app->notice[0] = '\0';
+    type(&f, "F");
+    ok = ok && strstr(f.app->notice, "F (request changes) works in the Plan pane");
+    f.app->notice[0] = '\0';
+    type(&f, "V");
+    ok = ok && !f.app->notice[0];
+    type(&f, "w");
+    ok = ok && !f.app->notice[0];
+    native_plan_destroy(f.app);
+    (void)unlink(script);
+    fixture_close(&f);
+    return ok;
+}
+
 /* Keys that arrive together cost one frame, and the frame after a resize
  * erases nothing. */
 static bool frames_are_few(void) {
@@ -290,6 +379,8 @@ int main(void) {
         {q_closes_output, "q closes the output viewer and does not quit"},
         {prompt_takes_input, "a prompt reads its text through the loop; paste cannot submit"},
         {dialogs_default_to_cancel, "a question defaults to Cancel and Esc closes a form without submitting"},
+        {plan_keys_say_why, "a plan key that cannot open its published plan says why instead of doing nothing"},
+        {plan_key_on_list_says_where, "a plan key pressed with the list focused says which pane takes it"},
         {frames_are_few, "a burst of keys is one frame; a resize erases nothing"}
     };
     size_t i;

@@ -32,19 +32,19 @@ int placement_directory(const char *task_id, char directory[F_PATH], bool create
 /* The receiver derives the task ID from the submission key alone, so the
  * submitter can bind a record before any host accepts the task. */
 int placement_task_id(const char *key, char id[70]) {
-    char scratch[F_PATH], hash[65]; json_object *binding; int status;
-    if (!f_name(key) || strlen(key) > 128 || snprintf(scratch, sizeof(scratch), "%s/hydra-placement-id.XXXXXX", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") >= (int)sizeof(scratch) || !mkdtemp(scratch)) return -1;
+    char hash[65]; json_object *binding; int status;
+    if (!f_name(key) || strlen(key) > 128) return -1;
     binding = json_object_new_object(); f_string_add(binding, "submission_key", key);
-    status = task_json_hash(binding, scratch, hash); json_object_put(binding); f_remove_tree(scratch);
+    status = task_json_hash(binding, hash); json_object_put(binding);
     if (status) return -1;
     snprintf(id, 70, "task_%s", hash);
     return 0;
 }
 int placement_record_digest(json_object *record, char digest[65]) {
-    char scratch[F_PATH]; json_object *copy = f_parse(json_object_to_json_string_ext(record, JSON_C_TO_STRING_PLAIN)); int status;
-    if (!copy || snprintf(scratch, sizeof(scratch), "%s/hydra-placement-digest.XXXXXX", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") >= (int)sizeof(scratch) || !mkdtemp(scratch)) { json_object_put(copy); return -1; }
+    json_object *copy = f_parse(json_object_to_json_string_ext(record, JSON_C_TO_STRING_PLAIN)); int status;
+    if (!copy) return -1;
     json_object_object_del(copy, "sha256");
-    status = task_json_hash(copy, scratch, digest); json_object_put(copy); f_remove_tree(scratch);
+    status = task_json_hash(copy, digest); json_object_put(copy);
     return status;
 }
 json_object *placement_record_read(const char *task_id) {

@@ -31,7 +31,11 @@ notify_enable() {
             return 1
         fi
     fi
-    printf '%s %s %s\n' "$_ne_event" "$_ne_sink" "$_ne_interval" >> "$_ne_tmp"
+    if ! printf '%s %s %s\n' "$_ne_event" "$_ne_sink" "$_ne_interval" >> "$_ne_tmp"; then
+        rm -f "$_ne_tmp"
+        release_lock "$_ne_lock"
+        return 1
+    fi
     chmod 600 "$_ne_tmp" 2>/dev/null || true
     if ! atomic_replace "$_ne_file" "$_ne_tmp"; then
         release_lock "$_ne_lock"

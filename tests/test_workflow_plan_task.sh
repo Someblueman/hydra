@@ -9,19 +9,14 @@ if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ] && [ "$(id -u)" = 0 ]; then
     printf 'SKIP plan repair fault injection: chmod 500 cannot refuse writes as root (uid 0); run as an unprivileged user to cover it. Running the case without the fault.\n'
     HYDRA_TEST_PLAN_REPAIR_FAULT=0
 fi
-# HYDRA_TEST_FIXTURE_DIR names a new fixture directory, so that two runs of a
-# case record the same paths (tests/test_workflow_driver_differential.sh).
-if [ -n "${HYDRA_TEST_FIXTURE_DIR:-}" ]; then
-    fixture="$HYDRA_TEST_FIXTURE_DIR"
-    (umask 077 && mkdir "$fixture")
-else
-    fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
-fi
+fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_FLEET_BIN
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
+# shellcheck source=/dev/null
+. "$root/tests/workflow_plan_explain.sh"
 cleanup() {
     workflow_task_fixture_quiesce || return 1
     if [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" = 1 ]; then printf 'Plan task evidence: %s\n' "$fixture" >&2; return 0; fi
@@ -35,7 +30,7 @@ cleanup() {
     else printf 'Plan task evidence: %s\n' "$fixture" >&2; fi
 }
 test_code=0
-trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
+trap 'test_code=$?; if [ "$test_code" != 0 ]; then workflow_plan_task_explain "$test_code" || :; fi; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
@@ -119,6 +114,8 @@ code=0
 "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run.out" 2> "$fixture/run.err" || code=$?
 run="$(sed -n '1p' "$fixture/run.out")"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+# shellcheck disable=SC2034 # read by workflow_plan_task_explain
+explain_reason="the plan run finished; checking the outcome of the plan run (mode $mode)"
 if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
     if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_resume; fi
     if [ "${HYDRA_TEST_PLAN_REUSE:-0}" = 1 ]; then workflow_plan_reuse_assert; else workflow_plan_repair_assert; fi

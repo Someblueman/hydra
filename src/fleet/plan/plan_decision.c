@@ -96,9 +96,11 @@ static json_object *decision_id(const char *directory, char id[17]) {
 static json_object *refuse(const char *code, const char *message) {
     return f_error("workflow plan decision", code, message);
 }
-/* Reads the selected and rejected alternatives from argv pairs; NULL when all are usable. */
+/* Reads the selected and rejected alternatives from argv pairs; NULL when all
+ * are usable. The caller has refused more than DECISION_ALTERNATIVES pairs;
+ * the loop repeats that bound where it indexes the array. */
 static json_object *load_alternatives(int argc, char **argv, struct alternative *alternatives, size_t *count) {
-    for (int i = 4; i + 1 < argc; i += 2) {
+    for (int i = 4; i + 1 < argc && *count < DECISION_ALTERNATIVES; i += 2) {
         struct alternative *a = &alternatives[*count];
         if (!(a->compiled = pi_read_compiled(argv[i], a->digest))) return refuse("invalid_alternative", "every alternative must be a supported, structurally valid compiled artifact");
         a->reason = argv[i + 1]; (*count)++;

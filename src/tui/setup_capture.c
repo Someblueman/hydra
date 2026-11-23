@@ -25,6 +25,7 @@ static void capture_child(int output, char *const argv[]) {
     if (setsid() < 0 || (null_fd = open("/dev/null", O_RDWR)) < 0) _exit(126);
     if (dup2(output, STDOUT_FILENO) < 0 || dup2(null_fd, STDIN_FILENO) < 0 || dup2(null_fd, STDERR_FILENO) < 0) _exit(126);
     close(null_fd); close(output);
+    child_signals();
     execvp(argv[0], argv);
     _exit(127);
 }
@@ -141,15 +142,11 @@ static int handoff_wait(pid_t pid) {
 
 static int handoff_spawn(char *const argv[]) {
     posix_spawnattr_t attributes;
-    sigset_t defaults;
     pid_t pid;
     int result;
-    sigemptyset(&defaults);
-    sigaddset(&defaults, SIGINT); sigaddset(&defaults, SIGQUIT); sigaddset(&defaults, SIGTERM);
-    sigaddset(&defaults, SIGHUP); sigaddset(&defaults, SIGPIPE);
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setsigdefault(&attributes, &defaults);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF);
+    /* The interrupt and quit keys, ignored here while the terminal is lent,
+     * are the step's to act on. */
+    child_spawn_attributes(&attributes, 0);
     result = posix_spawnp(&pid, argv[0], NULL, &attributes, argv, environ);
     posix_spawnattr_destroy(&attributes);
     if (result) { fprintf(stderr, "Hydra could not start %s: %s\n", argv[0], strerror(result)); return 127; }
@@ -173,8 +170,7 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
         (void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         printf("\nHydra: the step ended with exit status %d. Press Enter to return to Hydra.", status);
         fflush(stdout);
-        while (getchar() != '\n' && !feof(stdin)) { }
-        clearerr(stdin);
+        terminal_await_enter();
     }
     (void)terminal_return(app, &loan);
     return status;

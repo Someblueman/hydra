@@ -268,7 +268,7 @@ static void group_key(struct app *app) {
 
 static void cycle_theme(struct app *app) {
     app->theme = (app->theme + 1) % 3;
-    snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
+    notice_set(app, "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
 }
 
 /* d: the technical details of the selected head, on the Details page. */

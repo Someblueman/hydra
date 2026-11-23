@@ -7,6 +7,245 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-21
+
+Hydra 5.0.0 is a reliability and performance release. It fixes defects that
+could end the wrong head's session, replace state with an empty file on a full
+disk, or leave a lock held by a dead process, and it makes the native helpers
+the paths that run: `hydra snapshot` answers from `hydra-core`, workflow runs
+are driven by `hydra-fleet`, and the control centre has one reader of local
+head data. With five heads `hydra list` and `hydra status` answer in about
+25 ms instead of about 700 ms, a snapshot of 60 heads takes about 50 ms
+instead of about 4 s, and opening the control centre no longer starts a shell
+process for every head. Fleet records are written durably, and read-only
+remote operations open one SSH connection instead of two. Hosts running Hydra
+2.x to 5.x keep speaking the same fleet protocol. This is a major release:
+compatibility paths for Hydra 1.x and 2.5 data, the shell workflow driver,
+`HYDRA_MAX_SESSIONS` and `hydra queue`, old view names and unbound key action
+names are removed. The entries marked **Breaking** below say what to change.
+
+### Breaking
+- **`hydra state migrate` is removed.** It only deleted the Hydra 1.x session
+  map (`~/.hydra/map`) and the 1.9 `compat-map` files, which no release since
+  2.0 reads. They are still ignored wherever they remain; delete them by hand
+  to be rid of them. The command now prints the `hydra state` usage and exits 1.
+- **`hydra state rollback` no longer restores a 1.x map** from a backup that
+  holds a copy of one; it restores the state tree only. Backups made by 4.0.0
+  restore, and 4.0.0 can roll back a backup made by this release.
+- **`hydra init` no longer imports `.hydra/local.yml`** (written by 2.5 and
+  earlier). Where this host has a worktree root recorded, or you pass
+  `--worktree-root`, the file is ignored. Otherwise init exits 1 with `Error:
+  .hydra/local.yml is a host-local record from Hydra 2.5 or earlier, which this
+  release does not read`: run `hydra init` with 4.0.0 first, or delete the
+  file. The generated `.hydra/config.yml` stub is no longer deleted: approve it
+  with `hydra init --trust` or delete it.
+- **`hydra` no longer falls back to `/usr/local/lib/hydra`.** A binary copied
+  away from its libraries fails with `Cannot find hydra library directory`;
+  reinstall, or set `HYDRA_ROOT`. Installs made by `install.sh`, including the
+  default prefix, are unaffected.
+- `hydra tui --basic` reports `unknown TUI option '--basic'`; it still exits 2.
+- **Workflows need the `hydra-fleet` helper.** The shell workflow run driver is
+  removed. Without a helper, or with one too old to drive runs, `hydra
+  workflow run` exits 1 before creating a run record, with one error that says
+  how to get it (`make build-fleet`, which needs JSON-C and pkg-config, then
+  `./install.sh`). Other commands are unaffected. `HYDRA_NATIVE_DRIVER=0` is
+  refused with the same error; other values are ignored. Runs an earlier
+  release's shell driver started can still be read with `hydra workflow
+  status`; `resume` and `cancel` finish them with `hydra-fleet`, and without it
+  refuse and leave the run unchanged.
+- **`HYDRA_MAX_SESSIONS` and `hydra queue` are removed.** Use `hydra admission
+  configure` for a host-wide limit; it also covers resume, exec and gates, and
+  is enforced under a lock. `hydra spawn` prints one warning when
+  `HYDRA_MAX_SESSIONS` is set (and not 0) and ignores it. `hydra queue` fails
+  like any unknown command. Spawns queued by an earlier release are not run and
+  `hydra kill` no longer starts them; spawn those branches again, and delete
+  `<HYDRA_HOME>/state/v2/projects/<project>/queue` if you want the files gone.
+  The control centre's command palette no longer offers "queue".
+- **The control centre has one reader of local head data**, the native read
+  of the state store. `hydra tui --data` is removed (`unknown TUI option`,
+  exit 2); use `hydra list`, or `hydra-tui --data` for the same rows.
+  `hydra-tui --store` is refused, since the store is always read: drop the
+  option.
+- **Old view names are refused.** `hydra-tui --view heads|workspace` (use
+  `work`), `coordination` (use `detail`), `workflows` (use `overview`),
+  `attention|recovery` (use `inbox`) and `statistics` (use `stats`) exit 2
+  with an error naming the current view. An unknown view name now lists the
+  valid ones instead of exiting silently.
+- **Key actions that bound nothing are removed** (34 of them, for example
+  `statistics.page`, `workspace.attach`, `heads.attach`, `remote.approve`,
+  `views.next`, `view.5` to `view.9`, `view.cycle`, `head.output`). A keys file
+  that names one shows a notice at start-up naming the action to use, or
+  saying nothing replaces it; its other lines still apply. A keys file written
+  by `hydra tui --print-keys` of 3.0 or 4.0 contains these names: delete those
+  lines.
+
+### Fixed
+- **Head names that begin another head's name:** `hydra kill`, `hydra
+  lifecycle`, the control centre's pane preview and every other tmux call now
+  match a head's session by its exact name. Before, with heads `zed` and
+  `zed-two` and `zed`'s terminal gone, `hydra kill zed` ended `zed-two`'s
+  session and `hydra lifecycle zed` reported it live.
+- **State writes that fail:** a state record that cannot be written (full
+  disk, quota, I/O error) now reports failure and keeps its previous value, in
+  the shell writers and in the native workflow driver. Before, the record was
+  replaced by an empty file and the write reported success.
+- **Locks left by a dead process:** commands take over a lock whose owner died
+  on this host instead of failing until `hydra cleanup`. Locks held by a live
+  process or by another host are never broken.
+- **Commands started from the control centre** no longer run with SIGPIPE
+  ignored, so their pipelines end quietly instead of reporting broken pipes.
+- **Quitting the control centre** no longer hangs when a command it started
+  left a background process holding its output open; stopping is bounded at
+  about two seconds.
+- `hydra-tui` no longer crashes at startup under a low stack limit, and waiting
+  for Enter after a command that took the terminal no longer spins when
+  terminal reads fail.
+- `hydra template create` run inside a head's session copies that head's
+  `.hydra/config.yml`. Before, it always wrote the generic template.
+- **Workflow event locks:** a lock left without an owner record no longer
+  causes every later event of that run to be dropped; it is recovered after
+  five seconds without change. Two writers can no longer both break one stale
+  lock and write the same sequence number.
+- **Fleet records that cannot be written:** `hydra remote add`, enrollment,
+  revocations, placement drain markers, guided setup state and task records
+  are written through one path that also syncs the directory. A record
+  reported as saved survives a crash, and one that cannot be written (full
+  disk, quota, I/O error) reports failure and keeps its previous value.
+- `hydra fleet auth copy` no longer reports success when the credential could
+  not be completely written and closed.
+- A collected task result that could not be written no longer leaves a partial
+  file that made every later collection of that result fail.
+- A workflow event or schedule entry that cannot be written whole is no longer
+  left as a torn line in `events.jsonl` or `schedule.jsonl`.
+- A pinned fleet helper download that could not be moved into the cache no
+  longer leaves its `.partial` file behind.
+- `hydra send` no longer fails for a head after an earlier send to it was
+  killed part-way; before, every send failed until `hydra cleanup`.
+- An admission command that was killed no longer blocks the host: before,
+  `hydra admission status` failed after 2 s and every spawn, exec, gate and
+  resume waited out its queue deadline (60 s by default) and failed, until
+  `~/.hydra/admission/lock` was removed by hand.
+- A command killed while one of its background steps still held a lock no
+  longer lets the next command take that lock and write the same state beside
+  it. Locks, including the pool and schedule locks, now name the process that
+  holds them.
+- `hydra` started through a relative symbolic link finds its libraries on
+  systems whose `readlink` has no `-f`.
+- `hydra fleet handshake HOST` works again. It always failed with
+  `capability_unavailable`; it now prints the host's handshake and exits 0,
+  and still reports an unreachable host as `offline`, a host without Hydra as
+  `remote_failed` and an incompatible one as `version_mismatch`.
+- Installing a fleet package, importing a bundle, retaining agent output,
+  `hydra remote remove` and `hydra placement undrain` now sync the directory
+  they changed, and report a failed sync (`outcome_unknown` for install and
+  import, `io_failed` otherwise) instead of reporting success.
+- Task acceptance and collection no longer fail on file systems that do not
+  support syncing a directory.
+- A workflow cancellation no longer leaves a torn line in its residual-children
+  record, and the event lock is released when its owner record cannot be
+  written.
+- In the control centre, approving or sending back a published plan (Inbox
+  `Y`/`F`, Work `E`/`F`) no longer does nothing when the plan cannot be
+  opened: if its head is no longer listed or its draft cannot be read, the
+  status line says which plan, and that nothing was approved or sent back.
+- In the control centre, a plan key the Plan page offers (`E` approve, `F`
+  request changes, ...) pressed while the list or another pane has focus now
+  says it works in the Plan pane and that Tab moves there. Before, it did
+  nothing.
+- `hydra-fleet` exits non-zero when its output cannot be written.
+- Short Git and remote commands run by `hydra-fleet` no longer occasionally
+  stall for 50 ms after the command has finished.
+
+### Changed
+- **`hydra snapshot` answers from `hydra-core` by default** when the helper is
+  installed, and from the shell otherwise, with the same output either way
+  (60 heads: about 50 ms instead of several seconds). The fleet host listing
+  uses the same path. The helper now refuses every state the shell verifier
+  refuses, so a store the shell rejects is rejected by both. `--native`
+  reports on stderr why the helper was not used; the new `--shell` never runs
+  it.
+- **Workflow runs are driven by `hydra-fleet`** (see Breaking). `hydra
+  workflow status` and each `run.running` event name the driver that ran: the
+  first line of `workflow status` changes and its JSON gains a `driver`
+  member.
+- The native driver numbers a new event from the bytes appended since its last
+  one instead of re-reading `events.jsonl` each time.
+- **Fewer SSH connections for remote operations.** `hydra fleet list`,
+  `overview`, `attention`, `doctor` and `watch` open one connection per host
+  instead of two, and the control centre's remote views one per host per
+  refresh instead of four. `hydra fleet list|doctor|admission HOST`, `hydra
+  fleet task status|observe|logs|requests|result` and `hydra fleet auth
+  status|preview` open one instead of two; `hydra fleet auth copy` two instead
+  of three; automatic placement one per candidate host instead of two.
+  Operations that change a host still check it first in a connection of their
+  own. For the combined operations `--timeout` bounds the single connection,
+  and the host's login shell must run a `A | B && C` command line.
+- Multi-host fleet commands no longer wait up to 20 ms after the last host
+  has answered.
+- `./install.sh` no longer skips `hydra-fleet` silently: it warns that
+  workflows are unavailable without it, and `hydra doctor` reports whether
+  workflows are available.
+- The control centre reads each head's record files once per refresh instead
+  of several times: about a third fewer file reads per head and about 20% less
+  time per refresh at 100 heads.
+- The once-per-10-minutes session upkeep pass no longer locks and re-examines
+  heads that have nothing to record. With idle heads it uses about a fifth of
+  the CPU and a sixth of the processes it did (100 heads: 1.8 s to 0.4 s); a
+  pass where every head has work costs about 10% more.
+- A task queued for host admission retries after a short, growing pause (20 ms
+  up to 1 s) instead of every 200 ms, starting about a quarter as many
+  admission processes while it waits. The queue deadline is still honoured; a
+  freed slot is taken within about a second instead of about 0.2 s.
+- `hydra state verify` finds duplicate branches in one pass per project
+  instead of comparing every head with every other.
+- **`hydra list`, `status` and `switch` are much faster:** with five heads,
+  `hydra list` takes about 25 ms instead of about 670 ms and starts about 10
+  processes instead of about 380. State records are read by the shell itself,
+  the project id is resolved once per process, and each row loads its head
+  once. Output is unchanged.
+- State record writes start two processes instead of four; admission scans no
+  longer run `wc` and `tr` per record.
+- An unknown command fails without loading any library.
+- The native helpers compile without warnings at every GCC optimisation level
+  (`-O0` to `-O3`, `-Os`, `-Og`); `make check-opt-levels` checks this.
+  `install.sh` no longer treats compiler warnings as errors when it builds on
+  your machine.
+- `hydra-tui` links kettle as a static library, so components it does not use
+  and the test driver are no longer in the installed binary. Building it now
+  needs `ar`.
+- Enrollment and placement digests are computed in memory, without temporary
+  files; the digests are unchanged.
+- Build: kettle and shared test support are compiled once, sanitizer lanes
+  share `$(BUILD_DIR)/sanitize`, `make clean` removes `$(BUILD_DIR)`, and the
+  TUI test targets set a UTF-8 locale themselves.
+- CI: every job has a timeout; pull requests also run a macOS native lane, a
+  sanitizer lane and the optimisation-level check; a release branch without a
+  pinned helper digest prints a notice instead of failing.
+- `make bench-core` runs again and reports 5, 20 and 60 heads; `make
+  bench-tui` measures stores that contain heads (its fixture had none).
+- **Opening the control centre no longer starts one `hydra adapter activity`
+  process per head.** A head whose recorded activity state still holds starts
+  none, and heads never observed before are recorded one per refresh instead
+  of all at once (100 such heads: about a fifth of one core for the first two
+  seconds instead of two cores; all recorded after about 200 seconds instead
+  of about 20). A changed state is recorded at once, as before.
+- `make bench-tui` measures what `hydra tui` runs: the control centre's own
+  state read (`hydra-tui --data`) and an interactive session started as
+  `hydra`. It used to time the shell reader `hydra tui --data` and a helper
+  started without `--store`, neither of which `hydra tui` uses.
+
+### Removed
+- `hydra-core capabilities`, `hydra-core json-string` and `hydra-core
+  validate-state`, which nothing called.
+- The shell reader of the control centre's head snapshot (`lib/tui_native.sh`
+  shrinks from about 500 to 240 lines); `make test-parity` now checks the
+  store reader against recorded rows.
+- The shell workflow run driver and its test lanes (`make test-shell-driver`,
+  `test-native-driver`, `test-driver-differential`,
+  `test-driver-differential-fast`) and the CI jobs that ran them.
+- 39 shell functions nothing called, `scripts/bench-tmux-control.sh`, and four
+  unreferenced screenshots under `assets/`.
+
 ## [4.0.0] - 2026-11-15
 
 Hydra 4.0.0 rebuilds the control centre on kettle, a C runtime for terminal
@@ -2640,7 +2879,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/Someblueman/hydra/compare/v4.0.0...v5.0.0
 [4.0.0]: https://github.com/Someblueman/hydra/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Someblueman/hydra/compare/v2.9.0...v3.0.0
 [2.9.0]: https://github.com/Someblueman/hydra/compare/v2.8.0...v2.9.0

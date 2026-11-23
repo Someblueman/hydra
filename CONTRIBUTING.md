@@ -18,6 +18,7 @@ make test-tui test-tui-pty sanitize-tui # focused native UI checks
 make test-fleet sanitize-fleet         # focused fleet checks
 make test-all                          # combined, parity, install and onboarding
 make sanitize                          # supported core/TUI/fleet sanitizers
+make -j4 check-opt-levels              # warnings at -O0, -Og, -O1, -O2, -O3 and -Os
 ```
 
 Choose focused checks for a localized change; run applicable broader acceptance for
@@ -41,7 +42,14 @@ Start with `make test-fast` for the selected fast subset. Use focused targets fo
 localized edits and `make test-all`, `make sanitize`, and `make quality-c` for the
 full local qualification set when a change crosses those boundaries. CI runs the
 fast subset as `pr-gate` on pull requests targeting `main`, `develop`, or
-`release/**`; pushes to those branches and manual dispatch run the full `release-gate`.
+`release/**`, beside a macOS native build and test lane, `check-opt-levels` and
+the core and TUI sanitizer lanes; pushes to those branches and manual dispatch
+run the full `release-gate`.
+
+Sanitizer lanes build in `$(BUILD_DIR)/sanitize` (one tree for every lane), so
+`make sanitize SANITIZE_LANES="core tui"` runs a subset without rebuilding.
+Native builds treat warnings as errors; `make WERROR= ...` reports them without
+failing, which is what a build on a user's machine should use.
 
 Keep changes cohesive and source/test files under 500 lines. Document behavior under
 Unreleased in the changelog. Versions are assigned at release time from compatibility

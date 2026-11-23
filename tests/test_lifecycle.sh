@@ -233,6 +233,42 @@ race_previous="$(
 )"
 assert_equal "$replacement_resume" "$race_previous" "resume resolves the previous instance after taking the state lock"
 
+# lifecycle_snapshot (one list or status row) loads the head once and takes
+# an interactive head's liveness from a loaded tmux snapshot by exact name.
+state_v2_create_head "$project_id" snap-zed zed - - 100 - - "$repo" >/dev/null
+tmux_calls="$test_root/tmux-calls"
+mkdir -p "$test_root/bin"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexit 1\n' "$tmux_calls" > "$test_root/bin/tmux"
+chmod +x "$test_root/bin/tmux"
+saved_path="$PATH"
+PATH="$test_root/bin:$PATH"
+head_loads=0
+# shellcheck disable=SC2034,SC2317,SC2329
+hydra_load_project_id() {
+    head_loads=$((head_loads + 1))
+    HYDRA_LOADED_PROJECT_ID="$project_id"
+}
+: > "$tmux_calls"
+_TMUX_SNAPSHOT_LOADED=1
+_TMUX_SNAPSHOT_SESSIONS="zed-two
+zed_1"
+lifecycle_snapshot snap-zed
+assert_equal "stopped:1" "$LIFECYCLE_SNAPSHOT_LIVENESS:$head_loads" \
+    "a row loads its head once, and a session its name is only a prefix of is not its session"
+_TMUX_SNAPSHOT_SESSIONS="zed-two
+zed"
+lifecycle_snapshot snap-zed
+assert_equal "live:0" "$LIFECYCLE_SNAPSHOT_LIVENESS:$(wc -l < "$tmux_calls" | tr -d ' ')" \
+    "a loaded tmux snapshot answers a row's liveness without asking tmux"
+assert_equal stopped "$(lifecycle_liveness snap-zed)" "lifecycle_liveness asks tmux even when a snapshot is loaded"
+assert_equal "has-session -t =zed:" "$(cat "$tmux_calls")" "the live probe names the session exactly"
+_TMUX_SNAPSHOT_LOADED=""
+: > "$tmux_calls"
+lifecycle_snapshot snap-zed
+assert_equal "stopped:has-session -t =zed:" "$LIFECYCLE_SNAPSHOT_LIVENESS:$(cat "$tmux_calls")" \
+    "without a snapshot a row asks tmux, by exact name"
+PATH="$saved_path"
+
 echo "======================================"
 echo "Test Results:"
 echo "Total:  $test_count"

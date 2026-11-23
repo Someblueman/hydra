@@ -144,14 +144,14 @@ apply_yaml_config() {
             if [ -z "${window_count:-}" ]; then window_count=0; else window_count=$((window_count+1)); fi
             base_dir="${window_dir:-$wt}"
             # Create a new window and capture its index
-            current_window_id="$(tmux new-window -P -F '#{window_id}' -t "$session:" -n "${window_name:-win$window_count}" -c "$base_dir" 2>/dev/null || true)"
+            current_window_id="$(tmux new-window -P -F '#{window_id}' -t "$(tmux_exact_target "$session")" -n "${window_name:-win$window_count}" -c "$base_dir" 2>/dev/null || true)"
             # Fallback: get the last-created window id
             if [ -z "${current_window_id:-}" ]; then
-                current_window_id="$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | tail -n1)"
+                current_window_id="$(tmux list-windows -t "$(tmux_exact_target "$session")" -F '#{window_id}' 2>/dev/null | tail -n1)"
             fi
             # After creating the first window, kill any other pre-existing window(s)
             if [ -z "${original_windows_cleaned:-}" ]; then
-                tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | while IFS= read -r wid; do
+                tmux list-windows -t "$(tmux_exact_target "$session")" -F '#{window_id}' 2>/dev/null | while IFS= read -r wid; do
                     [ "$wid" = "$current_window_id" ] && continue
                     tmux kill-window -t "$wid" 2>/dev/null || true
                 done
@@ -169,7 +169,7 @@ apply_yaml_config() {
                 # Propagate to tmux session so subsequent windows/panes inherit
                 k="${f2%%=*}"; v="${f2#*=}"
                 if [ -n "$k" ]; then
-                    tmux set-environment -t "$session" "$k" "$v" 2>/dev/null || true
+                    tmux set-environment -t "$(tmux_exact_target "$session")" "$k" "$v" 2>/dev/null || true
                 fi
                 ;;
               LAYOUT)
@@ -225,7 +225,7 @@ apply_yaml_config() {
             fi
             ;;
           START)
-            tmux send-keys -t "${session}:0.0" "$f1" Enter 2>/dev/null || true
+            tmux send-keys -t "$(tmux_exact_target "$session:0.0")" "$f1" Enter 2>/dev/null || true
             ;;
         esac
       done

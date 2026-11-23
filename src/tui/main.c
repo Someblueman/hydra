@@ -21,11 +21,10 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view work|inbox|hosts|stats] (and the earlier names: heads, detail, coordination,\n"
-          "   overview, workflows, workspace, attention, recovery, statistics)\n"
+          "  [--view work|inbox|hosts|stats, or detail|overview: Work on its Details or Run page]\n"
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
-          "  [--store|--data]\n"
+          "  [--data]\n"
           "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
           "   [--statistics-fixture FILE] [--attention-fixture FILE]... [--review-fixture FILE]\n"
           "   [--onboarding-fixture FILE [--onboarding-intent FILE]\n"
@@ -33,18 +32,26 @@ static void usage(FILE *out) {
           "   [--keys KEYS]... --size COLSxROWS --frames N]\n", out);
 }
 
-/* The four screens by name, and the names of earlier versions: the views
- * that became pages of Work open it on that page, Attention and Recovery
- * open Inbox. *page is the Work page, or -1. */
+/* The four screens by name, and Work on one of its pages: detail (Details)
+ * and overview (Run). *page is the Work page, or -1. A name that is not one
+ * of them is refused; the names of earlier releases that only stood for one
+ * of these are refused with the name to use. */
 static int parse_view(const char *name, int *page) {
     static const struct { const char *name; int view, page; } names[] = {
-        {"work", 7, -1}, {"heads", 7, -1}, {"workspace", 7, -1}, {"detail", 7, WORK_DETAILS},
-        {"coordination", 7, WORK_DETAILS}, {"overview", 7, WORK_RUN}, {"workflows", 7, WORK_RUN},
-        {"inbox", 9, -1}, {"attention", 9, -1}, {"recovery", 9, -1}, {"hosts", 6, -1},
-        {"stats", 8, -1}, {"statistics", 8, -1}};
+        {"work", 7, -1}, {"detail", 7, WORK_DETAILS}, {"overview", 7, WORK_RUN},
+        {"inbox", 9, -1}, {"hosts", 6, -1}, {"stats", 8, -1}};
+    static const char *const renamed[][2] = {
+        {"heads", "work"}, {"workspace", "work"}, {"coordination", "detail"}, {"workflows", "overview"},
+        {"attention", "inbox"}, {"recovery", "inbox"}, {"statistics", "stats"}};
     size_t i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
         if (!strcmp(name, names[i].name)) { *page = names[i].page; return names[i].view; }
+    for (i = 0; i < sizeof(renamed) / sizeof(renamed[0]); i++)
+        if (!strcmp(name, renamed[i][0])) {
+            fprintf(stderr, "hydra-tui: --view %s was removed; use --view %s\n", name, renamed[i][1]);
+            return -1;
+        }
+    fprintf(stderr, "hydra-tui: unknown view '%s'; --view takes work, inbox, hosts, stats, detail or overview\n", name);
     return -1;
 }
 
@@ -139,8 +146,8 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     return ferror(stdout) ? 3 : 0;
 }
 
+/* app is main's static object and starts zeroed. */
 static void initialize_app(struct app *app) {
-    memset(app, 0, sizeof(*app));
     terminal_pipe_signal();
     setlocale(LC_CTYPE, "");
     app->hydra = getenv("HYDRA_BIN_CMD") == NULL ? "hydra" : getenv("HYDRA_BIN_CMD");
@@ -185,14 +192,12 @@ static int print_keys_option(struct app *app) {
     return keys->problem[0] ? 1 : 0;
 }
 
-/* Options that only set a flag; false for anything else. --store: the
- * launching CLI's state store may be read here instead of asking that CLI
- * for the head snapshot. --data prints that snapshot and exits. */
+/* Options that only set a flag; false for anything else. --data prints the
+ * head snapshot read from the state store and exits. */
 static bool flag_option(struct app *app, const char *option, bool *print_keys, bool *print_data) {
     if (strcmp(option, "--no-color") == 0) app->no_color = true;
     else if (strcmp(option, "--ascii") == 0) app->ascii = true;
     else if (strcmp(option, "--print-keys") == 0) *print_keys = true;
-    else if (strcmp(option, "--store") == 0) app->store = true;
     else if (strcmp(option, "--data") == 0) *print_data = true;
     else return false;
     return true;
@@ -205,7 +210,9 @@ static bool theme_option(struct app *app, const char *theme) {
 }
 
 int main(int argc, char **argv) {
-    struct app app;
+    /* Static, not automatic: the model is several megabytes, more than a
+     * lowered stack limit (ulimit -s) leaves room for. */
+    static struct app app;
     const char *fixture = NULL, *remote_fixture = NULL;
     const char *workflow_fixture = NULL;
     const char *statistics_fixture = NULL;
@@ -259,6 +266,10 @@ int main(int argc, char **argv) {
             app.graph_follow = page == WORK_RUN;
         } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view, &page);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
+        else if (strcmp(argv[index], "--store") == 0) {
+            fputs("hydra-tui: --store was removed: the state store is always read; start it without the option\n", stderr);
+            return 2;
+        }
         else if (!flag_option(&app, argv[index], &print_keys, &print_data)) { usage(stderr); return 2; }
     }
     if (print_data) return snapshot_print(app.hydra, stdout);

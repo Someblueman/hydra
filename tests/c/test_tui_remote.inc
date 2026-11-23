@@ -84,6 +84,19 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     remote_env_clear();
 }
 
+/* The Work list with the remote head selected. The local heads come from
+ * their own observation, and when it answers after the remote one the
+ * selection goes back to the first local head, so the keys that count down
+ * to the remote head wait until both are listed (a slow machine, or
+ * HYDRA_TEST_TUI_DELAY, makes the local one late). */
+static bool select_remote_head(struct session *session) {
+    write_input(session->master, "1", 1U);
+    (void)wait_for_marker(session, "Heads  ", 6000);
+    if (!wait_for_markers(session, "builder/feature-", "feature-unavailable", 15000)) return false;
+    write_input(session->master, "jjj", 3U);
+    return wait_for_marker(session, "on builder   desired", 10000);
+}
+
 /* The dispatch notice is replaced by the control's completion notice as soon
  * as the detached child is reaped; a fast child can finish before a frame
  * shows the first one, so either notice proves this dispatch. */
@@ -116,10 +129,7 @@ static void test_remote_actions(const char *tui, const char *hydra, const char *
     result(wait_for_marker(&session, "task_build", 6000), "remote rows are present before acting");
     /* The Work list (the control centre opens on the Workspace, whose tree
      * also lists runs): local heads, then the remote head. */
-    write_input(session.master, "1", 1U);
-    (void)wait_for_marker(&session, "Heads  ", 2000);
-    write_input(session.master, "jjj", 3U);
-    result(wait_for_marker(&session, "on builder   desired", 2000), "the remote head's conversation header names its host");
+    result(select_remote_head(&session), "the remote head's conversation header names its host");
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Interrupt feature-build on builder?", 2000), "x on a remote head asks to interrupt, naming host and branch");
     write_input(session.master, "y", 1U);
@@ -185,10 +195,7 @@ static void test_remote_stale_and_disconnected(const char *tui, const char *hydr
     (void)wait_for_raw(&session);
     (void)wait_for_model(&session);
     result(wait_for_marker(&session, "builder/feature-", 6000), "remote rows arrive");
-    write_input(session.master, "1", 1U);
-    (void)wait_for_marker(&session, "Heads  ", 2000);
-    write_input(session.master, "jjj", 3U);
-    (void)wait_for_marker(&session, "on builder   desired", 2000);
+    result(select_remote_head(&session), "the remote head is selected once the local heads are listed");
     fd = open(fail_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
     result(fd >= 0, "inject a lost remote observation");
     if (fd >= 0) close(fd);

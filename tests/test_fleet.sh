@@ -41,9 +41,17 @@ case "$1" in
     slowgood)
         sleep 2
         request="$(cat)"
+        handshake='{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":["list","overview"]}}'
+        # An observation asks for the handshake on the command line and for
+        # its action on standard input: one session, two answers.
+        case "$2" in *'"action":"handshake"'*) printf '%s\n' "$handshake" ;; esac
+        # The control centre asks for the listing on the command line as well.
+        case "$2" in *'"action":"list"'*)
+            printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-snapshot","data":{"heads":[{"project_path":"/srv/slowgood","branch":"delayed","head_id":"head_delayed","current_instance":"instance_delayed","desired_state":"running"}]}}' ;;
+        esac
         case "$request" in
             *'"action":"handshake"'*)
-                printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":["list","overview"]}}' ;;
+                printf '%s\n' "$handshake" ;;
             *'"action":"list"'*)
                 printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-snapshot","data":{"heads":[{"project_path":"/srv/slowgood","branch":"delayed","head_id":"head_delayed","current_instance":"instance_delayed","desired_state":"running"}]}}' ;;
             *)
@@ -51,6 +59,23 @@ case "$1" in
         esac
         exit 0 ;;
     malformed) echo '{bad json'; exit ;;
+    nocap)
+        # Answers the action although its handshake does not advertise it.
+        cat > /dev/null
+        printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
+        printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-snapshot","data":{"heads":[]}}'
+        exit 0 ;;
+    nocapsolo)
+        # A compatible receiver that advertises nothing, for the handshake alone.
+        cat > /dev/null
+        printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}'
+        exit 0 ;;
+    refusing)
+        # A compatible receiver whose command fails with its own error.
+        cat > /dev/null
+        printf '%s\n' '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":["list","overview"]}}'
+        printf '%s\n' '{"schema_version":1,"ok":false,"command":"fleet","error":{"code":"receiver_refused","message":"the command failed on the host","recovery":"inspect the host"}}'
+        exit 1 ;;
     skew) printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":9,"capabilities":[]}}\n'; exit ;;
 esac
 exec /bin/sh -c "$2"
@@ -63,10 +88,34 @@ HYDRA_TEST_SSH_ARGV="$fixture/ssh-argv"
 export HYDRA_TEST_SSH_ARGV
 "$root/bin/hydra" fleet list --json > "$fixture/result"
 grep -q '"heads":\[\]' "$fixture/result"
+# The handshake and the listing share one SSH session per host.
+[ "$(wc -l < "$fixture/ssh-argv")" -eq 1 ] || { echo "fleet list started $(wc -l < "$fixture/ssh-argv") SSH sessions for one host"; exit 1; }
 # Without --multiplex Hydra neither starts nor reuses a ControlMaster from the
 # user's SSH config; with it Hydra uses only its own control path.
 grep -q -- '-o ControlMaster=no -o ControlPath=none good ' "$fixture/ssh-argv"
 if grep -q -- 'ControlMaster=auto' "$fixture/ssh-argv"; then echo 'user SSH master allowed'; exit 1; fi
+# An operation that only reads on the host shares the handshake's session;
+# one that changes the host is sent in a second session, after the handshake
+# has been judged.
+sessions() {
+    : > "$fixture/ssh-argv"
+    "$@" > "$fixture/sessions-out" 2>&1 || :
+    wc -l < "$fixture/ssh-argv" | tr -d ' '
+}
+absent_task="task_0000000000000000000000000000000000000000000000000000000000000000"
+[ "$(sessions "$root/bin/hydra" fleet list good --json)" -eq 1 ] || { echo 'fleet list HOST is not one SSH session'; exit 1; }
+grep -q '"heads":\[\]' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet doctor good --json)" -eq 1 ] || { echo 'fleet doctor HOST is not one SSH session'; exit 1; }
+[ "$(sessions "$root/bin/hydra" fleet admission good --json -- status)" -eq 1 ] || { echo 'fleet admission HOST is not one SSH session'; exit 1; }
+grep -q '"command":"admission"' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet task status good --id "$absent_task")" -eq 1 ] || { echo 'fleet task status is not one SSH session'; exit 1; }
+grep -q '"ok":false' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet task cancel good --id "$absent_task")" -eq 2 ] || { echo 'fleet task cancel was not sent after a judged handshake'; exit 1; }
+# The control centre's remote data needs a host's listing and its overview:
+# both come from one session.
+[ "$(sessions "$root/bin/hydra" fleet tui-visual-data)" -eq 1 ] || { echo 'the control centre data is not one SSH session per host'; exit 1; }
+awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 && $6=="reachable" {found=1} END {exit !found}' "$fixture/sessions-out"
+[ "$(sessions "$root/bin/hydra" fleet tui-data)" -eq 1 ] || { echo 'the legacy remote data is not one SSH session per host'; exit 1; }
 "$root/bin/hydra" remote add muxed good --hydra "$root/bin/hydra" --multiplex
 : > "$fixture/ssh-argv"
 "$root/bin/hydra" fleet list muxed --json > "$fixture/muxed-result"
@@ -101,6 +150,57 @@ for code in host_key_failed authentication_failed offline timeout invalid_respon
     grep -q "\"code\":\"$code\"" "$fixture/result"
 done
 grep -q '"partial":true' "$fixture/result"
+# One session per host still tells a host that cannot be reached (above) from
+# one without Hydra, one whose command failed, and one that does not offer
+# the operation, each with the reason the host or SSH gave.
+"$root/bin/hydra" remote add nohydra good --hydra /nonexistent/bin/hydra >/dev/null
+"$root/bin/hydra" remote add nocap nocap >/dev/null
+"$root/bin/hydra" remote add refusing refusing >/dev/null
+: > "$fixture/ssh-argv"
+HYDRA_TEST_SSH_ARGV="$fixture/ssh-argv"
+export HYDRA_TEST_SSH_ARGV
+for action in list overview; do
+    "$root/bin/hydra" fleet "$action" --json --timeout 1 --jobs 16 > "$fixture/specific" || :
+    grep -q '"code":"remote_failed","message":"[^"]*nonexistent[^"]*hydra' "$fixture/specific" || { echo "$action: a host without Hydra is not reported as such"; exit 1; }
+    grep -q '"code":"receiver_refused","message":"the command failed on the host"' "$fixture/specific" || { echo "$action: a failed command lost its error"; exit 1; }
+    grep -q '"code":"capability_unavailable"' "$fixture/specific" || { echo "$action: an unadvertised operation was accepted"; exit 1; }
+    grep -q '"code":"offline"' "$fixture/specific" || { echo "$action: an unreachable host is not offline"; exit 1; }
+done
+unset HYDRA_TEST_SSH_ARGV
+# Ten hosts, two observations: one SSH session per host and observation.
+[ "$(wc -l < "$fixture/ssh-argv")" -eq 20 ] || { echo "two observations of ten hosts started $(wc -l < "$fixture/ssh-argv") SSH sessions"; exit 1; }
+rm -f "$fixture/ssh-argv"
+# The same holds for one named host, and a receiver that answers an
+# operation it does not advertise is still refused.
+if "$root/bin/hydra" fleet list nohydra --json > "$fixture/specific" 2>&1; then echo 'a host without Hydra listed'; exit 1; fi
+grep -q '"code":"remote_failed","message":"[^"]*nonexistent[^"]*hydra' "$fixture/specific"
+if "$root/bin/hydra" fleet list refusing --json > "$fixture/specific" 2>&1; then echo 'a failed command listed'; exit 1; fi
+grep -q '"code":"receiver_refused"' "$fixture/specific"
+if "$root/bin/hydra" fleet list nocap --json > "$fixture/specific" 2>&1; then echo 'an unadvertised operation was accepted'; exit 1; fi
+grep -q '"code":"capability_unavailable"' "$fixture/specific"
+if "$root/bin/hydra" fleet list offline --json > "$fixture/specific" 2>&1; then echo 'an unreachable host listed'; exit 1; fi
+grep -q '"code":"offline"' "$fixture/specific"
+if "$root/bin/hydra" fleet task status nocap --id "$absent_task" > "$fixture/specific" 2>&1; then echo 'a host without the task protocol answered'; exit 1; fi
+grep -q '"code":"capability_unavailable"' "$fixture/specific"
+# The handshake of a named host is the receiver's own answer: the capability
+# list it returns cannot be required to contain the handshake itself.
+"$root/bin/hydra" fleet handshake good --json > "$fixture/specific" || { echo 'fleet handshake HOST failed for a reachable host'; cat "$fixture/specific"; exit 1; }
+grep -q '"ok":true' "$fixture/specific"
+grep -q '"command":"fleet-handshake"' "$fixture/specific"
+grep -q '"fleet_protocol":1' "$fixture/specific"
+grep -q '"capabilities":\[' "$fixture/specific"
+grep -q '"host":"good"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake offline --json > "$fixture/specific" 2>&1; then echo 'an unreachable host shook hands'; exit 1; fi
+grep -q '"code":"offline"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake nohydra --json > "$fixture/specific" 2>&1; then echo 'a host without Hydra shook hands'; exit 1; fi
+grep -q '"code":"remote_failed"' "$fixture/specific"
+if "$root/bin/hydra" fleet handshake skew --json > "$fixture/specific" 2>&1; then echo 'an incompatible host shook hands'; exit 1; fi
+grep -q '"code":"version_mismatch"' "$fixture/specific"
+# A receiver whose handshake lists no capabilities still answers it.
+"$root/bin/hydra" remote add nocapsolo nocapsolo >/dev/null
+"$root/bin/hydra" fleet handshake nocapsolo --json > "$fixture/specific" || { echo 'fleet handshake HOST needs an advertised capability'; exit 1; }
+grep -q '"capabilities":\[\]' "$fixture/specific"
+for host in nohydra nocap nocapsolo refusing; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
 "$root/bin/hydra" fleet tui-data > "$fixture/tui-v1"
 [ "$(head -n 1 "$fixture/tui-v1")" = "$(printf 'HYDRA_FLEET_TUI\t1')" ]
 if grep -q '^T' "$fixture/tui-v1"; then echo 'legacy fleet data changed'; exit 1; fi
@@ -144,6 +244,9 @@ ssh_pid="$(cat "$HYDRA_TEST_SSH_PID")"
 kill -TERM "$coordinator"
 if wait "$coordinator"; then exit 1; fi
 coordinator=""
+# The cancelled ssh is orphaned, so it stays visible to kill -0 until init reaps it.
+attempt=0
+while kill -0 "$ssh_pid" 2>/dev/null && [ "$attempt" -lt 100 ]; do sleep 0.1; attempt=$((attempt + 1)); done
 if kill -0 "$ssh_pid" 2>/dev/null; then kill "$ssh_pid" 2>/dev/null || :; echo 'SSH survived cancellation'; exit 1; fi
 ssh_pid=""
 printf 'Fleet CLI transport, partial failures, and cancellation passed\n'

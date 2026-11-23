@@ -13,8 +13,12 @@ admission_binding() {
     _ab_context="$_ab_common/hydra/admission-context"
     [ -e "$_ab_context" ] || [ -L "$_ab_context" ] || return 0
     [ -f "$_ab_context" ] && [ ! -L "$_ab_context" ] || return 1
-    IFS=' ' read -r _ab_task _ab_project _ab_seconds _ab_labels _ab_extra < "$_ab_context" || return 1
-    [ -z "$_ab_extra" ] && [ "$(wc -l < "$_ab_context" | tr -d ' ')" = 1 ] || return 1
+    # Exactly one newline (see admission_read).
+    {
+        IFS=' ' read -r _ab_task _ab_project _ab_seconds _ab_labels _ab_extra || return 1
+        ! IFS= read -r _ab_more || return 1
+    } < "$_ab_context" || return 1
+    [ -z "$_ab_extra" ] || return 1
     case "$_ab_task" in task_*) ;; *) return 1 ;; esac
     admission_token "$_ab_task" && admission_token "$_ab_project" &&
         admission_number "$_ab_seconds" && admission_labels "$_ab_labels" || return 1

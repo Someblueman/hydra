@@ -141,12 +141,6 @@ void work_counts(const struct app *app, struct work_counts *n) {
     }
 }
 
-size_t attention_count(const struct app *app) {
-    struct work_counts n;
-    work_counts(app, &n);
-    return n.attention;
-}
-
 bool run_expanded(const struct app *app, size_t run) {
     size_t i;
     if (!app->workflows || run >= app->workflows->run_count) return false;

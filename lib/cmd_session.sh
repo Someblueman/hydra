@@ -334,15 +334,18 @@ cmd_status() {
 
         if state_has_heads; then
             if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
+            _status_now="$(get_timestamp)"
             while IFS=' ' read -r branch session ai _group timestamp _deps _pr; do
                 # Calculate duration
                 duration_secs=0
                 if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                    duration_secs="$(get_duration_since "$timestamp")"
+                    state_load_age "$timestamp" "$_status_now"
+                    duration_secs="$STATE_AGE_SECONDS"
                 fi
 
                 # Determine status
-                _status_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+                _status_mode=interactive
+                if _state_load_terminal_mode "$branch"; then _status_mode="$STATE_TERMINAL_MODE"; fi
                 if [ "$_status_mode" = headless ] || tmux_snapshot_has_session "$session"; then
                     status="active"
                     active=$((active + 1))
@@ -433,12 +436,15 @@ EOF
         dead=0
 
         if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
+        _status_now="$(get_timestamp)"
         while IFS=' ' read -r branch session ai _group timestamp _deps _pr; do
             # Calculate duration if timestamp exists
             duration_str=""
             if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                duration_secs="$(get_duration_since "$timestamp")"
-                duration_str="$(format_duration "$duration_secs")"
+                state_load_age "$timestamp" "$_status_now"
+                duration_secs="$STATE_AGE_SECONDS"
+                state_load_duration "$duration_secs"
+                duration_str="$STATE_DURATION"
             fi
 
             # Build info string
@@ -456,7 +462,8 @@ EOF
 
             lifecycle_snapshot "$branch"
             lifecycle_info="[declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
-            _status_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+            _status_mode=interactive
+            if _state_load_terminal_mode "$branch"; then _status_mode="$STATE_TERMINAL_MODE"; fi
             if [ "$_status_mode" = headless ] || tmux_snapshot_has_session "$session"; then
                 echo "  [OK] $branch -> $session $info $lifecycle_info"
                 active=$((active + 1))

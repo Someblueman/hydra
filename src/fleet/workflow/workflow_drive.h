@@ -4,10 +4,11 @@
 #include <sys/types.h>
 
 /* The native workflow run driver (`hydra-fleet workflow-drive <run-dir>`).
- * It drives a run whose drive lock the shell already holds, exactly as
- * workflow_drive in lib/workflow_runtime.sh does: the same files, written by
- * atomic rename with the same modes, and the same events under the same
- * .events.lock protocol, so shell writers interleave with it. Step workers and
+ * It is the only run driver. It drives a run whose drive lock the shell
+ * (workflow_drive in lib/workflow_runtime.sh) already holds: files written by
+ * atomic rename with private modes, and events under the .events.lock
+ * protocol that shell writers share. It also drives runs that the shell driver
+ * of earlier releases started, which left the same files. Step workers and
  * the rarer parts of a drive stay shell processes ("hooks"). */
 
 #define WDR_VALUE 4096
@@ -26,6 +27,9 @@ struct wdr_policy { char *id, *classes, *delay; };
 
 struct wdr_child { pid_t pid; bool exited; };
 
+/* How much of events.jsonl this driver has counted: see next_sequence. */
+struct wdr_events { bool counted; dev_t dev; ino_t ino; off_t size; long lines; char last; };
+
 struct wdr_run {
     const char *dir;
     char *graph;
@@ -41,6 +45,7 @@ struct wdr_run {
     size_t child_count, child_capacity;
     bool woken;
     char root[F_PATH];
+    struct wdr_events events;
 };
 
 /* workflow_drive_io.c: run files, scalars and events. */

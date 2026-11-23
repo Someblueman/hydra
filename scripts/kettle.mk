@@ -3,8 +3,13 @@ CC = cc
 AR = ar
 CFLAGS = -O2
 CPPFLAGS =
-WARN = -std=c99 -Wall -Wextra -Werror -pedantic
+# Warnings are errors by default; pass WERROR= for a compiler that warns.
+WERROR = -Werror
+WARN = -std=c99 -Wall -Wextra $(WERROR) -pedantic
 INCLUDES = -Isrc -Isrc/kettle
+# The optional OS adapters pty_posix.c and terminal_posix.c are in no library on
+# purpose: an application compiles the one it uses, as kettle-workspace does
+# with pty_posix.c. Nothing built here calls terminal_posix.c (posix.h).
 CORE = canvas color theme draw layout plot graph present workspace unicode output input keymap tree terminal_screen terminal_csi terminal_sgr terminal_parser
 # The optional POSIX runtime (program.h) and its headless test driver (testing.h).
 RUNTIME = program program_frame program_child program_posix testing
@@ -19,6 +24,7 @@ TESTS = test_kettle test_kettle_present test_kettle_style test_kettle_draw test_
 TEST_BINS = $(addprefix build/,$(TESTS))
 HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
+PTY_SUPPORT_OBJECTS = $(patsubst tests/kettle/%.c,build/pty-%.o,$(PTY_SUPPORT))
 
 .PHONY: all runtime examples test test-pty clean
 all: build/libkettle.a
@@ -64,10 +70,13 @@ build/kettle-program-fixture: tests/kettle/program_fixture.c $(LIBRARIES)
 examples: build/kettle-example build/kettle-counter build/kettle-themes build/kettle-components build/kettle-workspace
 test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
-build/test-pty: tests/kettle/test_pty.c $(PTY_SUPPORT) tests/kettle/pty_support.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(filter %.c,$^) -o $@
-build/test-program-pty: tests/kettle/test_program_pty.c $(PTY_SUPPORT) tests/kettle/pty_support.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(filter %.c,$^) -o $@
+# The PTY observers' shared support is compiled once for both.
+build/pty-%.o: tests/kettle/%.c tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) -c $< -o $@
+build/test-pty: tests/kettle/test_pty.c $(PTY_SUPPORT_OBJECTS) tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $< $(PTY_SUPPORT_OBJECTS) -o $@
+build/test-program-pty: tests/kettle/test_program_pty.c $(PTY_SUPPORT_OBJECTS) tests/kettle/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $< $(PTY_SUPPORT_OBJECTS) -o $@
 test-pty: examples build/test-workspace-child build/test-pty build/kettle-program-fixture build/test-program-pty
 	build/test-program-pty
 	build/test-pty --standalone

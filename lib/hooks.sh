@@ -237,15 +237,15 @@ apply_custom_layout_or_default() {
             # Single pane; create_session already starts at worktree
             ;;
         dev)
-            tmux kill-pane -a -t "$target_session:0.0" 2>/dev/null || true
-            tmux split-window -t "$target_session:0.0" -h -p 30 -c "$wt"
-            tmux select-pane -t "$target_session:0.0"
+            tmux kill-pane -a -t "$(tmux_exact_target "$target_session:0.0")" 2>/dev/null || true
+            tmux split-window -t "$(tmux_exact_target "$target_session:0.0")" -h -p 30 -c "$wt"
+            tmux select-pane -t "$(tmux_exact_target "$target_session:0.0")"
             ;;
         full)
-            tmux kill-pane -a -t "$target_session:0.0" 2>/dev/null || true
-            tmux split-window -t "$target_session:0.0" -h -p 30 -c "$wt"
-            tmux split-window -t "$target_session:0.1" -v -p 30 -c "$wt"
-            tmux select-pane -t "$target_session:0.0"
+            tmux kill-pane -a -t "$(tmux_exact_target "$target_session:0.0")" 2>/dev/null || true
+            tmux split-window -t "$(tmux_exact_target "$target_session:0.0")" -h -p 30 -c "$wt"
+            tmux split-window -t "$(tmux_exact_target "$target_session:0.1")" -v -p 30 -c "$wt"
+            tmux select-pane -t "$(tmux_exact_target "$target_session:0.0")"
             ;;
         *)
             :

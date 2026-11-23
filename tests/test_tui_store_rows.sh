@@ -1,9 +1,18 @@
 #!/bin/sh
 # The control centre reads the local head snapshot from the state store in its
-# own process ('hydra-tui --data' prints that read). It must print exactly the
-# rows of the shell reader, 'hydra tui --data', for the same records: every
-# case below builds records, runs both readers and compares their output byte
-# for byte, then checks the rows for the values the case was built to produce.
+# own process ('hydra-tui --data' prints that read). Every case below builds
+# records, reads them, compares the rows byte for byte with the rows recorded
+# for the case (tests/fixtures/tui/store-rows) and checks them for the values
+# the case was built to produce.
+#
+# Where the recorded rows come from. Hydra had a second reader, the shell's
+# 'hydra tui --data', and this file compared the two byte for byte. The rows
+# of the cases down to "a state root outside HYDRA_HOME" were written from the
+# shell reader's output while both readers still agreed (commit "test(tui):
+# record the rows of every store parity case"), and the shell reader was
+# removed afterwards. They are not to be regenerated to make a failure go
+# away: HYDRA_STORE_ROWS_RECORD=1 rewrites them from the reader under test,
+# for a deliberate change to the rows, and its diff is what gets reviewed.
 
 set -u
 
@@ -11,7 +20,7 @@ test_count=0
 pass_count=0
 fail_count=0
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-parity or make test-one T=tui_store_parity}"
+tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-parity or make test-one T=tui_store_rows}"
 hydra="$repo_root/bin/hydra"
 
 # shellcheck source=helpers.sh
@@ -29,26 +38,63 @@ GIT_CEILING_DIRECTORIES="$test_root"
 export PATH GIT_CEILING_DIRECTORIES
 unset TMUX TMUX_PANE HYDRA_STATE_V2_ROOT HYDRA_TEST_TMUX_SOCKET
 
-echo "Running state store reader parity tests..."
-echo "=========================================="
+echo "Running state store reader tests..."
+echo "==================================="
 
 put() { printf '%s\n' "$2" > "$1"; }
 
-# Usage: same_rows <message> [NAME=value ...]
-# Runs both readers in $repo against $home and compares what they print.
-same_rows() {
-    _sr_message="$1"
-    shift
-    (cd "$repo" && env HYDRA_HOME="$home" "$@" "$hydra" tui --data) > "$test_root/shell.tsv" 2> "$test_root/shell.err"
-    _sr_shell=$?
+recorded_rows="$repo_root/tests/fixtures/tui/store-rows"
+
+# Usage: recorded_form <rows-file>
+# The rows as they are recorded: the fixture directory reads @ROOT@ and a
+# measured worktree size @SIZE@, and each run of stale-lock rows is sorted
+# (the reader reports locks in the order their directory lists them).
+recorded_form() {
+    awk -v root="$test_root" '
+        function flush(  i, j, held) {
+            for (i = 2; i <= locks; i++) {
+                held = lock[i]
+                for (j = i - 1; j >= 1 && lock[j] > held; j--) lock[j + 1] = lock[j]
+                lock[j + 1] = held
+            }
+            for (i = 1; i <= locks; i++) print lock[i]
+            locks = 0
+        }
+        {
+            line = ""
+            while ((at = index($0, root)) > 0) {
+                line = line substr($0, 1, at - 1) "@ROOT@"
+                $0 = substr($0, at + length(root))
+            }
+            line = line $0
+            if (line ~ /^R\torphan-worktree/) sub(/\), [0-9][0-9.]* [KMGT]iB\t/, "), @SIZE@\t", line)
+            if (line ~ /^R\tstale-lock\t/) { lock[++locks] = line; next }
+            flush()
+            print line
+        }
+        END { flush() }' "$1"
+}
+
+# Usage: read_rows <case> <message> [NAME=value ...]
+# Reads the records of $repo against $home and compares the rows with the ones
+# recorded for the case.
+read_rows() {
+    _rr_case="$1"
+    _rr_message="$2"
+    shift 2
     (cd "$repo" && env HYDRA_HOME="$home" "$@" "$tui" --hydra "$hydra" --data) > "$test_root/native.tsv" 2> "$test_root/native.err"
-    _sr_native=$?
-    if [ "$_sr_shell" -eq 0 ] && [ "$_sr_native" -eq 0 ] && cmp -s "$test_root/shell.tsv" "$test_root/native.tsv"; then
-        assert_success 0 "$_sr_message"
+    _rr_status=$?
+    recorded_form "$test_root/native.tsv" > "$test_root/native.recorded"
+    if [ -n "${HYDRA_STORE_ROWS_RECORD:-}" ]; then
+        mkdir -p "$recorded_rows"
+        cp "$test_root/native.recorded" "$recorded_rows/$_rr_case.tsv"
+    fi
+    if [ "$_rr_status" -eq 0 ] && cmp -s "$recorded_rows/$_rr_case.tsv" "$test_root/native.recorded"; then
+        assert_success 0 "$_rr_message: the rows recorded as $_rr_case"
     else
-        assert_success 1 "$_sr_message"
-        echo "  shell reader status $_sr_shell, store reader status $_sr_native; shell rows (<) against store rows (>):"
-        diff "$test_root/shell.tsv" "$test_root/native.tsv" | sed -n '1,20p'
+        assert_success 1 "$_rr_message: the rows recorded as $_rr_case"
+        echo "  store reader status $_rr_status; recorded rows (<) against the store reader's (>):"
+        diff "$recorded_rows/$_rr_case.tsv" "$test_root/native.recorded" | sed -n '1,20p'
         sed -n '1,5p' "$test_root/native.err"
     fi
 }
@@ -125,9 +171,10 @@ make_lock() {
 }
 
 this_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
-sh -c 'exit 0' &
-dead_pid=$!
-wait "$dead_pid"
+# An owner that is gone. No process can have this identity: it is above every
+# limit a kernel sets on process IDs (4194304 on Linux, 99999 on macOS and the
+# BSDs). The identity of a process that has just exited can be reused at once.
+dead_pid=2147483647
 
 # ---- no repository, and a repository Hydra does not know ----------------------
 
@@ -140,7 +187,7 @@ make_lock "$home/locks/elsewhere.lock" "$dead_pid" "another-machine.invalid"
 make_lock "$home/locks/unreadable.lock" "not-a-pid" "$this_host"
 make_lock "$home/locks/nested/inner.lock" "$dead_pid" "$this_host"
 : > "$home/locks/file.lock"
-same_rows "outside a repository both readers print the header and stale locks"
+read_rows outside-repository "outside a repository the rows are the header and the stale locks"
 assert_equal "2" "$(rows_of stale-lock)" "a lock is stale only when its owner on this machine is gone"
 assert_equal "3" "$(awk 'END { print NR }' "$test_root/native.tsv")" "nothing but the header and the stale locks is printed"
 
@@ -148,7 +195,7 @@ repo="$test_root/unknown/repo"
 home="$test_root/unknown/home"
 mkdir -p "$repo" "$home"
 git -C "$repo" init -q -b main
-same_rows "a repository without a Hydra project prints only the header"
+read_rows unknown-repository "a repository without a Hydra project prints only the header"
 assert_equal "HYDRA_TUI	2" "$(cat "$test_root/native.tsv")" "the header is the whole document"
 
 # ---- one project with every kind of record -----------------------------------
@@ -264,7 +311,7 @@ make_head head_00000000000000f5 tabbed session-tabbed none
 printf 'left\tright\n' > "$heads/head_00000000000000f5/group"
 
 live="session-linked,session-tabbed,session-plain,session-rich,session-stopping,session-spaced,session-unknown,session-no-instance,session-blocked,session-empty,session-override,session-partial,session-plain-dir,session-twice,session-legacy,session-misbound"
-same_rows "a project with every kind of record reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows every-record "a project with every kind of record" FAKE_TMUX_SESSIONS="$live"
 assert_equal "18" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "every active head has a row and the stopped one has none"
 assert_equal "session-rich custom team 42 active live done idle reported" \
     "$(row_fields rich 3 4 5 6 7 8 9 10 11)" "the recorded scalars of a head"
@@ -293,14 +340,14 @@ assert_equal "3" "$(rows_of malformed-state)" "a field with a space, a missing i
 assert_equal "1" "$(rows_of stale-lock)" "the stale lock is a recovery finding"
 assert_equal "0" "$(rows_of orphan-worktree)" "a recorded worktree is not a leftover"
 
-same_rows "with no live session every terminal head is dead in both readers"
+read_rows no-live-session "with no live session every terminal head is dead"
 assert_equal "16" "$(rows_of dead-session)" "every terminal head is reported once"
 
 # HYDRA_HOME through a symbolic link is reported by its physical path.
 ln -s "$home" "$test_root/rich/home-link"
 real_home="$home"
 home="$test_root/rich/home-link"
-same_rows "a linked HYDRA_HOME reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows every-record "a linked HYDRA_HOME reads as the home it names" FAKE_TMUX_SESSIONS="$live"
 assert_equal "$real_home/profiles/custom" "$(row_fields rich 28)" "paths are reported under the physical home"
 home="$real_home"
 
@@ -308,9 +355,9 @@ home="$real_home"
 mkdir -p "$repo/sub/dir"
 top="$repo"
 repo="$top/sub/dir"
-same_rows "a subdirectory of the repository reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows every-record "a subdirectory of the repository reads as its top level" FAKE_TMUX_SESSIONS="$live"
 repo="$worktrees/head_0000000000000002"
-same_rows "a linked worktree of the repository reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows every-record "a linked worktree of the repository reads as the repository" FAKE_TMUX_SESSIONS="$live"
 assert_equal "18" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "the worktree sees its project's heads"
 repo="$top"
 
@@ -320,7 +367,7 @@ git -C "$repo" worktree add -q "$worktrees/head_00000000000000aa" -b leftover-cl
 git -C "$repo" worktree add -q "$worktrees/head_00000000000000bb" -b leftover-dirty
 : > "$worktrees/head_00000000000000bb/uncommitted"
 mkdir -p "$worktrees/head_00000000000000cc" "$worktrees/not-a-head"
-same_rows "leftover worktrees are reported the same by both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows leftover-worktrees "leftover worktrees are reported" FAKE_TMUX_SESSIONS="$live"
 assert_equal "1" "$(rows_of orphan-worktree)" "a clean leftover worktree is reported"
 assert_equal "1" "$(rows_of orphan-worktree-dirty)" "a leftover worktree with uncommitted files is reported as dirty"
 if grep -q "leftover-clean ($worktrees/head_00000000000000aa), [0-9]" "$test_root/native.tsv"; then
@@ -332,7 +379,7 @@ fi
 # A stored worktree root replaces the default one.
 mkdir -p "$test_root/rich/elsewhere"
 put "$repo/.git/hydra/worktree-root" "$test_root/rich/elsewhere"
-same_rows "a stored worktree root is honoured by both readers" FAKE_TMUX_SESSIONS="$live"
+read_rows every-record "a stored worktree root is honoured" FAKE_TMUX_SESSIONS="$live"
 assert_equal "0" "$(rows_of orphan-worktree)" "worktrees outside the stored root are not leftovers"
 rm "$repo/.git/hydra/worktree-root"
 
@@ -344,7 +391,7 @@ make_head head_0000000000000011 later session-later none
 cp -R "$heads/head_0000000000000010" "$heads/head_000 bad\\name"
 put "$heads/head_000 bad\\name/branch" later
 put "$heads/head_000 bad\\name/head-id" "head_000 bad\\name"
-same_rows "a directory whose name is no identity reads the same in both readers" FAKE_TMUX_SESSIONS="session-odd,session-later"
+read_rows invalid-name "a directory whose name is no identity" FAKE_TMUX_SESSIONS="session-odd,session-later"
 # Both active records of the branch are rows, and both carry the first name.
 assert_equal "2 unavailable" "$(awk -F '\t' '$1 == "H" && $2 == "later" && $25 == "head_000 bad\\name" && $24 == "" { n++; desired = $23 }
     END { print n + 0, desired }' "$test_root/native.tsv")" \
@@ -366,7 +413,7 @@ make_head head_0000000000000020 moved session-moved none
 # Queue entries are read under HYDRA_HOME whatever the state root is.
 mkdir -p "$home/state/v2/projects/$project/queue"
 printf '%s\n' branch=moved > "$home/state/v2/projects/$project/queue/1.queue"
-same_rows "a state root outside HYDRA_HOME reads the same in both readers" \
+read_rows moved-state-root "a state root outside HYDRA_HOME" \
     FAKE_TMUX_SESSIONS=session-moved HYDRA_STATE_V2_ROOT="$moved_root"
 assert_equal "1 $moved_root/projects/$project/heads/head_0000000000000020" "$(row_fields moved 18 24)" \
     "records come from the state root and queue entries from HYDRA_HOME"
@@ -392,6 +439,58 @@ assert_equal "HYDRA_WORKFLOW_TUI	2" "$(cat "$test_root/workflow.tsv")" "an empty
 assert_failure $? "outside a project the workspace links reader fails"
 assert_equal "" "$(cat "$test_root/links.tsv")" "and prints nothing"
 
+# ---- the stores of the interactive fixtures --------------------------------------
+
+# The interactive (pseudo-terminal) tests run the control centre in the state
+# store that tests/fixtures/tui/rows-store.sh builds from a rows fixture, with
+# the fixture tmux and the fixture CLI. What the store reader reads from such a
+# store is recorded here, and it keeps every name, state and count of the rows
+# the store was built from.
+
+# Usage: head_values <rows-file> -> of every H row, the fields a store decides
+# from its records alone: names, states, counts, the adapter and the
+# notification count (not paths, identities or the liveness of a dead session)
+head_values() {
+    awk -F '\t' '$1 == "H" {
+        line = ""
+        for (i = 2; i <= 29; i++) if (i != 8 && i != 12 && (i < 23 || i > 25) && i != 28) line = line "\t" $i
+        print line
+    }' "$1"
+}
+
+# Usage: fixture_store <rows-fixture-name>
+fixture_store() {
+    _fs_rows="$repo_root/tests/fixtures/tui/$1.tsv"
+    _fs_store="$test_root/fixture-store-$1"
+    sh "$repo_root/tests/fixtures/tui/rows-store.sh" "$_fs_rows" "$_fs_store"
+    assert_success $? "rows-store.sh builds the store of $1.tsv"
+    (cd "$_fs_store/repo" && HYDRA_HOME="$_fs_store/home" HYDRA_TEST_STORE="$_fs_store" \
+        "$tui" --hydra "$repo_root/tests/fixtures/tui/fake-hydra.sh" --data) > "$test_root/native.tsv" 2> "$test_root/native.err"
+    _fs_status=$?
+    recorded_form "$test_root/native.tsv" > "$test_root/native.recorded"
+    if [ -n "${HYDRA_STORE_ROWS_RECORD:-}" ]; then cp "$test_root/native.recorded" "$recorded_rows/fixture-$1.tsv"; fi
+    if [ "$_fs_status" -eq 0 ] && cmp -s "$recorded_rows/fixture-$1.tsv" "$test_root/native.recorded"; then
+        assert_success 0 "the store of $1.tsv reads as the rows recorded as fixture-$1"
+    else
+        assert_success 1 "the store of $1.tsv reads as the rows recorded as fixture-$1"
+        echo "  store reader status $_fs_status; recorded rows (<) against the store reader's (>):"
+        diff "$recorded_rows/fixture-$1.tsv" "$test_root/native.recorded" | sed -n '1,20p'
+        sed -n '1,5p' "$test_root/native.err"
+    fi
+    assert_equal "$(head_values "$_fs_rows")" "$(head_values "$test_root/native.tsv")" \
+        "the store of $1.tsv keeps every name, state and count of its rows"
+}
+
+fixture_store native-v2
+assert_equal "2 1 1" "$(rows_of dead-session) $(rows_of stale-lock) $(rows_of orphan-worktree)" \
+    "its findings are the reader's own: both dead sessions, the stale lock, and the leftover worktree the CLI describes"
+assert_equal "0" "$(rows_of teardown-failure)" "a finding the store does not hold is not invented from the fixture's R rows"
+fixture_store native-runs
+assert_equal "active unavailable headless headless" "$(row_fields kill-dry-run-worker 7 8 23 31)" \
+    "a headless row is a headless record"
+fixture_store native-agent-exit
+assert_equal "1" "$(row_fields feature-live 32)" "an agent exit status is the instance's exit record"
+
 # ---- the control centre starts its helper on the store --------------------------
 
 cat > "$test_root/helper" <<'HELPER'
@@ -400,11 +499,19 @@ if [ "${1:-}" = --version ]; then printf 'Hydra TUI %s protocol 2\n' "$HYDRA_VER
 printf '%s\n' "$@" > "$HELPER_ARGV"
 HELPER
 chmod +x "$test_root/helper"
-(cd "$repo" && HYDRA_HOME="$home" HYDRA_TUI_BIN="$test_root/helper" HELPER_ARGV="$test_root/helper.argv" "$hydra" tui --view heads) > /dev/null 2>&1
-assert_equal "--hydra $hydra --store --view heads" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
-    "hydra tui tells the helper to read the store itself"
+(cd "$repo" && HYDRA_HOME="$home" HYDRA_TUI_BIN="$test_root/helper" HELPER_ARGV="$test_root/helper.argv" "$hydra" tui --view work) > /dev/null 2>&1
+assert_equal "--hydra $hydra --view work" "$(tr '\n' ' ' < "$test_root/helper.argv" | sed 's/ $//')" \
+    "hydra tui starts the helper with no option that chooses a reader: there is one"
+(cd "$repo" && "$tui" --hydra "$hydra" --store) > /dev/null 2> "$test_root/store.err"
+assert_equal "2" "$?" "the removed --store option is refused"
+assert_equal "hydra-tui: --store was removed: the state store is always read; start it without the option" \
+    "$(cat "$test_root/store.err")" "and the refusal says what to do"
 (cd "$repo" && HYDRA_HOME="$home" "$hydra" tui --orphan-rows extra) > /dev/null 2>&1
 assert_equal "2" "$?" "the leftover-rows entry takes no arguments"
+(cd "$repo" && HYDRA_HOME="$home" "$hydra" tui --data) > "$test_root/removed.out" 2> "$test_root/removed.err"
+assert_equal "2" "$?" "the shell reader's entry, hydra tui --data, is gone"
+assert_equal "Error: unknown TUI option '--data'" "$(sed -n '1p' "$test_root/removed.err")" "and says that it is not an option"
+assert_equal "" "$(cat "$test_root/removed.out")" "and prints no rows"
 
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

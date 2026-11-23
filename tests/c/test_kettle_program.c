@@ -1389,6 +1389,20 @@ static bool actions_same(const struct sigaction before[HANDLED]) {
     return true;
 }
 
+/* kt_child_signal names every signal the runtime handles or ignores, once,
+ * for an application that starts children of its own. */
+static void test_child_signal_list(void) {
+    size_t i, at, count = 0;
+    while (kt_child_signal(count) != 0) count++;
+    CHECK(count == HANDLED);
+    CHECK(kt_child_signal(count + 1) == 0);
+    for (i = 0; i < HANDLED; i++) {
+        size_t seen = 0;
+        for (at = 0; at < count; at++) if (kt_child_signal(at) == handled_signals[i]) seen++;
+        CHECK(seen == 1);
+    }
+}
+
 /* The file status flags a program can change with F_SETFL. F_GETFL may
  * report more: macOS adds a flag of its own once the descriptor has been
  * written to, which no program sets or clears. */
@@ -1451,6 +1465,7 @@ static void test_real_needs_terminal(void) {
 
 static void real(void) {
     test_real_needs_terminal();
+    test_child_signal_list();
     test_real_restoration();
     test_real_timer_and_watch();
     test_real_hangup();

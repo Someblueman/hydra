@@ -41,16 +41,18 @@ static void mouse_cases(const char *tui, const char *hydra, const char *fake_bin
     result(wait_for_selected(&session, "feature-live", 1000), "overlong mouse report drains without breaking the next key");
     mouse_input(&session, "\033[<0;20;1M"); /* the Inbox tab */
     result(wait_for_markers(&session, "Needs you", "Approve S-1: T-1", 3000), "click Inbox changes view");
+    /* The gates are the fixture store's: feature-live waits on gate-2,
+     * feature-stale on gate-1. */
     mouse_input(&session, "\033[<0;8;7M"); /* the second item's first line */
-    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "an Inbox row click selects its item");
+    result(wait_for_selected(&session, "Approval gate: gate-2", 1000), "an Inbox row click selects its item");
     mouse_input(&session, "\033[<0;8;8M"); /* its second line */
-    result(wait_for_selected(&session, "Approval gates: feature-live", 1000), "either line of a two-line item selects it");
+    result(wait_for_selected(&session, "Approval gate: gate-2", 1000), "either line of a two-line item selects it");
     mouse_input(&session, "\033[<65;8;7M");
-    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "wheel down in Inbox has keyboard selection parity");
+    result(wait_for_selected(&session, "Approval gate: gate-1", 1000), "wheel down in Inbox has keyboard selection parity");
     write_input(session.master, "\r", 1U);
-    result(wait_for_marker(&session, "has approval gates", 1000), "Enter opens the clicked item's detail");
+    result(wait_for_marker(&session, "feature-stale recorded the gate gate-1", 1000), "Enter opens the clicked item's detail");
     write_input(session.master, "\033", 1U);
-    result(wait_for_selected(&session, "Approval gates: feature-stale", 1000), "Escape closes the detail and keeps the selection");
+    result(wait_for_selected(&session, "Approval gate: gate-1", 1000), "Escape closes the detail and keeps the selection");
     sleep_ms(60);
     write_input(session.master, "1", 1U);
     result(wait_for_marker(&session, "Heads  ", 1000), "1 returns to Work");

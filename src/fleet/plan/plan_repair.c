@@ -7,8 +7,7 @@
 #include <unistd.h>
 
 static int scalar(const char *directory, const char *name, const char *value) {
-    char path[F_PATH];
-    return f_path(path, sizeof(path), directory, name) || f_write(path, value, strlen(value), true) || task_sync_dir(directory) ? -1 : 0;
+    return task_write_file(directory, name, value, strlen(value), true) ? -1 : 0;
 }
 static int round_number(const char *run) {
     char path[F_PATH], *text, *end; int round = -1;

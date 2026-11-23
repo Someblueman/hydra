@@ -1,5 +1,5 @@
 #!/bin/sh
-# Identity, state v2, migration, event, and lock-contract tests.
+# Identity, state v2, backup, event, and lock-contract tests.
 
 set -u
 
@@ -98,6 +98,77 @@ state_v2_write_scalar "$spaced_dir/task" "line one
 line two" >/dev/null 2>&1
 assert_failure $? "scalar layout rejects embedded newlines"
 
+# A record write that fails must report failure and keep the previous value.
+# The failure injected here is a real one: with the file size limit at zero
+# and SIGXFSZ ignored, write(2) into the temporary file returns EFBIG, the way
+# a full disk returns ENOSPC. The subshell keeps the limit away from the rest
+# of this file; stderr goes to /dev/null because a log file is limited too.
+failing_write() (
+    trap '' XFSZ
+    ulimit -f 0 || exit 99
+    "$@" 2>/dev/null
+)
+write_probe="$test_root/write-probe"
+write_probe_run() { printf 'probe\n' > "$write_probe"; }
+failing_write write_probe_run
+write_probe_status=$?
+if [ "$write_probe_status" -gt 0 ] && [ "$write_probe_status" -lt 99 ] && [ ! -s "$write_probe" ]; then
+    echo "write failure injection: file size limit"
+else
+    # No clean EFBIG on this platform (status $write_probe_status): stand in
+    # for the failed write itself. The redirection still creates the empty
+    # temporary file, as a failed write leaves it.
+    failing_write() (
+        # shellcheck disable=SC2317,SC2329 # Called by the library under test.
+        printf() { return 1; }
+        "$@" 2>/dev/null
+    )
+    echo "write failure injection: printf stub"
+fi
+rm -f "$write_probe"
+failing_write state_v2_write_scalar "$head_dir/desired-state" stopped
+assert_failure $? "a scalar write that cannot be written reports failure"
+assert_equal running "$(cat "$head_dir/desired-state")" "a failed scalar write keeps the previous value"
+assert_equal "" "$(find "$head_dir" -name '.hydra-tmp.*' -print)" "a failed scalar write leaves no temporary file"
+state_v2_write_text "$test_root/text-record" 'first text'
+assert_success $? "a text record is written"
+failing_write state_v2_write_text "$test_root/text-record" 'second text'
+assert_failure $? "a text write that cannot be written reports failure"
+assert_equal 'first text' "$(cat "$test_root/text-record")" "a failed text write keeps the previous value"
+assert_equal "" "$(find "$test_root" -maxdepth 1 -name '.hydra-tmp.*' -print)" "a failed text write leaves no temporary file"
+state_v2_write_scalar "$head_dir/desired-state" stopped
+assert_success $? "the scalar is writable again once writes succeed"
+
+# Records are private (0600) whatever the umask, with no chmod after the
+# write: mktemp_adjacent creates the temporary file that way.
+for record_umask in 000 002 022 077; do
+    (
+        umask "$record_umask"
+        state_v2_write_scalar "$test_root/mode-scalar-$record_umask" value &&
+            state_v2_write_text "$test_root/mode-text-$record_umask" text &&
+            mktemp_adjacent "$test_root/mode-temp-$record_umask" > "$test_root/mode-temp-path-$record_umask"
+    )
+    # ls -ld is the portable way to read one entry's mode (stat differs).
+    # shellcheck disable=SC2012
+    record_modes="$(ls -ld "$test_root/mode-scalar-$record_umask" "$test_root/mode-text-$record_umask" \
+        "$(cat "$test_root/mode-temp-path-$record_umask")" | awk '{ printf "%s ", substr($1, 1, 10) }')"
+    assert_equal "-rw------- -rw------- -rw------- " "$record_modes" \
+        "records and their temporary files are 0600 under umask $record_umask"
+done
+umask_before="$(umask)"
+mktemp_adjacent "$test_root/mode-direct" > /dev/null
+assert_equal "$umask_before" "$(umask)" "mktemp_adjacent leaves the caller's umask alone"
+# The temporary file is created where dirname puts the destination.
+mkdir -p "$test_root/adjacent/sub"
+for adjacent_dest in "$test_root/adjacent/sub/record" "$test_root/adjacent//sub/record" \
+    "$test_root/adjacent/sub/" relative-record ./relative-record; do
+    adjacent_tmp="$(cd "$test_root/adjacent" && mktemp_adjacent "$adjacent_dest")"
+    assert_equal "$(dirname "$adjacent_dest")" "${adjacent_tmp%/.hydra-tmp.*}" \
+        "the temporary file for $adjacent_dest is in that path's directory"
+done
+assert_equal stopped "$(cat "$head_dir/desired-state")" "a later scalar write replaces the value"
+state_v2_write_scalar "$head_dir/desired-state" running
+
 other_project="$(hydra_new_id project other-repository)"
 other_head="$(state_v2_create_head "$other_project" feature-x other-session - - 101 - - "$test_root/other")"
 if [ "$other_head" != "$head_id" ] && [ -d "$(state_v2_head_dir "$other_project" "$other_head")" ]; then
@@ -123,12 +194,12 @@ event_lock="events_${project_id}_${head_id}"
 try_lock "$event_lock" "test held event writer"
 HYDRA_LOCK_RETRIES=1
 export HYDRA_LOCK_RETRIES
-event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null 2>&1
+"$HYDRA_BIN" events retain --project "$project_id" --head "$head_id" --max-events 1 >/dev/null 2>&1
 assert_failure $? "event retention refuses a concurrent writer"
 assert_equal "2" "$(wc -l < "$event_file" | tr -d ' ')" "failed retention preserves concurrent event input"
 release_lock "$event_lock"
 unset HYDRA_LOCK_RETRIES
-event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null
+"$HYDRA_BIN" events retain --project "$project_id" --head "$head_id" --max-events 1 >/dev/null
 assert_success $? "event retention archives before truncating"
 event_verify_file "$event_file"
 assert_success $? "retained stream preserves valid sequence"
@@ -156,26 +227,14 @@ assert_success $? "repaired stream verifies"
 HYDRA_HOME="$test_root/home" "$HYDRA_BIN" events verify --project "$project_id" --head "$head_id" >/dev/null
 assert_success $? "events command verifies an explicit head"
 
-# Migration and rollback use a fresh home to prove the 1.9 projection retirement.
-HYDRA_HOME="$test_root/migrate-home"
-HYDRA_1X_MAP="$HYDRA_HOME/map"
+# Backup and rollback use a fresh home.
+HYDRA_HOME="$test_root/backup-home"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-export HYDRA_HOME HYDRA_1X_MAP HYDRA_STATE_V2_ROOT
+export HYDRA_HOME HYDRA_STATE_V2_ROOT
 mkdir -p "$HYDRA_HOME"
-legacy_row='legacy-branch legacy-session claude group 123 dep 9'
-state_v2_create_head "$project_id" legacy-branch legacy-session claude group 123 dep 9 "$repo" >/dev/null
-legacy_project_dir="$(state_v2_project_dir "$project_id")"
-printf '%s\n' "$legacy_row" > "$legacy_project_dir/compat-map"
-printf '%s\n' "$legacy_row" > "$HYDRA_1X_MAP"
-dry_output="$(state_v2_migrate --dry-run)"
-assert_success $? "migration dry-run succeeds"
-if [ -f "$legacy_project_dir/compat-map" ] && [ -f "$HYDRA_1X_MAP" ]; then
-    assert_success 0 "migration dry-run does not mutate compatibility projections"
-else
-    assert_success 1 "migration dry-run does not mutate compatibility projections"
-fi
-printf '%s\n' "$dry_output" | grep -q 'remove verified 1.9 compatibility projections: 1'
-assert_success $? "migration dry-run reports exact projection count"
+state_v2_create_head "$project_id" backup-branch backup-session claude group 123 dep 9 "$repo" >/dev/null
+backup_project_dir="$(state_v2_project_dir "$project_id")"
+backup_head_id="$(state_v2_find_head_by_branch "$project_id" backup-branch)"
 
 backup_count_before="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
 # shellcheck disable=SC2317,SC2329
@@ -184,16 +243,15 @@ assert_failure $? "backup fails when a source cannot be copied"
 backup_count_after="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
 assert_equal "$backup_count_before" "$backup_count_after" "failed backup leaves no incomplete recovery point"
 
-migrate_output="$(state_v2_migrate)"
-assert_success $? "migration writes state v2"
-backup_path="$(printf '%s\n' "$migrate_output" | sed -n 's/^Backup: //p')"
-if [ -d "$backup_path" ] && [ -f "$backup_path/map" ] && [ -f "$backup_path/state/v2/schema-version" ]; then
-    assert_success 0 "migration creates a recoverable backup"
-else
-    assert_success 1 "migration creates a recoverable backup"
-fi
+backup_output="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state backup)"
+assert_success $? "state backup succeeds"
+backup_path="$(printf '%s\n' "$backup_output" | sed -n 's/^Backup: //p')"
+# "map.absent" is the marker Hydra 4.0.0 requires before it rolls a backup back.
+assert_equal "map.absent
+state" "$(ls -A "$backup_path" 2>/dev/null)" "a backup holds the state tree and the marker 4.0.0 needs to roll it back"
+assert_equal 2 "$(sed -n '1p' "$backup_path/state/v2/schema-version" 2>/dev/null)" "the backed-up state names its schema"
 state_v2_verify
-assert_success $? "migrated state verifies"
+assert_success $? "backed-up state verifies"
 HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state verify >/dev/null
 assert_success $? "state command verifies active schema v2"
 printf '999\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
@@ -207,7 +265,6 @@ esac
 printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
 incomplete_backup="$HYDRA_HOME/backups/state-incomplete"
 mkdir -p "$incomplete_backup"
-: > "$incomplete_backup/map.absent"
 state_v2_rollback "$incomplete_backup" >/dev/null 2>&1
 assert_failure $? "rollback rejects a backup without durable state"
 assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "incomplete backup rejection preserves current state"
@@ -219,22 +276,43 @@ assert_failure $? "rollback refuses a concurrent state writer"
 assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "failed rollback preserves current state"
 release_lock "state_${project_id}"
 unset HYDRA_LOCK_RETRIES
+printf 'changed-after-backup\n' > "$backup_project_dir/heads/$backup_head_id/group"
 state_v2_rollback "$backup_path" >/dev/null
 assert_success $? "rollback succeeds with generated backup"
-assert_equal "$legacy_row" "$(sed -n '1p' "$HYDRA_1X_MAP")" "rollback restores the global 1.x map for downgrade"
-assert_equal "$legacy_row" "$(sed -n '1p' "$legacy_project_dir/compat-map")" "rollback restores the 1.9 project projection"
+assert_equal group "$(sed -n '1p' "$backup_project_dir/heads/$backup_head_id/group")" "rollback restores the backed-up records"
 
-rm -f "$HYDRA_1X_MAP"
-absent_map_backup="$(state_v2_backup)"
-assert_success $? "backup records an absent legacy map"
-printf 'stale projection\n' > "$HYDRA_1X_MAP"
-state_v2_rollback "$absent_map_backup" >/dev/null
-assert_success $? "rollback restores a backup with no legacy map"
-if [ ! -e "$HYDRA_1X_MAP" ]; then
-    assert_success 0 "rollback preserves exact legacy-map absence"
+# Only the state tree is restored. A backup made by 4.0.0 where a Hydra 1.x
+# session map was left over holds a copy of it ("map") in place of the marker,
+# and its state tree may hold a 1.9 "compat-map". No release since 2.0 reads
+# either: the backup restores, the map copy is not put back, and a leftover
+# map beside the store is left as it is.
+old_row='old-branch old-session claude group 123 dep 9'
+rm -f "$backup_path/map.absent"
+printf '%s\n' "$old_row" > "$backup_path/map"
+printf '%s\n' "$old_row" > "$backup_path/state/v2/projects/$project_id/compat-map"
+printf 'changed-again\n' > "$backup_project_dir/heads/$backup_head_id/group"
+rollback_output="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state rollback "$backup_path" 2>&1)"
+assert_success $? "rollback accepts a 4.0.0 backup that holds a copy of the 1.x map"
+assert_equal "Rolled back state from $backup_path" "$rollback_output" "rollback says nothing about the map copy"
+assert_equal group "$(sed -n '1p' "$backup_project_dir/heads/$backup_head_id/group")" "the backup with a map copy restores the backed-up records"
+if [ ! -e "$HYDRA_HOME/map" ]; then
+    assert_success 0 "the map copy in a backup is not restored"
 else
-    assert_success 1 "rollback preserves exact legacy-map absence"
+    assert_success 1 "the map copy in a backup is not restored"
 fi
+assert_equal "$old_row" "$(sed -n '1p' "$backup_project_dir/compat-map" 2>/dev/null)" "a compat-map in the backed-up tree comes back with the tree"
+HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state verify >/dev/null 2>&1
+assert_success $? "the restored tree verifies"
+printf 'left over\n' > "$HYDRA_HOME/map"
+printf 'changed-once-more\n' > "$backup_project_dir/heads/$backup_head_id/group"
+state_v2_rollback "$backup_path" >/dev/null 2>&1
+assert_success $? "rollback succeeds beside a leftover 1.x map"
+assert_equal "left over" "$(sed -n '1p' "$HYDRA_HOME/map")" "rollback leaves a leftover 1.x map as it is"
+rm -f "$HYDRA_HOME/map" "$backup_project_dir/compat-map"
+
+refusal="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state migrate 2>&1)"
+assert_equal 1 "$?" "state migrate is not a state action any more"
+assert_equal "Usage: hydra state <verify|backup|rollback>" "$refusal" "state migrate prints the state usage"
 
 echo "====================================="
 echo "Test Results:"

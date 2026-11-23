@@ -10,32 +10,43 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
     HOME="$(cd ~ && pwd)"
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
-HYDRA_1X_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="4.0.0"
-export HYDRA_VERSION HYDRA_1X_MAP
+HYDRA_VERSION="5.0.0"
+export HYDRA_VERSION
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
 # Try to resolve the real path of the hydra binary
 HYDRA_BIN_PATH="$0"
-if [ -L "$HYDRA_BIN_PATH" ]; then
-    # Follow symlinks if possible (POSIX-compliant approach)
-    if command -v readlink >/dev/null 2>&1; then
-        # Try GNU readlink -f first, then BSD readlink
-        HYDRA_BIN_PATH="$(readlink -f "$HYDRA_BIN_PATH" 2>/dev/null || readlink "$HYDRA_BIN_PATH" 2>/dev/null || echo "$HYDRA_BIN_PATH")"
+if [ -L "$HYDRA_BIN_PATH" ] && command -v readlink >/dev/null 2>&1; then
+    if _hydra_link_target="$(readlink -f "$HYDRA_BIN_PATH" 2>/dev/null)" && [ -n "$_hydra_link_target" ]; then
+        HYDRA_BIN_PATH="$_hydra_link_target"
+    elif _hydra_link_target="$(readlink "$HYDRA_BIN_PATH" 2>/dev/null)" && [ -n "$_hydra_link_target" ]; then
+        # A readlink without -f prints the target as the link stores it, and
+        # a relative target is relative to the link's directory, not to the
+        # caller's.
+        case "$_hydra_link_target" in
+            /*) HYDRA_BIN_PATH="$_hydra_link_target" ;;
+            *) HYDRA_BIN_PATH="$(dirname "$HYDRA_BIN_PATH")/$_hydra_link_target" ;;
+        esac
     fi
 fi
 
-# Get the directory containing the hydra binary
-if HYDRA_BIN_DIR="$(cd "$(dirname "$HYDRA_BIN_PATH")" 2>/dev/null && pwd)"; then
+# Get the directory containing the hydra binary. The path names a file, so
+# its directory and name are cut from it here instead of by dirname and
+# basename, two processes every command would otherwise start.
+case "$HYDRA_BIN_PATH" in
+    */*) HYDRA_BIN_DIR="${HYDRA_BIN_PATH%/*}"; [ -n "$HYDRA_BIN_DIR" ] || HYDRA_BIN_DIR=/ ;;
+    *) HYDRA_BIN_DIR=. ;;
+esac
+if HYDRA_BIN_DIR="$(cd "$HYDRA_BIN_DIR" 2>/dev/null && pwd)"; then
     : # Successfully got absolute path
 else
     # Fallback to dirname if cd fails
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
-HYDRA_BIN_PATH="$HYDRA_BIN_DIR/$(basename "$HYDRA_BIN_PATH")"
+HYDRA_BIN_PATH="$HYDRA_BIN_DIR/${HYDRA_BIN_PATH##*/}"
 
-# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
+# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
     HYDRA_LIB_DIR="$(cd "$HYDRA_ROOT/lib" && pwd)"
 elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
@@ -44,9 +55,6 @@ elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; th
 elif [ -d "$HYDRA_BIN_DIR/../lib/hydra" ] && [ -f "$HYDRA_BIN_DIR/../lib/hydra/git.sh" ]; then
     # PREFIX install: $PREFIX/bin/hydra -> $PREFIX/lib/hydra
     HYDRA_LIB_DIR="$(cd "$HYDRA_BIN_DIR/../lib/hydra" && pwd)"
-elif [ -d "/usr/local/lib/hydra" ] && [ -f "/usr/local/lib/hydra/git.sh" ]; then
-    # Legacy default prefix
-    HYDRA_LIB_DIR="/usr/local/lib/hydra"
 else
     echo "Error: Cannot find hydra library directory" >&2
     echo "Precondition: libraries must resolve from the binary (source ../lib or PREFIX ../lib/hydra)." >&2
@@ -54,7 +62,6 @@ else
     [ -n "${HYDRA_ROOT:-}" ] && echo "  - $HYDRA_ROOT/lib (HYDRA_ROOT)" >&2
     echo "  - $HYDRA_BIN_DIR/../lib (source checkout)" >&2
     echo "  - $HYDRA_BIN_DIR/../lib/hydra (PREFIX install)" >&2
-    echo "  - /usr/local/lib/hydra (legacy)" >&2
     echo "Next: run bin/hydra from a source checkout, set HYDRA_ROOT to that checkout, or reinstall with PREFIX=\$HOME/.local ./install.sh" >&2
     echo "See README Quick Start." >&2
     exit 1
@@ -115,12 +122,12 @@ _load_libs_for_cmd() {
             ;;
         workflow)
             _load_runtime_libs
-            _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
+            _load_libs operations parallel messages workflow cmd_fleet workflow_approval workflow_data \
                 workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow
             ;;
         plan)
             _load_runtime_libs
-            _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
+            _load_libs operations parallel messages workflow cmd_fleet workflow_approval workflow_data \
                 workflow_plan workflow_retry workflow_task workflow_runtime workflow_review cmd_workflow cmd_plan
             ;;
         lifecycle|outcome|wait|adapter|resume|notify)
@@ -138,7 +145,7 @@ _load_libs_for_cmd() {
         context|sync|land|integrate)
             _load_runtime_libs
             _load_libs notify hooks messages operations parallel integration integration_verified cmd_fleet workflow_plan integration_plan \
-                integration_verified_actions kill limits spawn cmd_integration
+                integration_verified_actions kill spawn cmd_integration
             ;;
         du|gc|worktree)
             _load_libs output paths locks git tmux state identity state_v2 project profiles lifecycle parallel \
@@ -146,7 +153,7 @@ _load_libs_for_cmd() {
             ;;
         spawn)
             _load_runtime_libs layout
-            _load_libs notify operations parallel hooks yaml spawn spawn_bulk github limits kill cmd_spawn cmd_list \
+            _load_libs notify operations parallel hooks yaml spawn spawn_bulk github kill cmd_spawn cmd_list \
                 cmd_session
             ;;
         list|switch|status|cycle-layout)
@@ -155,7 +162,7 @@ _load_libs_for_cmd() {
             ;;
         kill)
             _load_libs output paths locks git tmux state identity state_v2 events project lifecycle parallel notify \
-                hooks messages kill limits spawn cmd_session
+                hooks messages kill spawn cmd_session
             ;;
         group|send|recv)
             _load_libs output state tmux locks identity state_v2 messages cmd_group cmd_messages
@@ -168,22 +175,18 @@ _load_libs_for_cmd() {
             ;;
         regenerate)
             _load_runtime_libs layout
-            _load_libs notify hooks yaml spawn cmd_queue cmd_evidence
+            _load_libs notify hooks yaml spawn cmd_regenerate cmd_evidence
             ;;
         doctor|cleanup)
             _load_libs paths maintenance tmux state git locks identity state_v2 events lifecycle output messages \
-                profiles spawn project parallel worktree_ops cmd_queue cmd_maintenance
+                profiles spawn project parallel worktree_ops cmd_regenerate cmd_maintenance
             ;;
         dashboard|dashboard-exit)
             _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
-            _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
-                lifecycle limits parallel worktree_ops maintenance tui_native tui
-            ;;
-        queue)
-            _load_runtime_libs layout
-            _load_libs operations parallel notify hooks yaml limits spawn cmd_queue
+            _load_libs output paths locks identity git tmux state state_v2 project profiles notify \
+                parallel worktree_ops maintenance tui_native tui
             ;;
         pool)
             _load_runtime_libs
@@ -197,10 +200,7 @@ _load_libs_for_cmd() {
             _load_libs completion_bash completion_zsh completion_fish completion cmd_completion
             ;;
         *)
-            _load_libs output paths locks git tmux layout state completion dashboard github hooks yaml spawn \
-                spawn_bulk kill limits maintenance tui_native tui cmd_spawn cmd_queue cmd_list cmd_session \
-                cmd_group cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion identity \
-                state_v2 project parallel worktree_ops
+            # An unknown command needs no library: main reports it and exits 1.
             ;;
     esac
 }
@@ -231,8 +231,7 @@ init_hydra_home() {
     fi
     # Child commands can change directories; retain one host state authority.
     HYDRA_HOME="$(cd "$HYDRA_HOME" && pwd -P)" || exit 1
-    HYDRA_1X_MAP="$HYDRA_HOME/map"
-    export HYDRA_HOME HYDRA_1X_MAP
+    export HYDRA_HOME
 }
 
 # Load the top-level usage and dispatcher after library discovery is ready.

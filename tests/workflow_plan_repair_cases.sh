@@ -48,6 +48,13 @@ if grep -q '\''"attempt":2'\'' "$HYDRA_TASK_INPUT_DIR/repair"; then verdict=pass
 }
 workflow_plan_repair_assert() {
     : "${run_dir:?}" "${code:?}" "${root:?}" "${run:?}"
+    if [ "$HYDRA_TEST_PLAN_REPAIR" != crash ] && [ ! -e "$run_dir/repair-round" ]; then
+        # A run that never started a repair round has no repair-round file.
+        # The fixture's EXIT trap prints the run's evidence (workflow_plan_explain.sh).
+        # shellcheck disable=SC2034 # read by workflow_plan_task_explain
+        explain_reason="plan repair case $HYDRA_TEST_PLAN_REPAIR: the run ended with exit code $code and no repair round"
+        exit 1
+    fi
     if [ "$HYDRA_TEST_PLAN_REPAIR" = crash ]; then
         [ "$code" != 0 ]
         [ ! -e "$run_dir/repair-2.json" ]

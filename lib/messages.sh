@@ -93,52 +93,52 @@ send_message() {
         fi
     fi
 
-    # Use atomic write via lock with retries
-    _retries=0
-    while [ "$_retries" -lt 5 ]; do
-        if try_lock "$msg_lock" "message append"; then
-            while [ -e "$msg_file" ] || [ -e "$meta_file" ] || [ -e "$receipt_file" ]; do
-                hash=$((hash + 1))
-                filename="${timestamp}_${safe_sender}_${hash}"
-                msg_file="$msg_dir/queue/$filename"
-                meta_file="$msg_dir/metadata/$filename"
-                receipt_file="$msg_dir/receipts/$filename"
-            done
-            _sm_body_tmp="$(mktemp_adjacent "$msg_file")" || { release_lock "$msg_lock"; return 1; }
-            _sm_meta_tmp="$(mktemp_adjacent "$meta_file")" || { rm -f "$_sm_body_tmp"; release_lock "$msg_lock"; return 1; }
-            _sm_receipt_tmp="$(mktemp_adjacent "$receipt_file")" || { rm -f "$_sm_body_tmp" "$_sm_meta_tmp"; release_lock "$msg_lock"; return 1; }
-            printf '%s\n' "$message" > "$_sm_body_tmp"
-            {
-                printf 'type=%s\n' "$msg_type"
-                printf 'delivery=%s\n' "$delivery"
-                printf 'sender=%s\n' "$sender"
-                printf 'target=%s\n' "$target"
-                printf 'target_instance=%s\n' "$target_instance"
-                printf 'queued_at=%s\n' "$timestamp"
-            } > "$_sm_meta_tmp"
-            {
-                printf 'status=queued\n'
-                printf 'updated_at=%s\n' "$timestamp"
-                printf 'target_instance=%s\n' "$target_instance"
-            } > "$_sm_receipt_tmp"
-            chmod 600 "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp" 2>/dev/null || true
-            if ! atomic_replace "$meta_file" "$_sm_meta_tmp" || \
-               ! atomic_replace "$receipt_file" "$_sm_receipt_tmp" || \
-               ! atomic_replace "$msg_file" "$_sm_body_tmp"; then
-                rm -f "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp"
-                release_lock "$msg_lock"
-                return 1
-            fi
-            release_lock "$msg_lock"
-            printf '%s\n' "$filename"
-            return 0
-        fi
-        _retries=$((_retries + 1))
-        sleep 0.05
+    # The shared lock path: it retries, and takes over a lock whose owner died
+    # on this host (a sender that was killed while it held the lock).
+    if ! acquire_lock "$msg_lock" "message append"; then
+        echo "Error: Failed to acquire message lock for '$target'" >&2
+        return 1
+    fi
+    while [ -e "$msg_file" ] || [ -e "$meta_file" ] || [ -e "$receipt_file" ]; do
+        hash=$((hash + 1))
+        filename="${timestamp}_${safe_sender}_${hash}"
+        msg_file="$msg_dir/queue/$filename"
+        meta_file="$msg_dir/metadata/$filename"
+        receipt_file="$msg_dir/receipts/$filename"
     done
-
-    echo "Error: Failed to acquire message lock for '$target'" >&2
-    return 1
+    _sm_body_tmp="$(mktemp_adjacent "$msg_file")" || { release_lock "$msg_lock"; return 1; }
+    _sm_meta_tmp="$(mktemp_adjacent "$meta_file")" || { rm -f "$_sm_body_tmp"; release_lock "$msg_lock"; return 1; }
+    _sm_receipt_tmp="$(mktemp_adjacent "$receipt_file")" || { rm -f "$_sm_body_tmp" "$_sm_meta_tmp"; release_lock "$msg_lock"; return 1; }
+    # A failed write must not queue an empty or truncated message.
+    if ! printf '%s\n' "$message" > "$_sm_body_tmp" ||
+        ! {
+            printf 'type=%s\n' "$msg_type" &&
+            printf 'delivery=%s\n' "$delivery" &&
+            printf 'sender=%s\n' "$sender" &&
+            printf 'target=%s\n' "$target" &&
+            printf 'target_instance=%s\n' "$target_instance" &&
+            printf 'queued_at=%s\n' "$timestamp"
+        } > "$_sm_meta_tmp" ||
+        ! {
+            printf 'status=queued\n' &&
+            printf 'updated_at=%s\n' "$timestamp" &&
+            printf 'target_instance=%s\n' "$target_instance"
+        } > "$_sm_receipt_tmp"; then
+        rm -f "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp"
+        release_lock "$msg_lock"
+        return 1
+    fi
+    chmod 600 "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp" 2>/dev/null || true
+    if ! atomic_replace "$meta_file" "$_sm_meta_tmp" || \
+       ! atomic_replace "$receipt_file" "$_sm_receipt_tmp" || \
+       ! atomic_replace "$msg_file" "$_sm_body_tmp"; then
+        rm -f "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp"
+        release_lock "$msg_lock"
+        return 1
+    fi
+    release_lock "$msg_lock"
+    printf '%s\n' "$filename"
+    return 0
 }
 
 # =============================================================================
@@ -159,28 +159,16 @@ _message_write_receipt_locked() {
     case "$_mwr_status" in queued|delivered|stale) ;; *) return 1 ;; esac
     _mwr_path="$_mwr_dir/receipts/$_mwr_id"
     _mwr_tmp="$(mktemp_adjacent "$_mwr_path")" || return 1
-    printf 'status=%s\nupdated_at=%s\ntarget_instance=%s\n' \
-        "$_mwr_status" "$(date +%s)" "$_mwr_instance" > "$_mwr_tmp"
+    if ! printf 'status=%s\nupdated_at=%s\ntarget_instance=%s\n' \
+        "$_mwr_status" "$(date +%s)" "$_mwr_instance" > "$_mwr_tmp"; then
+        rm -f "$_mwr_tmp"
+        return 1
+    fi
     chmod 600 "$_mwr_tmp" 2>/dev/null || true
     if ! atomic_replace "$_mwr_path" "$_mwr_tmp"; then
         rm -f "$_mwr_tmp"
         return 1
     fi
-}
-
-message_write_receipt() {
-    _mwr_branch="$1"
-    _mwr_id="$2"
-    _mwr_status="$3"
-    _mwr_instance="$4"
-    _mwr_dir="$(get_message_dir "$_mwr_branch")"
-    _mwr_lock="$(get_message_lock "$_mwr_branch")"
-    acquire_lock "$_mwr_lock" "message receipt update" || return 1
-    if ! _message_write_receipt_locked "$_mwr_dir" "$_mwr_id" "$_mwr_status" "$_mwr_instance"; then
-        release_lock "$_mwr_lock"
-        return 1
-    fi
-    release_lock "$_mwr_lock"
 }
 
 recv_messages() {
@@ -342,34 +330,6 @@ messages_safe_point() (
     done
 )
 
-# Count pending messages for a branch
-# Usage: count_messages <branch>
-# Returns: Count on stdout
-count_messages() {
-    branch="${1:-}"
-
-    if [ -z "$branch" ]; then
-        echo "0"
-        return
-    fi
-
-    msg_dir="$(get_message_dir "$branch")" || return 1
-    queue_dir="$msg_dir/queue"
-
-    if [ ! -d "$queue_dir" ]; then
-        echo "0"
-        return
-    fi
-
-    # Count files in queue directory
-    count=0
-    for f in "$queue_dir"/*; do
-        [ -f "$f" ] && count=$((count + 1))
-    done
-
-    echo "$count"
-}
-
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -383,26 +343,6 @@ get_current_branch() {
         return 1
     fi
     get_branch_for_session "$current_session"
-}
-
-# Clean up old messages (archive older than N days)
-# Usage: cleanup_old_messages [days]
-# Returns: 0 always
-cleanup_old_messages() {
-    days="${1:-7}"
-    msg_base="${HYDRA_HOME:-$HOME/.hydra}"
-
-    if [ ! -d "$msg_base" ]; then
-        return 0
-    fi
-
-    # Find and remove archived messages older than N days
-    find "$msg_base" -path "*/messages/archive/*" -type f -mtime +"$days" -delete 2>/dev/null || true
-
-    # Remove empty directories
-    find "$msg_base" -path "*/messages/*" -type d -empty -delete 2>/dev/null || true
-
-    return 0
 }
 
 # Clean up messages for a dead session

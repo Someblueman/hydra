@@ -4,10 +4,15 @@
 
 # Populate LIST_* and the existing lifecycle/Git snapshots once per row.
 # Arguments: branch, timestamp, PR, include Git, skip PR status, refresh PR status.
+# Ages are measured against LIST_NOW, which cmd_list reads once.
 list_row_details() {
     LIST_DURATION_SECONDS=0
-    if [ -n "$2" ] && [ "$2" != - ]; then LIST_DURATION_SECONDS="$(get_duration_since "$2")"; fi
-    LIST_DURATION="$(format_duration "$LIST_DURATION_SECONDS")"
+    if [ -n "$2" ] && [ "$2" != - ]; then
+        state_load_age "$2" "$LIST_NOW"
+        LIST_DURATION_SECONDS="$STATE_AGE_SECONDS"
+    fi
+    state_load_duration "$LIST_DURATION_SECONDS"
+    LIST_DURATION="$STATE_DURATION"
     LIST_PR_STATUS=""
     if [ -n "$3" ] && [ "$3" != - ] && [ -z "$5" ]; then
         _load_lib github
@@ -16,8 +21,10 @@ list_row_details() {
     lifecycle_snapshot "$1"
     LIST_GIT_JSON=null
     if [ -n "$4" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
-        _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
-        _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+        state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/worktree"
+        _clg_worktree="$STATE_V2_SCALAR"
+        state_v2_read_scalar "$LIFECYCLE_HEAD_DIR/base-ref"
+        _clg_base="$STATE_V2_SCALAR"
         if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
             operations_git_counts "$_clg_worktree" "$_clg_base"
             LIST_GIT_JSON="{\"base_ref\":\"$_clg_base\",\"ahead\":$OPERATIONS_AHEAD,\"behind\":$OPERATIONS_BEHIND,\"dirty_paths\":$OPERATIONS_DIRTY}"
@@ -206,10 +213,12 @@ cmd_list() {
         echo ""
     fi
     total=0 active=0 dead=0
+    LIST_NOW="$(get_timestamp)"
     while IFS=' ' read -r branch session ai group timestamp deps pr; do
         [ -z "$filter_group" ] || [ "$group" = "$filter_group" ] || continue
         total=$((total + 1))
-        _row_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+        _row_mode=interactive
+        if _state_load_terminal_mode "$branch"; then _row_mode="$STATE_TERMINAL_MODE"; fi
         if [ "$_row_mode" = headless ] || tmux_snapshot_has_session "$session"; then
             status=active; active=$((active + 1))
         else

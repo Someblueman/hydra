@@ -18,7 +18,7 @@ void native_controls_tick(struct app *app) {
         pid_t result=waitpid(app->control_pids[i],&status,WNOHANG);
         if (result==app->control_pids[i]) {
             const char *state = control_outcome(status, !strncmp(app->control_labels[i], "task:", 5));
-            snprintf(app->notice,sizeof(app->notice),"Control %s / refresh task evidence: %s",state,app->control_labels[i]);
+            notice_set(app, "Control %s / refresh task evidence: %s",state,app->control_labels[i]);
             app->control_pids[i]=0;
         } else if (result<0 && errno==ECHILD) {
             app->control_pids[i]=0;
@@ -45,7 +45,7 @@ bool native_fleet_control_submit(struct app *app, const struct task_observation 
     for (i = 0; i < 4 && app->control_pids[i]; i++) { }
     if (i == 4 || !native_detached_start(&app->control_pids[i], argv, -1)) return false;
     snprintf(app->control_labels[i], sizeof(app->control_labels[i]), "task:%s %.80s on %.40s", action, task->task_id, task->host);
-    snprintf(app->notice, sizeof(app->notice), "%s dispatched for %s; refresh receiver evidence", action, task->task_id);
+    notice_set(app, "%s dispatched for %s; refresh receiver evidence", action, task->task_id);
     return true;
 }
 
@@ -56,6 +56,6 @@ bool native_control_submit(struct app *app, const char *run, const char *action,
     for (i=0;i<4;i++) if (!app->control_pids[i]) break;
     if (i==4 || !native_detached_start(&app->control_pids[i],argv,-1)) return false;
     snprintf(app->control_labels[i],sizeof(app->control_labels[i]),"%s run %s",action,run);
-    snprintf(app->notice,sizeof(app->notice),"%s requested. Decisions do not resume work automatically.",app->control_labels[i]);
+    notice_set(app, "%s requested. Decisions do not resume work automatically.",app->control_labels[i]);
     return true;
 }

@@ -133,9 +133,7 @@ assert_success $? "stale ownership is recorded as an event"
 
 echo "Testing unknown outcomes, operator decisions and repair rounds..."
 token3="$(json_field "$out" token)"
-sleep 1 &
-dead_pid=$!
-wait "$dead_pid"
+dead_pid="$(test_dead_pid)"
 "$HYDRA_BIN" pool complete bounded task-0002 --token "$token3" --outcome failed >/dev/null
 assert_equal failed "$(sed -n '1p' "$pool_dir/tasks/task-0002/state")" "a non-idempotent failure is terminal"
 "$HYDRA_BIN" pool create unknown --max-outstanding 2 --max-repair-rounds 1 >/dev/null

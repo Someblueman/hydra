@@ -168,6 +168,10 @@ static int slot_signal(size_t slot) {
     return slot < PIPE_SLOT ? fatal_signals[slot - WAKE_COUNT] : SIGPIPE;
 }
 
+int kt_child_signal(size_t index) {
+    return index < SIGNAL_SLOTS ? slot_signal(index) : 0;
+}
+
 static void signals_restore(struct kt_posix *b) {
     size_t slot;
     for (slot = 0; slot < SIGNAL_SLOTS; slot++) {

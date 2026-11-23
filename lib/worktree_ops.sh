@@ -25,7 +25,8 @@ worktree_physical_path() {
 # Recorded head worktree paths, as stored and in physical form, one per line.
 worktree_recorded_head_paths() {
     for _wrhp_head in "$PARALLEL_PROJECT_DIR"/heads/head_*; do
-        _wrhp_path="$(sed -n '1p' "$_wrhp_head/worktree" 2>/dev/null || true)"
+        state_v2_read_scalar "$_wrhp_head/worktree"
+        _wrhp_path="$STATE_V2_SCALAR"
         [ -n "$_wrhp_path" ] || continue
         printf '%s\n' "$_wrhp_path"
         [ ! -d "$_wrhp_path" ] || worktree_physical_path "$_wrhp_path"

@@ -10,7 +10,9 @@ state_v2_init() {
         (umask 077; printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version") || return 1
         chmod 600 "$HYDRA_STATE_V2_ROOT/schema-version" 2>/dev/null || true
     fi
-    [ "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" = "2" ]
+    state_v2_read_scalar "$HYDRA_STATE_V2_ROOT/schema-version"
+    _sv2i_version="$STATE_V2_SCALAR"
+    [ "$_sv2i_version" = "2" ]
 }
 
 state_v2_project_dir() {
@@ -26,6 +28,20 @@ state_v2_head_dir() {
     printf '%s/projects/%s/heads/%s\n' "$HYDRA_STATE_V2_ROOT" "$_sv2hd_project" "$_sv2hd_head"
 }
 
+# Read a record's first line without starting a process.
+# Usage: state_v2_read_scalar <file>
+# Sets STATE_V2_SCALAR to the first line of <file> without its newline, which
+# is what "$(sed -n 1p <file> 2>/dev/null || true)" gives: only the first
+# line, a carriage return is kept, and so is a line that ends the file
+# without a newline. A file that is missing or cannot be read gives the empty
+# string. Nothing is printed and the status is always 0, so a call needs no
+# "|| true" under set -e; test the file itself where its absence matters.
+state_v2_read_scalar() {
+    STATE_V2_SCALAR=
+    # read is false at end of file, also after storing an unterminated line.
+    { IFS= read -r STATE_V2_SCALAR < "$1"; } 2>/dev/null || :
+}
+
 state_v2_write_scalar() {
     _sv2ws_path="$1"
     _sv2ws_value="$2"
@@ -33,9 +49,15 @@ state_v2_write_scalar() {
         *'
 '*|*''*) echo "Error: scalar state values cannot contain newlines" >&2; return 1 ;;
     esac
+    # mktemp_adjacent creates the temporary file private (0600).
     _sv2ws_tmp="$(mktemp_adjacent "$_sv2ws_path")" || return 1
-    printf '%s\n' "$_sv2ws_value" > "$_sv2ws_tmp"
-    chmod 600 "$_sv2ws_tmp" 2>/dev/null || true
+    # A write that fails (full disk, quota, file size limit) leaves an empty
+    # or short temporary file; replacing the record with it would publish that
+    # as the new value and report success.
+    if ! printf '%s\n' "$_sv2ws_value" > "$_sv2ws_tmp"; then
+        rm -f "$_sv2ws_tmp"
+        return 1
+    fi
     if ! atomic_replace "$_sv2ws_path" "$_sv2ws_tmp"; then
         rm -f "$_sv2ws_tmp"
         return 1
@@ -46,8 +68,10 @@ state_v2_write_text() {
     _sv2wt_path="$1"
     _sv2wt_value="$2"
     _sv2wt_tmp="$(mktemp_adjacent "$_sv2wt_path")" || return 1
-    printf '%s' "$_sv2wt_value" > "$_sv2wt_tmp"
-    chmod 600 "$_sv2wt_tmp" 2>/dev/null || true
+    if ! printf '%s' "$_sv2wt_value" > "$_sv2wt_tmp"; then
+        rm -f "$_sv2wt_tmp"
+        return 1
+    fi
     if ! atomic_replace "$_sv2wt_path" "$_sv2wt_tmp"; then
         rm -f "$_sv2wt_tmp"
         return 1
@@ -69,7 +93,9 @@ state_v2_init_project() {
     _sv2ip_lock="project_${_sv2ip_project}"
     acquire_lock "$_sv2ip_lock" "state project init" || return 1
     if [ -d "$_sv2ip_dir" ]; then
-        if [ "$(sed -n '1p' "$_sv2ip_dir/project-id" 2>/dev/null || true)" != "$_sv2ip_project" ] || \
+        state_v2_read_scalar "$_sv2ip_dir/project-id"
+        _sv2ip_recorded="$STATE_V2_SCALAR"
+        if [ "$_sv2ip_recorded" != "$_sv2ip_project" ] || \
            ! hydra_private_mkdir "$_sv2ip_dir/heads" || \
            ! state_v2_write_scalar "$_sv2ip_dir/repo-root" "$_sv2ip_root"; then
             release_lock "$_sv2ip_lock"
@@ -95,19 +121,97 @@ state_v2_init_project() {
     release_lock "$_sv2ip_lock"
 }
 
-state_v2_find_head_by_branch() {
-    _sv2fh_project="$1"
-    _sv2fh_branch="$2"
-    _sv2fh_project_dir="$(state_v2_project_dir "$_sv2fh_project")" || return 1
-    [ -d "$_sv2fh_project_dir/heads" ] || return 1
-    for _sv2fh_dir in "$_sv2fh_project_dir"/heads/head_*; do
-        [ -d "$_sv2fh_dir" ] || continue
-        if [ "$(sed -n '1p' "$_sv2fh_dir/branch" 2>/dev/null || true)" = "$_sv2fh_branch" ]; then
-            basename "$_sv2fh_dir"
+# Branches this process has read so far, for the heads directory in the key
+# while it held the counted number of records: one "<branch><TAB><head id>"
+# line per record, in the order they were read.
+_STATE_V2_BRANCH_INDEX_KEY=
+_STATE_V2_BRANCH_INDEX_COUNT=
+_STATE_V2_BRANCH_INDEX='
+'
+
+# Find the head record of a branch without printing or starting a process.
+# Usage: state_v2_lookup_head <project-id> <branch>
+# Sets STATE_V2_HEAD_ID and STATE_V2_HEAD_DIR and returns 0; both are empty
+# and the status is 1 when no record carries the branch. Records are taken in
+# name order and the first one with the branch wins, whatever its state: a
+# stopped head keeps its branch, and spawn resumes that record.
+#
+# Stopped heads are never deleted, so the records before a branch's own grow
+# without bound. Each record's branch is therefore read once per process: a
+# branch found earlier is answered from the index after confirming that its
+# record still carries it, and a scan skips records it has already read. The
+# winner is unchanged: a record's branch is written once, when the record is
+# created, so an indexed record that carried the branch would have answered
+# before the scan started, and the index is dropped as soon as the number of
+# records differs from the one it was built for (a head was created or
+# removed, by this process or another).
+state_v2_lookup_head() {
+    STATE_V2_HEAD_ID=
+    STATE_V2_HEAD_DIR=
+    hydra_valid_id "$1" || return 1
+    _sv2lh_heads="$HYDRA_STATE_V2_ROOT/projects/$1/heads"
+    [ -d "$_sv2lh_heads" ] || return 1
+    _sv2lh_branch="$2"
+    set -- "$_sv2lh_heads"/head_*
+    if [ "$_STATE_V2_BRANCH_INDEX_KEY" != "$_sv2lh_heads" ] || [ "$_STATE_V2_BRANCH_INDEX_COUNT" != "$#" ]; then
+        _STATE_V2_BRANCH_INDEX_KEY="$_sv2lh_heads"
+        _STATE_V2_BRANCH_INDEX_COUNT="$#"
+        _STATE_V2_BRANCH_INDEX='
+'
+    fi
+    # A name with a tab or a newline could span index lines: never index it.
+    case "$_sv2lh_branch" in
+        *'	'*|*'
+'*) _STATE_V2_BRANCH_INDEX='
+' ;;
+        *)
+            case "$_STATE_V2_BRANCH_INDEX" in
+                *"
+$_sv2lh_branch	"*)
+                    _sv2lh_id="${_STATE_V2_BRANCH_INDEX#*"
+$_sv2lh_branch	"}"
+                    _sv2lh_id="${_sv2lh_id%%"
+"*}"
+                    state_v2_read_scalar "$_sv2lh_heads/$_sv2lh_id/branch"
+                    if [ -d "$_sv2lh_heads/$_sv2lh_id" ] && [ "$STATE_V2_SCALAR" = "$_sv2lh_branch" ]; then
+                        STATE_V2_HEAD_ID="$_sv2lh_id"
+                        # shellcheck disable=SC2034 # read by the callers
+                        STATE_V2_HEAD_DIR="$_sv2lh_heads/$_sv2lh_id"
+                        return 0
+                    fi
+                    # The record changed or is gone: read everything again.
+                    _STATE_V2_BRANCH_INDEX='
+'
+                    ;;
+            esac
+            ;;
+    esac
+    for _sv2lh_dir in "$@"; do
+        [ -d "$_sv2lh_dir" ] || continue
+        _sv2lh_id="${_sv2lh_dir##*/}"
+        case "$_STATE_V2_BRANCH_INDEX" in
+            *"	$_sv2lh_id
+"*) continue ;;
+        esac
+        state_v2_read_scalar "$_sv2lh_dir/branch"
+        case "$STATE_V2_SCALAR" in
+            *'	'*) ;;
+            *) _STATE_V2_BRANCH_INDEX="$_STATE_V2_BRANCH_INDEX$STATE_V2_SCALAR	$_sv2lh_id
+" ;;
+        esac
+        if [ "$STATE_V2_SCALAR" = "$_sv2lh_branch" ]; then
+            STATE_V2_HEAD_ID="$_sv2lh_id"
+            # shellcheck disable=SC2034 # read by the callers
+            STATE_V2_HEAD_DIR="$_sv2lh_dir"
             return 0
         fi
     done
     return 1
+}
+
+state_v2_find_head_by_branch() {
+    state_v2_lookup_head "$1" "$2" || return 1
+    printf '%s\n' "$STATE_V2_HEAD_ID"
 }
 
 state_v2_create_head() {
@@ -174,7 +278,7 @@ state_v2_create_head() {
     _sv2ch_dir="$(state_v2_head_dir "$_sv2ch_project" "$_sv2ch_head")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }
-    _sv2ch_heads_dir="$(dirname "$_sv2ch_dir")"
+    _sv2ch_heads_dir="${_sv2ch_dir%/*}"
     _sv2ch_tmp="$(mktemp -d "$_sv2ch_heads_dir/.head.XXXXXX")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }
@@ -237,6 +341,8 @@ state_v2_verify() {
         return 1
     fi
     _sv2v_errors=0
+    _sv2v_newline='
+'
     for _sv2v_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
         [ -d "$_sv2v_project" ] || continue
         _sv2v_project_id="$(basename "$_sv2v_project")"
@@ -248,6 +354,20 @@ state_v2_verify() {
             echo "state v2: invalid project record $_sv2v_project" >&2
             _sv2v_errors=1
         fi
+        # The branches that more than one head of this project records, each
+        # between newlines: one read per head, where comparing every head with
+        # every other read each branch once per head. A branch is one line, so
+        # a newline cannot be part of it.
+        _sv2v_seen="$_sv2v_newline"
+        _sv2v_shared="$_sv2v_newline"
+        for _sv2v_head in "$_sv2v_project"/heads/head_*; do
+            [ -d "$_sv2v_head" ] || continue
+            _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
+            case "$_sv2v_seen" in
+                *"$_sv2v_newline$_sv2v_branch$_sv2v_newline"*) _sv2v_shared="$_sv2v_shared$_sv2v_branch$_sv2v_newline" ;;
+                *) _sv2v_seen="$_sv2v_seen$_sv2v_branch$_sv2v_newline" ;;
+            esac
+        done
         for _sv2v_head in "$_sv2v_project"/heads/head_*; do
             [ -d "$_sv2v_head" ] || continue
             _sv2v_head_id="$(basename "$_sv2v_head")"
@@ -300,15 +420,12 @@ state_v2_verify() {
                 fi
             done
             _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
-            for _sv2v_other in "$_sv2v_project"/heads/head_*; do
-                [ -d "$_sv2v_other" ] || continue
-                [ "$_sv2v_other" = "$_sv2v_head" ] && continue
-                if [ "$(sed -n '1p' "$_sv2v_other/branch" 2>/dev/null || true)" = "$_sv2v_branch" ]; then
+            case "$_sv2v_shared" in
+                *"$_sv2v_newline$_sv2v_branch$_sv2v_newline"*)
                     echo "state v2: duplicate branch identity '$_sv2v_branch' in $_sv2v_project" >&2
                     _sv2v_errors=1
-                    break
-                fi
-            done
+                    ;;
+            esac
         done
     done
     return "$_sv2v_errors"
@@ -319,76 +436,15 @@ state_v2_backup() {
     hydra_private_mkdir "$HYDRA_HOME/backups" || return 1
     _sv2b_dir="$(mktemp -d "$HYDRA_HOME/backups/state-$_sv2b_stamp.XXXXXX")" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
-    if [ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ]; then
-        cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map" || { rm -rf "$_sv2b_dir"; return 1; }
-    else
-        hydra_private_touch "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
-    fi
+    # Nothing here reads this marker. Hydra 4.0.0 refuses to roll back a
+    # backup that holds neither "map" nor "map.absent", so it is written for
+    # a user who downgrades to 4.0.0 and restores a backup made by this release.
+    hydra_private_touch "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
     if [ ! -d "$HYDRA_HOME/state" ] || ! cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"; then
         rm -rf "$_sv2b_dir"
         return 1
     fi
     printf '%s\n' "$_sv2b_dir"
-}
-
-_state_v2_projection_matches() {
-    _sv2pm_project_dir="$1"
-    _sv2pm_map="$_sv2pm_project_dir/compat-map"
-    [ -f "$_sv2pm_map" ] || return 0
-    while IFS=' ' read -r _sv2pm_branch _sv2pm_session _sv2pm_profile _sv2pm_group \
-        _sv2pm_created _sv2pm_deps _sv2pm_pr _sv2pm_extra || [ -n "${_sv2pm_branch:-}" ]; do
-        if [ -z "${_sv2pm_branch:-}" ] || [ -z "${_sv2pm_session:-}" ] || \
-            [ -n "${_sv2pm_extra:-}" ]; then
-            echo "Error: malformed 1.9 compatibility projection: $_sv2pm_map" >&2
-            return 1
-        fi
-        _sv2pm_head="$(state_v2_find_head_by_branch "$(basename "$_sv2pm_project_dir")" \
-            "$_sv2pm_branch" 2>/dev/null)" || {
-            echo "Error: compatibility projection has no durable head: $_sv2pm_branch" >&2
-            return 1
-        }
-        _sv2pm_dir="$_sv2pm_project_dir/heads/$_sv2pm_head"
-        if [ "$(sed -n '1p' "$_sv2pm_dir/session")" != "$_sv2pm_session" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/profile")" != "${_sv2pm_profile:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/group")" != "${_sv2pm_group:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/created-at")" != "${_sv2pm_created:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/dependencies")" != "${_sv2pm_deps:--}" ] || \
-            [ "$(sed -n '1p' "$_sv2pm_dir/pr")" != "${_sv2pm_pr:--}" ]; then
-            echo "Error: compatibility projection diverges from durable head: $_sv2pm_branch" >&2
-            return 1
-        fi
-    done < "$_sv2pm_map"
-}
-
-state_v2_migrate() {
-    _sv2m_dry_run="${1:-}"
-    state_v2_verify || return 1
-    _sv2m_count=0
-    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
-        [ -d "$_sv2m_project" ] || continue
-        _state_v2_projection_matches "$_sv2m_project" || return 1
-        [ ! -f "$_sv2m_project/compat-map" ] || _sv2m_count=$((_sv2m_count + 1))
-    done
-    if [ "$_sv2m_dry_run" = --dry-run ]; then
-        echo "State migration plan:"
-        echo "  remove verified 1.9 compatibility projections: $_sv2m_count"
-        echo "  remove inactive global 1.x map: $([ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] && echo yes || echo no)"
-        echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>"
-        echo "  verify authoritative state v2 after migration: yes"
-        return 0
-    fi
-    _sv2m_backup="$(state_v2_backup)" || return 1
-    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
-        [ -d "$_sv2m_project" ] || continue
-        rm -f "$_sv2m_project/compat-map" || return 1
-    done
-    rm -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" || return 1
-    state_v2_verify || {
-        echo "Error: post-migration verification failed; rollback with: hydra state rollback $_sv2m_backup" >&2
-        return 1
-    }
-    echo "Removed $_sv2m_count compatibility projection(s)"
-    echo "Backup: $_sv2m_backup"
 }
 
 _state_v2_release_locks_file() {
@@ -406,14 +462,14 @@ state_v2_rollback() {
         *) echo "Error: backup must be under $HYDRA_HOME/backups" >&2; return 1 ;;
     esac
     [ -d "$_sv2r_backup" ] || { echo "Error: backup does not exist: $_sv2r_backup" >&2; return 1; }
-    if [ ! -d "$_sv2r_backup/state" ] || \
-       { [ -f "$_sv2r_backup/map" ] && [ -f "$_sv2r_backup/map.absent" ]; } || \
-       { [ ! -f "$_sv2r_backup/map" ] && [ ! -f "$_sv2r_backup/map.absent" ]; }; then
+    if [ ! -d "$_sv2r_backup/state" ]; then
         echo "Error: backup is incomplete: $_sv2r_backup" >&2
         return 1
     fi
+    # Only the state tree is restored. A backup made by 4.0.0 may also hold
+    # "map", a copy of the Hydra 1.x session map that no release since 2.0
+    # reads, or the marker "map.absent"; neither is used.
     _sv2r_guard="$HYDRA_HOME/state"
-    _sv2r_map_target="${HYDRA_1X_MAP:-$HYDRA_HOME/map}"
     if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
         return 1
     fi
@@ -470,26 +526,9 @@ state_v2_rollback() {
             return 1
         }
     fi
-    _sv2r_map_tmp=""
-    if [ -f "$_sv2r_backup/map" ]; then
-        _sv2r_map_tmp="$(mktemp_adjacent "$_sv2r_map_target")" || {
-            rm -rf "$_sv2r_stage"
-            _state_v2_release_locks_file "$_sv2r_locks"
-            rm -f "$_sv2r_locks"
-            return 1
-        }
-        cp "$_sv2r_backup/map" "$_sv2r_map_tmp" || {
-            [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
-            rm -rf "$_sv2r_stage"
-            _state_v2_release_locks_file "$_sv2r_locks"
-            rm -f "$_sv2r_locks"
-            return 1
-        }
-    fi
 
     if [ -d "$_sv2r_guard" ]; then
         mv "$_sv2r_guard" "$_sv2r_stage/previous-state" || {
-            rm -f "$_sv2r_map_tmp"
             rm -rf "$_sv2r_stage"
             _state_v2_release_locks_file "$_sv2r_locks"
             rm -f "$_sv2r_locks"
@@ -498,17 +537,6 @@ state_v2_rollback() {
     fi
     if [ -d "$_sv2r_stage/restored-state" ] && ! mv "$_sv2r_stage/restored-state" "$_sv2r_guard"; then
         [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
-        rm -rf "$_sv2r_stage"
-        _state_v2_release_locks_file "$_sv2r_locks"
-        rm -f "$_sv2r_locks"
-        return 1
-    fi
-    if { [ -n "$_sv2r_map_tmp" ] && ! atomic_replace "$_sv2r_map_target" "$_sv2r_map_tmp"; } || \
-       { [ -z "$_sv2r_map_tmp" ] && ! rm -f "$_sv2r_map_target"; }; then
-        [ ! -d "$_sv2r_guard" ] || mv "$_sv2r_guard" "$_sv2r_stage/failed-state"
-        [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
         rm -rf "$_sv2r_stage"
         _state_v2_release_locks_file "$_sv2r_locks"
         rm -f "$_sv2r_locks"

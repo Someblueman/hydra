@@ -44,16 +44,16 @@ shotf() {
 # approval and the item Hydra cannot classify, in that order.
 shota() {
     name="$1"; shift
-    shot "$name" --attention-fixture "$f/attention-v3.tsv" --view attention "$@"
+    shot "$name" --attention-fixture "$f/attention-v3.tsv" --view inbox "$@"
 }
 shota attention-list
 shota attention-detail-failure --keys "j$enter"
 shota attention-detail-result --keys "jj$enter"
 shota attention-detail-unknown --keys "jjjjjjj$enter"
-shot attention-empty --attention-fixture "$work/attention-empty.tsv" --view attention
-shot attention-stale --attention-fixture "$f/attention-v3.tsv" --attention-fixture "$work/attention-broken.tsv" --view attention
-shot attention-unavailable --attention-fixture "$work/attention-broken.tsv" --view attention
-shot attention-loading --view attention
+shot attention-empty --attention-fixture "$work/attention-empty.tsv" --view inbox
+shot attention-stale --attention-fixture "$f/attention-v3.tsv" --attention-fixture "$work/attention-broken.tsv" --view inbox
+shot attention-unavailable --attention-fixture "$work/attention-broken.tsv" --view inbox
+shot attention-loading --view inbox
 shota review-failure --keys j --review-fixture "$f/review-failure.tsv"
 shota review-result --keys jj --review-fixture "$f/review-result.tsv"
 shota review-result-changes --keys jj --review-fixture "$f/review-result.tsv" --keys nnnnn
@@ -62,26 +62,26 @@ shota review-reference-preview --keys jj --review-fixture "$work/review-result-l
 shota review-identity --keys jj --review-fixture "$f/review-result.tsv" --keys "]]"
 shota review-log --keys jj --review-fixture "$work/review-result-log.tsv" --keys L
 shota review-unavailable --keys jj --review-fixture "$work/review-mismatch.tsv"
-shot work-list --workflow-fixture "$f/workflow-runs.tsv" --view heads
-shot work-list-expanded --workflow-fixture "$f/workflow-runs.tsv" --view heads --task kill-dry-run-worker
+shot work-list --workflow-fixture "$f/workflow-runs.tsv" --view work
+shot work-list-expanded --workflow-fixture "$f/workflow-runs.tsv" --view work --task kill-dry-run-worker
 shot details --workflow-fixture "$f/workflow-runs.tsv" --view detail
 shot details-worker --workflow-fixture "$f/workflow-runs.tsv" --view detail --task kill-dry-run-worker
 shot details-stopped --workflow-fixture "$f/workflow-runs.tsv" --view detail --task notes-cleanup
 shot details-technical --workflow-fixture "$f/workflow-runs.tsv" --diagnostics --task kill-dry-run-worker
 shotf details-remote "$f/native-v2.tsv" --remote-fixture "$f/remote-v3.tsv" --view detail --task archive/feature-index
 shotf details-task "$f/native-v2.tsv" --remote-fixture "$f/remote-v3.tsv" --view detail --task task_build
-shotf recovery-list "$f/native-v2.tsv" --view recovery --keys "jj$enter"
-shotf recovery-detail "$f/native-v2.tsv" --view recovery --diagnostics --keys "jj$enter"
+shotf recovery-list "$f/native-v2.tsv" --view inbox --keys "jj$enter"
+shotf recovery-detail "$f/native-v2.tsv" --view inbox --diagnostics --keys "jj$enter"
 # A plan run that succeeded with its worker still listed is ready to land.
 shot inbox-land --workflow-fixture "$f/workflow-runs.tsv" --attention-fixture "$work/attention-empty.tsv" --view inbox
 shot overview-run --workflow-fixture "$f/workflow-runs.tsv" --view overview
 shot overview-run-live --workflow-fixture "$f/workflow-runs-running.tsv" --view overview
 shot overview-empty-run --view overview
-shot workflows --workflow-fixture "$f/workflow-runs.tsv" --view workflows
-shot work-plan --workflow-fixture "$f/workflow-runs.tsv" --view workspace
-shot workspace --workflow-fixture "$f/workflow-runs.tsv" --view workspace
-shot workspace-enter --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys "$tab$enter"
-shot workspace-monitor --workflow-fixture "$f/workflow-runs.tsv" --view workspace --keys C
-shotf statistics "$f/native-v2.tsv" --statistics-fixture "$f/statistics-v4.tsv" --view statistics
-shotf empty-work "$work/empty.tsv" --view heads
+shot workflows --workflow-fixture "$f/workflow-runs.tsv" --view overview
+shot work-plan --workflow-fixture "$f/workflow-runs.tsv" --view work
+shot workspace --workflow-fixture "$f/workflow-runs.tsv" --view work
+shot workspace-enter --workflow-fixture "$f/workflow-runs.tsv" --view work --keys "$tab$enter"
+shot workspace-monitor --workflow-fixture "$f/workflow-runs.tsv" --view work --keys C
+shotf statistics "$f/native-v2.tsv" --statistics-fixture "$f/statistics-v4.tsv" --view stats
+shotf empty-work "$work/empty.tsv" --view work
 shotf empty-overview "$work/empty.tsv" --view overview

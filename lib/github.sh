@@ -171,24 +171,6 @@ validate_pr_number() {
     return 0
 }
 
-# Fetch PR details from GitHub
-# Usage: fetch_pr_details <pr_number>
-# Returns: JSON data on stdout, 1 on error
-fetch_pr_details() {
-    pr_num="$1"
-
-    if ! validate_pr_number "$pr_num"; then
-        return 1
-    fi
-
-    # Fetch PR data
-    if ! gh pr view "$pr_num" --json number,title,headRefName,state,isDraft 2>/dev/null; then
-        echo "Error: Failed to fetch PR #$pr_num" >&2
-        echo "Make sure you're in a GitHub repository and the PR exists" >&2
-        return 1
-    fi
-}
-
 # Get branch name from PR
 # Usage: get_pr_branch <pr_number>
 # Returns: Branch name on stdout, 1 on error

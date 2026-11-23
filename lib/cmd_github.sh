@@ -109,8 +109,9 @@ cmd_template() {
                 current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
                 branch="$(get_branch_for_session "$current_session" 2>/dev/null || true)"
                 if [ -n "$branch" ]; then
-                    _load_lib paths
-                    wt="$(get_worktree_path_for_branch "$branch" 2>/dev/null || true)"
+                    # The head's recorded worktree, as "hydra path" prints it.
+                    _load_lib project
+                    wt="$(project_branch_worktree "$branch" 2>/dev/null || true)"
                     if [ -n "$wt" ] && [ -f "$wt/.hydra/config.yml" ]; then
                         source_cfg="$wt/.hydra/config.yml"
                     elif [ -n "$wt" ] && [ -f "$wt/.hydra/config.yaml" ]; then

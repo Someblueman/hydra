@@ -187,7 +187,7 @@ static void fixture(void) {
     kt_write(path, "fidelity\n");
     hf_commit_init(&f);
     H("spawn", "one", "--no-agent");
-    kt_format(rows, sizeof(rows), "%s", H("tui", "--data"));
+    kt_format(rows, sizeof(rows), "%s", hf_run(&f, NULL, 0, (const char *[]){f.tui, "--hydra", f.hydra, "--data", NULL}));
     for (p = rows; p && strncmp(p, "H\t", 2); p = strchr(p, '\n') ? strchr(p, '\n') + 1 : NULL) {}
     CHECK(p != NULL, "head row");
     p = strchr(p + 2, '\t') + 1;
@@ -207,7 +207,7 @@ int main(void) {
     fixture();
     show_in_head("codex-exec.raw");
     {
-        const char *argv[] = {f.tui, "--hydra", f.hydra, "--store", NULL};
+        const char *argv[] = {f.tui, "--hydra", f.hydra, NULL};
         kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
     kt_until(&s, "Session     running", 8);

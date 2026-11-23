@@ -24,8 +24,13 @@ export HYDRA_HOME
 
 # Cleanup function
 cleanup_test_locks() {
+    test_stop_processes_naming "$test_home"
     rm -rf "$test_home"
 }
+trap cleanup_test_locks EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # Test try_lock function
 test_try_lock() {
@@ -96,6 +101,274 @@ test_acquire_lock_fail_closed() {
     assert_success $? "acquire_lock should succeed when lock is free"
     release_lock "held"
     unset HYDRA_LOCK_RETRIES
+}
+
+# Writes a lock as try_lock leaves it, for an owner chosen by the test.
+# Usage: plant_lock <name> <pid> <host>
+plant_lock() {
+    mkdir -p "$HYDRA_HOME/locks/$1.lock"
+    : > "$HYDRA_HOME/locks/$1.lock/.claim"
+    [ -z "$2" ] || printf '%s\n' "$2" > "$HYDRA_HOME/locks/$1.lock/pid"
+    [ -z "$3" ] || printf '%s\n' "$3" > "$HYDRA_HOME/locks/$1.lock/host"
+    date +%s > "$HYDRA_HOME/locks/$1.lock/created_at"
+    printf 'planted\n' > "$HYDRA_HOME/locks/$1.lock/operation"
+}
+
+# Names in the lock directory that belong to one lock: the lock itself and
+# anything a breaker left beside it.
+lock_entries() {
+    find "$HYDRA_HOME/locks" -mindepth 1 -maxdepth 1 -name "$1.lock*" -exec basename {} \; | sort | tr '\n' ' '
+}
+
+# A holder that was interrupted or killed never releases. Its lock names a
+# dead process on this host, and the next acquirer takes it over.
+test_acquire_lock_recovers_dead_owner() {
+    echo "Testing acquire_lock recovers a lock whose owner died..."
+
+    dead_pid="$(test_dead_pid)"
+    HYDRA_LOCK_RETRIES=1
+    export HYDRA_LOCK_RETRIES
+
+    plant_lock dead-owner "$dead_pid" "$(hostname)"
+    acquire_lock dead-owner "recovery test"
+    assert_success $? "acquire_lock takes a lock whose owner is dead on this host"
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/dead-owner.lock/pid" 2>/dev/null)" "the recovered lock names its new owner"
+    assert_equal "recovery test" "$(sed -n '1p' "$HYDRA_HOME/locks/dead-owner.lock/operation" 2>/dev/null)" \
+        "acquire_lock records the operation it was given"
+    assert_equal "dead-owner.lock " "$(lock_entries dead-owner)" "breaking a lock leaves nothing beside it"
+    acquire_lock dead-owner
+    assert_failure $? "the recovered lock is held"
+    release_lock dead-owner
+    assert_equal "" "$(lock_entries dead-owner)" "the recovered lock is released like any other"
+
+    acquire_lock unnamed-operation
+    assert_equal "unnamed-operation" "$(sed -n '1p' "$HYDRA_HOME/locks/unnamed-operation.lock/operation" 2>/dev/null)" \
+        "acquire_lock records the lock name when no operation is given"
+    release_lock unnamed-operation
+    unset HYDRA_LOCK_RETRIES
+}
+
+# Evidence that the owner is gone is required: a live process, another host,
+# or an owner record that cannot be read keeps the lock.
+test_acquire_lock_keeps_owned_locks() {
+    echo "Testing acquire_lock never breaks a lock that may be owned..."
+
+    dead_pid="$(test_dead_pid)"
+    sleep 60 &
+    live_pid=$!
+    HYDRA_LOCK_RETRIES=2
+    export HYDRA_LOCK_RETRIES
+
+    plant_lock live-owner "$live_pid" "$(hostname)"
+    acquire_lock live-owner
+    assert_failure $? "acquire_lock refuses a lock whose owner is alive"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/live-owner.lock"
+    assert_failure $? "a lock whose owner is alive is not stale"
+    assert_equal "$live_pid" "$(sed -n '1p' "$HYDRA_HOME/locks/live-owner.lock/pid" 2>/dev/null)" "a live owner keeps its lock"
+
+    plant_lock foreign-owner "$dead_pid" different-host
+    acquire_lock foreign-owner
+    assert_failure $? "acquire_lock refuses a lock owned on another host"
+    assert_equal "$dead_pid" "$(sed -n '1p' "$HYDRA_HOME/locks/foreign-owner.lock/pid" 2>/dev/null)" "another host's lock is kept"
+    assert_equal "foreign-owner.lock " "$(lock_entries foreign-owner)" "refusing another host's lock leaves nothing beside it"
+
+    plant_lock no-owner "" "$(hostname)"
+    acquire_lock no-owner
+    assert_failure $? "acquire_lock refuses a lock without an owner record"
+    plant_lock no-host "$dead_pid" ""
+    acquire_lock no-host
+    assert_failure $? "acquire_lock refuses a lock without a host record"
+    if [ -d "$HYDRA_HOME/locks/no-owner.lock" ] && [ -d "$HYDRA_HOME/locks/no-host.lock" ]; then
+        assert_success 0 "locks with an incomplete owner record are kept"
+    else
+        assert_success 1 "locks with an incomplete owner record are kept"
+    fi
+
+    # Another live process has announced that it is breaking this lock: it
+    # may be about to delete it, so this caller must not.
+    plant_lock being-broken "$dead_pid" "$(hostname)"
+    : > "$HYDRA_HOME/locks/being-broken.lock.breaking.$live_pid"
+    acquire_lock being-broken
+    assert_failure $? "acquire_lock leaves a stale lock to the live process that is breaking it"
+    assert_equal "$dead_pid" "$(sed -n '1p' "$HYDRA_HOME/locks/being-broken.lock/pid" 2>/dev/null)" "the lock being broken elsewhere is untouched"
+    # A breaker that died left its claim behind: it no longer counts.
+    mv "$HYDRA_HOME/locks/being-broken.lock.breaking.$live_pid" "$HYDRA_HOME/locks/being-broken.lock.breaking.$dead_pid"
+    acquire_lock being-broken
+    assert_success $? "a dead breaker's claim does not keep a stale lock held"
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/being-broken.lock/pid" 2>/dev/null)" "the lock a dead breaker left is taken over"
+    release_lock being-broken
+
+    kill "$live_pid" 2>/dev/null
+    wait "$live_pid" 2>/dev/null
+    rm -rf "$HYDRA_HOME/locks/live-owner.lock" "$HYDRA_HOME/locks/foreign-owner.lock" \
+        "$HYDRA_HOME/locks/no-owner.lock" "$HYDRA_HOME/locks/no-host.lock" \
+        "$HYDRA_HOME/locks/being-broken.lock.breaking.$dead_pid"
+    unset HYDRA_LOCK_RETRIES
+}
+
+# acquire_lock records the shell process that calls it. In a subshell that
+# is the subshell, which $$ does not name.
+test_acquire_lock_records_its_holder() {
+    echo "Testing acquire_lock records the process that holds the lock..."
+
+    acquire_lock top-holder
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/top-holder.lock/pid" 2>/dev/null)" "in the top-level shell the holder is \$\$"
+    # Any shell of the command may release what the top-level shell holds.
+    ( release_lock top-holder )
+    assert_equal "" "$(lock_entries top-holder)" "a subshell releases the top-level shell's lock"
+
+    (
+        acquire_lock sub-holder "subshell section" || exit 2
+        recorded="$(sed -n '1p' "$HYDRA_HOME/locks/sub-holder.lock/pid" 2>/dev/null)"
+        # The parent of a process this subshell starts is the subshell.
+        own="$(exec sh -c 'echo "$PPID"')"
+        printf '%s %s\n' "$recorded" "$own" > "$test_home/sub-holder.pids"
+        # A sibling is another process: it must leave the lock alone.
+        ( release_lock sub-holder )
+        [ -d "$HYDRA_HOME/locks/sub-holder.lock" ] || exit 3
+        acquire_lock sub-holder && exit 4
+        release_lock sub-holder
+        [ ! -e "$HYDRA_HOME/locks/sub-holder.lock" ] || exit 5
+        exit 0
+    )
+    sub_status=$?
+    read -r recorded_pid own_pid < "$test_home/sub-holder.pids"
+    assert_equal "$own_pid" "$recorded_pid" "in a subshell the holder is the subshell"
+    if [ "$recorded_pid" != "$$" ]; then
+        assert_success 0 "the subshell's lock does not name the top-level shell"
+    else
+        assert_success 1 "the subshell's lock does not name the top-level shell"
+    fi
+    assert_success "$sub_status" "a subshell releases its own lock, and no other process of the command does (exit $sub_status)"
+
+    # try_lock reserves a name for the whole command: a lock taken in a command
+    # substitution is still held, by a live owner, after the substitution ended.
+    reserved="$(try_lock reserved-name && echo taken)"
+    assert_equal taken "$reserved" "try_lock takes a lock inside a command substitution"
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/reserved-name.lock/pid" 2>/dev/null)" "a lock of try_lock names the top-level shell"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/reserved-name.lock"
+    assert_failure $? "the reserved name is not stale once the substitution has ended"
+    release_lock reserved-name
+    assert_equal "" "$(lock_entries reserved-name)" "the command releases the name it reserved"
+}
+
+# A command is killed while a subshell of it holds a lock. The subshell goes
+# on running its section, so the lock is held: nobody may break it, and the
+# subshell releases it when it is done.
+test_subshell_lock_survives_its_command() {
+    echo "Testing a subshell's lock when the command that started it is killed..."
+
+    cat > "$test_home/holder.sh" <<'EOF'
+#!/bin/sh
+# holder.sh <locks.sh> <directory>: a subshell holds a lock while hold exists.
+. "$1"
+(
+    acquire_lock orphan-held "subshell section" || exit 1
+    : > "$2/holding"
+    while [ -f "$2/hold" ]; do sleep 0.05; done
+    release_lock orphan-held
+    : > "$2/released"
+) &
+wait
+EOF
+    : > "$test_home/hold"
+    sh "$test_home/holder.sh" "$(dirname "$0")/../lib/locks.sh" "$test_home" &
+    command_pid=$!
+    wait_for "the subshell to hold the lock" test -f "$test_home/holding"
+    holder_pid="$(sed -n '1p' "$HYDRA_HOME/locks/orphan-held.lock/pid" 2>/dev/null)"
+    assert_equal "$command_pid" "$(ps -o ppid= -p "$holder_pid" 2>/dev/null | tr -d ' ')" "the lock names the subshell of the command"
+
+    kill -9 "$command_pid"
+    wait "$command_pid" 2>/dev/null
+    kill -0 "$holder_pid" 2>/dev/null
+    assert_success $? "the subshell outlives the command that started it"
+    HYDRA_LOCK_RETRIES=2
+    export HYDRA_LOCK_RETRIES
+    acquire_lock orphan-held "second writer"
+    assert_failure $? "acquire_lock does not break the lock of a live subshell whose command died"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/orphan-held.lock"
+    assert_failure $? "the live subshell's lock is not stale"
+    release_lock orphan-held
+    assert_equal "$holder_pid" "$(sed -n '1p' "$HYDRA_HOME/locks/orphan-held.lock/pid" 2>/dev/null)" "another process cannot release the subshell's lock"
+    unset HYDRA_LOCK_RETRIES
+
+    rm -f "$test_home/hold"
+    wait_for "the subshell to finish its section" test -f "$test_home/released"
+    assert_equal "" "$(lock_entries orphan-held)" "the subshell releases its lock when it is done"
+    acquire_lock orphan-held "second writer"
+    assert_success $? "the lock is free for the next writer"
+    release_lock orphan-held
+    rm -f "$test_home/holder.sh" "$test_home/holding" "$test_home/released" "$test_home/sub-holder.pids"
+}
+
+# Only Hydra's own locks are ever broken: those of acquire_lock and the
+# admission lock. Any other directory is left alone, whatever it records.
+test_remove_stale_lock_dir_paths() {
+    echo "Testing remove_stale_lock_dir only breaks Hydra's own locks..."
+
+    # No process can have PID 99999999, so each record names a dead owner.
+    for stale_dir in "$HYDRA_HOME/admission/lock" "$HYDRA_HOME/admission/other" \
+        "$HYDRA_HOME/elsewhere/name.lock" "$test_home.outside/locks/name.lock"; do
+        mkdir -p "$stale_dir"
+        printf '99999999\n' > "$stale_dir/pid"
+        hostname > "$stale_dir/host"
+    done
+    remove_stale_lock_dir "$HYDRA_HOME/admission/other"
+    assert_failure $? "another directory beside the admission lock is not a lock"
+    remove_stale_lock_dir "$HYDRA_HOME/elsewhere/name.lock"
+    assert_failure $? "a .lock directory outside the lock directory is not a lock"
+    remove_stale_lock_dir "$test_home.outside/locks/name.lock"
+    assert_failure $? "a lock directory outside HYDRA_HOME is not a lock"
+    if [ -f "$HYDRA_HOME/admission/other/pid" ] && [ -f "$HYDRA_HOME/elsewhere/name.lock/pid" ] &&
+        [ -f "$test_home.outside/locks/name.lock/pid" ]; then
+        assert_success 0 "directories that are not locks are untouched"
+    else
+        assert_success 1 "directories that are not locks are untouched"
+    fi
+    remove_stale_lock_dir "$HYDRA_HOME/admission/lock"
+    assert_success $? "the admission lock of a dead owner is broken"
+    assert_equal "other" "$(ls -A "$HYDRA_HOME/admission")" "breaking the admission lock leaves nothing beside it"
+    rm -rf "$HYDRA_HOME/admission" "$HYDRA_HOME/elsewhere" "$test_home.outside"
+}
+
+# Several processes find the same dead owner at once. Each must hold the lock
+# alone: a waiter that deleted the lock another had just taken over would let
+# two of them into the critical section together.
+test_acquire_lock_breaks_once_under_contention() {
+    echo "Testing concurrent acquirers of a lock whose owner died..."
+
+    dead_pid="$(test_dead_pid)"
+    contend_dir="$test_home/contend"
+    mkdir -p "$contend_dir"
+    cat > "$contend_dir/contender.sh" <<'CONTENDER'
+#!/bin/sh
+# contender.sh <locks.sh> <dir>: take the lock, be alone, release.
+HYDRA_LOCK_RETRIES=600
+. "$1"
+if ! acquire_lock contended "contention test"; then
+    echo timeout >> "$2/timeouts"
+    exit 0
+fi
+if mkdir "$2/critical" 2>/dev/null; then
+    sleep 0.01 2>/dev/null || true
+    rmdir "$2/critical"
+else
+    echo overlap >> "$2/overlaps"
+fi
+echo acquired >> "$2/acquired"
+release_lock contended
+CONTENDER
+    plant_lock contended "$dead_pid" "$(hostname)"
+    contenders=""
+    for _ in 1 2 3 4 5 6 7 8; do
+        sh "$contend_dir/contender.sh" "$(dirname "$0")/../lib/locks.sh" "$contend_dir" &
+        contenders="$contenders $!"
+    done
+    # shellcheck disable=SC2086 # A list of PIDs.
+    wait $contenders
+    assert_equal 8 "$(grep -c acquired "$contend_dir/acquired" 2>/dev/null)" "every contender acquired the dead owner's lock in turn"
+    assert_equal "" "$(cat "$contend_dir/overlaps" "$contend_dir/timeouts" 2>/dev/null)" "no two contenders held the lock together"
+    assert_equal "" "$(lock_entries contended)" "contention leaves no lock, claim or leftover behind"
 }
 
 # Test cleanup_stale_locks function
@@ -247,6 +520,20 @@ echo "================================"
 test_try_lock
 test_release_lock
 test_acquire_lock_fail_closed
+test_acquire_lock_recovers_dead_owner
+test_acquire_lock_keeps_owned_locks
+test_acquire_lock_records_its_holder
+# Once more as on a system without /proc, where the shell asks a process for
+# its own PID.
+lock_proc_self="$_LOCK_PROC_SELF"
+# shellcheck disable=SC2034 # read by lock_load_self_pid
+_LOCK_PROC_SELF=
+test_acquire_lock_records_its_holder
+# shellcheck disable=SC2034
+_LOCK_PROC_SELF="$lock_proc_self"
+test_subshell_lock_survives_its_command
+test_remove_stale_lock_dir_paths
+test_acquire_lock_breaks_once_under_contention
 test_cleanup_stale_locks
 test_cleanup_dead_local_lock
 test_release_session_lock

@@ -15,11 +15,6 @@ cmd_tui() {
             tui_attach_instance "$@"
             return $?
             ;;
-        --basic)
-            echo "Error: the basic shell TUI was removed; 'hydra tui' opens the native control centre" >&2
-            echo "Next: run 'hydra tui', or use 'hydra list' and 'hydra switch' without the native helper" >&2
-            return 2
-            ;;
         --capabilities)
             shift
             if [ "${1:-}" = --json ]; then
@@ -30,12 +25,6 @@ cmd_tui() {
                 [ $# -eq 0 ] || return 2
                 tui_native_capabilities 0
             fi
-            return $?
-            ;;
-        --data)
-            shift
-            [ $# -eq 0 ] || return 2
-            tui_native_emit_data
             return $?
             ;;
         --remote-data)

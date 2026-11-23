@@ -212,6 +212,19 @@ bool terminal_lend(struct app *app, struct terminal_loan *loan, bool shield) {
     return true;
 }
 
+/* Waits for Enter on a lent terminal. End of input ends the wait, and so does
+ * a read error: a terminal that has gone away fails every read at once, and
+ * reading on would spin at full speed. An interrupted read is tried again. */
+void terminal_await_enter(void) {
+    int c;
+    do {
+        errno = 0;
+        c = getchar();
+        if (c == EOF && ferror(stdin) && errno == EINTR) { clearerr(stdin); c = 0; }
+    } while (c != '\n' && c != EOF);
+    clearerr(stdin);
+}
+
 /* Takes the terminal back; the next frame repaints all of it. False when the
  * terminal could not be taken back: the control centre then ends. */
 bool terminal_return(struct app *app, struct terminal_loan *loan) {

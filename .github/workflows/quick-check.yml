@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
 
+# One run per pull request: a new push cancels every job of the previous run.
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -15,6 +16,7 @@ jobs:
   pr-gate:
     name: pr-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@v4
     
@@ -30,3 +32,55 @@ jobs:
 
     - name: Check native attachment and capture cleanup
       run: HYDRA_TEST_LIFECYCLE_ONLY=1 make test-tui-pty
+
+  # The lanes below run beside pr-gate with the setup steps ci.yml uses for the
+  # same runner. They cover what was otherwise first seen on a push to main,
+  # develop or a release branch: macOS, optimisation levels other than -O2 and
+  # the sanitizers.
+  macos-native:
+    name: macOS native build and tests
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (macOS)
+      run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Build and test native protocol and mission control
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-native
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make build-fleet build-core build-tui
+        make test-c test-tui test-kettle test-parity
+
+  opt-levels:
+    name: Warnings at every optimisation level
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Compile every native source at -O0, -Og, -O1, -O2, -O3 and -Os
+      run: make -j"$(nproc)" check-opt-levels
+
+  sanitize:
+    name: Sanitizers (core and TUI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Run the core and TUI sanitizer lanes
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make sanitize SANITIZE_LANES="core tui"

@@ -68,8 +68,9 @@ printf 'Scanned and pruned 482 records in %ss\n' "$(($(date +%s) - started))"
 [ "$(count 'old_cancelled_*')" -eq 0 ] || fail 'finished records unchanged for 30 days are removed'
 [ "$(count 'refused_*')" -eq 50 ] || fail 'the most recently changed finished records are kept'
 [ "$(count 'released_*')" -eq 206 ] || fail 'at most 256 finished records are kept'
-[ ! -e "$records/released_94.request" ] && [ -f "$records/released_95.request" ] ||
+if [ -e "$records/released_94.request" ] || [ ! -f "$records/released_95.request" ]; then
     fail 'the least recently changed finished records go first'
+fi
 [ ! -e "$records/lock" ] || fail 'the admission lock is released'
 
 # Sequence numbers continue past the kept highest one; the new request queues

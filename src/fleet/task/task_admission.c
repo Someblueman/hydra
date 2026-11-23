@@ -1,5 +1,6 @@
 #include "fleet/task/task.h"
 #include "fleet/support/files.h"
+#include "fleet/support/process.h"
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -73,23 +74,79 @@ int task_admission_context(const char *directory, json_object *state, json_objec
 done:
     free(existing); json_object_put(accepted); return status;
 }
+/* The wait between claims. A claim is a shell process tree (about 15
+ * programs, 30 ms), and the slot it is waiting for frees up when another
+ * task finishes, which takes seconds to minutes. The first retry comes soon,
+ * after ADMISSION_FIRST_MS, then the wait doubles up to ADMISSION_CAP_MS: a
+ * freed slot is found within the cap and a long wait costs about a claim a
+ * second. It is spent in slices of at most ADMISSION_SLICE_MS, so that a
+ * cancellation is seen as soon as it ever was, and it never runs past the
+ * queue deadline. */
+#define ADMISSION_FIRST_MS 20L
+#define ADMISSION_CAP_MS 1000L
+#define ADMISSION_SLICE_MS 100L
+/* The pause that follows one of previous ms (0 before the first): short
+ * first, then doubled up to the cap. Pure, so the schedule can be tested
+ * without a clock. */
+long task_admission_pause_ms(long previous) {
+    if (previous <= 0) return ADMISSION_FIRST_MS;
+    return previous * 2 < ADMISSION_CAP_MS ? previous * 2 : ADMISSION_CAP_MS;
+}
+static int64_t realtime_ms(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now)) return (int64_t)time(NULL) * 1000;
+    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+/* time() reads a coarse clock that can lag a few milliseconds behind the one
+ * the pause is cut by, so the deadline is judged by the same clock. */
+static bool past(int64_t deadline) { return realtime_ms() >= deadline * 1000; }
+/* Returns after ms, at the deadline, or when a stop request or a stop signal
+ * ends it early: the caller looks at the deadline and the stop request again. */
+static void pause_until(struct task_control *control, long ms, int64_t deadline) {
+    while (ms > 0) {
+        int64_t left = deadline * 1000 - realtime_ms(); long slice = ms < ADMISSION_SLICE_MS ? ms : ADMISSION_SLICE_MS;
+        struct timespec pause, rest;
+        if (left <= 0) return;
+        if (slice > left) slice = (long)left;
+        pause.tv_sec = 0; pause.tv_nsec = slice * 1000000L;
+        /* A signal that is not a stop (the SIGCHLD of a claim) does not
+         * shorten the pause: only what was slept counts. */
+        if (nanosleep(&pause, &rest)) {
+            if (errno != EINTR || f_stopped) return;
+            slice -= (long)(rest.tv_sec * 1000 + (rest.tv_nsec + 999999L) / 1000000L);
+        }
+        ms -= slice;
+        if (control->process.stop(control->process.context)) return;
+    }
+}
+/* What the recorded admission says now: 0 reserved, 1 still queued, -1 it
+ * will not be (the failure is recorded in state). */
+static int admission_verdict(json_object *state, int64_t deadline) {
+    const char *name = f_string(f_field(state, "admission"), "state");
+    if (!name) return -1;
+    if (past(deadline) || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
+        f_string_add(state, "failure", "queue_deadline"); return -1;
+    }
+    if (!strcmp(name, "reserved")) return 0;
+    if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
+    return 1;
+}
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control) {
     const char *id = f_string(state, "admission_id");
     char *argv[] = {(char *)f_hydra, "admission", "claim", (char *)id, NULL};
     int64_t deadline = json_object_get_int64(f_field(state, "admission_deadline"));
-    struct timespec pause = {0, 200000000};
+    long wait = 0;
     if (!id) return -1;
     for (;;) {
-        const char *name = f_string(f_field(state, "admission"), "state");
-        json_object *reply; int status;
+        json_object *reply; int status, verdict;
         if (control->process.stop(control->process.context)) return -1;
-        if (!name) return -1;
-        if ((int64_t)time(NULL) >= deadline || (int64_t)time(NULL) < json_object_get_int64(f_field(f_field(state, "admission"), "requested_at"))) {
-            f_string_add(state, "failure", "queue_deadline"); return -1;
-        }
-        if (!strcmp(name, "reserved")) return 0;
-        if (strcmp(name, "queued")) { f_string_add(state, "failure", f_string(f_field(state, "admission"), "reason")); return -1; }
-        nanosleep(&pause, NULL);
+        verdict = admission_verdict(state, deadline);
+        if (verdict <= 0) return verdict;
+        wait = task_admission_pause_ms(wait);
+        pause_until(control, wait, deadline);
+        /* A pause that ended at the deadline or for a stop claims nothing:
+         * the checks above decide. */
+        if (past(deadline) || control->process.stop(control->process.context)) continue;
         reply = invoke(argv); status = observe(directory, state, reply); json_object_put(reply);
         if (status) return -1;
     }

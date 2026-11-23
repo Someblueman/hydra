@@ -35,8 +35,7 @@ static bool mark_transport(const char *directory, bool *historical_gap) {
     char path[F_PATH]; struct stat st; *historical_gap = false;
     if (!directory || f_path(path, sizeof(path), directory, "transport-incomplete")) return false;
     if (!lstat(path, &st)) { *historical_gap = true; return true; }
-    if (errno != ENOENT || f_write(path, "incomplete\n", 11, false)) return false;
-    return !task_sync_dir(directory);
+    return errno == ENOENT && !task_write_file(directory, "transport-incomplete", "incomplete\n", 11, false);
 }
 static bool record_transport(const char *directory, size_t request_bytes, size_t response_bytes, bool complete) {
     char path[F_PATH]; struct stat st; struct wt_transfer total = {.complete = true};

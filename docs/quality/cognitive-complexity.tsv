@@ -35,7 +35,6 @@ src/fleet/agent/agent_decode.c	claude	16
 src/fleet/agent/agent_decode.c	codex	16
 src/fleet/agent/agent_decode.c	cursor	21
 src/fleet/agent/agent_probe.c	agent_probe	33
-src/fleet/agent/agent_retention.c	agent_retain	37
 src/fleet/agent/agent_run.c	agent_run_cli	59
 src/fleet/agent/agent_run.c	prompt_read	23
 src/fleet/agent/agent_stream.c	agent_observe	57
@@ -64,7 +63,6 @@ src/fleet/discovery/live_ssh.c	hd_parse_ssh_hosts	19
 src/fleet/discovery/live_ssh.c	keyword_is	19
 src/fleet/discovery/progress.c	binding	20
 src/fleet/discovery/progress.c	restore_row	18
-src/fleet/main.c	main	41
 src/fleet/placement/placement_cli.c	placement_cli	24
 src/fleet/placement/placement_cli.c	withdraw	23
 src/fleet/placement/placement_observe.c	placement_observe	18
@@ -89,7 +87,7 @@ src/fleet/plan/plan_schema.c	recipe	24
 src/fleet/revocation/revocation.c	revocation_normalize	17
 src/fleet/support/files.c	f_mkdirs	16
 src/fleet/support/json.c	finite_json	21
-src/fleet/support/process.c	run	68
+src/fleet/support/process.c	run	51
 src/fleet/task/task_accept.c	dependencies	19
 src/fleet/task/task_accept.c	receipt	18
 src/fleet/task/task_accept.c	task_accept	35
@@ -115,7 +113,6 @@ src/fleet/task/task_launch.c	task_runtime_valid	19
 src/fleet/task/task_remote.c	parse_limits	16
 src/fleet/task/task_remote.c	parse_options	25
 src/fleet/task/task_remote.c	task_remote_cli	34
-src/fleet/task/task_remote.c	transact	17
 src/fleet/task/task_result.c	artifacts	17
 src/fleet/task/task_result.c	snapshot	21
 src/fleet/task/task_result_bindings.c	task_result_bindings	33
@@ -131,7 +128,6 @@ src/fleet/task/task_spec.c	task_path	22
 src/fleet/task/task_spec.c	task_spec	19
 src/fleet/task/task_store.c	task_read_record	16
 src/fleet/task/task_withdraw.c	task_withdraw	21
-src/fleet/transport/aggregate.c	f_aggregate	62
 src/fleet/transport/bootstrap.c	f_bootstrap	26
 src/fleet/transport/bundle.c	f_bundle_export	45
 src/fleet/transport/bundle.c	f_bundle_import	33
@@ -188,11 +184,8 @@ src/kettle/tools/cells.c	main	18
 src/kettle/tools/cells.c	read_all	16
 src/kettle/tree.c	kt_tree_draw	35
 src/kettle/unicode.c	kt_utf8_decode	19
-src/libhydra.c	hydra_collect_heads	42
 src/libhydra.c	hydra_json_write_string	34
 src/libhydra.c	hydra_validate_events	20
-src/libhydra.c	hydra_validate_state	31
-src/libhydra.c	hydra_validate_unique_branches	29
 src/tui/capture.c	native_capture_step	26
 src/tui/controls.c	native_controls_tick	27
 src/tui/controls_input.c	native_control_key	31
@@ -230,7 +223,6 @@ src/tui/workflow_model.c	accept_workflows	29
 src/tui/workflow_model.c	load_workflows	57
 src/tui/workflow_model.c	workflow_edges	27
 src/tui/workspace_terminals.c	native_workspace_show_terminal	20
-tests/c/test_agent_auth.c	main	54
 tests/c/test_agent_profile.c	decoders	49
 tests/c/test_agent_profile.c	main	49
 tests/c/test_agent_profile.c	provider_failures	20

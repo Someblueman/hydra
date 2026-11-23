@@ -3,9 +3,7 @@
 #include "fleet/support/json.h"
 #include "fleet/transport/server.h"
 #include "fleet/support/process.h"
-#include <fcntl.h>
 #include <string.h>
-#include <unistd.h>
 
 static bool operation_name(const char *operation, char name[256]) {
     size_t i;
@@ -39,14 +37,9 @@ json_object *enrollment_preflight(json_object *request) {
     f_string_add(data, "hydra", f_hydra); f_capture_free(&cap); return f_success("fleet-enrollment-preflight", data);
 }
 
-static int save_record(const char *path, const char *directory, json_object *record, bool replace) {
+static int save_record(const char *path, json_object *record, bool replace) {
     const char *text = json_object_to_json_string_ext(record, JSON_C_TO_STRING_PLAIN);
-    int fd, status;
-    if (f_write(path, text, strlen(text), replace)) return -1;
-    fd = open(directory, O_RDONLY);
-    if (fd < 0) return -1;
-    status = fsync(fd); close(fd);
-    return status;
+    return f_write(path, text, strlen(text), replace) ? -1 : 0;
 }
 
 static json_object *reconcile(const char *path, json_object *binding) {
@@ -80,13 +73,13 @@ json_object *enrollment_apply_request(json_object *request, char **argv, unsigne
     json_object_object_add(record, "request", json_object_get(binding));
     /* Atomic create is the sole claim. Once present, even owner death never
      * permits another caller to repeat a possibly completed mutation. */
-    if (save_record(path, directory, record, false)) {
+    if (save_record(path, record, false)) {
         result = reconcile(path, binding);
     } else {
         result = f_run_hydra(argv, seconds);
         f_string_add(record, "state", "completed");
         json_object_object_add(record, "result", json_object_get(result));
-        if (save_record(path, directory, record, true)) {
+        if (save_record(path, record, true)) {
             json_object_put(result);
             result = f_error("fleet-enrollment", "outcome_unknown", "mutation returned but its result could not be recorded durably");
         }

@@ -75,7 +75,11 @@ activity_observer_beat() {
     if [ ! -f "$_aob_file" ]; then
         _aob_before=0
         [ -z "$(find "$_aob_dir" -name 'coverage.corrupt.*' -print 2>/dev/null | head -n 1)" ] || _aob_before="$_aob_now"
-        printf 'HYDRA_ACTIVITY_COVERAGE\t1\t%s\n%s\t%s\n' "$_aob_before" "$_aob_now" "$_aob_now" > "$_aob_tmp"
+        if ! printf 'HYDRA_ACTIVITY_COVERAGE\t1\t%s\n%s\t%s\n' "$_aob_before" "$_aob_now" "$_aob_now" > "$_aob_tmp"; then
+            rm -f "$_aob_tmp"
+            release_lock "$_aob_lock"
+            return 1
+        fi
     fi
     if ! atomic_replace "$_aob_file" "$_aob_tmp"; then
         rm -f "$_aob_tmp"

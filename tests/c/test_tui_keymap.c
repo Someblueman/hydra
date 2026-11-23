@@ -152,15 +152,13 @@ static bool help_lists_chain(void) {
     return ok;
 }
 
-/* Stats owns w (workflow filter), tab (pane) and [ ] (pages): the Workflows
- * jump and the view-changing Tab are not in its chain. While its filter is
- * typed only the filter's keys are live, and its footer says so. */
+/* Stats owns w (workflow filter), tab (pane) and [ ] (pages). While its
+ * filter is typed only the filter's keys are live, and its footer says so. */
 static bool stats_keys_owned(void) {
     struct app *app = app_new(false);
     uint32_t chain = key_chains[KEY_CHAIN_STATISTICS];
     char shown[64], text[1024] = "";
-    bool ok = !native_keys(app)->bindings[KEY_VIEW_WORKFLOWS].scope && !(chain & KEY_SCOPE_VIEWS) && (chain & KEY_SCOPE_JUMPS) &&
-        !(key_chains[KEY_CHAIN_WORK_LIST] & KEY_SCOPE_VIEWS);
+    bool ok = (chain & KEY_SCOPE_JUMPS) != 0;
     ok = ok && key_text(app, KEY_STATS_WORKFLOW, shown, sizeof(shown)) && !strcmp(shown, "w");
     ok = ok && key_text(app, KEY_STATS_PANE, shown, sizeof(shown)) && !strcmp(shown, "Tab");
     ok = ok && key_text(app, KEY_STATS_PAGE_PREVIOUS, shown, sizeof(shown)) && !strcmp(shown, "[");
@@ -198,47 +196,56 @@ static bool old_keys_file_loads(void) {
 
 /* The fleet entry opens the one control centre filtered to remote work: it
  * keeps every key of local work (a talks to or attaches, x removes or
- * interrupts), leaves out only the local statistics pages, and the rows that
- * a and x took over are live in neither mode. */
+ * interrupts) and leaves out only the local statistics pages. */
 static bool fleet_drops_local(void) {
     struct app *app = app_new(true), *local = app_new(false);
     const struct native_keys *k = native_keys(app), *l = native_keys(local);
     bool ok = k->bindings[KEY_TASK_NEW].scope && k->bindings[KEY_HEAD_REMOVE].scope && k->bindings[KEY_HEADS_TALK].scope &&
         !k->bindings[KEY_STATS_PAGE_NEXT].scope && l->bindings[KEY_STATS_PAGE_NEXT].scope &&
         !k->bindings[KEY_STATS_COHORTS].scope && l->bindings[KEY_STATS_COHORTS].scope &&
-        !k->bindings[KEY_STATS_LOCATION].scope && l->bindings[KEY_STATS_LOCATION].scope &&
-        !k->bindings[KEY_HEADS_ATTACH].scope && !k->bindings[KEY_HEADS_INTERRUPT].scope &&
-        !l->bindings[KEY_HEADS_ATTACH].scope && !l->bindings[KEY_HEADS_INTERRUPT].scope;
+        !k->bindings[KEY_STATS_LOCATION].scope && l->bindings[KEY_STATS_LOCATION].scope;
     free(app); free(local);
     return ok;
 }
 
-/* A keys file written by 3.0 --print-keys names Statistics rows whose jobs
- * moved ([ ] pages, the typed filter, ctrl+r): it still loads without a
- * problem, those rows are live nowhere, and the new keys keep their
- * defaults. */
-static bool released_stats_names_load(void) {
-    static const char text[] = "statistics.page = s\nstatistics.workflow-previous = [\nstatistics.workflow-next = ]\n"
-        "statistics.find = /\nstatistics.refresh = r\nstatistics.cohorts = C\nstatistics.location = L\n";
+/* The problem a keys file leaves behind, and whether cohorts kept the chord
+ * the file gave it (the lines that are not refused still apply). */
+static bool keys_file_problem(const char *text, char *problem, size_t size, bool *applied) {
     char path[] = "/tmp/hydra-keymap-test-XXXXXX";
     struct app *app = app_new(false);
-    const struct native_keys *k;
     char shown[64];
     int fd = mkstemp(path);
-    bool ok = fd >= 0 && write(fd, text, sizeof(text) - 1U) == (ssize_t)(sizeof(text) - 1U);
+    bool ok = fd >= 0 && write(fd, text, strlen(text)) == (ssize_t)strlen(text);
     if (fd >= 0) (void)close(fd);
     setenv("HYDRA_TUI_KEYS", path, 1);
     native_keys_load(app, true);
     unsetenv("HYDRA_TUI_KEYS");
     (void)unlink(path);
-    k = native_keys(app);
-    ok = ok && !k->problem[0] && !k->bindings[KEY_STATS_PAGE].scope && !k->bindings[KEY_STATS_FIND].scope &&
-        !k->bindings[KEY_STATS_WORKFLOW_NEXT].scope && !k->bindings[KEY_STATS_REFRESH].scope &&
-        key_text(app, KEY_STATS_PAGE_NEXT, shown, sizeof(shown)) && !strcmp(shown, "]") &&
-        key_text(app, KEY_STATS_FILTER, shown, sizeof(shown)) && !strcmp(shown, "/") &&
-        key_text(app, KEY_STATS_COHORTS, shown, sizeof(shown)) && !strcmp(shown, "C");
-    if (!ok) fprintf(stderr, "released statistics keys: %s\n", k->problem);
+    snprintf(problem, size, "%s", native_keys(app)->problem);
+    *applied = key_text(app, KEY_STATS_COHORTS, shown, sizeof(shown)) && !strcmp(shown, "X");
     free(app);
+    return ok;
+}
+
+/* The action names of earlier releases that no longer exist are not loaded
+ * silently and not reported as mere typos: the file is told which line names
+ * a removed action and which action does its job now, how many more there
+ * are, and the other lines apply. */
+static bool removed_names_reported(void) {
+    char problem[TEXT];
+    bool applied, ok;
+    ok = keys_file_problem("statistics.cohorts = X\nstatistics.page = s\nheads.attach = a\nview.5 = 5\n", problem, sizeof(problem), &applied);
+    ok = ok && applied && strstr(problem, "line 2: statistics.page was removed; use statistics.page-previous and statistics.page-next") &&
+        strstr(problem, "(and 2 more removed actions; --print-keys lists the current ones)") && strstr(problem, "other lines applied");
+    if (!ok) fprintf(stderr, "removed names: %s\n", problem);
+    ok = ok && keys_file_problem("head.output = p\nstatistics.cohorts = X\n", problem, sizeof(problem), &applied) && applied &&
+        strstr(problem, "line 1: head.output was removed and nothing replaces it") && !strstr(problem, "more removed");
+    if (!ok) fprintf(stderr, "removed name without a successor: %s\n", problem);
+    /* A name that never existed is still an unknown action, and a current
+     * name that begins like a removed one is not taken for it. */
+    ok = ok && keys_file_problem("statistics.pages = s\nstatistics.page-next = X\n", problem, sizeof(problem), &applied) &&
+        strstr(problem, "line 1: unknown action 'statistics.pages'") && !strstr(problem, "was removed");
+    if (!ok) fprintf(stderr, "unknown name: %s\n", problem);
     return ok;
 }
 
@@ -303,8 +310,8 @@ int main(void) {
     result(help_lists_chain(), "help lists every binding of its chain and the agent-layer chords");
     result(stats_keys_owned(), "Stats owns w, tab and [ ], and its typed filter has only the filter's keys");
     result(old_keys_file_loads(), "a keys file with the first version's names still loads");
-    result(released_stats_names_load(), "a 3.0 keys file with the retired Statistics names still loads");
-    result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics; retired rows are live nowhere");
+    result(removed_names_reported(), "a keys file that names a removed action is told the action that replaced it; its other lines apply");
+    result(fleet_drops_local(), "the fleet entry keeps the one keymap but its own statistics");
     result(old_screen_keys(), "the old screen letters work on every screen, stay out of the footer and are help's old keys");
     result(onboarding_keys(), "the Onboarding page's screens have their own chains and footers; its forms keep every letter");
     printf("Passed: %d checks, Failed: %d\n", 12 - failures, failures);

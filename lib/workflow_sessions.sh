@@ -158,6 +158,12 @@ session_maintain_head() {
     [ -f "$_smh_coverage" ] || _smh_coverage=""
     _smh_summaries="$_smh_dir/sessions"
     hydra_private_mkdir "$_smh_summaries" || return 1
+    # Most heads have nothing to write. Looking first, without the locks,
+    # spares the two locks (eight processes) that deciding under them costs. A
+    # head the look finds work for decides again under the locks, as it always
+    # did, and one it finds none for waits for the next pass if something is
+    # recorded in between. A pass lists the summaries once for all its looks.
+    _smh_manifest="$(_session_maintain_decide look)" && [ -z "$_smh_manifest" ] && return 0
     _smh_activity_lock="activity_${_smh_project}_${_smh_head}"
     _smh_events_lock="events_${_smh_project}_${_smh_head}"
     acquire_lock "$_smh_activity_lock" "summarise sessions" || return 1
@@ -166,20 +172,64 @@ session_maintain_head() {
         return 1
     fi
     _smh_status=0
-    # Every file is read, however large: a summary or checkpoint made from
-    # all of a log is what brings an oversized one back within the bounds.
-    _smh_manifest="$( { _workflow_sessions_summary_names "$_smh_summaries"; _workflow_sessions_files "$_smh_head_dir" 1 3 4294967294; } |
+    _smh_manifest="$(_session_maintain_decide)" || _smh_status=1
+    [ "$_smh_status" -ne 0 ] || _session_apply_manifest || _smh_status=1
+    # A pass's list of summaries is out of date once a summary is written.
+    _smh_nl='
+'
+    case "$_smh_nl$_smh_manifest" in *"${_smh_nl}summary"*) _SMH_WROTE_SUMMARY=1 ;; esac
+    rm -f "$_smh_summaries"/*.next."$$" "$_smh_head_dir"/instances/*/session-checkpoint.next."$$" 2>/dev/null
+    release_lock "$_smh_events_lock"
+    release_lock "$_smh_activity_lock"
+    return "$_smh_status"
+}
+
+# The files of a head that a maintain pass reads, in the order and as
+# _workflow_sessions_files lists them, found by the shell: the head's branch,
+# its archived and live event logs, and each instance's activity log and
+# session checkpoint. Only regular files reached through real directories.
+# Usage: _session_maintain_files <head-directory>
+_session_maintain_files() {
+    _smf_dir="$1"
+    [ ! -f "$_smf_dir/branch" ] || [ -L "$_smf_dir/branch" ] || printf '%s\n' "$_smf_dir/branch"
+    if [ ! -L "$_smf_dir/events" ]; then
+        if [ ! -L "$_smf_dir/events/archive" ]; then
+            for _smf_file in "$_smf_dir"/events/archive/events-*.jsonl; do
+                [ ! -f "$_smf_file" ] || [ -L "$_smf_file" ] || printf '%s\n' "$_smf_file"
+            done
+        fi
+        [ ! -f "$_smf_dir/events/events.jsonl" ] || [ -L "$_smf_dir/events/events.jsonl" ] || printf '%s\n' "$_smf_dir/events/events.jsonl"
+    fi
+    for _smf_instance in "$_smf_dir"/instances/instance_*; do
+        [ -d "$_smf_instance" ] || continue
+        [ ! -L "$_smf_instance" ] || continue
+        for _smf_file in "$_smf_instance/activity.jsonl" "$_smf_instance/session-checkpoint"; do
+            [ ! -f "$_smf_file" ] || [ -L "$_smf_file" ] || printf '%s\n' "$_smf_file"
+        done
+    done
+}
+
+# Prints what a maintain pass decides for the head session_maintain_head is
+# working on (one "summary", "checkpoint" or "drop" line per decision), after
+# writing the summaries and checkpoints beside their final names. Every file is
+# read, however large: a summary or checkpoint made from all of a log is what
+# brings an oversized one back within the bounds. With "look" the files are
+# listed by the shell and the summaries are those a pass listed (_SMH_NAMES),
+# so that looking costs one process: the answer is the same, and only a look
+# that finds nothing is acted on.
+_session_maintain_decide() {
+    { if [ "${1:-}" = look ] && [ -n "${_SMH_NAMES_KNOWN:-}" ]; then
+          [ -z "${_SMH_NAMES:-}" ] || printf '%s\n' "$_SMH_NAMES"
+      else
+          _workflow_sessions_summary_names "$_smh_summaries"
+      fi
+      if [ "${1:-}" = look ]; then _session_maintain_files "$_smh_head_dir"; else _workflow_sessions_files "$_smh_head_dir" 1 3 4294967294; fi; } |
         (umask 077; LC_ALL=C awk -v mode=maintain -v root="$_smh_heads/" -v now="$_smh_now" \
             -v coverage="$_smh_coverage" -v summaries="$_smh_summaries" -v cache="" -v writer="$$" \
             -v settled="$HYDRA_SESSIONS_SETTLED_SECONDS" -v stale="${HYDRA_ACTIVITY_COVERAGE_STALE_SECONDS:-45}" \
             -v horizon="$HYDRA_SESSIONS_ACTIVITY_HORIZON_SECONDS" -v checkpoint_events=0 \
             -v max_rows=0 -v max_heads=1 -v max_candidates="$HYDRA_SESSIONS_MAX_CANDIDATES" -v max_summaries=0 \
-            "$_WORKFLOW_SESSIONS_AWK"))" || _smh_status=1
-    [ "$_smh_status" -ne 0 ] || _session_apply_manifest || _smh_status=1
-    rm -f "$_smh_summaries"/*.next."$$" "$_smh_head_dir"/instances/*/session-checkpoint.next."$$" 2>/dev/null
-    release_lock "$_smh_events_lock"
-    release_lock "$_smh_activity_lock"
-    return "$_smh_status"
+            "$_WORKFLOW_SESSIONS_AWK")
 }
 
 # Applies what the maintain pass decided: a summary or checkpoint it wrote
@@ -245,12 +295,17 @@ session_maintain_due() {
                 for (i = 0; i < n && i < most; i++) print heads[(start + i) % n + 1]
             }')"
     # The observer stops a recorder after ten seconds; start no head after five.
+    # The summaries are listed once; a head that writes one lists them again.
     _smd_started="$(date +%s)" _smd_done=0
+    _SMH_NAMES="$(_workflow_sessions_summary_names "$_smd_dir/sessions")" _SMH_NAMES_KNOWN=1
     for _smd_head in $_smd_heads; do
         [ $(($(date +%s) - _smd_started)) -lt "$HYDRA_SESSIONS_MAINTAIN_BUDGET_SECONDS" ] || break
+        _SMH_WROTE_SUMMARY=
         session_maintain_head "$_smd_project" "$_smd_head" "$_smd_now" || true
+        [ -z "$_SMH_WROTE_SUMMARY" ] || _SMH_NAMES="$(_workflow_sessions_summary_names "$_smd_dir/sessions")"
         _smd_done=$((_smd_done + 1))
     done
+    _SMH_NAMES="" _SMH_NAMES_KNOWN=
     _session_write_stamp "$_smd_stamp" "$_smd_now" $(((_smd_next + _smd_done) % 4294967294))
 }
 

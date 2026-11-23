@@ -45,7 +45,7 @@ static json_object *snapshot(const char *directory, json_object *receipt, const 
     spec = task_spec(f_field(package, "spec"), true);
     if (!spec) goto done;
     source = f_string(f_field(spec, "source"), "commit");
-    if (task_json_hash(spec, scratch, hash) || strcmp(hash, f_string(receipt, "spec_sha256"))) goto done;
+    if (task_json_hash(spec, hash) || strcmp(hash, f_string(receipt, "spec_sha256"))) goto done;
     { char *init[] = {"init", "--bare", "--template=", strlen(source) == 64 ? "--object-format=sha256" : "--object-format=sha1", NULL};
       if (command(scratch, init)) goto done; }
     if (f_path(path, sizeof(path), directory, "source.bundle")) goto done;
@@ -86,7 +86,7 @@ int task_result_seal(const char *directory, json_object *state) {
     if (!receipt || !mkdtemp(scratch)) { json_object_put(receipt); return -1; }
     json_object_object_add(receipt, "runtime", json_object_get(state));
     result = snapshot(directory, receipt, scratch, &failure);
-    if (!result || task_json_hash(result, scratch, hash)) goto done;
+    if (!result || task_json_hash(result, hash)) goto done;
     envelope = json_object_new_object(); json_object_object_add(envelope, "schema_version", json_object_new_int(1));
     f_string_add(envelope, "result_sha256", hash); json_object_object_add(envelope, "result", json_object_get(result));
     failure = "result_validation_failed"; checked = task_result_verify(envelope);

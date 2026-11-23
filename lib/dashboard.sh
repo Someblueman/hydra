@@ -36,8 +36,6 @@ create_dashboard_session() {
         exit_cmd="TMUX=\$TMUX . \"$HYDRA_LIB_DIR/dashboard.sh\" && cmd_dashboard_exit"
     elif [ -n "${HYDRA_BIN_CMD:-}" ] && [ -x "$HYDRA_BIN_CMD" ]; then
         exit_cmd="\"$HYDRA_BIN_CMD\" dashboard-exit"
-    elif [ -x "/usr/local/bin/hydra" ]; then
-        exit_cmd="/usr/local/bin/hydra dashboard-exit"
     else
         exit_cmd="hydra dashboard-exit"
     fi
@@ -91,7 +89,7 @@ collect_session_panes() {
         
         # Enumerate panes for this session across all windows and collect based on policy
         pane_count_for_session=0
-        windows_list="$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null || true)"
+        windows_list="$(tmux list-windows -t "$(tmux_exact_target "$session")" -F '#{window_id}' 2>/dev/null || true)"
         # Determine how many panes to collect (never drain last pane from a session)
         total_panes_session=0
         OLDIFS="$IFS"; IFS='
@@ -127,7 +125,7 @@ collect_session_panes() {
                 window_id="${line#* }"
                 [ -z "$pane_id" ] && continue
                 # Move pane to dashboard first
-                if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
+                if tmux join-pane -s "$pane_id" -t "$(tmux_exact_target "$DASHBOARD_SESSION")" 2>/dev/null; then
                     # Record original location for restoration only on success
                     echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
                     # Set pane title to show branch name
@@ -141,7 +139,7 @@ collect_session_panes() {
                     _joined=0
                     while [ "$_join_attempt" -lt "$_join_retries" ]; do
                         sleep 0.1
-                        if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
+                        if tmux join-pane -s "$pane_id" -t "$(tmux_exact_target "$DASHBOARD_SESSION")" 2>/dev/null; then
                             echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
                             tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
                             pane_count_for_session=$((pane_count_for_session + 1))
@@ -181,7 +179,7 @@ arrange_dashboard_layout() {
     fi
     
     # Get pane count (target session without window specifier to use current window)
-    pane_count="$(tmux list-panes -t "$DASHBOARD_SESSION" | wc -l | tr -d ' ')"
+    pane_count="$(tmux list-panes -t "$(tmux_exact_target "$DASHBOARD_SESSION")" | wc -l | tr -d ' ')"
 
     # Apply grid layout with equal percentages
     case "$pane_count" in
@@ -190,37 +188,37 @@ arrange_dashboard_layout() {
             ;;
         2)
             # Two panes (50%/50%) horizontally
-            tmux select-layout -t "$DASHBOARD_SESSION" even-horizontal
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" even-horizontal
             ;;
         3)
             # Three panes: one on top, two on bottom; rely on main-horizontal
-            tmux select-layout -t "$DASHBOARD_SESSION" main-horizontal
-            tmux resize-pane -t "${DASHBOARD_SESSION}.0" -y 20 2>/dev/null || true
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" main-horizontal
+            tmux resize-pane -t "$(tmux_exact_target "$DASHBOARD_SESSION").0" -y 20 2>/dev/null || true
             ;;
         4)
             # Four panes (25%/25%/25%/25%) in a 2x2 grid
-            tmux select-layout -t "$DASHBOARD_SESSION" tiled
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" tiled
             ;;
         5|6)
             # 5-6 panes: use 2x3 grid (tiled with manual adjustments)
-            tmux select-layout -t "$DASHBOARD_SESSION" tiled
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" tiled
             ;;
         7|8)
             # 7-8 panes: use 2x4 grid
-            tmux select-layout -t "$DASHBOARD_SESSION" tiled
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" tiled
             ;;
         9)
             # 9 panes: perfect 3x3 grid
-            tmux select-layout -t "$DASHBOARD_SESSION" tiled
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" tiled
             ;;
         *)
             # Many panes, use tiled and let tmux handle it
-            tmux select-layout -t "$DASHBOARD_SESSION" tiled
+            tmux select-layout -t "$(tmux_exact_target "$DASHBOARD_SESSION")" tiled
             ;;
     esac
 
     # Set window title
-    tmux rename-window -t "$DASHBOARD_SESSION" "Hydra Dashboard ($pane_count heads)"
+    tmux rename-window -t "$(tmux_exact_target "$DASHBOARD_SESSION")" "Hydra Dashboard ($pane_count heads)"
     
     return 0
 }
@@ -245,7 +243,7 @@ restore_panes() {
         fi
         
         # Move pane back to original session
-        if tmux join-pane -s "$pane_id" -t "$session:$window_id" 2>/dev/null; then
+        if tmux join-pane -s "$pane_id" -t "$(tmux_exact_target "$session:$window_id")" 2>/dev/null; then
             restored=$((restored + 1))
         else
             echo "Warning: Failed to restore pane for branch '$branch'" >&2
@@ -277,7 +275,7 @@ cleanup_dashboard() {
     
     # Kill dashboard session
     if tmux_session_exists "$DASHBOARD_SESSION"; then
-        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        tmux kill-session -t "$(tmux_exact_target "$DASHBOARD_SESSION")" 2>/dev/null || true
     fi
     
     # Clean up the q key binding

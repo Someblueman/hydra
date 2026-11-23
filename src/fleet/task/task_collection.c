@@ -9,11 +9,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static int collection_id(json_object *envelope, const char *scratch, char id[80]) {
+static int collection_id(json_object *envelope, char id[80]) {
     json_object *binding = json_object_new_object(), *result = f_field(envelope, "result"), *receipt = f_field(result, "receipt"); char hash[65]; int status;
     f_string_add(binding, "host", f_string(f_field(result, "spec"), "host"));
     f_string_add(binding, "task_id", f_string(receipt, "task_id")); f_string_add(binding, "spec_sha256", f_string(receipt, "spec_sha256"));
-    status = task_json_hash(binding, scratch, hash); json_object_put(binding);
+    status = task_json_hash(binding, hash); json_object_put(binding);
     if (!status) snprintf(id, 80, "collection_%s", hash);
     return status;
 }
@@ -53,7 +53,7 @@ json_object *task_collected(const char *project, const char *id) {
         f_path(path, sizeof(path), directory, "result.json") || !(envelope = f_read_json(path, TASK_PACKAGE_LIMIT + 1024))) goto done;
     checked = task_result_verify(envelope); if (!json_object_get_boolean(f_field(checked, "ok")) || !mkdtemp(scratch)) goto done;
     staged = true;
-    if (collection_id(envelope, scratch, expected) || strcmp(expected, id) ||
+    if (collection_id(envelope, expected) || strcmp(expected, id) ||
         materialized(directory, "artifacts", f_field(f_field(envelope, "result"), "artifacts"), scratch, false) ||
         materialized(directory, "evidence", f_field(f_field(envelope, "result"), "evidence"), scratch, false) || task_collection_refs(project, id, f_field(envelope, "result"), NULL, false)) goto done;
     out = summary(directory, id, envelope);
@@ -68,7 +68,7 @@ json_object *task_collect(const char *project, json_object *envelope) {
     if (!json_object_get_boolean(f_field(checked, "ok"))) { out = checked; checked = NULL; goto done; }
     if (task_collection_root(project, root, true) || snprintf(stage, sizeof(stage), "%s/.collect.XXXXXX", root) >= (int)sizeof(stage) || !mkdtemp(stage)) { stage[0] = '\0'; goto done; }
     failure = "snapshot_binding";
-    if (collection_id(envelope, stage, id) || f_path(directory, sizeof(directory), root, id)) goto done;
+    if (collection_id(envelope, id) || f_path(directory, sizeof(directory), root, id)) goto done;
     if (!lstat(directory, &st)) {
         if (!S_ISDIR(st.st_mode) || f_path(path, sizeof(path), directory, "result.json") || !(existing = f_read_json(path, TASK_PACKAGE_LIMIT + 1024)) ||
             !f_string(existing, "result_sha256") || strcmp(f_string(existing, "result_sha256"), digest)) goto done;

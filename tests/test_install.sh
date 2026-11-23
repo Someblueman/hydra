@@ -91,7 +91,7 @@ assert_file "$prefix1/lib/hydra/git.sh" "install.sh installs libraries"
 
 ver_out="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
 assert_success $? "installed hydra version should succeed"
-assert_contains "$ver_out" "Hydra version 4.0.0" "installed hydra reports 4.0.0"
+assert_contains "$ver_out" "Hydra version 5.0.0" "installed hydra reports 5.0.0"
 
 doc_out="$(cd "$home1" && HOME="$home1" HYDRA_HOME="$home1/.hydra" HYDRA_ROOT='' "$prefix1/bin/hydra" doctor 2>&1)"
 assert_success $? "installed hydra doctor should succeed"
@@ -100,7 +100,7 @@ assert_contains "$doc_out" "$prefix1/lib/hydra" "doctor should name installed li
 
 # Replace the installed binary with an older version marker, then reinstall into
 # the same prefix. User state lives outside PREFIX and must survive the upgrade.
-sed 's/HYDRA_VERSION="4.0.0"/HYDRA_VERSION="2.4.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
+sed 's/HYDRA_VERSION="5.0.0"/HYDRA_VERSION="2.4.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
 mv "$prefix1/bin/hydra.upgrade" "$prefix1/bin/hydra"
 chmod +x "$prefix1/bin/hydra"
 mkdir -p "$home1/.hydra"
@@ -111,7 +111,7 @@ printf '%s\n' 'preserve-upgrade-state' > "$home1/.hydra/upgrade-marker"
 ) >/dev/null
 assert_success $? "install.sh should upgrade an existing PREFIX"
 upgrade_ver="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
-assert_contains "$upgrade_ver" "Hydra version 4.0.0" "upgrade replaces the older binary"
+assert_contains "$upgrade_ver" "Hydra version 5.0.0" "upgrade replaces the older binary"
 assert_equal "preserve-upgrade-state" "$(sed -n '1p' "$home1/.hydra/upgrade-marker")" "upgrade preserves HYDRA_HOME state"
 
 un_out="$(
@@ -170,6 +170,45 @@ assert_file "$stage/usr/local/bin/hydra" "DESTDIR stages the binary"
 assert_file "$stage/usr/local/lib/hydra/git.sh" "DESTDIR stages libraries"
 ver_out="$(HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/usr/local/bin/hydra" version 2>&1)"
 assert_success $? "DESTDIR-staged hydra should discover sibling libraries"
+
+# The default prefix is found from the binary, like any other prefix.
+doc_out="$(cd "$home3" && HOME="$home3" HYDRA_HOME="$home3/.hydra" HYDRA_ROOT='' "$stage/usr/local/bin/hydra" doctor 2>&1)"
+assert_contains "$doc_out" "Layout: PREFIX install" "doctor finds the default prefix by the PREFIX rule"
+assert_contains "$doc_out" "Libraries: $stage/usr/local/lib/hydra" "doctor names the staged default-prefix libraries"
+
+# A link to the installed binary leads to the same libraries, whether the
+# link is absolute or relative and whether or not readlink knows -f.
+mkdir "$stage/links" "$stage/shim"
+ln -s "$stage/usr/local/bin/hydra" "$stage/links/hydra-absolute"
+ln -s ../usr/local/bin/hydra "$stage/links/hydra-relative"
+real_readlink="$(command -v readlink)"
+cat > "$stage/shim/readlink" <<EOF
+#!/bin/sh
+# readlink without -f, as on older BSD systems.
+[ "\$1" != -f ] || exit 1
+exec "$real_readlink" "\$@"
+EOF
+chmod +x "$stage/shim/readlink"
+for link in hydra-absolute hydra-relative; do
+    ver_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/links/$link" version 2>&1)"
+    assert_success $? "$link finds the libraries of the binary it points to"
+    ver_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' PATH="$stage/shim:$PATH" "$stage/links/$link" version 2>&1)"
+    assert_success $? "$link finds them without readlink -f"
+    assert_contains "$ver_out" "Hydra version" "$link without readlink -f prints the version"
+done
+
+# A binary away from its libraries stops and names where it looked; no other
+# installation on the machine is used in their place.
+cp "$stage/usr/local/bin/hydra" "$stage/links/hydra-copy"
+copy_out="$(cd "$home3" && HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/links/hydra-copy" version 2>&1)"
+assert_equal 1 "$?" "a binary without libraries beside it exits 1"
+assert_contains "$copy_out" "Error: Cannot find hydra library directory" "the missing libraries are reported"
+assert_contains "$copy_out" "$stage/links/../lib/hydra (PREFIX install)" "the report names the PREFIX location it tried"
+test_count=$((test_count + 1))
+case "$copy_out" in
+    *legacy*) fail_count=$((fail_count + 1)); echo "[FAIL] no location other than those of the binary is tried"; echo "  Actual: $copy_out" ;;
+    *) pass_count=$((pass_count + 1)); echo "[PASS] no location other than those of the binary is tried" ;;
+esac
 HOME="$home3" PREFIX=/usr/local DESTDIR="$stage" sh "$REPO_ROOT/uninstall.sh" --purge >/dev/null 2>&1 || true
 rm -rf "$stage" "$home3"
 

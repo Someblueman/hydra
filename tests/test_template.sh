@@ -441,6 +441,45 @@ EOF
 # =============================================================================
 # Run all tests
 # =============================================================================
+# Test: "hydra template create" from a head's session copies that head's config
+# =============================================================================
+test_template_create_from_head_session() {
+    echo ""
+    echo "Testing template create from a head's session..."
+    _tcs_root="$(test_mktemp_dir)"
+    _tcs_bin="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+    (
+        HYDRA_HOME="$_tcs_root/home"
+        export HYDRA_HOME HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1
+        unset HYDRA_TEMPLATES_DIR TMUX TMUX_PANE
+        mkdir -p "$_tcs_root/repo" && cd "$_tcs_root/repo" || exit 1
+        git init -q
+        git config user.name Test
+        git config user.email test@example.com
+        git commit --allow-empty -qm init
+        "$_tcs_bin" init --no-agent >/dev/null 2>&1 || exit 1
+        "$_tcs_bin" spawn tpl-head --no-agent >/dev/null 2>&1 || exit 1
+        _tcs_worktree="$("$_tcs_bin" path tpl-head)" || exit 1
+        mkdir -p "$_tcs_worktree/.hydra"
+        printf 'layout: dev\n# from-head-config\n' > "$_tcs_worktree/.hydra/config.yml"
+        # Run as the head's pane would: inside its tmux session and worktree.
+        _tcs_pane="$(tmux display-message -p -t '=tpl-head:0.0' '#{pane_id}')" || exit 1
+        _tcs_socket="$(tmux display-message -p -t '=tpl-head:0.0' '#{socket_path}')" || exit 1
+        cd "$_tcs_worktree" || exit 1
+        TMUX="$_tcs_socket,0,0" TMUX_PANE="$_tcs_pane" \
+            "$_tcs_bin" template create from-head >/dev/null 2>&1 || exit 1
+        grep -q 'from-head-config' "$HYDRA_HOME/templates/from-head.yml"
+    )
+    assert_success $? "template create copies the config of the head it runs in"
+    (
+        cd "$_tcs_root/repo" 2>/dev/null &&
+            env HYDRA_HOME="$_tcs_root/home" HYDRA_NONINTERACTIVE=1 "$_tcs_bin" kill tpl-head >/dev/null 2>&1
+    )
+    tmux kill-session -t '=tpl-head:' 2>/dev/null || true
+    rm -rf "$_tcs_root"
+}
+
+# =============================================================================
 echo "Running template.sh unit tests..."
 echo "================================"
 echo ""
@@ -455,6 +494,7 @@ test_delete_template
 test_get_template_field
 test_expand_template_vars
 test_apply_template
+test_template_create_from_head_session
 
 echo ""
 echo "================================"

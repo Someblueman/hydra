@@ -53,10 +53,40 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
 json_object *f_request_measured(const struct f_remote *remote, json_object *request,
                                 unsigned seconds, size_t *request_bytes,
                                 size_t *response_bytes, bool *request_complete);
+/* One SSH session for a handshake and then request, which must be one that
+ * only reads on the receiver: the receiver answers it without waiting for
+ * the caller to judge the handshake. *handshake is the handshake's answer and
+ * the return value the request's, each as f_request would return it from a
+ * session of its own and each the caller's. When the handshake fails (host
+ * unreachable, no Hydra on the host, an error envelope) the request was not
+ * answered and its answer is a copy of that failure. connect_seconds bounds
+ * the connection, as the handshake's own session bounded it, and seconds the
+ * whole session, as the request's own session bounded that. */
+json_object *f_request_observed(const struct f_remote *remote, json_object *request, unsigned connect_seconds, unsigned seconds,
+                                json_object **handshake);
+/* What f_observe(remote, "handshake", ...) returns for a handshake answer,
+ * which this takes over: the answer itself, or version_mismatch for a
+ * receiver that is not compatible, with the alias as "host". */
+json_object *f_handshake_judged(const struct f_remote *remote, json_object *handshake);
+/* f_request_observed for a caller that needs only yes or no from the
+ * handshake: the request's answer (caller-owned) when the receiver is
+ * compatible and advertises capability, NULL otherwise. */
+json_object *f_request_if_capable(const struct f_remote *remote, const char *capability, json_object *request,
+                                  unsigned connect_seconds, unsigned seconds);
 /* Borrowed handshake data; shares the fleet observation compatibility gate. */
 bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);
+/* Two observations of one host in one SSH session: the return value is what
+ * f_observe(remote, action, seconds) returns and *first_result what
+ * f_observe(remote, first, seconds) returns, each the caller's. Neither is
+ * "handshake". */
+json_object *f_observe_pair(const struct f_remote *remote, const char *first, const char *action, unsigned seconds, json_object **first_result);
 json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs);
 /* Bounded remote observation aggregation with host-local stale-cache projection. */
 json_object *f_observation_aggregate(unsigned seconds, unsigned jobs);
+/* f_observation_aggregate, with each host's listing fetched in the same SSH
+ * session as its overview: *listed receives the rows of
+ * f_aggregate("list", ...)'s data.hosts as a caller-owned array, or NULL
+ * when the aggregate is refused for its size. */
+json_object *f_observation_aggregate_listed(unsigned seconds, unsigned jobs, json_object **listed);
 #endif

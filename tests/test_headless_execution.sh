@@ -33,6 +33,7 @@ export HYDRA_HOME="$home"
 export HYDRA_NONINTERACTIVE=1
 export HYDRA_SETUP_CONTINUE=1
 export HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
+tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test or make test-one T=<name>}"
 cd "$repo" || exit 1
 
 tests=0
@@ -82,7 +83,8 @@ check "$root/bin/hydra" exec --branch headless-check --profile adapter-fixture \
     --prompt-file "$base/prompt" --require prompt,observations --result-file adapter.txt \
     --exit-code --json >/dev/null 2>&1
 check test "$(cat "$wt/adapter.txt" 2>/dev/null || true)" = 'adapter artifact'
-check "$root/bin/hydra" tui --data >/dev/null 2>&1
+# The control centre's read of the head snapshot starts no tmux either.
+check "$tui" --hydra "$root/bin/hydra" --data >/dev/null 2>&1
 check "$root/bin/hydra" kill --force headless-check >/dev/null 2>&1
 check test "$(sed -n '1p' "$head_dir/desired-state")" = stopped
 check test ! -d "$wt"

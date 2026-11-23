@@ -51,10 +51,21 @@ json_object *placement_observe(const char *alias, const char *required_labels, u
     json_object_object_add(out, "drained", json_object_new_boolean(drained));
     json_object_object_add(out, "compatible", json_object_new_boolean(false));
     if (f_remote_load(alias, &remote)) { f_string_add(out, "error", "alias_invalid"); goto empty; }
-    handshake = f_observe(&remote, "handshake", seconds); data = f_field(handshake, "data");
+    /* Admission status only reads on the receiver, so it is asked for in the
+     * handshake's SSH session and used only if the handshake advertises it. */
+    {
+        json_object *args = json_object_new_array();
+        request = json_object_new_object();
+        json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "admission");
+        json_object_array_add(args, json_object_new_string("status")); json_object_array_add(args, json_object_new_string("--json"));
+        json_object_object_add(request, "args", args);
+        reply = f_request_observed(&remote, request, seconds, seconds, &handshake); json_object_put(request);
+        handshake = f_handshake_judged(&remote, handshake);
+    }
+    data = f_field(handshake, "data");
     if (!json_object_get_boolean(f_field(handshake, "ok"))) {
         const char *code = f_string(f_field(handshake, "error"), "code");
-        f_string_add(out, "error", code ? code : "offline"); json_object_put(handshake); goto empty;
+        f_string_add(out, "error", code ? code : "offline"); json_object_put(handshake); json_object_put(reply); goto empty;
     }
     json_object_object_add(out, "error", json_object_new_null());
     json_object_object_add(out, "compatible", json_object_new_boolean(f_handshake_compatible(data)));
@@ -67,16 +78,10 @@ json_object *placement_observe(const char *alias, const char *required_labels, u
         json_object_object_add(out, "platform", platform);
     } else json_object_object_add(out, "platform", json_object_new_null());
     if (advertises(f_field(data, "capabilities"), "admission")) {
-        json_object *args = json_object_new_array();
-        request = json_object_new_object();
-        json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "admission");
-        json_object_array_add(args, json_object_new_string("status")); json_object_array_add(args, json_object_new_string("--json"));
-        json_object_object_add(request, "args", args);
-        reply = f_request(&remote, request, seconds); json_object_put(request);
         if (json_object_get_boolean(f_field(reply, "ok"))) admission = admission_summary(f_field(reply, "data"), required_labels);
         else f_string_add(out, "admission_error", f_string(f_field(reply, "error"), "code") ? f_string(f_field(reply, "error"), "code") : "admission_unavailable");
-        json_object_put(reply);
     }
+    json_object_put(reply);
     json_object_object_add(out, "admission", admission ? admission : json_object_new_null());
     json_object_put(handshake);
     return out;

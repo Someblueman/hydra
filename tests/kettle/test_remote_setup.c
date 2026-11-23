@@ -440,7 +440,7 @@ static void duplicate_name(int cols, int rows) {
 }
 
 int main(void) {
-    char fake[4096], fixture[4096];
+    char fake[4096], home[4096];
     kt_init();
     kt_paths(root, sizeof(root), build, sizeof(build));
     kt_temp(base, sizeof(base), "hydra-remote-setup");
@@ -449,12 +449,14 @@ int main(void) {
     kt_format(evidence, sizeof(evidence), "%s/remote-setup-evidence", build);
     kt_mkdir(evidence);
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/setup/fake-hydra-setup.sh", root);
-    kt_format(fixture, sizeof(fixture), "%s/tests/fixtures/tui/setup/empty.tsv", root);
+    /* No head: the control centre starts outside a repository, with a
+     * HYDRA_HOME of its own that holds no record. */
+    kt_format(home, sizeof(home), "%s/home", base);
     plan_hash("provision-approval.json", provision_hash, sizeof(provision_hash));
     plan_hash("install-approval.json", install_hash, sizeof(install_hash));
     setenv("HYDRA_BIN_CMD", fake, 1);
     setenv("HYDRA_SETUP_FAKE", state, 1);
-    setenv("HYDRA_TUI_FIXTURE", fixture, 1);
+    setenv("HYDRA_HOME", home, 1);
     setenv("TERM", "xterm-256color", 1);
     unsetenv("HYDRA_NONINTERACTIVE");
     journey(140, 40, true);

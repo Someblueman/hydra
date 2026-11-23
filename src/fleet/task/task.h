@@ -13,7 +13,7 @@ bool task_hex(const char *text, size_t length);
 bool task_keys(json_object *object, const char *const keys[]);
 /* Validation also creates a canonical copy; the caller owns the result. */
 json_object *task_spec(json_object *input, bool prepared);
-int task_json_hash(json_object *object, const char *scratch, char digest[65]);
+int task_json_hash(json_object *object, char digest[65]);
 /* Borrowed roots; NULL input_source selects the resolved source directory.
  * Caller owns the returned envelope. */
 json_object *task_prepare(const char *source, const char *input_source, json_object *spec);
@@ -37,6 +37,10 @@ json_object *task_observation(const char *id, json_object *request);
 json_object *task_overview(void);
 int task_store_root(char root[F_PATH]);
 int task_sync_dir(const char *path);
+/* One durable record in a task directory (f_write_at): NAME is replaced or
+ * created whole, or the call fails and NAME keeps what it held. The
+ * directory itself may not be a symbolic link. */
+int task_write_file(const char *directory, const char *name, const char *data, size_t size, bool replace);
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace);
 json_object *task_read_record(const char *directory, const char *name);
 json_object *task_start(const char *id, const char *trust);
@@ -61,6 +65,8 @@ struct task_control {
 int task_admission_request(const char *directory, json_object *state, json_object *accepted, json_object *spec);
 int task_admission_context(const char *directory, json_object *state, json_object *spec);
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control);
+/* The pause after one of previous ms (0 for the first), in ms. */
+long task_admission_pause_ms(long previous);
 void task_admission_close(const char *directory, json_object *state, bool confirmed);
 /* confirmed must reflect independent managed child termination evidence. */
 void task_admission_children(json_object *state, bool confirmed);

@@ -43,9 +43,12 @@ make test-fleet
 
 JSON-C is linked statically into the fleet executable. Deployed hosts do not need
 `jq`, Python, Go, or a JSON-C shared library. The normal shell-only CLI remains
-available without the fleet executable or its build dependencies. `install.sh`
-copies a prebuilt fleet executable when present; `HYDRA_INSTALL_FLEET=never` skips
-it and `required` refuses an absent executable. Uninstall removes it with the
+available without the fleet executable or its build dependencies, except for
+workflows: `hydra workflow run` and plans are driven by this executable alone.
+`install.sh` copies a prebuilt fleet executable when present; without one (or
+with `HYDRA_INSTALL_FLEET=never`) it finishes and warns that workflows are
+unavailable, `required` refuses an absent executable, and `hydra doctor` reports
+a missing helper as "workflows unavailable". Uninstall removes it with the
 other native helpers. JSON-C's [license](licenses/json-c.txt) travels with packages.
 
 ## Guided remote setup
@@ -584,6 +587,7 @@ with host/provider status before another explicit copy.
 
 ```sh
 hydra fleet handshake --json              # this installation
+hydra fleet handshake HOST --json         # a registered host's own answer
 hydra fleet attention --json               # read-only exact task attention rollup
 hydra fleet review KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
 hydra fleet review-data KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
@@ -596,6 +600,10 @@ hydra fleet watch --interval 5 --timeout 5 --jobs 4
 The handshake exposes Hydra version, fleet/state/event/JSON protocols, native
 protocol expectations and executable presence, project mappings, capabilities,
 and supported signals. Native presence does not certify helper compatibility.
+`fleet handshake HOST` prints that answer (a `fleet-handshake` envelope plus
+`host`) and exits 0 for a compatible host; no capability gates it. A host that
+cannot be reached is `offline`, one without Hydra is `remote_failed`, and an
+incompatible one is `version_mismatch`.
 The coordinator requires Hydra 2.x or 3.x, fleet protocol 1, state 2, event 1, JSON 1,
 and the requested capability. A 2.x coordinator accepts only 2.x receivers, so a
 3.x receiver answers it with `version_mismatch`: upgrade the coordinator with or

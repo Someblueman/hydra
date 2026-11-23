@@ -114,11 +114,62 @@ static void exited_grace(pid_t pid, struct capture_stream streams[2], long *exit
     if (*exited_at < 0 && leader_exited(pid)) *exited_at = milliseconds();
     if (*exited_at >= 0 && milliseconds() - *exited_at >= EXITED_GRACE_MS) close_streams(streams);
 }
+/* One turn of run's loop waits for output for at most TICK_MS, so that the
+ * deadline, a stop request and a signal are noticed in time. With both
+ * streams closed there is no output left to wait for, only the child's
+ * exit, and that usually follows the close within microseconds: the wait
+ * then starts at REAP_FIRST_US and doubles up to the same tick. A child is
+ * reaped within about twice the time it took to exit after closing its
+ * streams, instead of a whole tick later, and nothing is checked less often
+ * than before. A cancellation keeps the plain tick: its child is not reaped
+ * before the grace period has run. */
+#define TICK_MS 50
+#define REAP_FIRST_US 100L
+/* The wait that follows one of previous microseconds (0 before the first):
+ * short first, then doubled up to the tick. Pure, so the schedule can be
+ * tested without a clock. */
+long f_reap_pause_us(long previous) {
+    if (previous <= 0) return REAP_FIRST_US;
+    return previous * 2 < TICK_MS * 1000L ? previous * 2 : TICK_MS * 1000L;
+}
+static void reap_pause(long *wait_us) {
+    struct timespec pause;
+    *wait_us = f_reap_pause_us(*wait_us);
+    pause.tv_sec = 0; pause.tv_nsec = *wait_us * 1000L;
+    (void)nanosleep(&pause, NULL);
+}
+/* The child between fork and exec: its own process group, default signals,
+ * the input file and the two pipes as its standard streams. */
+static void child_exec(char *const argv[], FILE *in, struct capture_stream streams[2]) {
+    (void)setpgid(0, 0);
+    signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL); signal(SIGPIPE, SIG_DFL);
+    dup2(fileno(in), STDIN_FILENO); dup2(streams[0].pipe[1], STDOUT_FILENO); dup2(streams[1].pipe[1], STDERR_FILENO);
+    close(streams[0].pipe[0]); close(streams[0].pipe[1]); close(streams[1].pipe[0]); close(streams[1].pipe[1]); fclose(in);
+    execvp(argv[0], argv); _exit(127);
+}
+/* The run's progress through stopping its group: a stop request, the
+ * deadline or a cancellation sends SIGTERM, and the grace period ending
+ * sends SIGKILL. */
+struct stopping { long deadline, cancel_grace; bool stopped; };
+static void stop_group(pid_t pid, struct f_capture *cap, struct f_control *control, struct stopping *stop) {
+    if (!stop->stopped && control && control->stop && control->stop(control->context)) cap->cancelled = true;
+    if (!stop->stopped && (f_stopped || cap->cancelled || milliseconds() >= stop->deadline)) {
+        cap->timeout = !f_stopped && !cap->cancelled; stop->stopped = true;
+        (void)kill(-pid, SIGTERM); stop->deadline = milliseconds() + (cap->cancelled ? stop->cancel_grace : 500);
+    }
+    if (stop->stopped && milliseconds() >= stop->deadline - (cap->cancelled ? 200 : 0)) (void)kill(-pid, SIGKILL);
+}
+static void close_pipe_ends(struct capture_stream streams[2]) {
+    int i, end;
+    for (i = 0; i < 2; i++) for (end = 0; end < 2; end++) if (streams[i].pipe[end] >= 0) close(streams[i].pipe[end]);
+}
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     struct capture_stream streams[2] = {{{-1, -1}, NULL, 0, 0, NULL, false}, {{-1, -1}, NULL, 0, 0, NULL, false}};
     int status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL;
-    long deadline, exited_at = -1, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
+    long exited_at = -1; bool child_started = false;
+    struct stopping stopping = {0, 0L, false};
+    long reap_wait = 0;
     memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
     if (!stream_init(&streams[0], &cap->out) || !stream_init(&streams[1], &cap->err) || !(in = tmpfile())) goto done;
     if (control && control->stop && control->stop(control->context)) { cap->cancelled = true; cap->status = 130; result = 0; goto done; }
@@ -127,43 +178,34 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
     if (pipe(streams[0].pipe) || pipe(streams[1].pipe)) goto done;
     pid = fork();
     if (pid < 0) goto done;
-    if (!pid) {
-        (void)setpgid(0, 0);
-        signal(SIGINT, SIG_DFL); signal(SIGTERM, SIG_DFL); signal(SIGHUP, SIG_DFL); signal(SIGPIPE, SIG_DFL);
-        dup2(fileno(in), STDIN_FILENO); dup2(streams[0].pipe[1], STDOUT_FILENO); dup2(streams[1].pipe[1], STDERR_FILENO);
-        close(streams[0].pipe[0]); close(streams[0].pipe[1]); close(streams[1].pipe[0]); close(streams[1].pipe[1]); fclose(in);
-        execvp(argv[0], argv); _exit(127);
-    }
+    if (!pid) child_exec(argv, in, streams);
     child_started = true;
     (void)setpgid(pid, pid);
     close(streams[0].pipe[1]); streams[0].pipe[1] = -1; close(streams[1].pipe[1]); streams[1].pipe[1] = -1;
     fcntl(streams[0].pipe[0], F_SETFL, O_NONBLOCK); fcntl(streams[1].pipe[0], F_SETFL, O_NONBLOCK);
-    deadline = milliseconds() + (long)seconds * 1000L;
+    stopping.cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L;
+    stopping.deadline = milliseconds() + (long)seconds * 1000L;
     for (;;) {
         struct pollfd polls[2] = {{streams[0].pipe[0], POLLIN, 0}, {streams[1].pipe[0], POLLIN, 0}};
         int i;
-        if (!stopped && control && control->stop && control->stop(control->context)) cap->cancelled = true;
-        if (!stopped && (f_stopped || cap->cancelled || milliseconds() >= deadline)) {
-            cap->timeout = !f_stopped && !cap->cancelled; stopped = true;
-            (void)kill(-pid, SIGTERM); deadline = milliseconds() + (cap->cancelled ? cancel_grace : 500);
-        }
-        if (stopped && milliseconds() >= deadline - (cap->cancelled ? 200 : 0)) (void)kill(-pid, SIGKILL);
-        (void)poll(polls, 2, 50);
+        stop_group(pid, cap, control, &stopping);
+        if (polls[0].fd < 0 && polls[1].fd < 0 && !cap->cancelled) reap_pause(&reap_wait);
+        else (void)poll(polls, 2, TICK_MS);
         for (i = 0; i < 2; i++) {
             if (drain_stream(&streams[i], i, control)) {
                 (void)kill(-pid, SIGKILL);
                 close_stream(&streams[i]);
-                stopped = true;
-                deadline = 0;
+                stopping.stopped = true;
+                stopping.deadline = 0;
             }
         }
         exited_grace(pid, streams, &exited_at);
         /* Do not reap the group leader until its pipes close: its PID cannot be reused. */
-        if (streams[0].pipe[0] < 0 && streams[1].pipe[0] < 0 && (!cap->cancelled || milliseconds() >= deadline - 200)) {
+        if (streams[0].pipe[0] < 0 && streams[1].pipe[0] < 0 && (!cap->cancelled || milliseconds() >= stopping.deadline - 200)) {
             pid_t waited = waitpid(pid, &status, WNOHANG);
             if (waited == pid) { pid = -1; break; }
         }
-        if (cap->cancelled && milliseconds() >= deadline) { cap->stop_unknown = true; if (control) control->stop_unknown = true; break; }
+        if (cap->cancelled && milliseconds() >= stopping.deadline) { cap->stop_unknown = true; if (control) control->stop_unknown = true; break; }
     }
     cap->status = cap->timeout ? 124 : (f_stopped || cap->cancelled ? 130 : (WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)));
     if (truncated(streams)) cap->status = 125;
@@ -173,10 +215,7 @@ done:
     if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, cap->stop_unknown ? WNOHANG : 0) < 0 && errno == EINTR) { } }
     measure_input(in, size, child_started, cap, result, truncated(streams));
     if (in) fclose(in);
-    if (streams[0].pipe[0] >= 0) close(streams[0].pipe[0]);
-    if (streams[0].pipe[1] >= 0) close(streams[0].pipe[1]);
-    if (streams[1].pipe[0] >= 0) close(streams[1].pipe[0]);
-    if (streams[1].pipe[1] >= 0) close(streams[1].pipe[1]);
+    close_pipe_ends(streams);
     return result;
 }
 int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap) {

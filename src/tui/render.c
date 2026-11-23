@@ -89,12 +89,32 @@ void style(struct app *app, enum tone tone) { app->tone = (int)tone; }
 const char *theme_name(int theme) { return theme_names[theme]; }
 const char *dot(const struct app *app) { return app->ascii ? " / " : " \xc2\xb7 "; }
 
+/* Text cut to its buffer ends on a character: a UTF-8 sequence the cut left
+ * incomplete is dropped. */
+static void text_cut(char *buffer, size_t length) {
+    size_t start = length, need;
+    unsigned char lead;
+    while (start > 0 && length - start < 3U && ((unsigned char)buffer[start - 1U] & 0xc0U) == 0x80U) start--;
+    if (!start) return;
+    lead = (unsigned char)buffer[start - 1U];
+    need = lead >= 0xf0U ? 4U : lead >= 0xe0U ? 3U : lead >= 0xc0U ? 2U : 1U;
+    if (need > length - start + 1U) buffer[start - 1U] = '\0';
+}
+
+/* The one vsnprintf behind the helpers below. Text that does not fit is cut,
+ * by design, so what a caller may pass is not limited by what a compiler can
+ * prove about its length. */
+static void text_format(char *buffer, size_t size, const char *format, va_list args) {
+    int written = vsnprintf(buffer, size, format, args);
+    if (written >= 0 && (size_t)written >= size) text_cut(buffer, size - 1U);
+}
+
 /* The buffer holds exactly the formatted text (cut to size). */
 void text_set(char *buffer, size_t size, const char *format, ...) {
     va_list args;
     if (!size) return;
     va_start(args, format);
-    (void)vsnprintf(buffer, size, format, args);
+    text_format(buffer, size, format, args);
     va_end(args);
 }
 
@@ -104,7 +124,15 @@ void text_append(char *buffer, size_t size, const char *format, ...) {
     va_list args;
     if (used + 1U >= size) return;
     va_start(args, format);
-    (void)vsnprintf(buffer + used, size - used, format, args);
+    text_format(buffer + used, size - used, format, args);
+    va_end(args);
+}
+
+/* The status-line notice, formatted. */
+void notice_set(struct app *app, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    text_format(app->notice, sizeof(app->notice), format, args);
     va_end(args);
 }
 

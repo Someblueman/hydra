@@ -14,21 +14,24 @@ extern char **environ;
  * Only switch and dashboard still do this; everything else is captured. */
 static int run_argv(struct app *app, char *const argv[]) {
     struct terminal_loan loan;
+    posix_spawnattr_t attributes;
     pid_t pid;
-    int status = 0;
+    int status = 0, error;
     if (!terminal_lend(app, &loan, false)) return -1;
     printf("\033[H\033[2J");
     fflush(stdout);
-    if (posix_spawnp(&pid, app->hydra, NULL, NULL, argv, environ) != 0) {
-        perror("hydra action");
+    child_spawn_attributes(&attributes, 0);
+    error = posix_spawnp(&pid, app->hydra, NULL, &attributes, argv, environ);
+    posix_spawnattr_destroy(&attributes);
+    if (error != 0) {
+        fprintf(stderr, "hydra action: %s\n", strerror(error));
         status = 1;
     } else if (waitpid(pid, &status, 0) < 0) {
         status = 1;
     }
     printf("\nPress Enter to return to Hydra...");
     fflush(stdout);
-    while (getchar() != '\n' && !feof(stdin)) { }
-    clearerr(stdin);
+    terminal_await_enter();
     if (!terminal_return(app, &loan)) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
@@ -170,7 +173,7 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
         r->skipped++;
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
+    notice_set(app, "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
     status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
     text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
     if (status == 0) { r->removed++; r->gone[index] = true; return; }
@@ -181,16 +184,16 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
 static void removal_single_notice(struct app *app, const char *target, const struct removal *r) {
     char line[TEXT];
     if (r->skipped) {
-        snprintf(app->notice, sizeof(app->notice), "Skipped %.120s: this is the terminal you are using", target);
+        notice_set(app, "Skipped %.120s: this is the terminal you are using", target);
         return;
     }
     first_line(r->output, line, sizeof(line));
-    snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", target, line[0] ? ": " : "", line);
+    notice_set(app, "Removed %.120s%s%.100s", target, line[0] ? ": " : "", line);
 }
 
 static void removal_notice(struct app *app, char targets[][TEXT], const struct removal *r) {
     if (r->failed) {
-        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu unsuccessful; %zu skipped%s", r->removed, r->count, r->failed, r->skipped,
+        notice_set(app, "Removed %zu of %zu; %zu unsuccessful; %zu skipped%s", r->removed, r->count, r->failed, r->skipped,
                  r->dirty ? " (uncommitted changes; see output)" : " (see output)");
         return;
     }
@@ -198,7 +201,7 @@ static void removal_notice(struct app *app, char targets[][TEXT], const struct r
         removal_single_notice(app, targets[0], r);
         return;
     }
-    snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",
+    notice_set(app, "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",
              r->skipped ? "; skipped the current session" : "", r->skipped ? "" : "");
 }
 
@@ -267,7 +270,6 @@ static const struct palette_command palette_commands[] = {
     {"diff", "Show diff of the selected head", "diff", NULL, ACTION_HEAD},
     {"claims", "Claims", "claim", "list", ACTION_GLOBAL},
     {"scopes", "Scopes of the selected head", "scope", "show", ACTION_HEAD},
-    {"queue", "Queue", "queue", NULL, ACTION_GLOBAL},
     {"resources", "Resources of the selected head", "resource", "status", ACTION_HEAD},
     {"approvals", "Approval gates of the selected head", "gate", "status", ACTION_HEAD},
     {"collisions", "Collisions with another head", "collision", NULL, ACTION_COMPARE},
@@ -298,7 +300,7 @@ static void palette_theme(struct app *app) {
 static void palette_capture(struct app *app, const struct palette_command *chosen, char *const argv[]) {
     char output[8192], title[TEXT];
     int status;
-    snprintf(app->notice, sizeof(app->notice), "Running %s...", chosen->name);
+    notice_set(app, "Running %s...", chosen->name);
     status = run_captured(app, argv, output, sizeof(output), 30000L);
     app->notice[0] = '\0';
     snprintf(title, sizeof(title), status ? "%s (exit %d)" : "%s", chosen->label, status);

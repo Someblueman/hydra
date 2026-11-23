@@ -5,7 +5,7 @@
 #include "internal.h"
 /* One workspace across local and remote execution (U11). The composed model
  * is built from two observations that arrive separately: the local snapshot
- * (`hydra tui --data`) and the remote one (`hydra tui --remote-data`, the
+ * (read from the state store) and the remote one (`hydra tui --remote-data`, the
  * fleet stream). Remote rows carry their host's connectivity and observation
  * age; when a host stops answering its rows are kept as the last observation,
  * marked retained, and never authorize an action. */

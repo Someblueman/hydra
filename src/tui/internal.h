@@ -23,7 +23,6 @@
 #include <langinfo.h>
 #include "../kettle/kettle.h"
 #include "../kettle/workspace.h"
-#include "../kettle/tree.h"
 #include "../kettle/terminal.h"
 #include "../kettle/pty_posix.h"
 #include "../kettle/input.h"
@@ -37,7 +36,7 @@
 #include "terminal.h"
 #include "transcript.h"
 extern char **environ;
-#define HYDRA_TUI_VERSION "4.0.0"
+#define HYDRA_TUI_VERSION "5.0.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define NATIVE_PLAN_LIMIT (256U*1024U)
 #define NATIVE_PLAN_TEXT (1024U*1024U)
@@ -602,12 +601,21 @@ int accept_workflows(struct app *app, FILE *input);
 int load_workflow_fixture(struct app *app, const char *fixture);
 void workflow_move(struct app *app, int direction);
 bool workflow_key(struct app *app, char key);
+/* Bounded captures of read-only children (capture.c). destroy stops one that
+ * is still running and waits for it, for a bounded time; stop only asks, so
+ * that several can be stopped together and then destroyed (captures_destroy). */
 void native_capture_destroy(struct native_capture *p);
+void native_capture_stop(struct native_capture *p);
+void native_captures_destroy(struct native_capture *const captures[], size_t count);
 bool native_capture_start(struct native_capture *p, char *const argv[], long budget_ms);
 bool native_capture_step(struct native_capture *p);
 FILE *native_capture_result(struct native_capture *p, bool *success);
 FILE *native_capture_take(struct native_capture *p);
 bool native_detached_start(pid_t *pid, char *const argv[], int input_fd);
+/* Default signal dispositions and an empty mask for every child started here
+ * (child.c): in a forked child before exec, or as posix_spawn attributes. */
+void child_signals(void);
+void child_spawn_attributes(posix_spawnattr_t *attributes, short flags);
 /* The interactive loop (loop.c) and what handlers use of it. */
 extern const struct kt_app tui_app;
 void tui_options(const struct app *app, struct kt_options *options);
@@ -627,6 +635,7 @@ void modal_pop(struct app *app);
 enum modal_event modal_wait(struct app *app, struct kt_msg *msg);
 struct terminal_loan { struct sigaction stop, interrupt, quit; bool lent, shield, stop_changed; };
 bool terminal_lend(struct app *app, struct terminal_loan *loan, bool shield);
+void terminal_await_enter(void);
 bool terminal_return(struct app *app, struct terminal_loan *loan);
 void copy_text(char *dst, size_t size, const char *src);
 bool parse_unsigned(const char *value, unsigned *result);
@@ -648,19 +657,24 @@ void linef(struct app *app, const char *format, ...);
 const char *display_status(const struct head *head);
 const char *status_label(const struct head *head);
 struct kt_style status_tone(const struct head *head);
-size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
 struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 /* Formatting through a function, not snprintf at each call site: with
- * fortify on, macOS makes every snprintf a macro with a branch of its own. */
+ * fortify on, macOS makes every snprintf a macro with a branch of its own,
+ * and GCC warns, at some optimisation levels only, about a snprintf whose
+ * arguments could be longer than its buffer. Text that does not fit is cut
+ * on a character boundary. notice_set formats the status-line notice. */
 #if defined(__GNUC__) || defined(__clang__)
 #define TEXT_FORMAT __attribute__((format(printf, 3, 4)))
+#define NOTICE_FORMAT __attribute__((format(printf, 2, 3)))
 #else
 #define TEXT_FORMAT
+#define NOTICE_FORMAT
 #endif
 void text_set(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
 void text_append(char *buffer, size_t size, const char *format, ...) TEXT_FORMAT;
+void notice_set(struct app *app, const char *format, ...) NOTICE_FORMAT;
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);

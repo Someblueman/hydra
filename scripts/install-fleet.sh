@@ -5,9 +5,26 @@ source_binary="$1"
 destination="$2"
 mode="${HYDRA_INSTALL_FLEET:-auto}"
 case "$mode" in auto|required|never) ;; *) echo 'Invalid HYDRA_INSTALL_FLEET' >&2; exit 1 ;; esac
-[ "$mode" != never ] || exit 0
+# Workflows (hydra workflow run, plans) are driven by hydra-fleet alone, so an
+# installation without it says so. It is not an error: every other command
+# works. A helper that an earlier installation left in place stays and is not
+# reported as missing.
+workflows_unavailable() {
+    [ ! -x "$destination/hydra-fleet" ] || return 0
+    {
+        echo "Warning: hydra-fleet was not installed ($1)."
+        echo "         Workflows are unavailable without it: hydra workflow run and plans will refuse to run."
+        echo "         Other hydra commands work. To get it, install JSON-C development files and pkg-config,"
+        echo "         run make build-fleet, then run ./install.sh again."
+    } >&2
+}
+if [ "$mode" = never ]; then
+    workflows_unavailable 'HYDRA_INSTALL_FLEET=never'
+    exit 0
+fi
 if [ ! -x "$source_binary" ]; then
     [ "$mode" != required ] || { echo 'Run make build-fleet before installing with fleet required' >&2; exit 1; }
+    workflows_unavailable "$source_binary is missing"
     exit 0
 fi
 [ "$("$source_binary" --version)" = 'Hydra fleet protocol 1' ] || exit 1

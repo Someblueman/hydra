@@ -1,6 +1,7 @@
 #define _XOPEN_SOURCE 700
 #include "fleet/workflow/workflow_drive.h"
 #include "fleet/support/files.h"
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -79,10 +80,21 @@ static int write_all(int fd, const char *data, size_t size) {
     return 0;
 }
 
-/* One line written to an adjacent temporary file, made private and renamed
- * over the destination. */
+static int sync_dir(const char *dir) {
+    int fd = open(dir, O_RDONLY | O_DIRECTORY), status;
+    if (fd < 0) return -1;
+    status = fsync(fd);
+    close(fd);
+    return status ? -1 : 0;
+}
+
+/* One line written to an adjacent temporary file, made private, synced and
+ * renamed over the destination, whose directory is then synced as
+ * task_write_json syncs its own. A line that could not be written whole,
+ * synced and closed is never published: the temporary file is removed and
+ * the destination keeps its previous value. */
 int wdr_scalar(const char *path, const char *value) {
-    char dir[F_PATH], tmp[F_PATH]; char *slash; int fd;
+    char dir[F_PATH], tmp[F_PATH]; char *slash; int fd; bool written;
     if (strpbrk(value, "\n\r")) { fputs("Error: scalar state values cannot contain newlines\n", stderr); return -1; }
     if (f_copy(dir, sizeof(dir), path)) return -1;
     slash = strrchr(dir, '/');
@@ -91,11 +103,12 @@ int wdr_scalar(const char *path, const char *value) {
     if (wdr_private_mkdirs(dir) || wdr_join(tmp, dir, ".hydra-tmp.XXXXXX")) return -1;
     fd = mkstemp(tmp);
     if (fd < 0) return -1;
-    (void)(write_all(fd, value, strlen(value)) || write_all(fd, "\n", 1));
+    written = !write_all(fd, value, strlen(value)) && !write_all(fd, "\n", 1);
     (void)fchmod(fd, 0600);
-    close(fd);
-    if (rename(tmp, path)) { unlink(tmp); return -1; }
-    return 0;
+    if (written && fsync(fd)) written = false;
+    if (close(fd)) written = false;
+    if (!written || rename(tmp, path)) { unlink(tmp); return -1; }
+    return sync_dir(dir);
 }
 
 int wdr_scalar_long(const char *path, long value) {
@@ -162,19 +175,47 @@ static size_t escape(char *out, size_t size, const char *text) {
     return used;
 }
 
-/* awk 'END { print NR + 1 }': a last line without a newline counts too. */
-static long next_sequence(const char *path) {
-    char buffer[65536]; long lines = 0; char last = '\n'; int fd = open(path, O_RDONLY);
-    if (fd < 0) return 1;
+/* awk 'END { print NR + 1 }', as workflow_event numbers an event: the lines
+ * of the file, a last line without a newline included, plus one. The driver
+ * remembers how far it has counted, so each event reads only what other
+ * writers appended since its previous one instead of the whole file. What was
+ * counted is trusted while the file is the same one, is no shorter, and still
+ * ends a line where the count stopped; otherwise it is counted from the
+ * start. Called with the event lock held. */
+static void count_lines(int fd, struct wdr_events *seen) {
+    char buffer[65536];
     for (;;) {
         ssize_t n = read(fd, buffer, sizeof(buffer)), i;
         if (n < 0 && errno == EINTR) continue;
         if (n <= 0) break;
-        for (i = 0; i < n; i++) if (buffer[i] == '\n') lines++;
-        last = buffer[n - 1];
+        for (i = 0; i < n; i++) if (buffer[i] == '\n') seen->lines++;
+        seen->last = buffer[n - 1];
+        seen->size += (off_t)n;
     }
+}
+
+static bool counted_part_kept(int fd, const struct stat *st, const struct wdr_events *seen) {
+    char last;
+    if (!seen->counted || st->st_dev != seen->dev || st->st_ino != seen->ino || st->st_size < seen->size) return false;
+    if (seen->size == 0) return true;
+    return pread(fd, &last, 1, seen->size - 1) == 1 && last == seen->last;
+}
+
+static long next_sequence(const char *path, struct wdr_events *seen) {
+    struct stat st; int fd = open(path, O_RDONLY);
+    if (fd < 0 || fstat(fd, &st)) {
+        if (fd >= 0) close(fd);
+        seen->counted = false;
+        return 1;
+    }
+    if (!counted_part_kept(fd, &st, seen)) {
+        memset(seen, 0, sizeof(*seen));
+        seen->counted = true; seen->dev = st.st_dev; seen->ino = st.st_ino; seen->last = '\n';
+    }
+    if (lseek(fd, seen->size, SEEK_SET) == seen->size) count_lines(fd, seen);
+    else seen->counted = false;
     close(fd);
-    return lines + (last != '\n') + 1;
+    return seen->lines + (seen->last != '\n') + 1;
 }
 
 static void pause_second(void) {
@@ -195,20 +236,128 @@ static bool event_lock_claimed(const char *lock) {
     return true;
 }
 
-static int take_event_lock(struct wdr_run *run, const char *lock) {
-    char owner_file[F_PATH], owner[64], pid[32]; int tries = 0, fd;
-    if (wdr_join(owner_file, lock, "owner-pid")) return -1;
-    while (mkdir(lock, 0700) || !event_lock_claimed(lock)) {
-        (void)wdr_first_line(owner_file, owner, sizeof(owner));
-        if (owner[0] && !wdr_pid_alive(run, owner)) { (void)wdr_remove_tree(lock); continue; }
-        if (++tries >= 30) return -1;
-        pause_second();
+/* A lock that could not be taken, as a waiting writer sees it. Its holder
+ * records itself in owner-pid after creating the directory, which changes
+ * the directory's modification time. */
+struct lock_view { bool held; ino_t ino; time_t modified; char owner[64]; };
+
+static void view_lock(const char *lock, struct lock_view *view) {
+    char owner_file[F_PATH]; struct stat st;
+    memset(view, 0, sizeof(*view));
+    if (lstat(lock, &st) || !S_ISDIR(st.st_mode)) return;
+    view->held = true; view->ino = st.st_ino; view->modified = st.st_mtime;
+    if (!wdr_join(owner_file, lock, "owner-pid")) (void)wdr_first_line(owner_file, view->owner, sizeof(view->owner));
+}
+
+/* One-second polls for which an unchanged lock without an owner record is
+ * waited for; workflow_event (lib/workflow_runtime.sh) waits as long. */
+#define OWNERLESS_POLLS 5
+
+struct lock_wait { int tries, ownerless; struct lock_view first; };
+
+/* A lock without an owner record belongs to a writer that is between
+ * creating it and recording itself, which takes no time to speak of, or
+ * that died there, and then no process will ever release it. It is abandoned
+ * when the same directory has stayed unchanged, still without a record, over
+ * OWNERLESS_POLLS polls after it was first seen. */
+static bool abandoned(const struct lock_view *view, struct lock_wait *wait) {
+    if (!view->held || view->owner[0]) { wait->ownerless = 0; return false; }
+    if (wait->ownerless && (view->ino != wait->first.ino || view->modified != wait->first.modified)) wait->ownerless = 0;
+    if (!wait->ownerless) wait->first = *view;
+    return ++wait->ownerless > OWNERLESS_POLLS;
+}
+
+/* Another live process has announced, in <lock>.breaking.<pid>, that it is
+ * breaking this lock. An announcement counts only while its process lives;
+ * a dead one is left alone, as its PID may name a new process that has just
+ * announced under the same name. */
+static bool other_breaker(struct wdr_run *run, const char *own_pid) {
+    static const char prefix[] = ".events.lock.breaking.";
+    DIR *entries = opendir(run->dir); struct dirent *entry; bool found = false;
+    if (!entries) return true;
+    while (!found && (entry = readdir(entries))) {
+        const char *pid = entry->d_name + sizeof(prefix) - 1;
+        if (strncmp(entry->d_name, prefix, sizeof(prefix) - 1) || !strcmp(pid, own_pid)) continue;
+        found = wdr_pid_alive(run, pid);
     }
+    closedir(entries);
+    return found;
+}
+
+/* The lock is still the one that was judged stale: the same directory, with
+ * the same dead owner or, without an owner record, unchanged. */
+static bool still_stale(struct wdr_run *run, const char *lock, const struct lock_view *seen) {
+    struct lock_view now;
+    view_lock(lock, &now);
+    if (!now.held || now.ino != seen->ino || strcmp(now.owner, seen->owner)) return false;
+    return seen->owner[0] ? !wdr_pid_alive(run, now.owner) : now.modified == seen->modified;
+}
+
+/* Breaks a lock whose owner died or that was abandoned without one. Checking
+ * and then deleting is not enough: of two waiting writers that both saw the
+ * stale lock, the slower would delete the lock the faster had taken in
+ * between, and both would append with the same sequence number. So, as
+ * remove_stale_lock_dir (lib/locks.sh) does, and as workflow_event does for
+ * this lock:
+ *   1. announce, in <lock>.breaking.<pid> beside the lock;
+ *   2. give way to any other live announcement: of two breakers at least one
+ *      sees the other, because each announces before it looks;
+ *   3. check again that the lock is the stale one: no other breaker is past
+ *      step 2, and a lock taken since the first look has a live owner or is
+ *      a newer directory;
+ *   4. rename the directory away, which frees the name in one step, and
+ *      delete it under its new name.
+ * True when this process removed the lock. */
+static bool break_event_lock(struct wdr_run *run, const char *lock, const struct lock_view *seen) {
+    char pid[32], claim[F_PATH], grave[F_PATH]; bool broken = false; int fd;
+    snprintf(pid, sizeof(pid), "%ld", (long)getpid());
+    if (f_format(claim, sizeof(claim), "%s.breaking.%s", lock, pid) || f_format(grave, sizeof(grave), "%s.dead.%s", lock, pid)) return false;
+    fd = open(claim, O_WRONLY | O_CREAT, 0600);
+    if (fd < 0) return false;
+    close(fd);
+    if (!other_breaker(run, pid) && still_stale(run, lock, seen)) {
+        (void)wdr_remove_tree(grave);
+        broken = rename(lock, grave) == 0;
+        (void)wdr_remove_tree(grave);
+    }
+    (void)unlink(claim);
+    return broken;
+}
+
+/* Writes this process as the owner of the lock it holds; a lock whose owner
+ * cannot be recorded is removed. */
+static int record_event_owner(const char *lock, const char *owner_file) {
+    char pid[32]; int fd;
     (void)chmod(lock, 0700);
     snprintf(pid, sizeof(pid), "%ld\n", (long)getpid());
+    /* A holder that cannot record itself would be read as a dead one (a
+     * torn PID) or wait out OWNERLESS_POLLS: it lets the lock go instead. */
     fd = open(owner_file, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (fd >= 0) { (void)fchmod(fd, 0600); (void)write_all(fd, pid, strlen(pid)); close(fd); }
+    if (fd >= 0) (void)fchmod(fd, 0600);
+    if (fd < 0 || write_all(fd, pid, strlen(pid))) {
+        if (fd >= 0) close(fd);
+        (void)wdr_remove_tree(lock);
+        return -1;
+    }
+    if (close(fd)) { (void)wdr_remove_tree(lock); return -1; }
     return 0;
+}
+
+/* Waits for a held lock: a second at a time while its owner lives, giving up
+ * after 30 tries. A lock that has just been released is tried again at once. */
+static int take_event_lock(struct wdr_run *run, const char *lock) {
+    char owner_file[F_PATH]; struct lock_wait wait;
+    memset(&wait, 0, sizeof(wait));
+    if (wdr_join(owner_file, lock, "owner-pid")) return -1;
+    while (mkdir(lock, 0700) || !event_lock_claimed(lock)) {
+        struct lock_view view; bool stale;
+        view_lock(lock, &view);
+        stale = view.owner[0] ? !wdr_pid_alive(run, view.owner) : abandoned(&view, &wait);
+        if (stale && break_event_lock(run, lock, &view)) { wait.ownerless = 0; continue; }
+        if (++wait.tries >= 30) return -1;
+        if (view.held) pause_second();
+    }
+    return record_event_owner(lock, owner_file);
 }
 
 static bool notice_type(const char *type) {
@@ -246,9 +395,17 @@ int wdr_event(struct wdr_run *run, const char *step, const char *type, const cha
     char file[F_PATH], lock[F_PATH], line[4 * WDR_VALUE]; size_t size; int fd, status = 1;
     if (wdr_join(file, run->dir, "events.jsonl") || wdr_join(lock, run->dir, ".events.lock") ||
         wdr_private_touch(file) || take_event_lock(run, lock)) return 1;
-    size = format_event(line, sizeof(line), run, next_sequence(file), step, type, detail);
+    size = format_event(line, sizeof(line), run, next_sequence(file, &run->events), step, type, detail);
     fd = open(file, O_WRONLY | O_APPEND | O_CREAT, 0666);
-    if (fd >= 0) { status = size < sizeof(line) && !write_all(fd, line, size) ? 0 : 1; close(fd); }
+    /* Under the lock this is the only appender: a line that cannot be
+     * written whole is cut off again (f_append), and a failed close counts. */
+    if (fd >= 0) {
+        status = size < sizeof(line) && !f_append(fd, line, size, false) ? 0 : 1;
+        if (close(fd)) status = 1;
+    }
+    /* The appended line is counted while no other writer can append. */
+    if (status == 0 && run->events.counted) { run->events.size += (off_t)size; run->events.lines++; run->events.last = '\n'; }
+    else run->events.counted = false;
     (void)wdr_remove_tree(lock);
     if (status == 0 && notice_type(type) && wdr_run_has(run, "planning-head"))
         (void)wdr_hook(run, NULL, 0, false, "notify", step ? step : "", type);

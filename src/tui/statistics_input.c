@@ -77,7 +77,7 @@ static void statistics_head(struct app *app) {
     s = &v->model->sessions[v->session_rows[v->session_selected]];
     for (i = 0; i < app->model.head_count && strcmp(app->model.heads[i].branch, s->branch); i++) {}
     if (i == app->model.head_count) {
-        (void)snprintf(app->notice, sizeof(app->notice), "%.120s is not a head in this project any more", s->branch);
+        (void)notice_set(app, "%.120s is not a head in this project any more", s->branch);
         return;
     }
     if (!head_matches(&app->model.heads[i], app->search)) app->search[0] = '\0';

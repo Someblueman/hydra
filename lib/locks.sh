@@ -73,9 +73,6 @@ hydra_private_touch() (
     done
 )
 
-# Try to acquire a lock for a session name candidate
-# Usage: try_lock <candidate_name>
-# Returns: 0 if lock acquired, 1 if failed
 # Creates directory $1 for this caller alone: false when it exists or when
 # another process creates it at the same moment. mkdir's exit status cannot
 # decide that: the Rust coreutils Ubuntu ships from 25.10 (0.10.0 in 26.04)
@@ -89,9 +86,74 @@ hydra_exclusive_mkdir() {
     (set -C; : > "$1/.claim") 2>/dev/null
 }
 
+# Sets _LOCK_HOST_NAME to this host's name as lock owner records carry it.
+# The name is asked for once per process.
+_LOCK_HOST_NAME=
+lock_load_host_name() {
+    [ -n "$_LOCK_HOST_NAME" ] ||
+        _LOCK_HOST_NAME="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+}
+
+# Sets _LOCK_PROC_PID to this process's PID as /proc gives it, without
+# starting a process: /proc/self belongs to the process that looks at it, and
+# the one entry of its task directory, the main thread, carries the PID.
+# Returns 1, with _LOCK_PROC_PID empty, without such a /proc.
+lock_read_proc_pid() {
+    _LOCK_PROC_PID=
+    for _lock_task in /proc/self/task/*; do
+        # A shell is one thread; with more entries this is not the PID.
+        [ -z "$_LOCK_PROC_PID" ] || { _LOCK_PROC_PID=; return 1; }
+        _LOCK_PROC_PID="${_lock_task##*/}"
+    done
+    case "$_LOCK_PROC_PID" in
+        ''|*[!0-9]*) _LOCK_PROC_PID=; return 1 ;;
+    esac
+}
+
+# Set when /proc is trusted for that. Libraries are loaded by the top-level
+# shell, where the PID is $$: /proc has to give the same here. Where it does
+# not (no /proc, one that belongs to another PID namespace, or a library
+# loaded by a subshell), a process is asked for the PID instead.
+_LOCK_PROC_SELF=
+if lock_read_proc_pid && [ "$_LOCK_PROC_PID" = "$$" ]; then
+    _LOCK_PROC_SELF=1
+fi
+
+# Sets _LOCK_SELF_PID to the PID of the shell process that calls this, which
+# in a subshell is not $$: $$ stays the top-level shell's PID. Call it as a
+# plain command; inside a command substitution it would name that
+# substitution's process. Returns 1, with _LOCK_SELF_PID empty, when the PID
+# cannot be found.
+lock_load_self_pid() {
+    _LOCK_SELF_PID=
+    if [ -n "$_LOCK_PROC_SELF" ] && lock_read_proc_pid; then
+        _LOCK_SELF_PID="$_LOCK_PROC_PID"
+        return 0
+    fi
+    # The parent of a process started here is this shell.
+    _LOCK_SELF_PID="$(exec sh -c 'echo "$PPID"' 2>/dev/null)" || _LOCK_SELF_PID=
+    case "$_LOCK_SELF_PID" in
+        ''|*[!0-9]*) _LOCK_SELF_PID=; return 1 ;;
+    esac
+}
+
+# Try once to take a lock, recording the top-level shell ($$) as its owner.
+# Usage: try_lock <name> [operation]
+# Returns: 0 if the lock was taken, 1 if not
+# The owner is $$ because callers of try_lock reserve a name for the whole
+# command: generate_session_name runs in a command substitution, and the lock
+# it takes is kept by the command after that substitution has ended. A lock
+# that guards a section of code is taken with acquire_lock, which records the
+# process that runs the section.
 try_lock() {
+    lock_take "$1" "${2:-$1}" "$$"
+}
+
+# Usage: lock_take <name> <operation> <owner-pid>
+lock_take() {
     candidate="$1"
-    operation="${2:-$candidate}"
+    operation="$2"
+    _lock_owner="$3"
     # Only lock if HYDRA_HOME is set
     if [ -z "${HYDRA_HOME:-}" ]; then
         return 0
@@ -105,10 +167,11 @@ try_lock() {
 
     # The directory is the lock. Metadata is diagnostic and enables safe local
     # recovery; a partially written owner record still remains a held lock.
-    _lock_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+    lock_load_host_name
+    _lock_host="$_LOCK_HOST_NAME"
     if ! (
         umask 077
-        printf '%s\n' "$$" > "$lock_path/pid" &&
+        printf '%s\n' "$_lock_owner" > "$lock_path/pid" &&
         printf '%s\n' "$_lock_host" > "$lock_path/host" &&
         printf '%s\n' "$(date +%s)" > "$lock_path/created_at" &&
         printf '%s\n' "$operation" > "$lock_path/operation"
@@ -120,14 +183,24 @@ try_lock() {
     return 0
 }
 
-# Release a lock for a session name candidate
-# Usage: release_lock <candidate_name>
+# Release a lock this process holds.
+# Usage: release_lock <name>
 # Returns: 0 always (best-effort cleanup)
+# The lock is removed when its owner record names this process: $$ for a lock
+# of try_lock or of acquire_lock in the top-level shell, or the PID of this
+# subshell for a lock acquire_lock took here. Another process's lock is left
+# alone. A subshell asks for its own PID only when the record is not $$.
 release_lock() {
     candidate="$1"
     if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
         _rl_path="$HYDRA_HOME/locks/$candidate.lock"
-        _rl_pid="$(sed -n '1p' "$_rl_path/pid" 2>/dev/null || true)"
+        _rl_pid=
+        { IFS= read -r _rl_pid < "$_rl_path/pid"; } 2>/dev/null || :
+        if [ -n "$_rl_pid" ] && [ "$_rl_pid" != "$$" ]; then
+            # Not the top-level shell's: this subshell's, or somebody else's.
+            lock_load_self_pid || :
+            [ "$_rl_pid" != "$_LOCK_SELF_PID" ] || _rl_pid="$$"
+        fi
         # Empty PID supports pre-v1 metadata-free locks acquired by this process.
         if [ -z "$_rl_pid" ] || [ "$_rl_pid" = "$$" ]; then
             rm -f "$_rl_path/pid" "$_rl_path/host" \
@@ -152,18 +225,38 @@ release_session_lock() {
 }
 
 # Acquire a lock with retries, then fail closed.
-# Usage: acquire_lock <name>
+# Usage: acquire_lock <name> [operation]
 # HYDRA_LOCK_RETRIES (default 5). Sleep 0.05s between tries when supported.
+# The operation is recorded in the lock for diagnostics. A lock whose recorded
+# owner is a dead process on this host (a holder that was interrupted or
+# killed never releases) is broken and the try repeated at once. A lock owned
+# by a live process, by another host, or without a complete owner record is
+# never broken, however long it has been held.
+#
+# The owner recorded is the shell process that calls this, which runs the
+# locked section and releases the lock. In a subshell that is not $$: with $$
+# a subshell that still held the lock after the command that started it was
+# killed would own a lock that names a dead process, and the next caller
+# would break it and run the same section beside it. The lock must therefore
+# be released by the process that acquired it, before that process ends.
 # Returns: 0 if acquired, 1 if not
 acquire_lock() {
     _al_name="$1"
+    _al_operation="${2:-$1}"
     _al_retries="${HYDRA_LOCK_RETRIES:-5}"
     _al_i=0
     case "$_al_retries" in
         ''|*[!0-9]*) _al_retries=5 ;;
     esac
+    lock_load_self_pid || _LOCK_SELF_PID="$$"
+    _al_owner="$_LOCK_SELF_PID"
     while [ "$_al_i" -lt "$_al_retries" ]; do
-        if try_lock "$_al_name"; then
+        if lock_take "$_al_name" "$_al_operation" "$_al_owner"; then
+            return 0
+        fi
+        if [ -n "${HYDRA_HOME:-}" ] &&
+            remove_stale_lock_dir "$HYDRA_HOME/locks/$_al_name.lock" 2>/dev/null &&
+            lock_take "$_al_name" "$_al_operation" "$_al_owner"; then
             return 0
         fi
         _al_i=$((_al_i + 1))
@@ -177,16 +270,25 @@ acquire_lock() {
 # Create a temporary file in the same directory as dest (same filesystem).
 # Usage: mktemp_adjacent <dest>
 # Returns: temp path on stdout
+# The file is private (0600) whatever the caller's umask: mktemp creates it
+# with mode 0600 less the umask, and it runs here under umask 077. Callers
+# therefore need no chmod before renaming it into place.
 mktemp_adjacent() {
     _ma_dest="$1"
     if [ -z "$_ma_dest" ]; then
         return 1
     fi
-    _ma_dir="$(dirname "$_ma_dest")"
+    # The directory of an ordinary path, without a dirname process. dirname
+    # still answers for the forms it treats specially.
+    case "$_ma_dest" in
+        */|*//*) _ma_dir="$(dirname "$_ma_dest")" ;;
+        */*) _ma_dir="${_ma_dest%/*}"; [ -n "$_ma_dir" ] || _ma_dir=/ ;;
+        *) _ma_dir=. ;;
+    esac
     if [ ! -d "$_ma_dir" ]; then
         hydra_private_mkdir "$_ma_dir" || return 1
     fi
-    mktemp "$_ma_dir/.hydra-tmp.XXXXXX"
+    (umask 077; mktemp "$_ma_dir/.hydra-tmp.XXXXXX")
 }
 
 # Atomically replace dest with tmpfile via rename. tmpfile must be same-FS.
@@ -206,26 +308,94 @@ atomic_replace() {
 lock_dir_is_stale() {
     _ldis_path="$1"
     [ -d "$_ldis_path" ] || return 1
-    _ldis_pid="$(sed -n '1p' "$_ldis_path/pid" 2>/dev/null || true)"
-    _ldis_owner_host="$(sed -n '1p' "$_ldis_path/host" 2>/dev/null || true)"
-    _ldis_host="$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)"
+    _ldis_pid=
+    _ldis_owner_host=
+    { IFS= read -r _ldis_pid < "$_ldis_path/pid"; } 2>/dev/null || :
+    { IFS= read -r _ldis_owner_host < "$_ldis_path/host"; } 2>/dev/null || :
+    lock_load_host_name
+    _ldis_host="$_LOCK_HOST_NAME"
     case "$_ldis_pid" in ''|*[!0-9]*) return 1 ;; esac
     [ "$_ldis_owner_host" = "$_ldis_host" ] || return 1
     ! kill -0 "$_ldis_pid" 2>/dev/null
 }
 
-# Remove a lock only after rechecking stale-owner evidence.
+# True when another live process on this host has announced that it is
+# breaking this lock.
+# Usage: lock_breaker_active <lock-directory> <own-claim-file>
+lock_breaker_active() {
+    for _lba_claim in "$1".breaking.*; do
+        [ "$_lba_claim" != "$2" ] || continue
+        [ -f "$_lba_claim" ] || continue
+        _lba_pid="${_lba_claim##*.breaking.}"
+        case "$_lba_pid" in ''|*[!0-9]*) continue ;; esac
+        if kill -0 "$_lba_pid" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Break a lock whose owner is a dead process on this host.
 # Usage: remove_stale_lock_dir <lock-directory>
+# Returns: 0 when this caller removed the lock, 1 otherwise
+#
+# Checking the owner and then deleting the directory is not enough: of two
+# callers that both saw the dead owner, the slower one would delete the lock
+# the faster one, or anybody else, acquired in between. As the .claim of
+# hydra_exclusive_mkdir decides who created a lock, a claim decides who may
+# break one:
+#   1. Announce: create <lock>.breaking.<pid of this process> next to the lock.
+#   2. Look for other announcements. One from a live process means that
+#      process may be at step 3 or 4, so withdraw and report failure. Of two
+#      breakers at least one sees the other, because each announces before it
+#      looks; when both withdraw, their callers retry.
+#   3. Check the owner again. No other breaker is past step 2 and a dead owner
+#      releases nothing, so a lock that is stale now stays this one until
+#      step 4. A lock acquired since the first look has a live owner and is
+#      left alone.
+#   4. Rename the directory out of the way, which frees the name in one step,
+#      and delete it under its new name.
+# The claim lies beside the lock, never in it, so a live owner's record and
+# its release are not touched. A breaker that dies leaves its claim behind;
+# a claim counts only while its process is alive, and a dead one is harmless
+# and is never deleted by others (its PID may belong to a new process that
+# has just announced under the same name). Only a lock whose recorded host is
+# this one gets as far as a claim, so the PID in a claim's name is a local one.
+#
+# Besides the locks of acquire_lock this accepts the admission lock
+# ($HYDRA_HOME/admission/lock, lib/admission.sh), which keeps the same owner
+# record in a directory of its own.
 remove_stale_lock_dir() {
     _rsld_path="$1"
+    [ -n "${HYDRA_HOME:-}" ] || return 1
     case "$_rsld_path" in
-        "$HYDRA_HOME"/locks/*.lock) ;;
+        "$HYDRA_HOME"/locks/*.lock|"$HYDRA_HOME"/admission/lock) ;;
         *) return 1 ;;
     esac
     lock_dir_is_stale "$_rsld_path" || return 1
-    rm -f "$_rsld_path/pid" "$_rsld_path/host" "$_rsld_path/created_at" \
-        "$_rsld_path/operation" "$_rsld_path/head_id" "$_rsld_path/run_id" "$_rsld_path/.claim" 2>/dev/null || true
-    rmdir "$_rsld_path" 2>/dev/null
+    # $$ stays the main shell's PID in a subshell; the claim has to name the
+    # process that makes it, which is the parent of this command substitution.
+    _rsld_self="$(exec sh -c 'echo "$PPID"' 2>/dev/null)"
+    case "$_rsld_self" in ''|*[!0-9]*) return 1 ;; esac
+    _rsld_claim="$_rsld_path.breaking.$_rsld_self"
+    (umask 077; : > "$_rsld_claim") 2>/dev/null || return 1
+    _rsld_status=1
+    if ! lock_breaker_active "$_rsld_path" "$_rsld_claim" && lock_dir_is_stale "$_rsld_path"; then
+        _rsld_grave="$_rsld_path.dead.$_rsld_self"
+        if mv -f "$_rsld_path" "$_rsld_grave" 2>/dev/null; then
+            _rsld_status=0
+            # A leftover directory of that name received the lock as a
+            # subdirectory; both levels are emptied of what a lock holds.
+            for _rsld_dir in "$_rsld_grave/${_rsld_path##*/}" "$_rsld_grave"; do
+                [ -d "$_rsld_dir" ] || continue
+                rm -f "$_rsld_dir/pid" "$_rsld_dir/host" "$_rsld_dir/created_at" "$_rsld_dir/operation" \
+                    "$_rsld_dir/head_id" "$_rsld_dir/run_id" "$_rsld_dir/.claim" 2>/dev/null || true
+                rmdir "$_rsld_dir" 2>/dev/null || true
+            done
+        fi
+    fi
+    rm -f "$_rsld_claim"
+    return "$_rsld_status"
 }
 
 # Clean up locks provably owned by a dead process on this host.
