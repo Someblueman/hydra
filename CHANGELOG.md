@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Unused repository files: five TUI headers nothing includes
+  (`src/tui/{actions,adapter,input,render,selection}.h`), the provider-driven
+  scripts and prompts the feature and research planning examples no longer call,
+  an unreferenced dashboard screenshot and two empty `.gitkeep` placeholders.
+
+### Fixed
+- The 9B fixture README names the native contract runner, `docs/workflows.md`
+  no longer mentions shell-only workflow execution, and `make help` no longer
+  lists TUI timings under `make bench` (use `make bench-tui`).
+
 ## [5.0.0] - 2026-11-21
 
 Hydra 5.0.0 is a reliability and performance release. It fixes defects that
