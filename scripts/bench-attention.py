@@ -1276,9 +1276,15 @@ def main() -> int:
             args.out.resolve(),
             root / "tests/fixtures/perf/attention-cases.json",
         )
-        print(json.dumps({key: report[key] for key in ("complete", "false_positives_total", "missed_signals_total")}))
+        print(json.dumps({key: report[key] for key in ("complete", "error", "false_positives_total", "missed_signals_total")}))
         print(f"report={args.out.resolve() / 'report.json'}")
-        return 0 if report["complete"] else 1
+        # unsupported_silent_total is expected to be non-zero and does not fail the run
+        failed = (
+            report["error"] is not None
+            or report["false_positives_total"] != 0
+            or report["missed_signals_total"] != 0
+        )
+        return 0 if report["complete"] and not failed else 1
     if args.repetitions < 3 or args.interval < 1 or args.window < 3:
         parser.error("require >=3 repetitions, interval >=1s, window >=3s")
     for path in (args.tui, args.fleet):
