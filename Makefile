@@ -608,8 +608,8 @@ test-plan-staged-public: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" "$(BUILD_DIR)/native-tests/test-plan-staged-public" --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
 # Planning-quality evaluation (roadmap 9E): archived pilot cases plus held-out
-# additions through the independent oracle, one executed run per arm and the
-# serial/fork-join scheduling patterns. The report lands in build/plan-eval/.
+# additions through the independent oracle, and the serial/fork-join scheduling
+# patterns, each run once. The report lands in build/plan-eval/.
 .PHONY: test-plan-eval
 test-plan-eval: build-fleet build-plan-example
 	python3 scripts/plan-eval.py --execute 1 --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --plan-example "$(abspath $(BUILD_DIR))/plan-example" --output "$(abspath $(BUILD_DIR))/plan-eval/report.json"

@@ -6,10 +6,10 @@ These fixed examples exercise Hydra's public planning and independent outcome ch
 before admission. Staged planning passes an accepted, source-bound finding into a
 separately compiled static graph. The
 [planner evaluation](evaluation/README.md) keeps the archived pilot's six frozen
-candidates, cases and incorrect-artifact controls reproducible from Git history,
-adds held-out cases and an independent oracle, and `make test-plan-eval` measures
-planning, validation and scheduling effects separately at the current source; the
-observed interface conformance difference does not establish a planning benefit.
+candidates reproducible from Git history, adds held-out cases and an independent
+oracle, and `make test-plan-eval` checks that oracle and compares the serial and
+fork/join scheduling patterns at the current source; it establishes no planning
+benefit.
 
 Run each in a **new disposable Git repository**. Do not run these spawn recipes
 inside Hydra's implementation checkout. For example, from the Hydra checkout:

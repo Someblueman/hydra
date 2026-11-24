@@ -445,14 +445,10 @@ bytes or ID changed fails with `invalid_decision`. `decision list --json` return
 
 The planning evaluation report (`build/plan-eval/report.json`, schema 1,
 `report` `hydra-plan-eval-1`) records `source_commit`, `archive` (`commit`,
-`files` digests, `verified`), `matched_contract`, `case_set`, `planning` (per arm
-and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
-`total`, `by_class`, `by_source`, `cases`, `repeats`, `distinct_outcomes`),
+`files` digests, `verified`), `matched_contract`, `case_set`,
 `validation` (`false_rejections`, `false_acceptances`, `incorrect_rejected`,
-`incorrect_total`, `by_class`, `controls`), `execution` (`compiled`, `runs` with
-`verified_outcome`, `as_expected`, `wall_seconds`,
-`time_to_verified_result_milliseconds`, `cost`, `human_corrections`,
-`repeated_work`), `scheduling` (`structural`, `executed`, `calibration`),
+`incorrect_total`, `by_class`, `controls`),
+`scheduling` (`structural`, `executed`, `calibration`),
 `calibration`, `human_corrections`, `stochastic_variability`, `failures`,
 `status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
 never estimates.

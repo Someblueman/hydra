@@ -12,7 +12,7 @@ make perf-attention # annotated attention corpus: missed signals and false posit
 
 The study of October 2026 (a 1/10/50-head matrix with published evidence under
 `docs/evidence/performance/`) measured the shell data reader that 5.0 removed and
-has been retired. To reproduce it, check out commit `d31b596`, the last that
+has been retired. To reproduce it, check out commit `c82547c`, the last that
 carries `scripts/perf-matrix.py` and that bundle.
 
 ## I1 benchmark
