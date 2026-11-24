@@ -40,6 +40,15 @@ static void cycle(struct kt_session *s) {
         CHECK(!strcmp(focus(s), backward[i]), "Shift-Tab moves the focus to the previous pane");
     }
 }
+
+/* The diff header is "+++ b/NAME", or "+++ w/NAME" when the user's git sets diff.mnemonicPrefix. */
+static bool new_file_shown(struct kt_session *s, const char *name) {
+    char b[256], w[256];
+    snprintf(b, sizeof(b), "+++ b/%s", name);
+    snprintf(w, sizeof(w), "+++ w/%s", name);
+    return kt_contains(s, b) || kt_contains(s, w);
+}
+
 int main(void) {
     struct kt_session s;
     char path[4096], worktree[4096], text[512];
@@ -73,8 +82,8 @@ int main(void) {
     S("diff");
     U("Show diff of the selected head", 5);
     S("\r");
-    U("+++ w/greeting.txt", 10);
-    CHECK(kt_contains(&s, "+++ w/greet.sh") && kt_contains(&s, "+hello") && kt_contains(&s, "+echo hello"),
+    U("+echo hello", 10);
+    CHECK(new_file_shown(&s, "greeting.txt") && new_file_shown(&s, "greet.sh") && kt_contains(&s, "+hello"),
           "the full diff lists both committed files inside the control centre");
     CHECK(!kt_contains(&s, "Press Enter to return"), "the diff needs no return to the control centre");
     S("\033");
