@@ -9,8 +9,8 @@ word painted in a contradicting tone), raw identifiers in headings or too
 many outside detail/diagnostic screens, repeated keyboard hints, and text
 contrast below the threshold in the dark and light themes.
 
-Findings listed in lint-known.tsv (rule, capture glob, message substring,
-reason) are reported as known and do not fail the lint; everything else does.
+Findings listed in lint-known.tsv (rule, capture globs separated by commas,
+message substring, reason) are reported as known and do not fail the lint; everything else does.
 See docs/VISUAL-REVIEW.md.
 """
 
@@ -226,7 +226,6 @@ class Lint:
     def palette(self) -> None:
         s = self.s
         if s.theme == "nocolor":
-            foreign = sorted({c for row in s.cells for c in (row[0][1], row[0][2]) if c})
             for y, row in enumerate(s.cells):
                 if any(c[1] or c[2] for c in row):
                     self.finding("palette", y, f"colour escapes in no-colour mode: {sorted({c[1] or c[2] for c in row if c[1] or c[2]})[:3]}")
@@ -337,6 +336,11 @@ host hosts machine remote changed nothing continue identity log transcript secti
 """.split())
 
 
+def in_captures(identifier: str, patterns: str) -> bool:
+    """Whether the capture id matches one of the comma-separated globs."""
+    return any(fnmatch.fnmatch(identifier, pattern) for pattern in patterns.split(","))
+
+
 def load_known(path: Path) -> list[tuple[str, str, str, str]]:
     rows = []
     if not path.exists():
@@ -361,7 +365,7 @@ def lint_directory(output: Path) -> dict:
         screen = Screen(entry, data)
 
         def finding(rule: str, row: int, message: str, entry=entry) -> None:
-            match = next((k for k in known if k[0] == rule and fnmatch.fnmatch(entry["id"], k[1]) and k[2] in message), None)
+            match = next((k for k in known if k[0] == rule and in_captures(entry["id"], k[1]) and k[2] in message), None)
             findings.append({"capture": entry["id"], "rule": rule, "row": row, "message": message,
                              "known": bool(match), "reason": match[3] if match else ""})
 
@@ -374,7 +378,7 @@ def lint_directory(output: Path) -> dict:
     # A known row that no finding matches any more: the screen was fixed (or
     # the state is no longer captured); report it so the row can go.
     resolved = [{"rule": k[0], "capture": k[1], "message": k[2], "reason": k[3]} for k in known
-                if not any(f["rule"] == k[0] and fnmatch.fnmatch(f["capture"], k[1]) and k[2] in f["message"]
+                if not any(f["rule"] == k[0] and in_captures(f["capture"], k[1]) and k[2] in f["message"]
                            for f in findings)]
     return {"screens": len(manifest["captures"]), "findings": findings, "resolved": resolved,
             "known": sum(1 for f in findings if f["known"]), "new": sum(1 for f in findings if not f["known"])}

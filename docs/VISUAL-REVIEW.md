@@ -14,12 +14,18 @@ the same application") remains the reviewer's, and the contact sheet is its
 input.
 
 ```sh
-make visual-review                                  # build/visual-review/index.html
+make visual-review                                  # focused: build/visual-review/index.html
+make visual-review VISUAL_REVIEW_FULL=1             # every flow, every theme
 make visual-review VISUAL_BASELINE=/path/to/earlier # before/after columns
 make test-visual-lint                               # the bounded layout lint only
 ```
 
-A full run takes about seven minutes on a shared 4-core machine; a subset is
+The default capture is focused: the `work` flow (Work, its Run and Details
+pages, Inbox, review, Stats) and the `hosts` flow (the guided remote setup) at
+80x24 and 140x40 in the dark and light themes, about two minutes on a shared
+4-core machine. `VISUAL_REVIEW_FULL=1` (`--full`) adds the `fleet` and the other
+`hosts-*` flows and the no-colour theme; a full run takes about seven minutes.
+A subset is
 `python3 scripts/visual_review/run.py --output build/visual-review --cells
 build/kettle-cells --keep-prefix --flow work --theme dark --size 80x24`
 (`--keep-prefix` reuses the installed prefix and keeps the captures of every

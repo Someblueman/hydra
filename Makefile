@@ -489,7 +489,7 @@ help:
 	@echo "  make build-fleet-static [ARCH=x86_64|aarch64] - Reproducible static Linux fleet helper (Docker)"
 	@echo "  make check-fleet-assets - Validate the pinned release/fleet-assets.tsv digests table"
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
-	@echo "  make visual-review [VISUAL_BASELINE=dir] - Capture, render and lint the native TUI screens into one contact sheet"
+	@echo "  make visual-review [VISUAL_REVIEW_FULL=1] [VISUAL_BASELINE=dir] - Capture, render and lint the native TUI screens into one contact sheet (focused: Work, Inbox, Hosts in dark and light; FULL adds every flow and no-colour)"
 	@echo "  make test-visual-lint - Run the bounded layout lint over the visual-review captures"
 	@echo "  make test-u10-loopback - Guided remote setup of a throwaway account over loopback SSH through the control centre"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
@@ -752,6 +752,10 @@ include scripts/native-tests.mk
 include scripts/fleet-tests.mk
 include scripts/shell-tests.mk
 
+# Installed-build first-use and planning walkthrough (scripts/usability/): a
+# fresh prefix, a repository nobody initialized, a conversation to a proposal,
+# one approval of the exact revision and its checked delivery, at 80x24 and
+# 140x40. USABILITY_ARGS="--journey planning --columns 80" narrows it.
 .PHONY: test-usability
 USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
 test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
@@ -764,15 +768,18 @@ $(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle
 
 # Visual review without manual runs (U4, I4, 2.9.0 Hosts screens): drives the
 # prefix-installed native TUI over a PTY through fixture states at 80x24 and
-# 140x40 in the dark, light and no-colour themes, renders each capture to
-# HTML/SVG with exact colours, lints the layouts and writes one contact sheet
-# to $(VISUAL_REVIEW_OUTPUT)/index.html. VISUAL_BASELINE=dir adds before/after
-# columns from an earlier output directory.
+# 140x40, renders each capture to HTML/SVG with exact colours, lints the
+# layouts and writes one contact sheet to $(VISUAL_REVIEW_OUTPUT)/index.html.
+# The default is focused: the work flow (Work, Inbox, Stats, review) and the
+# hosts flow in the dark and light themes. VISUAL_REVIEW_FULL=1 captures every
+# flow in the dark, light and no-colour themes. VISUAL_BASELINE=dir adds
+# before/after columns from an earlier output directory.
 VISUAL_REVIEW_OUTPUT ?= $(BUILD_DIR)/visual-review
 .PHONY: visual-review test-visual-lint
 visual-review: build-core build-tui build-fleet $(BUILD_DIR)/kettle-cells
 	python3 scripts/visual_review/run.py --output "$(abspath $(VISUAL_REVIEW_OUTPUT))" \
-		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)")
+		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)") \
+		$(if $(VISUAL_REVIEW_FULL),--full)
 
 # The bounded, deterministic layout lint over the captures (captures them
 # first when the output directory has none).
@@ -790,8 +797,8 @@ test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/kettle-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
 
-# Installed-build acceptance for the open roadmap items (docs/ACCEPTANCE.md):
-# one HTML+JSON matrix mapping each acceptance bullet to its checks and evidence.
+# Installed-build flicker acceptance (U6, docs/ACCEPTANCE.md): one HTML+JSON
+# report mapping each U6 bullet to its checks and retained recordings.
 .PHONY: test-acceptance
 ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)
 test-acceptance: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
