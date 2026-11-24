@@ -45,8 +45,8 @@ only a person, a real host or a real provider can give. By what each item needs:
 - **A person at the screen:** U1 to U9 (U5's follow-ups need a real run), U12, U13, U15, U17 to U19 and
   I4 (details in each item). The automated checks are described in
   [TUI-REVIEW.md](TUI-REVIEW.md).
-- **A real host or provider:** U10 (the operator VPS run), U11 (remote
-  attach, reconnect, history), T2 and T3 (hosts without tmux), item 6 (placement
+- **A real host or provider:** U10 (the operator VPS run), U11 and U16 (remote
+  attach, reconnect, history, repeated attach cycles), R1 (the hosted rerun), T2 and T3 (hosts without tmux), item 6 (placement
   trials), item 8 (cron, systemd, launchd, macOS, several hosts), H4 to H6 (a live
   network, inventory and key rotation), statistics from real remote hosts.
 - **Measurement:** item 10 (a second Linux trial, macOS, frozen budgets, the
@@ -118,10 +118,12 @@ Work replaces Heads, Details, Coordination, Overview, Workflows and the Workspac
 layouts, Inbox replaces Attention and Recovery, Hosts is `3` and Stats is `4`
 (see "What moved" in [USAGE.md](USAGE.md#what-moved)). Each item below is open
 until the acceptance it states has been observed; "Open" says what is still
-missing. What the automated checks cover is in [TUI-REVIEW.md](TUI-REVIEW.md); the
+missing. What the automated checks cover is in [TUI-REVIEW.md](TUI-REVIEW.md). The
 installed-build journeys for the individual items were removed from
-`make test-acceptance` and are covered by the focused tests the
-[changelog](../CHANGELOG.md#unreleased) lists.
+`make test-acceptance` and the simulated discoverability trials from
+`make test-usability`; the focused tests the [changelog](../CHANGELOG.md#unreleased)
+lists cover part of what they asserted, not all of it, so an item below stays open
+until its stated acceptance has been shown.
 
 - [ ] **U1 — Keep ordinary onboarding out of the source tree.** Store local
       registration, preferences and runtime state outside the repository by default.
@@ -133,9 +135,9 @@ installed-build journeys for the individual items were removed from
       requests actual project work or explicitly chooses shared configuration.
       Existing dirty work and ignore rules are preserved. Repository commands still
       require explicit trust before execution; fewer setup steps must not imply
-      blanket trust. Open: no human step; covered by `tests/test_init_source_tree.sh`,
-      `tests/test_onboarding.sh` and `tests/test_project_trust.sh`, awaiting the
-      maintainer's acceptance.
+      blanket trust. Open: `tests/test_init_source_tree.sh`, `tests/test_onboarding.sh`
+      and `tests/test_project_trust.sh` cover the files, status and trust rules; the
+      same must still be shown from the installed control centre on first entry.
 - [ ] **U2 — Clean terminal entry and human-readable context.** Deliver the
       required environment before the interactive prompt without typing setup
       commands into the user's conversation or shell history. Present concise
@@ -245,7 +247,10 @@ installed-build journeys for the individual items were removed from
       remote` to find it. A pinned release build needs no
       `HYDRA_REMOTE_SETUP_BINARY`. Upgrading a host that an older Hydra set up
       (`hydra remote provision NAME`, [FLEET.md](FLEET.md#upgrading-a-host)) is
-      qualified over the fake SSH boundary of `tests/test_remote_provision.sh` only.
+      qualified over the fake SSH boundary of `tests/test_remote_provision.sh` only;
+      upgrading the operator VPS from its 2.9 setup has not been observed and is part
+      of the operator run. Record the run (the plans approved, the sign-in, the task
+      and its reconnect) as evidence.
 - [ ] **U11 — One workspace across local and remote execution.** Local and remote
       work share navigation, agent interaction, task details, attention and review,
       with location as a visible filter; users need not discover `fleet tui`. Keep
@@ -259,7 +264,16 @@ installed-build journeys for the individual items were removed from
       a live remote host: real SSH attach, reconnect after a real disconnection,
       and remote history scrolling against a host tmux (including a non-default
       prefix; remote panes scroll through `Ctrl-B [`, which needs the default
-      prefix). Remote tasks are not yet nodes of the workspace navigation tree.
+      prefix). Remote tasks are not yet nodes of the workspace navigation tree. Part of
+      U5's real-task acceptance is still to be run as one journey: onboard a remote
+      machine, then follow local and remote work in that same UI.
+- [ ] **U16 — Attachment that can always be left cleanly (live host).** Accepted
+      locally on 27 September 2026 (leave input, close the pane, resize, reattach
+      with no stuck input capture, duplicate views or residual regions, and closing a
+      client never kills its execution owner). Open: the same repeated cycle (attach,
+      leave input, close the pane, switch layouts, resize, reattach) against a live
+      remote host over real SSH, verified with actual user input; the remote cycles
+      are covered by U11 fixtures only.
 - [ ] **U12 — Keep action confirmation and results inside the control centre.**
       Confirm the selected target and consequences in an in-app dialog, execute
       through the authoritative CLI, and show progress and a concise result in
@@ -271,8 +285,14 @@ installed-build journeys for the individual items were removed from
       stopped head and an active head, cancel confirmation, encounter dirty work,
       and exercise a failed or partially successful bulk action. The UI remains the
       interaction surface, reflects each outcome accurately, and never requires a
-      shell detour or a return-to-UI keypress after success. Open: no human step;
-      covered by `tests/test_kill.sh`, awaiting the maintainer's acceptance.
+      shell detour or a return-to-UI keypress after success. Open:
+      `tests/test_kill.sh` covers the CLI removal and its dirty-work protection, but
+      cannot show the in-app flow. The installed-build journey that did (stopped and
+      active head removal, cancelled confirmation, dirty-work refusal, a partial
+      bulk action, and the return to the UI with no extra keypress) was removed from
+      `make test-acceptance`. Those behaviours must still be shown in the control
+      centre; the item stays open until the automated coverage being added for them
+      and a human check are done.
 - [ ] **U13 — Shared navigation and meaningful statistics.** Statistics keeps the
       common navigation, the selected work and a clear return path, and covers head
       sessions as well as recorded workflow runs. Activity is inferred from tmux
@@ -315,11 +335,18 @@ installed-build journeys for the individual items were removed from
       qualification stay explicit, never replaced by fixture passes or an AI score.
       `make test-usability` runs the first-use and planning walkthrough
       ([TUI-REVIEW.md](TUI-REVIEW.md#first-use-walkthrough-make-test-usability)).
-      Its goal-driven discoverability trials and the journeys for clean entry,
-      navigation, attachment, removal and recovery were removed from the runner;
-      native tests cover those areas. Open: showing that a first-time person (not a
-      scripted evaluator) can find the controls for those tasks from what the screen
-      says, and the live-provider, real-terminal and remote-onboarding runs.
+      It was built with scripted journeys for clean entry, navigation, attachment,
+      removal and recovery, and six goal-driven trials (start a task, find why one
+      stopped, find what needs a decision, leave an agent and return, remove a
+      stopped head, approve a plan) in which a deterministic evaluator saw only the
+      goal and the visible screen, never a feature name, key sequence or source, and
+      outcomes were checked independently against Git, tmux and state; steps, dead
+      ends and help reads were scored. The trials and those journeys were removed
+      from the runner, so the walkthrough exercises none of that discovery. Open:
+      showing that a person (or an evaluator given only a goal and the screen) can
+      find the controls for those tasks, with every unexecuted gate named in the
+      report: a live authenticated provider, a real terminal visual review, human
+      first-use review and an authorized remote host with real onboarding.
 - [ ] **U19 — Explain features where users encounter them.** Establish consistent
       user-facing language and explain each feature's purpose, when it helps, and
       the next action in its entry point and empty state (workflow, head, plan, gate,
@@ -333,9 +360,38 @@ installed-build journeys for the individual items were removed from
       permanent walls of text, and keep them aligned with shipped behavior.
       Acceptance: a first-time user can explain what a workflow does, decide whether
       their task needs one, start the appropriate path and understand its states
-      without leaving the control centre. Open: human first-use review; the
-      comprehension trials that asserted the copy were removed with the simulated
-      discoverability layer.
+      without leaving the control centre. Also required: at each entry point and empty
+      state (Work, Inbox, Hosts, Stats, plan, run, details, an attached agent) and at
+      80x24 and 140x40, the visible text states purpose, when it helps, a concrete
+      example and the next action in plain language; consequences are stated before
+      approval, interruption and removal; every `hydra <command>` it names exists in
+      `hydra help`; no phrase is cut by a panel edge. Goal-driven trials that give
+      the evaluator no feature names or shortcuts must pick an action that fits the
+      goal, alongside human first-use review. Open: all of it. The comprehension
+      trials that asserted the copy were removed with the simulated discoverability
+      layer, so no automated check asserts it now; the walkthrough does not exercise
+      it.
+
+### Reliability follow-up
+
+- [ ] **R1 — Hydra state under a group-writable umask: remaining qualification.**
+      Fixed in 2.9.0: Hydra creates its own state, lock and run directories and
+      files with explicit private modes independent of the caller's umask, and `hydra
+      doctor --fix-permissions` reports or repairs existing group-writable state;
+      shared or foreign-owned directories are still refused. Below a directory with
+      a default POSIX ACL the kernel ignores the umask, so Hydra also sets the
+      directories it creates to 0700 (`tests/test_acl_state.sh`). Open:
+      - A hosted `make test-u10-loopback` run must pass. It failed once with
+        admission `state_unavailable` on the remote spawn; that the hosted image's
+        homes carry a default ACL is inferred from reproducing the same failures
+        locally, not observed. On a failed launch the test records the remote modes,
+        ACLs, umask and disk in its evidence; keep that evidence if it fails.
+      - Acceptance not yet run on both platforms: `make test-fast`, `make test`, the
+        fleet suites and `make test-usability` under umask `002` on Linux and macOS,
+        with admission, statistics and workflow runs behaving as under `022`.
+        (`make test-umask` runs the fast lane, the umask state cases and the DAG
+        fleet cases under `002`, in CI; the full Linux gate under `002` passed on
+        the operator VPS on 28 September 2026.)
 
 ### Candidate features
 
@@ -431,7 +487,8 @@ byte for byte).
 
 Acceptance: explain every required node and reproduce deterministic comparisons from
 recorded inputs. Report stochastic variability and held-out outcome errors, not only
-plan validity or throughput. Qualify semantic improvements with observed results and
+plan validity or throughput. Reject every declared deterministic corruption case in
+every evaluation, and never count a plan as correct because it validates. Qualify semantic improvements with observed results and
 explicit limits; planning benefit must exceed its overhead on the workload where
 improvement is claimed. Open: a semantic planning benefit over its overhead on a
 real workload with live agents, with recorded human corrections and supplied
@@ -440,8 +497,10 @@ claims the benefit.
 
 #### 10. Performance baselines, idle efficiency, and change locality
 
-Begin measurement before changing refresh or scheduling policy. This milestone
-measures Hydra itself (item 9D's performance tasks are workloads Hydra executes).
+Begin measurement before changing refresh or scheduling policy; it does not wait for
+9F or load balancing. This milestone measures Hydra itself (item 9D's performance
+tasks are workloads Hydra executes). Feed fleet overhead and contention evidence into
+item 6 and expose useful counters through item 7.
 Method: schedule inputs independently of render completion, use monotonic timestamps
 and tagged stimuli, record clock uncertainty, attribute agent, tmux and observer work
 separately, and treat unsupported counters as unknown
@@ -495,8 +554,8 @@ Open requirements, each with what is still missing:
       render, for selected and unselected worktrees, bursts and remote
       disconnect and reconnect, with remote clock uncertainty bounded. Missing: the
       stage split, unselected worktrees, bursts, remote reconnect and clock bounds.
-- [ ] **Fleet scaling** across the matrix: per-role and per-worktree CPU, resident
-      and peak memory, process and descriptor counts, scans, remote traffic,
+- [ ] **Fleet scaling** across the matrix: total, per-role and per-worktree CPU,
+      resident and peak memory and its growth, process and descriptor counts, scans, remote traffic,
       time-to-usable and tails; record agent activity, repository size, placement
       and admission limits, and never report queued work as concurrently active
       agents. Missing: remote traffic, tails, 50 headless heads, macOS.
@@ -517,7 +576,7 @@ Open requirements, each with what is still missing:
       environment and tool versions, attribution boundaries and observer overhead;
       separate startup from steady state and alternate baseline and candidate
       trials. Choose numeric idle, tail-latency, memory, recovery and locality
-      budgets from the supported-platform baselines and freeze them before
+      budgets from the supported-platform baselines and product needs, and freeze them before
       evaluating optimizations. Retain stalls and uncertainty; never treat a
       short-run maximum as a guaranteed worst case or a missing counter as zero.
       Missing: a macOS baseline, the decision that freezes the budgets, and a
@@ -555,7 +614,9 @@ withdrawn and re-placed only under a new assignment generation, and running agen
 are never migrated; there is no shared provider budget authority, so Hydra does not
 claim to enforce account or provider limits fleet-wide; a task's external side
 effects need their own idempotency or fencing contract, and lease expiry alone never
-authorizes duplicate execution.
+authorizes duplicate execution. Placement must preserve measurement exclusivity and
+required validator separation, and its trials build on item 9's measured planning
+baseline (9E) and item 10's fleet overhead and contention evidence.
 
 - [ ] Heterogeneous-host trials compare explicit placement and simple balanced
       placement using queue wait, time to verified result, throughput, transfer
@@ -613,7 +674,10 @@ provider status for Hydra verification.
       understanding why it needs attention, reviewing its evidence and returning
       to the queue with selection preserved. Passing tests or placeholder-filled
       screenshots alone are insufficient. Open: the user's review of the
-      `make visual-review` contact sheet (hierarchy and visual quality; the palette
+      `make visual-review` contact sheet (run it with `VISUAL_REVIEW_FULL=1`: the
+      default skips the Fleet flow and the no-colour theme, so it does not show every
+      state, and even `--full` has no dedicated References or reference-preview
+      capture, `scripts/visual_review/flows.py`; hierarchy and visual quality; the palette
       contrast rows in `scripts/visual_review/lint-known.tsv` are a palette decision
       left to that review) and the interactive walk-through
       ([TUI-REVIEW.md](TUI-REVIEW.md#screen-captures-and-layout-lint-make-visual-review)).
