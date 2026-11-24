@@ -20,7 +20,7 @@ root, report_path = Path(sys.argv[1]), Path(sys.argv[2])
 report = json.loads(report_path.read_text())
 spec = json.loads((root / "tests/fixtures/perf/attention-cases.json").read_text())
 assert report["complete"] and report["error"] is None, report["error"]
-assert report["cases_total"] == len(spec["cases"]) == report["cases_scored"], report["cases_total"]
+assert report["cases_total"] == len(spec["cases"]) == report["cases_scored"] == 14, report["cases_total"]
 assert report["false_positives_total"] == 0, report["false_positives_total"]
 assert report["missed_signals_total"] == 0, report["missed_signals_total"]
 assert report["wire_parity_all"], "attention --json and attention-data disagree"
