@@ -215,9 +215,10 @@ an acceptance blocker, not optional cosmetic polish.
       project work or explicitly chooses shared configuration. Existing dirty work
       and ignore rules are preserved. Repository commands still require explicit
       trust before execution; fewer setup steps must not imply blanket trust.
-- [ ] **U2 — Clean terminal entry and human-readable context.** Spawn currently
-      echoes a long `export HYDRA_PROJECT_ID=... HYDRA_HEAD_ID=...` bootstrap command,
-      with wrapped internal paths and identities dominating the terminal. Deliver
+- [ ] **U2 — Clean terminal entry and human-readable context.** Spawn used to
+      echo a long `export HYDRA_PROJECT_ID=... HYDRA_HEAD_ID=...` bootstrap command,
+      with wrapped internal paths and identities dominating the terminal (fixed in
+      2.6.0; `u2-spawn-reconnect` checks the transcript and scrollback). Deliver
       the required environment before the interactive prompt without typing setup
       commands into the user's conversation or shell history. Present concise
       project/branch context; keep exact identities and paths in inspectable details.
@@ -391,9 +392,9 @@ an acceptance blocker, not optional cosmetic polish.
       Remote tasks are not yet nodes of the workspace navigation tree.
 
 - [ ] **U12 — Keep action confirmation and results inside the control centre.**
-      Killing a head currently leaves the TUI for a shell confirmation and teardown
-      transcript, then requires “Press Enter to return to Mission Control” even
-      after success. Confirm the selected target and consequences in an in-app
+      Killing a head used to leave the TUI for a shell confirmation and teardown
+      transcript, then required “Press Enter to return to Mission Control” even
+      after success (removal confirms in-app since 2.6.0; `u12-removal` checks it). Confirm the selected target and consequences in an in-app
       dialog, execute through the authoritative CLI, and show progress and a concise
       result in place. On success, update navigation and move focus predictably to
       surviving work without an extra acknowledgement. Keep detailed output available
@@ -988,8 +989,11 @@ live-agent cells and frozen budgets remain open.
 Target: **with no changes, Hydra should do almost no work; with one changed
 worktree, work should be mostly confined to that worktree.** This is an acceptance
 objective, not a claim about the current periodic snapshot implementation. The
-Linux baseline shows the opposite today: every worktree is scanned on every refresh
-whether or not it changed.
+17 October 2026 Linux baseline showed the opposite: every worktree was scanned on
+every refresh whether or not it changed. Since 4.0.0 the control centre re-reads
+uncommitted-file counts only for the selected head, worktrees whose index or
+`HEAD` changed, and a fixed number of the others per refresh; the baseline has
+not been repeated since.
 
 - [ ] Establish repeatable baselines at **1, 10, and 50 real worktrees with active
       agents**. Separate quiescent, one-changing, all-changing, and sustained-output
@@ -1084,9 +1088,10 @@ whether or not it changed.
       only where profiles support them; prove missed-event and reconnect recovery.
       Measured on Linux: git launches per unchanged worktree equal those of the
       changed worktree and are the same whether no worktree or one worktree
-      changed (the periodic snapshot scans every worktree each refresh; the rate
-      per worktree falls with scale only because a refresh takes longer). The
-      efficiency work is not started.
+      changed (on 17 October 2026 the periodic snapshot scanned every worktree
+      each refresh; the rate per worktree falls with scale only because a refresh
+      takes longer). 4.0.0 then bounded that scan to the selected, changed and a
+      fixed rotation of unchanged worktrees; no before/after trial has been run.
 - [ ] Store exact revisions, builds, workload seeds, raw timestamped samples,
       environment/tool versions, attribution boundaries, and observer overhead.
       Separate startup from steady state and alternate baseline/candidate trials.

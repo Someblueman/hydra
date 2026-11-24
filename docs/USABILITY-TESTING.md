@@ -93,12 +93,12 @@ are not special-cased.
 ## Comprehension trials
 
 `--trial comprehension` runs two sessions per size (an empty project and one with
-a head) and visits each concept's entry point or empty state: head (Work, and the
-shell TUI's empty list), workflow (Workflows), plan versus approved workflow (the
-plan pane), workflow run (Overview's run panel), gate and check (Attention),
-coordination view, Fleet and host (Hosts), statistics, live session versus
-completed work (Details), interruption (attached input) and removal (the
-confirmation). For each it rejoins the wrapped rows and asserts that the visible
+a head) and visits each concept's entry point or empty state: head (Work's empty
+state), workflow (Stats' Runs page before any run), plan versus approved work (the
+new-task form's Start field), gate and check (Inbox's empty state), coordination
+view (a head's Details), Fleet and host (Hosts), statistics (Stats' Sessions page
+before any head), live session versus completed work (Details),
+interruption (attached input) and removal (the confirmation). For each it rejoins the wrapped rows and asserts that the visible
 text states the purpose, when it helps, a concrete example and the next action,
 with no internal terms, that consequences are stated before approval,
 interruption and removal, and that every `hydra <command> [<sub>]` it mentions

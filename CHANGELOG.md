@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The 9B fixture README names the native contract runner, `docs/workflows.md`
   no longer mentions shell-only workflow execution, and `make help` no longer
   lists TUI timings under `make bench` (use `make bench-tui`).
+- Documentation corrected where it described removed or superseded behaviour:
+  the comprehension trial's entry points (Work, Stats, Inbox; no shell TUI),
+  the roadmap's U2, U12 and change-locality passages, the T2/T3 guide's fixture
+  retention and shard assignment, the research planning example's
+  `plan-example` step, and the attention acceptance record's local-only paths.
 
 ## [5.0.0] - 2026-11-21
 
