@@ -299,16 +299,18 @@ jobs:
         grep -q '^Remote setup host key trust over loopback SSH passed' "$RUNNER_TEMP/remote-setup-ssh.out"
 
     # T2/T3 with tmux absent on the execution hosts: the controlled-transport
-    # cases run in every fleet shard; the loopback SSH variant prints SKIP
-    # without sshd, so require its pass line here where sshd is installed.
-    - name: Qualify T2/T3 execution without tmux over loopback SSH
+    # cases are fleet cases (t3-distributed in the even shard, t2-headless in
+    # the odd one; see scripts/fleet-tests.mk), so only the loopback SSH variant
+    # runs here. It prints SKIP without sshd, so require its pass line where
+    # sshd is installed.
+    - name: Qualify T3 execution without tmux over loopback SSH
       if: matrix.os == 'ubuntu-latest' && matrix.mode == 'acceptance' && matrix.shard == 'odd'
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-headless
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make test-t2-headless test-t3-distributed | tee "$RUNNER_TEMP/t2-t3.out"
-        grep -q '^T3 distributed over loopback SSH passed' "$RUNNER_TEMP/t2-t3.out"
+        make test-t3-distributed-ssh | tee "$RUNNER_TEMP/t3-ssh.out"
+        grep -q '^T3 distributed over loopback SSH passed' "$RUNNER_TEMP/t3-ssh.out"
 
     - name: Run fleet sanitizers
       if: matrix.mode == 'sanitizers'

@@ -114,7 +114,6 @@ def identities(
     paths = [
         *sorted((harness / "scripts").glob("bench_i1*.py")),
         harness / "scripts/bench-i1.py",
-        harness / "scripts/bench-i1.sh",
         harness / "tests/fixtures/agents/item10-worker.py",
         harness / "tests/c/test_tui_pty.c",
         *sorted((harness / "tests/c").glob("test_tui_*.inc")),

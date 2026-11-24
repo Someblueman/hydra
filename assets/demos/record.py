@@ -7,7 +7,7 @@ keeps every byte the program wrote with the time it arrived. ``render``
 replays those bytes through kettle's own terminal model (kettle-cells) at the
 moments the screen changed, draws each distinct screen with its exact cell
 colours, and encodes the frames with their real timing into a GIF (ffmpeg
-palettegen/paletteuse) and an H.264 MP4.
+palettegen/paletteuse).
 """
 
 from __future__ import annotations
@@ -497,15 +497,12 @@ def encode(frames: list[tuple[Path, float]], work: Path, output: Path) -> None:
         lines += [f"file '{path.name}'", f"duration {duration:.3f}"]
     lines.append(f"file '{frames[-1][0].name}'")  # the demuxer needs the last file twice
     listing.write_text("\n".join(lines) + "\n")
-    gif, mp4 = output / "quick-tour.gif", output / "quick-tour.mp4"
+    gif = output / "quick-tour.gif"
     common = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing)]
     subprocess.run(common + [
         "-vf", "split[a][b];[a]palettegen=max_colors=128:stats_mode=full:reserve_transparent=0[p];"
                "[b][p]paletteuse=dither=none:diff_mode=rectangle",
         "-fps_mode", "passthrough", "-loop", "0", str(gif)], check=True)
-    subprocess.run(common + [
-        "-vf", "fps=20,format=yuv420p", "-c:v", "libx264", "-preset", "slow", "-tune", "animation",
-        "-crf", "20", "-movflags", "+faststart", str(mp4)], check=True)
 
 
 def render(args: argparse.Namespace) -> int:
@@ -550,8 +547,8 @@ def render(args: argparse.Namespace) -> int:
                 moment = sequence[index][0]
                 shutil.copy(path, args.frames / f"t{moment:06.2f}.png")
         print(f"{len(frames)} frames ({len(rendered)} distinct), {duration + FINAL_HOLD:.1f}s:")
-        for name in ("quick-tour.gif", "quick-tour.mp4"):
-            print(f"  {args.output / name}  {(args.output / name).stat().st_size / 1e6:.2f} MB")
+        gif = args.output / "quick-tour.gif"
+        print(f"  {gif}  {gif.stat().st_size / 1e6:.2f} MB")
     finally:
         shutil.rmtree(work, ignore_errors=True)
     return 0
