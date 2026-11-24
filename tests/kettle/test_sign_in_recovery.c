@@ -40,6 +40,25 @@ static void top_bar(struct kt_session *s, const char *message) {
     for (i = 0; TOP_BAR[i]; i++)
         CHECK(strstr(row, TOP_BAR[i]), message);
 }
+/* What the terminal itself shows: no bootstrap export or environment command
+ * in the pane's scrollback, and Hydra's context is one short line naming the
+ * head, agent and repository without raw identities. */
+static void clean_terminal(const char *session, const char *message) {
+    char scrollback[262144], *line, *end;
+    bool banner = false;
+    kt_format(scrollback, sizeof(scrollback), "%s", RUN("tmux", "capture-pane", "-p", "-J", "-S", "-", "-t", session));
+    CHECK(!strstr(scrollback, "export HYDRA_") && !strstr(scrollback, "HYDRA_PROJECT_ID=") &&
+          !strstr(scrollback, "HYDRA_HEAD_ID=") && !strstr(scrollback, "set-environment"), message);
+    for (line = strstr(scrollback, "Hydra head "); line; line = strstr(end, "Hydra head ")) {
+        end = line + strcspn(line, "\n");
+        if (*end) *end++ = 0;
+        CHECK(strstr(line, "repo") && strlen(line) <= 80 && !strstr(line, "head_") && !strstr(line, "project_") &&
+              !strstr(line, "instance_"), "Hydra's context is a concise banner without raw identities");
+        banner = true;
+        if (!*end) break;
+    }
+    CHECK(banner, "Hydra printed its one-line context banner");
+}
 static bool no_head(void) {
     return !strstr(H("list", "--json"), "\"branch\"");
 }
@@ -69,14 +88,16 @@ int main(void) {
     U("No agent work in this project yet", 5);
     S("3");
     U("This machine", 10);
-    U("codex     - not found on PATH", 5);
+    U("not found on PATH", 5);
+    CHECK(kt_contains(&s, "codex"), "Hosts lists codex among the agents this machine lacks");
     top_bar(&s, "Hosts keeps the control centre's top bar");
     kt_close(&s, "q", 0, 0);
     CHECK(no_head(), "visiting the form and Hosts created no head");
     setenv("PATH", normal, 1);
 
     /* An interactive launch shows the agent and Hydra together. */
-    provider("echo 'DETERMINISTIC PROVIDER FIXTURE - ready to discuss'\ncat >/dev/null\n");
+    provider("echo 'DETERMINISTIC PROVIDER FIXTURE - ready to discuss'\n"
+             "while IFS= read -r line; do printf '%s\\n' \"$line\" >> key-proof; done\n");
     unsetenv("HYDRA_NO_SWITCH");
     unsetenv("HYDRA_SKIP_AI");
     setenv("HYDRA_TUI_BIN", f.tui, 1);
@@ -85,6 +106,22 @@ int main(void) {
     U("ready to discuss", 30);
     U("typing to codex", 5);
     top_bar(&s, "the launch shows the top bar beside the agent");
+    clean_terminal("cli-task", "a fresh spawn leaves no bootstrap command in the scrollback");
+    /* Keys the control centre uses itself reach the attached agent as typed. */
+    S("x\ty\033z\r");
+    kt_format(worktree, sizeof(worktree), "%s", H("path", "cli-task"));
+    hf_trim(worktree);
+    kt_format(path, sizeof(path), "%s/key-proof", worktree);
+    {
+        char text[256];
+        double deadline = kt_now() + 15;
+        text[0] = 0;
+        while (kt_now() < deadline && strcmp(text, "x\ty\033z\n")) {
+            kt_pump(&s, .1);
+            if (kt_exists(path)) kt_read(path, text, sizeof(text));
+        }
+        CHECK(!strcmp(text, "x\ty\033z\n"), "Tab and Esc typed into the attached agent arrive as those bytes");
+    }
     S("\x1d");
     U("Keys go to Hydra", 5);
     top_bar(&s, "leaving agent input keeps the user in the control centre");
@@ -101,6 +138,7 @@ int main(void) {
     top_bar(&s, "the provider's sign-in instruction appears inside the control centre");
     U("exited with status 1", 15);
     CHECK(kt_contains(&s, "is now a shell"), "Hydra says the agent exited and the pane is a shell");
+    clean_terminal("needs-login", "the shell after the agent exits has no bootstrap command in its scrollback");
     kt_format(worktree, sizeof(worktree), "%s", H("path", "needs-login"));
     hf_trim(worktree);
     S("printf ok > login-proof\r");

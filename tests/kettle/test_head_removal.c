@@ -88,6 +88,14 @@ int main(void) {
     S("1");
     U("dirty", 5);
 
+    /* Visiting Stats by its number and coming back keeps the selection. */
+    select_head(&s, "survivor");
+    S("4");
+    U("Sessions", 10);
+    S("1");
+    U("x remove", 5);
+    CHECK(selected(&s, "survivor"), "the Work selection survives a round trip to Stats");
+
     /* Cancelling keeps the head, its worktree and the selection. */
     select_head(&s, "survivor");
     S("x");
