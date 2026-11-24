@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installed-build flicker acceptance (U6; see docs/ACCEPTANCE.md).
+"""Installed-build flicker acceptance (U6; see docs/TUI-REVIEW.md).
 
 Installs a fresh prefix, runs the flicker case on real Git, tmux and
 pseudo-terminals, and writes a report (HTML and JSON) that maps each U6

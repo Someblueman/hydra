@@ -39,7 +39,7 @@ Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
 [the roadmap](docs/ROADMAP.md#next-target-live-and-human-acceptance)
-and [usability testing](docs/USABILITY-TESTING.md).
+and the [TUI review guide](docs/TUI-REVIEW.md).
 
 ## What you can do
 
@@ -244,6 +244,7 @@ model itself; an ordinary agent authors the proposal through the CLI.
 | Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
 | Task pools and host-timer schedules | [Workflows: pools and schedules](docs/workflows.md#pools-and-schedules) |
 | State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
+| Reviewing the TUI: flicker, first use, screen captures | [TUI review](docs/TUI-REVIEW.md) |
 | Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 
 ## Development

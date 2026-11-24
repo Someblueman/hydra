@@ -762,7 +762,7 @@ test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)
 
 # Replays captured terminal bytes through the product's own terminal
-# interpreter (src/kettle) and prints exact cells; see docs/VISUAL-REVIEW.md.
+# interpreter (src/kettle) and prints exact cells; see docs/TUI-REVIEW.md.
 $(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle/terminal.h
 	$(CC) $(CORE_CFLAGS) src/kettle/tools/cells.c $(KETTLE_OBJECTS) -o $@
 
@@ -797,7 +797,7 @@ test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/kettle-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
 
-# Installed-build flicker acceptance (U6, docs/ACCEPTANCE.md): one HTML+JSON
+# Installed-build flicker acceptance (U6, docs/TUI-REVIEW.md): one HTML+JSON
 # report mapping each U6 bullet to its checks and retained recordings.
 .PHONY: test-acceptance
 ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)
