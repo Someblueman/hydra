@@ -87,5 +87,5 @@ establish authenticated agent or remote provider qualification, and remote
 headless, macOS, and disconnect/reconnect under pressure are not measured here.
 PTY observations are not input-to-pixel measurements, latency tails need more
 samples than a single run provides, and missing counters are unknown rather than
-zero. See [the roadmap](ROADMAP.md#10-performance-baselines-idle-efficiency-and-change-locality)
-and [the separate attention qualification](attention-review-acceptance.md).
+zero. See [the roadmap](ROADMAP.md#10-performance-baselines-idle-efficiency-and-change-locality);
+the attention and review routes are specified in [the contracts](CONTRACTS.md).
