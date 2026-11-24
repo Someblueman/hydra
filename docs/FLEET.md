@@ -22,7 +22,9 @@ Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durabl
 approval suspension are available in v2.2.0; see the [changelog](../CHANGELOG.md).
 A remote workflow runs on one selected host. New remote tasks can be placed
 automatically across eligible hosts (see [Automatic placement](#automatic-placement));
-cross-host DAG coordination remains on the [roadmap](ROADMAP.md).
+the two-host DAG scenario is qualified over loopback receivers (see
+[Execution hosts without tmux](#execution-hosts-without-tmux)); qualification on
+real hosts remains on the [roadmap](ROADMAP.md).
 
 ## Architecture and installation
 

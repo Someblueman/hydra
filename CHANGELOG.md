@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an unreferenced dashboard screenshot and two empty `.gitkeep` placeholders.
 - The 72 pre-pass I4 screen captures (`docs/evidence/i4/*-before.txt`); the
   after captures that `tests/test_native_tui_i4.sh` compares stay.
+- Process-scaffolding documents: `docs/T2_T3_QUALIFICATION.md` (its prerequisites,
+  commands and real-host checklist are now the "Execution hosts without tmux"
+  section of `docs/FLEET.md`), `docs/attention-review-acceptance.md` (a dated
+  September record; the attention and review routes and the `review-data` argument
+  list are in `docs/CONTRACTS.md`), and `docs/ACCEPTANCE.md`,
+  `docs/USABILITY-TESTING.md` and `docs/VISUAL-REVIEW.md`, merged into
+  `docs/TUI-REVIEW.md`.
 
 ### Changed
 - `make visual-review` captures a focused set by default: the Work flow (with Inbox,
@@ -49,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/test_init_source_tree.sh`); the new-task form lists only available agents
   (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say the project
   identity is unavailable (`tests/test_workflow_statistics.sh`, `tests/test_native_tui.sh`).
+- `docs/ROADMAP.md` lists prioritized open work only: open items with their
+  requirement and acceptance, the design constraints, and the release checklist. The
+  delivery tables, dated provider transcripts, delivered-item narratives and
+  references to removed acceptance journeys are gone (git history and this changelog
+  keep them); the version header now says 5.0.0.
+- `docs/TUI-REVIEW.md` describes the flicker measurement, the planning walkthrough,
+  the focused visual review and the layout lint (including comma-separated globs in
+  `lint-known.tsv`) as they are now, and what still needs a person.
 
 ### Fixed
 - The 9B fixture README names the native contract runner, `docs/workflows.md`
