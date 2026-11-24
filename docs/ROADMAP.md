@@ -136,8 +136,10 @@ until its stated acceptance has been shown.
       Existing dirty work and ignore rules are preserved. Repository commands still
       require explicit trust before execution; fewer setup steps must not imply
       blanket trust. Open: `tests/test_init_source_tree.sh`, `tests/test_onboarding.sh`
-      and `tests/test_project_trust.sh` cover the files, status and trust rules; the
-      same must still be shown from the installed control centre on first entry.
+      and `tests/test_project_trust.sh` cover the files, status and trust rules, and
+      `tests/kettle/test_first_entry.c` shows that opening the control centre on an
+      unseen repository registers, trusts and starts nothing; the installed-build
+      first entry still needs the maintainer's acceptance.
 - [ ] **U2 — Clean terminal entry and human-readable context.** Deliver the
       required environment before the interactive prompt without typing setup
       commands into the user's conversation or shell history. Present concise
@@ -162,7 +164,9 @@ until its stated acceptance has been shown.
       terminal attachment is an explicit expert choice, preserving documented
       noninteractive contracts. Acceptance includes starting from both the UI and
       an interactive CLI launch without opening another terminal to recover Hydra
-      navigation. Open: a live provider's sign-in and missing-login states.
+      navigation. `tests/kettle/test_sign_in_recovery.c` covers the no-agent form,
+      an interactive `spawn --prompt` and a fixture provider that exits needing a
+      login. Open: a live provider's sign-in and missing-login states.
 - [ ] **U4 — Match the reviewed workspace mockups in actual use.** The two user
       references show (1) "HYDRA / PLAN TOGETHER": narrow project navigation, a
       prominent interactive agent conversation, adjacent plan and dependency review
@@ -291,8 +295,11 @@ until its stated acceptance has been shown.
       active head removal, cancelled confirmation, dirty-work refusal, a partial
       bulk action, and the return to the UI with no extra keypress) was removed from
       `make test-acceptance`. Those behaviours must still be shown in the control
-      centre; the item stays open until the automated coverage being added for them
-      and a human check are done.
+      centre. `tests/kettle/test_head_removal.c` (run by `make test-plan-workspace`)
+      now drives the real dialog for a cancelled removal, an active head and a mixed
+      clean/dirty bulk action with no return keypress; a dirty head refused on its own
+      and a stopped head's removal are not yet covered, and the item stays open until
+      they and a human check are done.
 - [ ] **U13 — Shared navigation and meaningful statistics.** Statistics keeps the
       common navigation, the selected work and a clear return path, and covers head
       sessions as well as recorded workflow runs. Activity is inferred from tmux

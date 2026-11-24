@@ -110,6 +110,8 @@ assert_not_contains "$(git status --porcelain)" "private-notes.txt" "locally exc
 assert_equal "edited" "$(cat tracked.txt)" "the tracked edit is preserved"
 assert_equal "untracked draft" "$(cat notes.txt)" "the untracked file is preserved"
 assert_equal "ignored output" "$(cat debug.log)" "the ignored file is preserved"
+assert_equal "excluded locally" "$(cat private-notes.txt)" "the locally excluded file is preserved"
+assert_equal "out" "$(cat build/out.bin)" "the ignored build output is preserved"
 
 # --- committed shared configuration is still parsed and still needs trust ---
 new_repo "$fixture/committed"

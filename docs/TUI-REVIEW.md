@@ -146,8 +146,11 @@ globs, a substring of the finding's message and the reason. The capture column
 takes several `fnmatch` globs separated by commas (for example
 `work--*--dark-*,fleet--*--dark-*`). A matching finding is reported as known and
 does not fail the lint; everything else does. A known row that no finding matches
-any more is reported as resolved: remove it. Add a row only for a finding that needs
-a design decision, never to hide a regression.
+any more is reported as resolved: remove it. A row whose globs match no capture of
+the run (the focused default skips most screens) is reported as "not captured", not
+resolved; `make test-visual-lint VISUAL_REVIEW_FULL=1` recaptures the full sweep when
+the existing captures are the focused default. Add a row only for a finding that
+needs a design decision, never to hide a regression.
 
 ## What still needs a person
 

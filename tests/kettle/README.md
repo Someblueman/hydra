@@ -61,6 +61,13 @@ driver also checks that no process still names its socket. `test_terminal_restor
 kills an interactive head's tmux session, then checks that opening it from Work
 restarts the terminal in the same worktree with committed and uncommitted work
 intact, and that a missing worktree is refused without recreating anything.
+`test_first_entry.c` opens the control centre on a repository Hydra has never seen
+(`hf_git_init`, no `hydra init`) and checks that nothing is registered, trusted or
+started; `test_head_removal.c` drives the removal dialog (cancel, an active head,
+a bulk removal of a clean and a dirty head); `test_sign_in_recovery.c` covers a
+machine with no agent, an interactive `hydra spawn --profile --prompt` and a
+provider that exits needing a login; `test_head_changes.c` covers committed work in
+Work, Details and `:diff`, and the Tab and Shift-Tab pane cycle.
 `HYDRA_TEST_KEEP_FIXTURE=1` keeps a `hydra_fixture.c` directory (never its tmux
 server) for inspection. Failed receiver runs retain their fixture. Set
 `HYDRA_TEST_KEEP_FIXTURE=1` to retain a successful receiver run, including commands,

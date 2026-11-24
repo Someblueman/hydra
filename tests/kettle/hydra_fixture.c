@@ -169,18 +169,21 @@ const char *hf_run(struct hf_fixture *f, const char *input, int expected,
         CHECK(status != 0, "command must refuse");
     return f->output;
 }
-void hf_commit_init(struct hf_fixture *f) {
+void hf_git_init(struct hf_fixture *f) {
     const char *init[] = {"git", "init", "-q", NULL};
     const char *name[] = {"git", "config", "user.name", "Test", NULL};
     const char *email[] = {"git", "config", "user.email", "test@example.com", NULL};
     const char *add[] = {"git", "add", ".", NULL};
     const char *commit[] = {"git", "commit", "-qm", "fixture", NULL};
-    const char *hydra[] = {f->hydra, "init", "--no-agent", "--trust", NULL};
     hf_run(f, NULL, 0, init);
     hf_run(f, NULL, 0, name);
     hf_run(f, NULL, 0, email);
     hf_run(f, NULL, 0, add);
     hf_run(f, NULL, 0, commit);
+}
+void hf_commit_init(struct hf_fixture *f) {
+    const char *hydra[] = {f->hydra, "init", "--no-agent", "--trust", NULL};
+    hf_git_init(f);
     hf_run(f, NULL, 0, hydra);
 }
 /* The default prompt names the user, host and worktree. On CI runners that
