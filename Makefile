@@ -775,20 +775,25 @@ $(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle
 # 140x40, renders each capture to HTML/SVG with exact colours, lints the
 # layouts and writes one contact sheet to $(VISUAL_REVIEW_OUTPUT)/index.html.
 # The default is focused: the work flow (Work, Inbox, Stats, review) and the
-# hosts flow in the dark and light themes. VISUAL_REVIEW_FULL=1 captures every
-# flow in the dark, light and no-colour themes. VISUAL_BASELINE=dir adds
-# before/after columns from an earlier output directory.
+# hosts flow in the dark and light themes. VISUAL_REVIEW_FULL=1 (only the
+# value 1 turns it on) captures every flow in the dark, light and no-colour
+# themes. VISUAL_BASELINE=dir adds before/after columns from an earlier output
+# directory.
 VISUAL_REVIEW_OUTPUT ?= $(BUILD_DIR)/visual-review
 .PHONY: visual-review test-visual-lint
 visual-review: build-core build-tui build-fleet $(BUILD_DIR)/kettle-cells
 	python3 scripts/visual_review/run.py --output "$(abspath $(VISUAL_REVIEW_OUTPUT))" \
 		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)") \
-		$(if $(VISUAL_REVIEW_FULL),--full)
+		$(if $(filter 1,$(VISUAL_REVIEW_FULL)),--full)
 
-# The bounded, deterministic layout lint over the captures (captures them
-# first when the output directory has none).
+# The bounded, deterministic layout lint over the captures. It captures first
+# when the output directory has none, and again when VISUAL_REVIEW_FULL=1 asks
+# for the full sweep but the captures there are the focused default.
 test-visual-lint: $(BUILD_DIR)/kettle-cells
-	@if [ ! -f "$(VISUAL_REVIEW_OUTPUT)/manifest.json" ]; then $(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)"; fi
+	@manifest="$(VISUAL_REVIEW_OUTPUT)/manifest.json"; \
+	if [ ! -f "$$manifest" ] || { [ "$(VISUAL_REVIEW_FULL)" = 1 ] && ! grep -q '"full": true' "$$manifest"; }; then \
+		$(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)" VISUAL_REVIEW_FULL="$(VISUAL_REVIEW_FULL)"; \
+	fi
 	python3 scripts/visual_review/lint.py "$(abspath $(VISUAL_REVIEW_OUTPUT))"
 
 # U10 loopback acceptance: a private sshd on a loopback port serves a fresh

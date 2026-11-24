@@ -191,8 +191,12 @@ def main() -> int:
                     capture.failures.append({"flow": flow, "variant": f"{theme}-{columns}x{rows}",
                                              "error": "".join(traceback.format_exception(error))})
                 print(f"captured {flow} {theme} {columns}x{rows}", flush=True)
+    everything = set(args.flow) == set(flows.FLOWS) and set(args.theme) == set(THEMES)
+    if args.keep_prefix and previous.exists():
+        everything = everything or bool(json.loads(previous.read_text()).get("full"))
     manifest = {
-        "commit": run_command(["git", "rev-parse", "HEAD"], ROOT, dict(os.environ)),
+        "full": everything,
+        "commit":run_command(["git", "rev-parse", "HEAD"], ROOT, dict(os.environ)),
         "installed_hashes": tree(prefix),
         "captures": capture.manifest,
         "failures": capture.failures,

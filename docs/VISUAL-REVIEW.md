@@ -115,8 +115,11 @@ message substring, reason) are reported as known on the contact sheet and do
 not fail `make test-visual-lint`; everything else does. That file is the open
 list of layout defects for the people who own `src/tui`: a fix removes its
 row, a new row needs a reason, and a known finding that disappears is reported
-as such. Add a row only for a finding that needs a design decision, never to
-hide a regression.
+as such. A row whose capture globs match no capture of the run (the focused
+default skips most screens) is reported as "not captured", not as resolved;
+`make test-visual-lint VISUAL_REVIEW_FULL=1` recaptures the full sweep when the
+captures in the output directory are the focused default. Add a row only for a
+finding that needs a design decision, never to hide a regression.
 
 ## Boundaries
 
