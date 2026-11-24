@@ -98,10 +98,9 @@ Passing evidence covers all **23 `make test-all` prerequisites** and all
 **7 `make sanitize` prerequisites**. This combines completed, source-matched
 earlier checks with the remaining checks and affected-case reruns; it is not a
 claim that either earlier interrupted top-level command exited successfully.
-The local target-to-log inventory is
-`/Users/sws/Code/hydra/build/i3-acceptance-cleanup/INVENTORY.md`, with exact
-commands, environments, exit codes, source/runtime hashes and coverage in the
-adjacent JSON records.
+The target-to-log inventory was a local build artifact (an `INVENTORY.md`
+beside JSON records of the exact commands, environments, exit codes,
+source/runtime hashes and coverage); it was not committed and is not in this tree.
 
 The shell inventory covers all 61 currently eligible scripts: 53 completed
 before the earlier interruption, followed by 8 complete passing runs. The
@@ -141,9 +140,9 @@ Fleet `1206cac4090f210f695e37c38f11f02a214f9e30a5c6d8f34588802ae16a082d`.
 The base checkout was `f74aa9d68ff59b60b07478002ebb2ba02f060b16`; these qualified
 dirty-source snapshots and hashes are the evidence identity, not that base alone.
 
-The full raw reports and fixtures remain local artifacts at
-`/Users/sws/.codex/team-leader/01a08fe3-16c1-7212-8401-cb2c1ea37c8d/i2-measurement/final-bounded-report`
-and the adjacent measurement phase; they are not durable public URLs. They record fixture-generated
+The full raw reports and fixtures (the final bounded report and the adjacent
+measurement phase) were local artifacts that were not committed and have no
+durable public location. They record fixture-generated
 input and controlled local transport; they do not establish authenticated
 provider behavior, live SSH, remote platform parity, the item-10 1/10/50 matrix,
 or T2/T3 qualification. The accepted attention metrics exercised the attention

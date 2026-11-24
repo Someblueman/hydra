@@ -48,8 +48,13 @@ make test-t3-distributed-ssh     # loopback SSH variant only; SKIP without sshd
 make test-fleet                  # includes fleet-case-t2-headless and fleet-case-t3-distributed
 make test-one T=t2_headless      # one case with the full log printed
 HYDRA_TEST_T3_TRANSPORT=ssh make test-one T=t3_distributed
-HYDRA_TEST_KEEP_FIXTURE=1 ...    # keep the fixture directory as evidence
 ```
+
+Every command above runs the case through `scripts/run-shell-test.sh`, which gives
+it a private `TMPDIR` and removes that directory afterwards. The case's fixture
+lives under it, so no fixture directory survives (`HYDRA_TEST_KEEP_FIXTURE=1` only
+stops the case's own cleanup; the evidence path it prints is gone once the case
+ends). A failed case keeps its log under `$BUILD_DIR/test-logs/`; read that.
 
 Each case prints its final line only when every assertion held:
 
@@ -57,8 +62,10 @@ Each case prints its final line only when every assertion held:
 - `T3 distributed: two tmux-less hosts, fan-out, cross-host validation, join, composition, final check, lost acknowledgment, coordinator restart and stale results passed`
 - `T3 distributed over loopback SSH passed: two tmux-less hosts, fan-out, cross-host validation, join, composition, final check, coordinator restart`
 
-CI (`.github/workflows/ci.yml`, job `fleet`): the controlled cases run in
-every fleet acceptance shard on Ubuntu and macOS through `make test-fleet`;
+CI (`.github/workflows/ci.yml`, job `fleet`): the controlled cases run in the
+fleet acceptance shards on Ubuntu and macOS through `make test-fleet`, which
+divides `FLEET_CASES` by position: `t3-distributed` (second) runs in the even
+shard and `t2-headless` (third) in the odd shard;
 the Ubuntu odd shard additionally installs `openssh-server` and runs
 `make test-t2-headless test-t3-distributed`, requiring the loopback SSH pass
 line, in the same step layout as `test-remote-setup-ssh`.
