@@ -11,7 +11,6 @@ Every unobserved quantity is reported as unknown, never estimated.
 """
 
 import argparse
-import hashlib
 import json
 import shutil
 import subprocess

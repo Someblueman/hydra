@@ -25,8 +25,20 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y shellcheck dash
-    
-    - name: Run ShellCheck
+
+    - name: Install pinned Python and workflow linters
+      run: |
+        pipx install ruff==0.11.13
+        ruff --version | grep -x 'ruff 0.11.13'
+        archive=actionlint_1.7.12_linux_amd64.tar.gz
+        curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$archive"
+        echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$archive" | sha256sum -c -
+        sudo tar -xzf "$RUNNER_TEMP/$archive" -C /usr/local/bin actionlint
+        actionlint --version | head -n 1 | grep -x '1.7.12'
+
+    - name: Run lint (ShellCheck, dash, ruff, actionlint)
+      env:
+        HYDRA_LINT_STRICT: 1
       run: make lint
     
   quality-c:

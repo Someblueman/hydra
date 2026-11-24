@@ -360,7 +360,7 @@ def publish(bundle: dict[str, Any], output: Path, evidence: Path, raw_budget: in
     # Smallest first so the budget covers as many cells as it can; diagnostics under a
     # non-default configuration are never published in place of a baseline cell.
     chosen, used = set(), 0
-    for fixture, cell, data in sorted(candidates, key=lambda row: len(row[2])):
+    for _fixture, cell, data in sorted(candidates, key=lambda row: len(row[2])):
         if not cell.get("fixture_env") and used + len(data) <= raw_budget:
             chosen.add(id(cell))
             used += len(data)

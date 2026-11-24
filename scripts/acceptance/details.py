@@ -25,23 +25,23 @@ def details_lines(screen: str) -> list[str]:
 
 
 def no_raw(lines: list[str]) -> bool:
-    return not any(RAW_ID.search(l) or STATE_PATH.search(l) or "confidence" in l.lower() for l in lines)
+    return not any(RAW_ID.search(line) or STATE_PATH.search(line) or "confidence" in line.lower() for line in lines)
 
 
 def details_checks(j: Case, name: str, state: str) -> list[str]:
     select_head(j, name)
     screen = page(j, b"]", "Session", "CHANGES")
     lines = details_lines(screen)
-    grouped = all(any(l == s for l in lines) for s in SECTIONS)
+    grouped = all(any(line == s for line in lines) for s in SECTIONS)
     j.record("U7.a", f"{state} head: Details group identity (Agent, Session, Reported), CHANGES and CHECKS",
-             grouped and any(l.startswith("Agent") for l in lines) and any(l.startswith("Reported") for l in lines)
-             and any(l.startswith("Session") for l in lines), detail=" / ".join(lines)[:300])
+             grouped and any(line.startswith("Agent") for line in lines) and any(line.startswith("Reported") for line in lines)
+             and any(line.startswith("Session") for line in lines), detail=" / ".join(lines)[:300])
     j.record("U7.a", f"{state} head: pending decisions are a labelled line under CHECKS (approval requests)",
-             any(l.startswith("Approvals") for l in lines))
+             any(line.startswith("Approvals") for line in lines))
     j.record("U7.a", f"{state} head: every row fits the width (wrapped, not clipped)",
              all(len(line.rstrip()) <= j.columns for line in screen.splitlines()))
     j.record("U7.b", f"{state} head: no raw head/instance/project id, state path or confidence word in Details",
-             no_raw(lines), detail="; ".join(l for l in lines if RAW_ID.search(l) or STATE_PATH.search(l))[:200])
+             no_raw(lines), detail="; ".join(line for line in lines if RAW_ID.search(line) or STATE_PATH.search(line))[:200])
     j.keys(b"d")
     technical = j.see_all("IDENTITY", "LIFECYCLE")
     j.record("U7.b", f"{state} head: the technical group (d) is where the raw identities and sources live",
@@ -87,7 +87,7 @@ def details_recovery(j: Case) -> None:
     # Inbox: the stopped terminal, its account and its diagnostics.
     j.keys(b"2")
     listing = j.see("Terminal stopped: gone")
-    rows = [strip_frame(l) for l in listing.splitlines() if "Terminal stopped" in l]
+    rows = [strip_frame(line) for line in listing.splitlines() if "Terminal stopped" in line]
     j.record("U7.c", "the Inbox lists the stopped terminal in plain language without its raw kind",
              bool(rows) and not any(RAW_KINDS.search(r) for r in rows), detail="; ".join(rows)[:160])
     select(j, "Terminal stopped: gone")
@@ -98,14 +98,14 @@ def details_recovery(j: Case) -> None:
              "no longer running" in account and "files are kept" in account and "opens the head in Work" in account
              and not any(w in account.lower() for w in LOSS_WORDS) and not any(w in account for w in INTERNAL_WORDS),
              detail=account[:300])
-    actions = next((l for l in detail.splitlines() if "Restart terminal" in l), "")
+    actions = next((line for line in detail.splitlines() if "Restart terminal" in line), "")
     j.record("U7.d", "the item's actions restore access (restart, run its check, open in Work); removal is not offered",
              "Restart terminal" in actions and "Open in Work" in actions and "remove" not in actions.lower()
              and "x remove" not in j.hint(detail), detail=actions.strip())
     technical = page(j, b"[", "DIAGNOSTICS")
     lines = body(technical)
-    heading = next((i for i, l in enumerate(lines) if l == "DIAGNOSTICS"), len(lines))
+    heading = next((i for i, line in enumerate(lines) if line == "DIAGNOSTICS"), len(lines))
     j.record("U7.b", "raw kind, source path and confidence appear only on the Technical page, under DIAGNOSTICS",
-             heading < len(lines) and any(RAW_KINDS.search(l) for l in lines[heading:])
-             and any("Confidence" in l for l in lines[heading:]) and no_raw(body(detail)[:6]),
+             heading < len(lines) and any(RAW_KINDS.search(line) for line in lines[heading:])
+             and any("Confidence" in line for line in lines[heading:]) and no_raw(body(detail)[:6]),
              detail=" / ".join(lines[heading:heading + 5]))
