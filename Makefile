@@ -563,8 +563,9 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
-test-workflow-contracts: build-fleet
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
+# Local names for fleet cases of scripts/fleet-tests.mk: the recipe lives there.
+test-workflow-contracts: build-fleet $(BUILD_DIR)/native-tests/workflow-contract-cases
+	+@$(MAKE) fleet-case-native-workflow-contract-cases
 
 .PHONY: test-fleet-controls test-fleet-recovery
 test-fleet-controls: build-tui
@@ -595,11 +596,12 @@ test-workflow-metrics: build-fleet build-core
 	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
 
 # Bounded expansions (roadmap 9F): native admission cases over fabricated run
-# records, then the public CLI over real base and round runs.
+# records, then the public CLI over real base and round runs. Both are fleet
+# cases of scripts/fleet-tests.mk; the recipes live there.
 .PHONY: test-plan-expansion
 test-plan-expansion: build-fleet $(BUILD_DIR)/test-plan-expansion $(SHELL_TEST_PREREQS)
-	$(BUILD_DIR)/test-plan-expansion
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" plan-expansion tests/test_workflow_plan_expansion.sh
+	+@$(MAKE) fleet-case-native-plan-expansion
+	+@$(MAKE) fleet-case-shell-workflow-plan-expansion
 
 test-plan-staged: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-staged"
