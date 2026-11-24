@@ -60,7 +60,8 @@ class Harness:
 
     def setup(self) -> None:
         self.repo.mkdir()
-        self.home.mkdir()
+        # Admission refuses a HYDRA_HOME that is group- or world-writable (umask 002).
+        self.home.mkdir(mode=0o700)
         self.call("git", "init", "-q")
         self.call("git", "config", "user.email", "perf@example.invalid")
         self.call("git", "config", "user.name", "perf attention fixture")
