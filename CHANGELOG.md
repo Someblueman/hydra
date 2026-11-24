@@ -13,14 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from `ACCEPTANCE_ARGS`, and so are the U-number report matrix beyond U6, the
   `scripts/acceptance/` modules `entry`, `terminal`, `details`, `navigation`,
   `overview`, `removal`, `journeys` and `ptyrun`, and `tests/fixtures/acceptance/`.
-  The assertions are covered by the focused tests: `tests/test_init_source_tree.sh`,
-  `tests/test_onboarding.sh`, `tests/test_project_trust.sh` (U1),
-  `tests/test_spawn_bootstrap.sh`, `tests/test_tmux.sh` (U2),
-  `tests/test_spawn_ux.sh`, `tests/c/test_tui_pty.c`, `tests/c/test_tui_visualization.inc`
-  (U3), `tests/test_native_tui.sh`, `tests/test_native_tui_i4.sh` (U7, U9, U13, U15),
-  `tests/kettle/test_attach_cycles.c` (U8), `tests/test_kill.sh` (U12) and
-  `tests/kettle/test_plan_conversation.c`, `test_plan_launch.c`, `test_workflow_controls.c`
-  (U9, U17).
+  Their assertions are covered by existing tests (`tests/test_init_source_tree.sh`,
+  `tests/test_onboarding.sh`, `tests/test_project_trust.sh` for U1;
+  `tests/test_spawn_bootstrap.sh`, `tests/test_tmux.sh` for U2; `tests/test_spawn_ux.sh`,
+  `tests/c/test_tui_pty.c` for U3; `tests/test_native_tui.sh`, `tests/test_native_tui_i4.sh`
+  for U7, U9, U13 and U15; `tests/kettle/test_attach_cycles.c` for U8; `tests/test_kill.sh`
+  for U12; `tests/kettle/test_plan_conversation.c`, `test_plan_launch.c`,
+  `test_workflow_controls.c` for U9 and U17), by the tests added under "Changed" below, or
+  were dropped; the dropped ones are listed there.
 - **The simulated-discoverability layer of `make test-usability`:** the goal-driven
   trials, the comprehension trials, the scripted journeys other than `planning`, the
   HTML report and the `--trial` option (`scripts/usability/policy.py`, `trials.py`,
@@ -36,13 +36,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `make test-usability` runs the `planning` first-use walkthrough and writes `report.json`.
 - The five palette exceptions in `scripts/visual_review/lint-known.tsv` name the flows
   and theme they cover instead of every capture; `lint.py` accepts comma-separated globs.
-- Assertions moved from the removed journeys into existing tests: the control centre
-  leaves the checkout, git status and `.git/info/exclude` unchanged and creates no head
-  (`tests/kettle/test_plan_workspace.c`, and the `planning` walkthrough); init keeps a
-  dirty repository's edits, untracked, ignored and excluded files
-  (`tests/test_init_source_tree.sh`); the new-task form lists only available agents
-  (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say the project
-  identity is unavailable (`tests/test_workflow_statistics.sh`, `tests/test_native_tui.sh`).
+- Assertions moved from the removed journeys into tests CI runs. In `make
+  test-plan-workspace`: `tests/kettle/test_first_entry.c` opens the control centre on a
+  repository Hydra has never seen and checks that no project is registered or trusted, no
+  tmux session starts, the committed workflow is still refused and git status, the tree and
+  `.git/info/exclude` are unchanged, also on a reopen after `hydra init --trust`;
+  `test_head_removal.c` drives the real removal dialog (cancel keeps the head, an active head's
+  terminal process is stopped, a bulk removal removes the clean head and refuses the dirty one,
+  keeping its draft, with no "Press Enter to return") and checks the Work selection survives
+  a visit to Stats; `test_sign_in_recovery.c` checks a machine with no agent (the new-task
+  form offers only `none`, Hosts names the missing agents, no head is created), an
+  interactive `hydra spawn --profile --prompt` (agent beside the top bar, Ctrl-] and `q`
+  keep the task), a provider that exits needing a login (its instruction on screen, a typed
+  command runs in the worktree), a scrollback with no bootstrap export and a one-line banner,
+  and Tab and Esc reaching an attached agent as typed; `test_head_changes.c` checks that two
+  committed files are not shown as zero in Work, are labelled apart from uncommitted
+  changes and are both in `:diff`, and that Tab and Shift-Tab walk the panes and return;
+  `test_plan_conversation.c` checks the approval dialog says a changed draft or policy runs
+  nothing; `test_terminal_restore.c` checks the Details and the Inbox item for a head whose
+  terminal is gone use plain words and offer restart and Open in Work but no removal.
+  Also: init keeps a dirty repository's edits and the contents of its untracked, ignored
+  and excluded files (`tests/test_init_source_tree.sh`); the new-task form lists only
+  available agents (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say
+  the project identity is unavailable (`tests/test_workflow_statistics.sh`,
+  `tests/test_native_tui.sh`); the planning walkthrough and
+  `tests/kettle/test_plan_workspace.c` check git status after entry.
+- Dropped with the journeys, not moved: the shell-history file check after a provider exit,
+  reattaching at another terminal width and reading the agent process's `/proc` environment
+  (U2; `tests/test_spawn_bootstrap.sh` still checks the session environment and the spawn
+  transcript); Work or Details saying the agent exited after a failed login (U3; Work
+  still reports the session as running); Details of a stopped head, the raw kind and
+  confidence appearing only on the Inbox Technical page, and the launch objective in Details
+  (U7); the end-to-end two-head approval, resume and handoff run and Stats listing one run
+  as `waiting-approval` (U9; `tests/kettle/test_workflow_controls.c` still drives approval
+  and resume of a waiting run and `tests/test_native_tui.sh` the handoff Details); empty-state
+  and single-agent wording beyond the existing `tests/test_native_tui.sh` fixtures (U9, U13,
+  U15); the help text and 80-column footer hints (U8); a dirty head refused on its own and a
+  stopped head's removal (U12; the bulk case covers the refusal); and the independent
+  digest comparison and the no-user-command ledger of the plan journey (U17).
+- `make visual-review VISUAL_REVIEW_FULL=0` no longer captures the full sweep (only `1`
+  does), `make test-visual-lint VISUAL_REVIEW_FULL=1` recaptures when the existing captures
+  are the focused default, `lint.py` strips whitespace around comma-separated globs, and a
+  known row that no capture of the run matches is reported as "not captured" instead of
+  "resolved".
 
 ## [5.0.0] - 2026-11-21
 
