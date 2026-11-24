@@ -3,10 +3,8 @@
 Three commands exercise the installed native TUI (`hydra tui`) over a
 pseudo-terminal and keep what they saw, so a person can review evidence instead of
 rebuilding and clicking through every screen. Each installs this checkout into a
-private prefix (`install.sh` with the core, TUI and fleet helpers required), runs
-against real Git and tmux in a disposable repository with private `HOME`,
-`HYDRA_HOME` and tmux sockets, and uses deterministic fixtures. None uses a live
-provider or a remote host.
+private prefix (`install.sh` with the core, TUI and fleet helpers required) and
+uses deterministic fixtures. None uses a live provider or a remote host.
 
 | Command | Question it answers | Runner |
 | --- | --- | --- |
@@ -14,13 +12,17 @@ provider or a remote host.
 | `make test-usability` | Can a first-time user get from a new repository to an approved, delivered plan? | `scripts/usability/` |
 | `make visual-review` | What does every screen look like, and does the layout lint pass? | `scripts/visual_review/` |
 
-Run them with `LANG=C.UTF-8 LC_ALL=C.UTF-8`. Each exits 0 when everything passed, 1
-when a check failed and, for the acceptance and usability runners, 2 on an
-infrastructure error (install or observer failure). A failed check is a finding
-against the build: the assertion states the desired behaviour and is not relaxed to
-match the measurement. Each runner takes `--prefix DIR` to reuse an installed
+The acceptance and usability runners drive the installed `hydra` on real Git, tmux
+and pseudo-terminals in a disposable repository with private `HOME`, `HYDRA_HOME`
+and tmux sockets. They exit 0 when every check passed, 1 when a check failed and 2
+on an infrastructure error (install or observer failure). A failed check is a
+finding against the build: the assertion states the desired behaviour and is not
+relaxed to match the measurement. Both take `--prefix DIR` to reuse an installed
 prefix while iterating; a report made that way says so and is not a release report.
-Python assertions must stay enabled (do not run with `-O`).
+Run them without Python optimization (`-O`), which would disable the assertions.
+The visual review is different: it drives the installed `hydra-tui` against a fake
+`hydra` and the fixtures under `tests/fixtures/tui`, so what it shows is the
+rendering of fixture states, not of a live repository.
 
 ## Flicker (`make test-acceptance`)
 
@@ -159,5 +161,5 @@ fixtures, repaint counts, and one scripted first-use path. They do not establish
   with `TERM=xterm-256color`.
 - **A live provider and a remote host.** Real provider sign-in, missing-auth states
   of real CLIs, an agent authoring a plan, and onboarding a real machine are
-  separate qualification steps (see [fleet](FLEET.md#execution-hosts-without-tmux)
-  for the host checklist).
+  separate qualification steps (see the U10 item in the
+  [roadmap](ROADMAP.md) and [FLEET.md](FLEET.md#guided-remote-setup)).

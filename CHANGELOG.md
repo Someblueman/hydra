@@ -70,10 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer mentions shell-only workflow execution, and `make help` no longer
   lists TUI timings under `make bench` (use `make bench-tui`).
 - Documentation corrected where it described removed or superseded behaviour:
-  the comprehension trial's entry points (Work, Stats, Inbox; no shell TUI),
-  the roadmap's U2, U12 and change-locality passages, the T2/T3 guide's fixture
-  retention and shard assignment, the research planning example's
-  `plan-example` step, and the attention acceptance record's local-only paths.
+  the roadmap's U2, U12 and change-locality passages and the research planning
+  example's `plan-example` step. `docs/FLEET.md` no longer says cross-host DAG
+  coordination is only on the roadmap: the two-host scenario is qualified over
+  loopback receivers, and real hosts remain open.
 
 ## [5.0.0] - 2026-11-21
 

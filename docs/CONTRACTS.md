@@ -811,9 +811,10 @@ The public routes are `hydra workflow attention --json`, `workflow attention-dat
 `fleet attention --json`, `fleet attention-data`, and `hydra workflow review-data`
 and `fleet review-data`, which take the 13 positional selection fields (`KIND
 PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256
-IDENTITY_SHA256`) and an optional 14th argument, a JSON reference to preview. A
-reference preview is capped at 4096 bytes; the producer never opens a URL, and the
-native `o` passes a selected URL to the operating system opener without reading it.
+IDENTITY_SHA256`) and an optional 14th argument, a bounded JSON array of explicit
+references (transcript, log or PR locators). A local reference preview is capped at
+4096 bytes; the producer never opens a URL, and in the native review Enter on a web
+reference passes its locator to `open` (macOS) or `xdg-open` without reading it.
 
 Attention data is `HYDRA_ATTENTION<TAB>3`: each `ITEM` keeps the 19 version-1
 fields and appends a presentation `label` (the workflow name, or `-`; version 2)

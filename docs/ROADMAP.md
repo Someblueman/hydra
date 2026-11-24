@@ -45,7 +45,7 @@ only a person, a real host or a real provider can give. By what each item needs:
 - **A person at the screen:** U1 to U9 (U5's follow-ups need a real run), U12, U13, U15, U17 to U19 and
   I4 (details in each item). The automated checks are described in
   [TUI-REVIEW.md](TUI-REVIEW.md).
-- **A real host or provider:** U10 (the operator VPS run), U11 and U16 (remote
+- **A real host or provider:** U10 (the operator VPS run), U11 (remote
   attach, reconnect, history), T2 and T3 (hosts without tmux), item 6 (placement
   trials), item 8 (cron, systemd, launchd, macOS, several hosts), H4 to H6 (a live
   network, inventory and key rotation), statistics from real remote hosts.
@@ -425,7 +425,7 @@ byte for byte).
       time and cost, human correction, repeated work and estimate calibration by
       task class. State: `make test-plan-eval` validates the held-out oracle and runs
       one serial and fork-join scheduling comparison; it does not run candidate
-      planners ([planning evaluation](../examples/planning/evaluation/README.md)). Human
+      planners. Human
       corrections and provider cost have never been observed (unknown), and no
       per-class estimate calibration exists.
 
