@@ -10,6 +10,15 @@ case ${test_make_flags%% *} in
     -*|*=*|*[!a-zA-Z]*) ;;
     *n*) exec "$@" ;;
 esac
+# Every case sees git and tmux as CI does, whatever the developer has
+# configured (see scripts/test-env.sh).
+scripts=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+# shellcheck source=test-env.sh
+# shellcheck disable=SC1091
+. "$scripts/test-env.sh"
+test_env_directory=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test-env.XXXXXX")
+trap 'rm -rf "$test_env_directory"' EXIT
+test_env_apply "$scripts" "$test_env_directory"
 mkdir -p "$directory"
 log="$directory/$name.log"
 started=$(date +%s)

@@ -13,6 +13,10 @@ CFLAGS ?= -O2
 WERROR ?= -Werror
 CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra $(WERROR) -pedantic -Isrc
 BUILD_DIR ?= build
+# Runs a test binary with git and tmux isolated from the developer's own
+# configuration (scripts/test-env.sh). Shell cases and the fleet cases get the
+# same through scripts/run-test.sh.
+TEST_ENV = sh scripts/with-test-env.sh
 # Build and analysis share recursive discovery so domain directories cannot
 # silently omit native sources from the quality gate.
 NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
@@ -178,13 +182,13 @@ test-kettle: $(KETTLE_TEST_BINS)
 	$(BUILD_DIR)/test-kettle-components-example
 
 test-program-pty: $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/kettle-components
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-program-pty"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-program-pty"
 
 $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_workspace_child.c -o $@
 
 test-workspace-pty: test-program-pty example-workspace build-tui $(BUILD_DIR)/test-workspace-child
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-pty"
 
 $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.h $(TUI_DATA_OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c $(TUI_DATA_OBJECTS) -o $@
@@ -192,7 +196,7 @@ $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.h $
 .PHONY: test-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
 	$(BUILD_DIR)/test-statistics
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-statistics-pty"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-statistics-pty"
 
 example-workspace: $(BUILD_DIR)/kettle-workspace
 
@@ -313,16 +317,16 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 		HYDRA_TEST_CRASH_DISPATCH="$(CURDIR)/tests/fixtures/tui/crash-dispatch.sh" \
 		HYDRA_TEST_SLOW_HYDRA="$(CURDIR)/tests/fixtures/tui/slow-hydra.sh" \
 		HYDRA_TEST_EOF_HYDRA="$(CURDIR)/tests/fixtures/tui/eof-hydra.sh" \
-		$(BUILD_DIR)/test-tui-pty "$(abspath $(BUILD_DIR))/hydra-tui" \
+		$(TEST_ENV) $(BUILD_DIR)/test-tui-pty "$(abspath $(BUILD_DIR))/hydra-tui" \
 		"$(CURDIR)/tests/fixtures/tui/fake-hydra.sh" "$(CURDIR)/tests/fixtures/tui/fake-bin"; \
 	status=$$?; \
 	after="$$(find "$(abspath $(BUILD_DIR))/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-remote-setup"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-responsive-reads"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-refresh-cost"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-onboarding"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-remote-setup"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-responsive-reads"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-refresh-cost"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-onboarding"
 
 test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
@@ -581,10 +585,10 @@ test-workflow-contracts: build-fleet
 
 .PHONY: test-fleet-controls test-fleet-recovery
 test-fleet-controls: build-tui
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-fleet-controls"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-fleet-controls"
 
 test-fleet-recovery: build-core build-fleet build-tui
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-fleet-recovery"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-fleet-recovery"
 
 .PHONY: test-plan-outcomes test-task-announce test-plan-reuse test-retention test-workflow-metrics test-plan-staged test-plan-staged-public
 test-plan-outcomes: build-fleet build-plan-precompile
@@ -696,11 +700,11 @@ check-opt-levels: $(OPT_CHECK_UNITS)
 
 .PHONY: test-attached-pty
 test-attached-pty: build-tui
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attached-pty"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-terminal-restore"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-interactive-loop"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-attached-pty"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-attach-cycles"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-output-fidelity"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-terminal-restore"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-interactive-loop"
 
 .PHONY: test-kettle-export
 test-kettle-export:
@@ -708,12 +712,12 @@ test-kettle-export:
 
 .PHONY: test-plan-workspace
 test-plan-workspace: build-tui build-fleet
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-workspace"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-launch"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-conversation"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-assets"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
-	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-runs-heads"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-plan-workspace"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-plan-launch"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-plan-conversation"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-plan-assets"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-workflow-controls"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" $(TEST_ENV) "$(BUILD_DIR)/native-tests/pty-runs-heads"
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery
