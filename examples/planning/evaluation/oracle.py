@@ -3,25 +3,16 @@
 
 Loads the archived held-out cases and the held-out additions, computes every
 expected artifact from the case inputs and the frozen visible contracts (never
-from a candidate), compares artifacts strictly, and runs a frozen candidate in
-a separate interpreter with an empty stdin and a bounded timeout.
-
-Worker mode: python3 -I oracle.py --worker <candidate.py> <contract_id> <inputs-json>
+from a candidate), and compares artifacts strictly with JSON types and a size
+bound.
 """
 
-import contextlib
 import csv
 import hashlib
-import importlib.util
 import json
-import os
-import subprocess
-import sys
-import time
 from pathlib import Path
 
 MAX_ARTIFACT_BYTES = 65536
-CANDIDATE_TIMEOUT_SECONDS = 5
 # The archived held-out cases carry no contract ID; this map is the archived one.
 CASE_CONTRACTS = {
     "fc-01-normalize-record": "feature.normalize_records.v1",
@@ -158,42 +149,6 @@ def expected(contract_id, hidden):
     return SOLVERS[contract_id](hidden)
 
 
-# --- candidate interfaces ----------------------------------------------------
-
-def declared_inputs(contract_id, hidden):
-    """The archived pilot's declared candidate interface."""
-    if contract_id == "feature.reject_duplicate_config.v1":
-        return hidden["config_bytes"]
-    if contract_id == "research.schedule_metrics.v1":
-        return hidden["jobs_csv"]
-    if contract_id == "research.preserve_unknowns.v1":
-        observations = {}
-        for item in hidden["observations"]:
-            key, value = item.split("=", 1)
-            observations[key] = value if value == "unknown" else (
-                float(value) if key == "rework_probability" else int(value))
-        return {"observations": observations}
-    return hidden
-
-
-def adapted_inputs(contract_id, hidden, contract):
-    """The archived post hoc diagnostic: file inputs become named-file maps."""
-    inputs = declared_inputs(contract_id, hidden)
-    if isinstance(inputs, str):
-        return {contract["input"]["file"]: inputs}
-    if contract_id == "feature.compose_two_members.v1":
-        return {"files": inputs}
-    return inputs
-
-
-def adapt_output(value, contract):
-    """Unwrap a single-entry output-file map named as the contract declares."""
-    name = contract["output"].get("file")
-    if isinstance(value, dict) and len(value) == 1 and name in value:
-        return value[name]
-    return value
-
-
 # --- artifacts ---------------------------------------------------------------
 
 def artifact_value(control):
@@ -260,60 +215,3 @@ def load_cases(archived_heldout: Path, additions: Path):
                           "source": source, "inputs": case["inputs"], "expected": value,
                           "incorrect_artifacts": case.get("incorrect_artifacts", [])})
     return cases
-
-
-# --- candidates --------------------------------------------------------------
-
-def import_candidate(path: Path):
-    if not path.is_file():
-        raise ValueError("candidate must be a regular Python file")
-    spec = importlib.util.spec_from_file_location("planner_candidate", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    solve = getattr(module, "solve", None)
-    if not callable(solve):
-        raise ValueError("candidate must export solve(task_type, inputs)")
-    return solve
-
-
-def worker(candidate: Path, contract_id: str, inputs_json: str):
-    started = time.process_time()
-    try:
-        inputs = strict_json_loads(inputs_json)
-        with open(os.devnull, "w", encoding="utf-8") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
-            result = import_candidate(candidate)(contract_id, inputs)
-        encoded = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-        response = {"ok": True, "result": strict_json_loads(encoded), "cpu_seconds": time.process_time() - started}
-    except Exception as exc:  # the candidate is untrusted code; report every failure
-        response = {"ok": False, "error": f"candidate_error:{type(exc).__name__}:{exc}", "cpu_seconds": time.process_time() - started}
-    sys.stdout.write(json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n")
-
-
-def run_candidate(candidate: Path, contract_id: str, inputs):
-    """Returns (value, cpu_seconds, wall_seconds, error)."""
-    payload = json.dumps(inputs, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-    command = [sys.executable, "-I", str(Path(__file__).resolve()), "--worker", str(candidate), contract_id, payload]
-    started = time.monotonic()
-    try:
-        completed = subprocess.run(command, input="", capture_output=True, text=True, timeout=CANDIDATE_TIMEOUT_SECONDS, check=False)
-    except subprocess.TimeoutExpired:
-        return None, None, time.monotonic() - started, "candidate_timeout"
-    wall = time.monotonic() - started
-    if completed.returncode:
-        return None, None, wall, f"candidate_worker_exit:{completed.returncode}"
-    try:
-        response = strict_json_loads(completed.stdout)
-    except (TypeError, ValueError) as exc:
-        return None, None, wall, f"malformed_candidate_response:{exc}"
-    if not isinstance(response, dict) or not response.get("ok"):
-        error = response.get("error", "candidate_worker_error") if isinstance(response, dict) else "candidate_worker_error"
-        return None, None, wall, error
-    return response.get("result"), response.get("cpu_seconds"), wall, None
-
-
-if __name__ == "__main__":
-    if len(sys.argv) == 5 and sys.argv[1] == "--worker":
-        worker(Path(sys.argv[2]), sys.argv[3], sys.argv[4])
-        sys.exit(0)
-    sys.stderr.write(__doc__)
-    sys.exit(2)

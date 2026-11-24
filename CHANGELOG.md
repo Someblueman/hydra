@@ -40,6 +40,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list are in `docs/CONTRACTS.md`), and `docs/ACCEPTANCE.md`,
   `docs/USABILITY-TESTING.md` and `docs/VISUAL-REVIEW.md`, merged into
   `docs/TUI-REVIEW.md`.
+- **Perf matrix.** `make perf-matrix`, `make test-perf-matrix` and
+  `scripts/perf-matrix.py` with its `perf_matrix_*` modules are gone, as is the
+  October 2026 evidence bundle under `docs/evidence/performance/`, which measured
+  the shell data reader that 5.0 removed. `make perf-attention` stays, now run
+  as `scripts/attention_corpus.py`; it exits 1 on any missed signal or false
+  positive, and `tests/test_attention_corpus.sh` runs it under `make test`. To
+  reproduce the study, check out commit `c82547c`.
+- **`make bench`** and `scripts/bench.sh` (one-shot `list`, `status` and `doctor`
+  timings), the `benchmark-core` alias of `bench-core` and the `sanitizer` alias
+  of `sanitize-core`. Use `make bench-core`, `make bench-tui` and
+  `make sanitize-core`. `scripts/bench-i1.sh` is folded into the `bench-i1`
+  recipe (`make bench-i1` is unchanged), and `scripts/quality-c-incremental.sh`
+  and its `quality.json` registrations are deleted; `make quality-c` remains.
+- **`make test-plan-eval` no longer runs the archived candidate arms.** It
+  checks the independent held-out oracle and the serial/fork-join scheduling
+  comparison; the `--repeat` option and the `planning` and `execution` sections
+  of `build/plan-eval/report.json` are gone. The archived candidates remain
+  reproducible at commit `b0fb5b1d9220189ad2498a244274ae498a3c7d0c`.
+- **`assets/demos/quick-tour.mp4`.** `assets/demos/record.sh` now writes only
+  `quick-tour.gif` and no longer needs libx264.
+- The `update-notification` workflow (a daily branch-behind reminder), and
+  `smoke-onboarding` from `make test-all`, where `make test` already runs it.
 
 ### Changed
 - `make visual-review` captures a focused set by default: the Work flow (with Inbox,

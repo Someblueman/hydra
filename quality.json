@@ -57,17 +57,6 @@
         "--version"
       ],
       "install": []
-    },
-    "c-incremental": {
-      "command": [
-        "sh",
-        "scripts/quality-c-incremental.sh"
-      ],
-      "version": "22.1.8",
-      "version_args": [
-        "--version"
-      ],
-      "install": []
     }
   },
   "checks": [
@@ -88,33 +77,6 @@
       "inputs": [
         "scripts/lint-shell.sh",
         "**/.shellcheckrc"
-      ],
-      "kind": "lint"
-    },
-    {
-      "name": "Hydra C complexity regression gate",
-      "tool": "c-incremental",
-      "args": [],
-      "patterns": [
-        "*.c",
-        "*.h",
-        "*.inc"
-      ],
-      "files": true,
-      "stage": "full",
-      "failure_codes": [
-        1,
-        2
-      ],
-      "scope": "translation-units",
-      "inputs": [
-        "Makefile",
-        "scripts/quality-c.sh",
-        "scripts/quality-c-incremental.sh",
-        "docs/quality/*.tsv",
-        "scripts/native-tests.mk",
-        "scripts/*.mk",
-        "scripts/clang-tidy.sh"
       ],
       "kind": "lint"
     },
@@ -146,7 +108,6 @@
         "scripts/*.mk",
         "scripts/clang-tidy.sh",
         "scripts/quality-c.sh",
-        "scripts/quality-c-incremental.sh",
         "docs/quality/*.tsv"
       ]
     },
@@ -230,7 +191,7 @@
     "mode": "review"
   },
   "verification": {
-    "green": "Changed behavior preserves Hydra POSIX CLI, state and native protocol contracts; affected native builds and existing behavioral checks pass. Broad runtime changes require make test-all, make quality-c and applicable make sanitize targets, with Linux/macOS CI passing before integration. Incremental lint or complexity success alone is not acceptance.",
+    "green": "Changed behavior preserves Hydra POSIX CLI, state and native protocol contracts; affected native builds and existing behavioral checks pass. Broad runtime changes require make test-all, make quality-c and applicable make sanitize targets, with Linux/macOS CI passing before integration. Lint or complexity success alone is not acceptance.",
     "manual": [
       "For TUI or interaction changes, inspect the affected real PTY workflow for readable layout, navigation, input routing and terminal restoration; automated assertions do not establish visual quality.",
       "For state, recovery or cancellation changes, assess the relevant failure interleaving and durable evidence; distinguish controlled fixtures from live-host or authenticated-provider qualification.",

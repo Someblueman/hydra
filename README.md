@@ -226,7 +226,7 @@ For comparing and growing plans, `hydra workflow plan evaluate` compares two
 compiled alternatives by decomposition, fixed-graph scheduling and placement with
 ranges and explicit unknowns, `plan decision` records why one was selected and
 replays that comparison from its recorded inputs, and `make test-plan-eval`
-measures held-out planning quality. `hydra workflow plan expand` admits a bounded
+checks the independent held-out oracle and a scheduling comparison. `hydra workflow plan expand` admits a bounded
 expansion of a finished run as a new version compiled under the same policy, with
 retries kept apart from new claims; each round runs with its own exact digest and
 its steps pass the same per-step guard as any approved plan. Use `hydra workflow
