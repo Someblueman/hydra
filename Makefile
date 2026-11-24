@@ -714,6 +714,7 @@ test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-assets"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-runs-heads"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-first-entry"
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery
