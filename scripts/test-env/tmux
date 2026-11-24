@@ -7,12 +7,19 @@
 # configured workstation behave the same.
 #
 # scripts/test-env.sh puts this directory first on PATH, so Hydra and the cases
-# find it by name. PATH is left as it was, so panes started by the server find
-# this wrapper too. The real tmux is the first one after this directory on PATH:
-# a case's own wrapper or stub ahead of this directory, which may call this one
-# by name, is never chosen again (that would recurse). When this directory is
-# not on PATH at all, it is the first one outside it.
-self=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+# find it by name, and records the real tmux in HYDRA_TEST_REAL_TMUX. That one
+# is used whenever it is set: cases link "$(command -v tmux)" (this wrapper)
+# into directories of their own and run with a PATH that holds no other tmux,
+# or so few tools that not even dirname is there, and a case's own tmux stub
+# may call this wrapper by name. Only builtins run before the exec, so a
+# stripped PATH cannot break it.
+if [ -n "${HYDRA_TEST_REAL_TMUX:-}" ] && [ -x "$HYDRA_TEST_REAL_TMUX" ]; then
+    exec "$HYDRA_TEST_REAL_TMUX" -f /dev/null "$@"
+fi
+# Without a recorded tmux: the first one after this directory on PATH (a case's
+# own wrapper or stub ahead of this directory is never chosen again, which
+# would recurse), else the first one outside it.
+self=$(CDPATH='' cd -- "${0%/*}" && pwd -P)
 real=
 after=
 old_ifs=$IFS
