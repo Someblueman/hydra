@@ -26,9 +26,11 @@ jobs:
         
     - name: Check branch status
       run: |
-        echo "## Branch Status Report" >> $GITHUB_STEP_SUMMARY
-        echo "Branches that are behind main:" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        {
+          echo "## Branch Status Report"
+          echo "Branches that are behind main:"
+          echo ""
+        } >> "$GITHUB_STEP_SUMMARY"
         
         behind_count=0
         for branch in $(git branch -r | grep -E 'origin/(feature|fix|release)/' | grep -v HEAD | sed 's/origin\///'); do
@@ -41,22 +43,24 @@ jobs:
           behind=$(git rev-list --count "origin/$branch..origin/main" 2>/dev/null || echo "0")
           
           if [ "$behind" -gt 0 ]; then
-            echo "- \`$branch\` is $behind commits behind main" >> $GITHUB_STEP_SUMMARY
+            echo "- \`$branch\` is $behind commits behind main" >> "$GITHUB_STEP_SUMMARY"
             behind_count=$((behind_count + 1))
           fi
         done
         
         if [ "$behind_count" -eq 0 ]; then
-          echo "✅ All feature branches are up-to-date!" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All feature branches are up-to-date!" >> "$GITHUB_STEP_SUMMARY"
         else
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### How to update your branch:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "git checkout your-branch" >> $GITHUB_STEP_SUMMARY
-          echo "git fetch origin" >> $GITHUB_STEP_SUMMARY
-          echo "git rebase origin/main" >> $GITHUB_STEP_SUMMARY
-          echo "# or: git merge origin/main" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          {
+            echo ""
+            echo "### How to update your branch:"
+            echo "\`\`\`bash"
+            echo "git checkout your-branch"
+            echo "git fetch origin"
+            echo "git rebase origin/main"
+            echo "# or: git merge origin/main"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
         fi
     
     - name: Comment on PRs

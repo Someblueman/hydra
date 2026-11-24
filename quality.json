@@ -12,7 +12,9 @@
     "Makefile",
     "docs/quality",
     "quality.json",
-    "examples/planning"
+    "examples/planning",
+    "ruff.toml",
+    ".github/workflows"
   ],
   "exclude": [],
   "tools": {
@@ -42,6 +44,26 @@
         "scripts/clang-tidy.sh"
       ],
       "version": "22.1.8",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "ruff": {
+      "command": [
+        "ruff"
+      ],
+      "version": "0.11.13",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "actionlint": {
+      "command": [
+        "actionlint"
+      ],
+      "version": "1.7.12",
       "version_args": [
         "--version"
       ],
@@ -89,6 +111,44 @@
         "scripts/lint-shell.sh",
         "**/.shellcheckrc"
       ],
+      "kind": "lint"
+    },
+    {
+      "name": "Hydra Python lint (ruff)",
+      "tool": "ruff",
+      "args": [
+        "check",
+        "--quiet"
+      ],
+      "patterns": [
+        "*.py"
+      ],
+      "files": true,
+      "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "inputs": [
+        "ruff.toml"
+      ],
+      "kind": "lint"
+    },
+    {
+      "name": "Hydra workflow lint (actionlint)",
+      "tool": "actionlint",
+      "args": [],
+      "patterns": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+      ],
+      "files": true,
+      "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "inputs": [],
       "kind": "lint"
     },
     {

@@ -55,7 +55,7 @@ def spawn_reconnect(j: Case) -> None:
     session = j.tmux("list-sessions", "-F", "#{session_name}").split()[0]
     rows = 40 if j.columns > 80 else 24
     client = j.pty("attach", ["tmux", "attach-session", "-t", session], j.columns, rows)
-    screen = client.wait_for("ready to discuss", timeout=20)
+    client.wait_for("ready to discuss", timeout=20)
     attached_at = time.monotonic()
     client.send(b"hello\r")
     client.wait_for("Discuss the plan", timeout=10)
@@ -78,7 +78,7 @@ def spawn_reconnect(j: Case) -> None:
              detail=f"pid {identity['agent_pid']} {identity['agent_cmdline'][:80]}", evidence=[environ_evidence])
     # Leave the agent; the launcher hands over to the interactive shell.
     client.send(b"\x04")
-    screen = client.wait_for("this pane is now a shell", timeout=15)
+    client.wait_for("this pane is now a shell", timeout=15)
     client.send(b"printf ok > u2-proof\r")
     worktree = Path(j.cli("path", "fresh"))
     j.record("U2.a", "after the agent exits the shell prompt in the worktree is usable",

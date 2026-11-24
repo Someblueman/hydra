@@ -6,7 +6,9 @@ The shell CLI in `bin/hydra` owns lifecycle mutations; optional C helpers live i
 `src/`. Runtime state is project-scoped state v2 under `$HYDRA_HOME/state/v2`.
 See [contracts](docs/CONTRACTS.md) before changing CLI, JSON, or durable records.
 
-Shell development needs Git, tmux 3.0+, Make, dash, and ShellCheck. Native builds
+Shell development needs Git, tmux 3.0+, Make, dash, and ShellCheck; `make lint`
+also runs ruff and actionlint when installed (`pipx install ruff`,
+`brew install actionlint`). Native builds
 need a C99 compiler; fleet additionally needs pkg-config and JSON-C development
 files. Run from source with `bin/hydra`; no installation is necessary.
 
@@ -206,7 +208,8 @@ done < file.txt
 
 Before committing:
 
-1. Run `make lint` (ShellCheck and dash syntax checks).
+1. Run `make lint` (ShellCheck and dash syntax checks, plus ruff on Python and
+   actionlint on the workflows).
 2. Run the affected shell tests under `/bin/sh`.
 3. Use the broader checks above when the changed boundary requires them.
 
@@ -214,7 +217,12 @@ Before committing:
 
 - **ShellCheck**: `shellcheck --shell=sh --severity=style script.sh`
 - **dash**: `dash -n script.sh`
-- **Makefile**: `make lint` runs both checks
+- **ruff**: `ruff check` lints every Python file with the rules in `ruff.toml` (the
+  defaults plus flake8-bugbear; formatting is not enforced)
+- **actionlint**: `actionlint` checks `.github/workflows/*.yml`, including the embedded shell
+- **Makefile**: `make lint` runs all four checks. ruff and actionlint are optional
+  locally (a missing one is skipped with a warning) and required in CI, which sets
+  `HYDRA_LINT_STRICT=1`; `quality.json` pins their versions, as it does ShellCheck's
 
 ### Common Patterns
 

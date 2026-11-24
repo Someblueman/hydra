@@ -226,7 +226,6 @@ class Lint:
     def palette(self) -> None:
         s = self.s
         if s.theme == "nocolor":
-            foreign = sorted({c for row in s.cells for c in (row[0][1], row[0][2]) if c})
             for y, row in enumerate(s.cells):
                 if any(c[1] or c[2] for c in row):
                     self.finding("palette", y, f"colour escapes in no-colour mode: {sorted({c[1] or c[2] for c in row if c[1] or c[2]})[:3]}")
@@ -319,7 +318,7 @@ class Lint:
                 ratio = contrast(fg, bg)
                 if ratio < threshold and (fg, bg) not in low:
                     low[(fg, bg)] = (y, f"#{fg} on #{bg} has contrast {ratio:.2f} (< {threshold}) at {s.text[y].strip()[:32]!r}")
-        for (fg, bg), (y, message) in sorted(low.items()):
+        for _colours, (y, message) in sorted(low.items()):
             self.finding("contrast", y, message)
 
 

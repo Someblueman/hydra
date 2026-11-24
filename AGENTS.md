@@ -24,12 +24,16 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   `gh` (GitHub issue/PR features), and an AI CLI such as `claude`/`aider`/`gemini`.
   `python3` is needed only by the bench-i1, perf-matrix, plan-eval, usability,
   acceptance and visual-review targets.
+- Optional locally, required in CI (versions pinned in `quality.json`): `ruff` and
+  `actionlint`. `make lint` warns and skips a missing one; `HYDRA_LINT_STRICT=1`
+  makes a missing one an error.
 
 ### Lint / Test / Run (standard commands, see `Makefile` and `README.md`)
 - First check for a pull request: `make test-fast` — lint, a fixed selection of shell
   cases and the native unit tests (`CONTRIBUTING.md`).
 - Lint: `make lint` — runs ShellCheck (`--shell=sh --severity=style`) plus `dash -n`
-  syntax checks on every shell file.
+  syntax checks on every shell file, `ruff check` (rules in `ruff.toml`) on every
+  Python file and `actionlint` on `.github/workflows/*.yml` (`scripts/lint-extra.sh`).
 - Test: `make test` — runs with `sh` every `tests/test_*.sh` that is not listed in
   `SHELL_TEST_EXCLUDES` in `scripts/shell-tests.mk`; other targets such as
   `test-fleet`, `test-parity` and `test-tui` run the excluded files. Passing runs still print
