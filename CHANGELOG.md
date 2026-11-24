@@ -2097,7 +2097,7 @@ NAME` (or `hydra fleet bootstrap NAME` with a reviewed 3.0.0 package). See
 - Standalone workspace demo with one real shell through a separate POSIX PTY
   adapter, bounded screen/parser and scrollback, alternate-screen support, resize
   propagation and explicit child cleanup. Hydra heads retain tmux ownership.
-  See the [supported terminal subset](src/termviz/TERMINAL.md).
+  See the [supported terminal subset](src/kettle/TERMINAL.md).
 
 - Antigravity (`agy`) and Cursor Agent headless profiles with bounded event
   translation, explicit recorded-session resume, and native fleet sign-in.
