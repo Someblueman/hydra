@@ -807,6 +807,14 @@ durable state or confer approval. Stale or ambiguous selections remain unavailab
 until a fresh exact identity is established. Native UI behavior is covered by the
 public CLI and protocol rules in this guide.
 
+The public routes are `hydra workflow attention --json`, `workflow attention-data`,
+`fleet attention --json`, `fleet attention-data`, and `hydra workflow review-data`
+and `fleet review-data`, which take the 13 positional selection fields (`KIND
+PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256
+IDENTITY_SHA256`) and an optional 14th argument, a JSON reference to preview. A
+reference preview is capped at 4096 bytes; the producer never opens a URL, and the
+native `o` passes a selected URL to the operating system opener without reading it.
+
 Attention data is `HYDRA_ATTENTION<TAB>3`: each `ITEM` keeps the 19 version-1
 fields and appends a presentation `label` (the workflow name, or `-`; version 2)
 and a presentation `detail` (version 3: for a failed check, the IDs of the
