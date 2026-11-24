@@ -14,8 +14,10 @@ uses deterministic fixtures. None uses a live provider or a remote host.
 
 The acceptance and usability runners drive the installed `hydra` on real Git, tmux
 and pseudo-terminals in a disposable repository with private `HOME`, `HYDRA_HOME`
-and tmux sockets. They exit 0 when every check passed, 1 when a check failed and 2
-on an infrastructure error (install or observer failure). A failed check is a
+and tmux sockets. They exit 0 when every case passed and 1 when a case failed or
+was blocked; an install or prefix error is written to the report as an
+infrastructure error and exits 2 (`make` reports its own status for a failing
+recipe). A failed check is a
 finding against the build: the assertion states the desired behaviour and is not
 relaxed to match the measurement. Both take `--prefix DIR` to reuse an installed
 prefix while iterating; a report made that way says so and is not a release report.
@@ -31,17 +33,18 @@ writes (through the observer's timestamped read index) in five phases: 30 second
 idle on Work, an attached head streaming 300 lines, local state changed from the
 CLI (spawn, outcome), Tab cycling Work's panes and `3`, `4`, `2`, `1` switching
 screens, and two resizes (80x24 and 140x40, back and forth). `scripts/acceptance/vt.py`
-replays each phase and splits it into refreshes (reads less than 5 ms apart). The
+replays each phase and groups reads at most 5 ms apart into one refresh. The
 checks (`scripts/acceptance/flicker.py`):
 
 - no full-screen clears while idle, streaming, polling and switching, and at most
-  one per resize;
+  two across the combined resize phase (one per resize);
 - a refresh rewrites at most 25% of the screen's cells unchanged, and at most 5% on
   average (idle, streaming and polling; a screen switch legitimately repaints
   whole panels, so only clears and blinks are asserted there);
 - no blinks (a cell erased and painted back with the same content in one refresh)
-  and no cursor moves that paint nothing;
-- after idling the selection is unchanged and the cursor stays hidden.
+  and no cursor moves that paint nothing, including while switching;
+- after idling the selection is unchanged, and the cursor is hidden at the end of
+  every sampled idle refresh.
 
 `ACCEPTANCE_OUTPUT=/absolute/new/directory` names the run and
 `ACCEPTANCE_ARGS="--columns 80"` narrows it (`--list` lists the case). The output
@@ -163,3 +166,7 @@ fixtures, repaint counts, and one scripted first-use path. They do not establish
   of real CLIs, an agent authoring a plan, and onboarding a real machine are
   separate qualification steps (see the U10 item in the
   [roadmap](ROADMAP.md) and [FLEET.md](FLEET.md#guided-remote-setup)).
+
+Keep failure artifacts outside the tested repository. The fixture runs hold no
+credentials, but a capture or recording made with a live provider or a real host can:
+review it for credentials before publishing it.
