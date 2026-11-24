@@ -890,6 +890,66 @@ boundary. Heterogeneous-host trials comparing explicit and balanced placement
 (queue wait, time to verified result, throughput, transfer bytes, starvation)
 need real hosts and have not been run; no performance improvement is claimed.
 
+## Execution hosts without tmux
+
+A receiving host does not need tmux to run fleet tasks. Task acceptance refuses a
+recipe that requires the `tmux` capability with `capability_unavailable` before
+anything is recorded (`src/fleet/task/task_accept.c`), exec tasks run as headless
+heads, and the handshake always advertises `execution-headless`. It advertises
+`tmux` only when `tmux -V` on the receiver reports 3.x or newer
+(`src/fleet/transport/server.c`). Plan recipes admit only the `exec` and
+`execution-headless` capabilities (`src/fleet/plan/plan_tasks.c`). Git and the
+shell CLI are the hard dependencies; interactive `hydra spawn`, attach and the
+dashboard still need tmux 3.0 or newer. `hydra doctor` treats a missing tmux as an
+error only when interactive heads exist, and remote preflight reports it as a
+warning.
+
+The T2 and T3 cases check this with tmux hidden from the receiver's `PATH`
+(`tests/headless_path.sh`) while the coordinator keeps its own. A `tmux` stand-in
+on the receiver fails `tmux -V` and refuses any other call loudly, so a case fails
+if anything tried a terminal operation. T2 runs one receiver (command and adapter
+tasks, reconnect, duplicate submission, lost start, owner death, cancellation,
+bounded logs, a locally compiled plan). T3 runs two receivers through a placed task
+plan (fan-out, cross-host validation, evidence join, composition, lost
+acknowledgment, coordinator restart, stale results). The SSH boundary is either
+the fault-injecting loopback transport the DAG fleet cases use or, for T3, two
+private `sshd` daemons on loopback ports with ephemeral keys and a `ForceCommand`
+that runs each request with the receiver `PATH`; nothing touches `~/.ssh`.
+
+```sh
+make test-t2-headless            # controlled transport
+make test-t3-distributed         # controlled transport, then loopback SSH
+make test-t3-distributed-ssh     # loopback SSH only
+make test-one T=t3_distributed   # one case, log printed
+```
+
+The loopback SSH variant needs `sshd`, `ssh` and `ssh-keygen`; without them it
+prints `SKIP T3 distributed SSH: ...` and exits 0, so CI requires its pass line
+rather than the exit code. The controlled cases also run as part of
+`make test-fleet`. A failed case keeps its log under `$BUILD_DIR/test-logs/`.
+
+These are loopback qualifications. They do not authenticate to a provider or to a
+separately administered host. To qualify a real host without tmux, run the public
+interfaces against it:
+
+1. `hydra remote setup NAME USER@HOST` (or `hydra remote add NAME USER@HOST
+   --ssh-config FILE`), checking the host key through your own trusted process.
+   The preflight should show tmux as a warning only.
+2. `hydra fleet list --json`: the host answers with `execution-headless` and
+   without `tmux` in `capabilities`.
+3. Place the recipes of `tests/fixtures/plan-task` (or your own, with
+   `"capabilities":["exec","execution-headless"]`) on that host, then
+   `hydra workflow plan compile` and `plan run --accept`. Disconnect and
+   reconnect, then check `workflow status --json`, `fleet task status`,
+   `fleet task logs` and `fleet task result`.
+4. For an authenticated headless adapter, sign in on the host
+   (`hydra fleet auth login HOST --agent NAME`) and submit a workflow task whose
+   steps use that profile. The committed fixture agent does not stand in for it.
+
+Keep the receiver's `HYDRA_HOME/fleet/tasks` records and the run directory as the
+evidence. Hydra does not claim live-host or provider qualification it did not
+observe.
+
 ## Task telemetry
 
 Since 3.0.0 the task owner records what it measured about the execution phase in

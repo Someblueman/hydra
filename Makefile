@@ -735,7 +735,7 @@ test-remote-setup-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
 
 # T2/T3 qualification with tmux absent on the execution hosts (the coordinator
-# keeps its PATH). See docs/T2_T3_QUALIFICATION.md. The loopback SSH variant
+# keeps its PATH). See docs/FLEET.md (Execution hosts without tmux). The loopback SSH variant
 # prints SKIP and exits 0 without an OpenSSH server, like test-remote-setup-ssh.
 .PHONY: test-t2-headless test-t3-distributed test-t3-distributed-ssh
 test-t2-headless: fleet-test-build

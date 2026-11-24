@@ -1019,7 +1019,7 @@ terminal operations (interactive spawn and resume, attach, switch, broadcast,
 dashboard, TUI, and workflow steps that request a terminal); headless heads, exec,
 workflows, remote tasks, bootstrap, install, and doctor run without it. A tmux on
 PATH that cannot report a version is unusable, never "old enough". The root README
-lists supported tools; [T2/T3 qualification](T2_T3_QUALIFICATION.md) records the
+lists supported tools; [Execution hosts without tmux](FLEET.md#execution-hosts-without-tmux) describes the
 reproducible execution-without-tmux cases.
 
 ## Fleet coordination (since v2.1.0)
