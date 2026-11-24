@@ -16,6 +16,7 @@
  * there runs in the head's worktree. Private tmux socket. */
 static struct hf_fixture f;
 static const char *const TOP_BAR[] = {"1 Work", "2 Inbox", "3 Hosts", "4 Stats", NULL};
+static char normal_path[32768];
 #define RUN(...) hf_run(&f, NULL, 0, (const char *[]){__VA_ARGS__, NULL})
 #define H(...) RUN(f.hydra, __VA_ARGS__)
 #define S(keys) kt_send(&s, (keys))
@@ -40,42 +41,56 @@ static void top_bar(struct kt_session *s, const char *message) {
     for (i = 0; TOP_BAR[i]; i++)
         CHECK(strstr(row, TOP_BAR[i]), message);
 }
+/* Hydra's context line: one short line naming head, agent and repository,
+ * without raw identities. */
+static bool concise_banner(const char *line) {
+    return strstr(line, "repo") && strlen(line) <= 80 && !strstr(line, "head_") && !strstr(line, "project_") &&
+           !strstr(line, "instance_");
+}
 /* What the terminal itself shows: no bootstrap export or environment command
- * in the pane's scrollback, and Hydra's context is one short line naming the
- * head, agent and repository without raw identities. */
-static void clean_terminal(const char *session, const char *message) {
-    char scrollback[262144], *line, *end;
+ * in the pane's scrollback, and Hydra's context is a concise banner. */
+static void banners(char *scrollback) {
+    char *line, *end;
     bool banner = false;
-    kt_format(scrollback, sizeof(scrollback), "%s", RUN("tmux", "capture-pane", "-p", "-J", "-S", "-", "-t", session));
-    CHECK(!strstr(scrollback, "export HYDRA_") && !strstr(scrollback, "HYDRA_PROJECT_ID=") &&
-          !strstr(scrollback, "HYDRA_HEAD_ID=") && !strstr(scrollback, "set-environment"), message);
-    for (line = strstr(scrollback, "Hydra head "); line; line = strstr(end, "Hydra head ")) {
+    for (line = strstr(scrollback, "Hydra head "); line; line = end ? strstr(end, "Hydra head ") : NULL) {
         end = line + strcspn(line, "\n");
-        if (*end) *end++ = 0;
-        CHECK(strstr(line, "repo") && strlen(line) <= 80 && !strstr(line, "head_") && !strstr(line, "project_") &&
-              !strstr(line, "instance_"), "Hydra's context is a concise banner without raw identities");
+        end = *end ? end + 1 : NULL;
+        if (end) end[-1] = 0;
+        CHECK(concise_banner(line), "Hydra's context is a concise banner without raw identities");
         banner = true;
-        if (!*end) break;
     }
     CHECK(banner, "Hydra printed its one-line context banner");
 }
-static bool no_head(void) {
-    return !strstr(H("list", "--json"), "\"branch\"");
+static void clean_terminal(const char *session, const char *message) {
+    static char scrollback[262144];
+    kt_format(scrollback, sizeof(scrollback), "%s", RUN("tmux", "capture-pane", "-p", "-J", "-S", "-", "-t", session));
+    CHECK(!strstr(scrollback, "export HYDRA_") && !strstr(scrollback, "HYDRA_PROJECT_ID=") &&
+          !strstr(scrollback, "HYDRA_HEAD_ID=") && !strstr(scrollback, "set-environment"), message);
+    banners(scrollback);
+}
+static void worktree_file(const char *head, const char *name, char *out, size_t size) {
+    char worktree[4096];
+    kt_format(worktree, sizeof(worktree), "%s", H("path", head));
+    hf_trim(worktree);
+    kt_format(out, size, "%s/%s", worktree, name);
+}
+/* Pumps the UI until the file holds exactly the text (or the time is up). */
+static bool file_becomes(struct kt_session *s, const char *path, const char *want) {
+    char text[256];
+    double deadline = kt_now() + 15;
+    text[0] = 0;
+    while (kt_now() < deadline && strcmp(text, want)) {
+        kt_pump(s, .1);
+        if (kt_exists(path)) kt_read(path, text, sizeof(text));
+    }
+    return !strcmp(text, want);
 }
 
-int main(void) {
+/* No agent installed: the form offers none, Hosts names what is missing. */
+static void no_agent(void) {
     struct kt_session s;
-    char path[4096], restricted[4096], normal[32768], worktree[4096];
-    const char *spawn[] = {NULL, "spawn", "cli-task", "--profile", "codex", "--prompt", "Add a greeting", NULL};
-    kt_init();
-    hf_init(&f, "hydra-sign-in", "repo", false, true);
-    hf_file(&f, "README", path, sizeof(path));
-    kt_write(path, "sign-in fixture\n");
-    hf_git_init(&f);
-    kt_format(normal, sizeof(normal), "%s", getenv("PATH"));
+    char restricted[4096];
     kt_format(restricted, sizeof(restricted), "%s/bin:/usr/bin:/bin:/usr/sbin:/sbin", f.base);
-
-    /* No agent installed: the form offers none, Hosts names what is missing. */
     setenv("PATH", restricted, 1);
     hf_open(&f, &s);
     U("No agent work in this project yet", 10);
@@ -92,36 +107,29 @@ int main(void) {
     CHECK(kt_contains(&s, "codex"), "Hosts lists codex among the agents this machine lacks");
     top_bar(&s, "Hosts keeps the control centre's top bar");
     kt_close(&s, "q", 0, 0);
-    CHECK(no_head(), "visiting the form and Hosts created no head");
-    setenv("PATH", normal, 1);
-
-    /* An interactive launch shows the agent and Hydra together. */
+    CHECK(!strstr(H("list", "--json"), "\"branch\""), "visiting the form and Hosts created no head");
+    setenv("PATH", normal_path, 1);
+}
+/* An interactive launch shows the agent and Hydra together. */
+static void launch(struct kt_session *s, const char *branch) {
+    const char *spawn[] = {NULL, "spawn", branch, "--profile", "codex", "--prompt", "Add a greeting", NULL};
+    spawn[0] = f.hydra;
+    kt_open_terminal(s, spawn, 80, 24, f.repo);
+}
+static void interactive(void) {
+    struct kt_session s;
+    char proof[4096];
     provider("echo 'DETERMINISTIC PROVIDER FIXTURE - ready to discuss'\n"
              "while IFS= read -r line; do printf '%s\\n' \"$line\" >> key-proof; done\n");
-    unsetenv("HYDRA_NO_SWITCH");
-    unsetenv("HYDRA_SKIP_AI");
-    setenv("HYDRA_TUI_BIN", f.tui, 1);
-    spawn[0] = f.hydra;
-    kt_open_terminal(&s, spawn, 80, 24, f.repo);
+    launch(&s, "cli-task");
     U("ready to discuss", 30);
     U("typing to codex", 5);
     top_bar(&s, "the launch shows the top bar beside the agent");
     clean_terminal("cli-task", "a fresh spawn leaves no bootstrap command in the scrollback");
     /* Keys the control centre uses itself reach the attached agent as typed. */
     S("x\ty\033z\r");
-    kt_format(worktree, sizeof(worktree), "%s", H("path", "cli-task"));
-    hf_trim(worktree);
-    kt_format(path, sizeof(path), "%s/key-proof", worktree);
-    {
-        char text[256];
-        double deadline = kt_now() + 15;
-        text[0] = 0;
-        while (kt_now() < deadline && strcmp(text, "x\ty\033z\n")) {
-            kt_pump(&s, .1);
-            if (kt_exists(path)) kt_read(path, text, sizeof(text));
-        }
-        CHECK(!strcmp(text, "x\ty\033z\n"), "Tab and Esc typed into the attached agent arrive as those bytes");
-    }
+    worktree_file("cli-task", "key-proof", proof, sizeof(proof));
+    CHECK(file_becomes(&s, proof, "x\ty\033z\n"), "Tab and Esc typed into the attached agent arrive as those bytes");
     S("\x1d");
     U("Keys go to Hydra", 5);
     top_bar(&s, "leaving agent input keeps the user in the control centre");
@@ -129,28 +137,41 @@ int main(void) {
     kt_close(&s, "q", 0, 0);
     CHECK(strstr(H("list"), "cli-task"), "quitting the control centre keeps the task");
     RUN("tmux", "has-session", "-t", "=cli-task");
-
-    /* A provider that exits needing a login. */
+}
+/* A provider that exits needing a login. */
+static void needs_login(void) {
+    struct kt_session s;
+    char proof[4096];
     provider("echo 'Not logged in. Run: codex login' >&2\nexit 1\n");
-    spawn[2] = "needs-login";
-    kt_open_terminal(&s, spawn, 80, 24, f.repo);
+    launch(&s, "needs-login");
     U("Not logged in. Run: codex login", 30);
     top_bar(&s, "the provider's sign-in instruction appears inside the control centre");
     U("exited with status 1", 15);
     CHECK(kt_contains(&s, "is now a shell"), "Hydra says the agent exited and the pane is a shell");
     clean_terminal("needs-login", "the shell after the agent exits has no bootstrap command in its scrollback");
-    kt_format(worktree, sizeof(worktree), "%s", H("path", "needs-login"));
-    hf_trim(worktree);
     S("printf ok > login-proof\r");
-    kt_format(path, sizeof(path), "%s/login-proof", worktree);
-    {
-        double deadline = kt_now() + 15;
-        while (access(path, F_OK) && kt_now() < deadline) kt_pump(&s, .1);
-    }
-    CHECK(!access(path, F_OK), "a command typed into the pane runs in the head's worktree");
+    worktree_file("needs-login", "login-proof", proof, sizeof(proof));
+    CHECK(file_becomes(&s, proof, "ok"), "a command typed into the pane runs in the head's worktree");
     S("\x1d");
     U("Keys go to Hydra", 5);
     kt_close(&s, "q", 0, 0);
+}
+
+int main(void) {
+    char path[4096];
+    kt_init();
+    hf_init(&f, "hydra-sign-in", "repo", false, true);
+    hf_file(&f, "README", path, sizeof(path));
+    kt_write(path, "sign-in fixture\n");
+    hf_git_init(&f);
+    kt_format(normal_path, sizeof(normal_path), "%s", getenv("PATH"));
+    no_agent();
+    unsetenv("HYDRA_NO_SWITCH");
+    unsetenv("HYDRA_SKIP_AI");
+    setenv("HYDRA_TUI_BIN", f.tui, 1);
+    interactive();
+    needs_login();
     hf_finish(&f);
+    printf("PASS sign-in recovery: no agent is offered when none is installed, an interactive spawn keeps the task, and a provider that needs a login leaves a usable shell in the worktree\n");
     return 0;
 }

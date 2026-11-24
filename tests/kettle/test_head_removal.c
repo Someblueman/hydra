@@ -13,6 +13,7 @@
  * everything. */
 static struct hf_fixture f;
 static const char *const WORK = "1 Work";
+static char dirty[4096], clean[4096], survivor[4096], active[4096], draft[4096];
 #define RUN(...) hf_run(&f, NULL, 0, (const char *[]){__VA_ARGS__, NULL})
 #define REFUSED(...) hf_run(&f, NULL, -2, (const char *[]){__VA_ARGS__, NULL})
 #define H(...) RUN(f.hydra, __VA_ARGS__)
@@ -56,11 +57,9 @@ static void in_app_for(struct kt_session *s, double seconds) {
     }
 }
 
-int main(void) {
-    struct kt_session s;
-    char path[4096], dirty[4096], clean[4096], survivor[4096], active[4096], draft[4096], text[4096];
-    kt_init();
-    hf_init(&f, "hydra-head-removal", "repo", false, true);
+static void prepare(void) {
+    char path[4096];
+    double deadline = kt_now() + 10;
     hf_file(&f, "README", path, sizeof(path));
     kt_write(path, "removal fixture\n");
     hf_commit_init(&f);
@@ -76,76 +75,98 @@ int main(void) {
     kt_write(draft, "uncommitted draft\n");
     /* A process runs in the active head's terminal. */
     RUN("tmux", "send-keys", "-t", "active", "sleep 7777", "Enter");
-    {
-        double deadline = kt_now() + 10;
-        while (hf_run(&f, NULL, -1, (const char *[]){"pgrep", "-f", "sleep 7777", NULL}), !f.output[0] && kt_now() < deadline)
-            kt_sleep(.2);
-        CHECK(f.output[0], "the active head's terminal is running a process");
-    }
-
-    hf_open(&f, &s);
-    U("survivor", 10);
-    S("1");
-    U("dirty", 5);
-
-    /* Visiting Stats by its number and coming back keeps the selection. */
-    select_head(&s, "survivor");
-    S("4");
-    U("Sessions", 10);
-    S("1");
-    U("x remove", 5);
-    CHECK(selected(&s, "survivor"), "the Work selection survives a round trip to Stats");
-
-    /* Cancelling keeps the head, its worktree and the selection. */
-    select_head(&s, "survivor");
-    S("x");
-    U("Remove survivor?", 5);
-    CHECK(kt_contains(&s, "The branch survivor is kept") || kt_contains(&s, "survivor is kept"),
-          "the confirmation says the branch is kept");
-    CHECK(kt_contains(&s, "refused, never forced"), "the confirmation says dirty work is refused");
-    S("n");
-    U("Removal cancelled; nothing changed", 5);
-    CHECK(selected(&s, "survivor"), "cancelling keeps the selection");
+    do {
+        hf_run(&f, NULL, -1, (const char *[]){"pgrep", "-f", "sleep 7777", NULL});
+        if (!f.output[0]) kt_sleep(.2);
+    } while (!f.output[0] && kt_now() < deadline);
+    CHECK(f.output[0], "the active head's terminal is running a process");
+}
+/* Visiting Stats by its number and coming back keeps the selection. */
+static void stats_round_trip(struct kt_session *s) {
+    select_head(s, "survivor");
+    kt_send(s, "4");
+    kt_until(s, "Sessions", 10);
+    kt_send(s, "1");
+    kt_until(s, "x remove", 5);
+    CHECK(selected(s, "survivor"), "the Work selection survives a round trip to Stats");
+}
+/* Cancelling keeps the head, its worktree and the selection. */
+static void cancel(struct kt_session *s) {
+    select_head(s, "survivor");
+    kt_send(s, "x");
+    kt_until(s, "Remove survivor?", 5);
+    CHECK(kt_contains(s, "survivor is kept") && kt_contains(s, "refused, never forced"),
+          "the confirmation says the branch is kept and dirty work is refused");
+    kt_send(s, "n");
+    kt_until(s, "Removal cancelled; nothing changed", 5);
+    CHECK(selected(s, "survivor"), "cancelling keeps the selection");
     CHECK(listed("survivor") && !access(survivor, F_OK), "cancelling keeps the head and its worktree");
-
-    /* An active head: its terminal's process is stopped, its worktree removed. */
-    select_head(&s, "active");
-    S("x");
-    U("Remove active?", 5);
-    S("y");
-    in_app_for(&s, 3);
-    U("Removed active", 15);
+}
+/* An active head: its terminal's process is stopped, its worktree removed. */
+static void remove_active(struct kt_session *s) {
+    select_head(s, "active");
+    kt_send(s, "x");
+    kt_until(s, "Remove active?", 5);
+    kt_send(s, "y");
+    in_app_for(s, 3);
+    kt_until(s, "Removed active", 15);
     CHECK(access(active, F_OK) && !listed("active"), "the active head and its worktree are gone");
     REFUSED("pgrep", "-f", "sleep 7777");
     RUN("git", "rev-parse", "--verify", "active");
-
-    /* One bulk removal with a clean and a dirty head marked. */
-    select_head(&s, "dirty");
-    S(" ");
-    select_head(&s, "clean");
-    S(" ");
-    U("2 marked", 5);
-    S("x");
-    U("Remove 2 heads", 5);
-    CHECK(kt_contains(&s, "clean") && kt_contains(&s, "dirty"), "the bulk confirmation names both heads");
-    S("y");
-    U("REMOVAL OUTPUT", 20);
-    in_app_for(&s, 1);
-    CHECK(kt_contains(&s, "== dirty (exit 1)") && kt_contains(&s, "untracked files"),
+}
+static void mark(struct kt_session *s, const char *head) {
+    select_head(s, head);
+    kt_send(s, " ");
+}
+/* One bulk removal with a clean and a dirty head marked. */
+static void remove_both(struct kt_session *s) {
+    mark(s, "dirty");
+    mark(s, "clean");
+    kt_until(s, "2 marked", 5);
+    kt_send(s, "x");
+    kt_until(s, "Remove 2 heads", 5);
+    CHECK(kt_contains(s, "clean") && kt_contains(s, "dirty"), "the bulk confirmation names both heads");
+    kt_send(s, "y");
+    kt_until(s, "REMOVAL OUTPUT", 20);
+    in_app_for(s, 1);
+    CHECK(kt_contains(s, "== dirty (exit 1)") && kt_contains(s, "untracked files"),
           "the result reports the dirty head refused for its untracked files");
-    CHECK(kt_contains(&s, "== clean (exit 0)") && kt_contains(&s, "Removed clean."),
+    CHECK(kt_contains(s, "== clean (exit 0)") && kt_contains(s, "Removed clean."),
           "the result reports the clean head removed");
+}
+static void dirty_kept(void) {
+    char text[4096];
     CHECK(access(clean, F_OK) && !listed("clean"), "the clean head was removed");
     CHECK(listed("dirty") && !access(dirty, F_OK), "the dirty head and its worktree remain");
     kt_read(draft, text, sizeof(text));
     CHECK(!strcmp(text, "uncommitted draft\n"), "the dirty head keeps its draft");
     RUN("git", "rev-parse", "--verify", "clean");
+}
+static void after_bulk(struct kt_session *s) {
+    dirty_kept();
     /* The messages close with Esc and surviving work is selected. */
-    S("\033");
-    U("x remove", 5);
-    CHECK(!kt_contains(&s, "REMOVAL OUTPUT"), "the removal output closes");
-    CHECK(selected(&s, "dirty") || selected(&s, "survivor"), "surviving work stays selected");
+    kt_send(s, "\033");
+    kt_until(s, "x remove", 5);
+    CHECK(!kt_contains(s, "REMOVAL OUTPUT"), "the removal output closes");
+    CHECK(selected(s, "dirty") || selected(s, "survivor"), "surviving work stays selected");
+}
+
+int main(void) {
+    struct kt_session s;
+    kt_init();
+    hf_init(&f, "hydra-head-removal", "repo", false, true);
+    prepare();
+    hf_open(&f, &s);
+    U("survivor", 10);
+    S("1");
+    U("dirty", 5);
+    stats_round_trip(&s);
+    cancel(&s);
+    remove_active(&s);
+    remove_both(&s);
+    after_bulk(&s);
     kt_close(&s, "q", 0, 0);
     hf_finish(&f);
+    printf("PASS head removal: cancel keeps the head, an active head's process stops, a bulk removal removes the clean head and refuses the dirty one with its draft kept\n");
     return 0;
 }

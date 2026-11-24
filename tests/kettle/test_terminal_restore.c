@@ -83,6 +83,25 @@ static void plain_words(struct kt_session *s, const char *where) {
         CHECK(!kt_contains(s, loss[i]), message);
     }
 }
+/* A gone terminal in plain words: Details say the files are kept, and the Inbox
+ * item offers restart, check and Open in Work, never removal. Ends in Work. */
+static void gone_views(struct kt_session *s) {
+    CHECK(kt_contains(s, "The terminal is gone") && kt_contains(s, "files are kept"),
+          "Details say the terminal is gone and the files are kept");
+    plain_words(s, "Details");
+    /* Restoring access and removal are separate: the Inbox item offers restart,
+     * check and Open in Work, never removal. */
+    kt_send(s, "2");
+    kt_until(s, "Terminal stopped", 5);
+    kt_until(s, "Open in Work", 5);
+    CHECK(kt_contains(s, "no longer running") && kt_contains(s, "files are kept") &&
+          kt_contains(s, "R Restart terminal") && kt_contains(s, "c Run check"),
+          "the Inbox item says what stopped, that files are kept, and offers a way back");
+    CHECK(!kt_contains(s, "Remove") && !kt_contains(s, "x remove"), "the Inbox item offers no removal");
+    plain_words(s, "the Inbox item");
+    kt_send(s, "1");
+    kt_until(s, "keeper", 5);
+}
 static void restore(const char *worktree, const char *head, const char *status) {
     struct kt_session s;
     char path[4096], session[256];
@@ -92,21 +111,7 @@ static void restore(const char *worktree, const char *head, const char *status) 
     U("Session     terminal gone", 10);
     U("a restarts the", 5);
     CHECK(!kt_contains(&s, "\xe2\x97\x8f running"), "a gone terminal is not offered as a live agent");
-    CHECK(kt_contains(&s, "The terminal is gone") && kt_contains(&s, "files are kept"),
-          "Details say the terminal is gone and the files are kept");
-    plain_words(&s, "Details");
-    /* Restoring access and removal are separate: the Inbox item offers restart,
-     * check and Open in Work, never removal. */
-    S("2");
-    U("Terminal stopped", 5);
-    U("Open in Work", 5);
-    CHECK(kt_contains(&s, "no longer running") && kt_contains(&s, "files are kept") &&
-          kt_contains(&s, "R Restart terminal") && kt_contains(&s, "c Run check"),
-          "the Inbox item says what stopped, that files are kept, and offers a way back");
-    CHECK(!kt_contains(&s, "Remove") && !kt_contains(&s, "x remove"), "the Inbox item offers no removal");
-    plain_words(&s, "the Inbox item");
-    S("1");
-    U("keeper", 5);
+    gone_views(&s);
     S("1");
     U("Heads \xe2\x94\x80", 5);
     S("a");

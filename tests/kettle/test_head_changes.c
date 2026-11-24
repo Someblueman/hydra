@@ -81,5 +81,6 @@ int main(void) {
     U("x remove", 5);
     kt_close(&s, "q", 0, 0);
     hf_finish(&f);
+    printf("PASS head changes: committed work is not shown as zero, the full diff lists both files and Tab and Shift-Tab walk the panes\n");
     return 0;
 }
