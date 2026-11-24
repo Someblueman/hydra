@@ -1,0 +1,41 @@
+#!/bin/sh
+# tmux for tests: the real tmux, started without the invoking user's
+# configuration. A bare tmux reads /etc/tmux.conf, ~/.tmux.conf and
+# $XDG_CONFIG_HOME/tmux/tmux.conf, so a developer's plugins (for example
+# tmux-continuum restoring saved sessions) would run in every private test
+# server and keep it alive. CI has no such file; -f /dev/null makes a
+# configured workstation behave the same.
+#
+# scripts/test-env.sh puts this directory first on PATH, so Hydra and the cases
+# find it by name. PATH is left as it was, so panes started by the server find
+# this wrapper too. The real tmux is the first one after this directory on PATH:
+# a case's own wrapper or stub ahead of this directory, which may call this one
+# by name, is never chosen again (that would recurse). When this directory is
+# not on PATH at all, it is the first one outside it.
+self=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+real=
+after=
+old_ifs=$IFS
+IFS=:
+for pass in after any; do
+    for dir in $PATH; do
+        [ -n "$dir" ] || dir=.
+        candidate=$(CDPATH='' cd -- "$dir" 2>/dev/null && pwd -P) || continue
+        if [ "$candidate" = "$self" ]; then
+            after=yes
+            continue
+        fi
+        [ "$pass" = any ] || [ -n "$after" ] || continue
+        if [ -x "$candidate/tmux" ] && [ ! -d "$candidate/tmux" ]; then
+            real=$candidate/tmux
+            break
+        fi
+    done
+    [ -z "$real" ] || break
+done
+IFS=$old_ifs
+if [ -z "$real" ]; then
+    printf 'tmux: not found on PATH (outside %s)\n' "$self" >&2
+    exit 127
+fi
+exec "$real" -f /dev/null "$@"
