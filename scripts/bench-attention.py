@@ -1263,11 +1263,11 @@ def main() -> int:
     parser.add_argument(
         "--local-corpus",
         action="store_true",
-        help="score the annotated local workflow attention cases (item 10) instead of the receiver fixture",
+        help="score the annotated local workflow attention cases instead of the receiver fixture",
     )
     args = parser.parse_args()
     if args.local_corpus:
-        from perf_matrix_attention import run as local_corpus
+        from attention_corpus import run as local_corpus
 
         root = args.root.resolve()
         report = local_corpus(

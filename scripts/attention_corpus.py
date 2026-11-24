@@ -267,7 +267,8 @@ def main() -> int:
     print(json.dumps({key: report[key] for key in ("complete", "error", "false_positives_total",
                                                    "missed_signals_total", "unsupported_silent_total")}))
     print(args.out / "report.json")
-    return 0 if report["complete"] else 1
+    clean = report["false_positives_total"] == 0 and report["missed_signals_total"] == 0
+    return 0 if report["complete"] and clean else 1
 
 
 if __name__ == "__main__":
