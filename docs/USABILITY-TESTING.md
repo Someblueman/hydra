@@ -5,26 +5,29 @@ goal-driven screen-only trials and comprehension trials were added for 3.0.0.
 Human first-use review and the live-provider and remote-onboarding gates below
 remain an acceptance plan; passing automated runs does not close them.
 
-Run `make test-usability`. It builds and installs a fresh prefix, exercises real
-Git/tmux and public Hydra entry points, then writes an HTML report under
+Run `make test-usability`. It builds and installs a fresh prefix, runs the
+first-use and planning walkthrough (`planning`: a repository nobody initialized,
+a conversation to a proposal, a revision and one approval of the exact revision,
+checked delivery) on real Git/tmux and public Hydra entry points at 80x24 and
+140x40, and writes `report.json` and each journey's proof under
 `build/usability-<timestamp>/`. Set `USABILITY_OUTPUT=/absolute/new/directory` to
 retain a named run. No provider login is used by this command. The runner is the
 package `scripts/usability/` (`PYTHONPATH=scripts python3 -m usability`); pass
 extra options with `USABILITY_ARGS`, for example
-`make test-usability USABILITY_ARGS="--trial approve-plan --columns 80"`.
+`make test-usability USABILITY_ARGS="--columns 80"`. `--journey NAME` selects a
+journey and `--prefix DIR` reuses an installed prefix while iterating; a report
+made that way says so and is not a release report.
 
 The separate `make test-acceptance` ([ACCEPTANCE.md](ACCEPTANCE.md)) reuses this
-runner's installation, journey and PTY observer helpers to produce the
-installed-build acceptance matrix for the open roadmap items (U1, U2, U3, U6,
-U7, U8, U9, U12, U13, U15, U17): one check per acceptance sentence with retained
-evidence, including measured flicker from the raw terminal bytes.
+runner's installation, journey and PTY observer helpers for the installed-build
+flicker measurement (U6). `make visual-review` reuses `journey.run` and `tree`.
 
-One run has three parts, each at 80x24 and 140x40 (`--columns` selects a width):
-the scripted journeys (`--journey NAME` selects one), the goal-driven trials
-(`--trial NAME`) and the comprehension trials (`--trial comprehension`). Selecting
-a journey runs no trials and selecting a trial runs no journeys. `--prefix DIR`
-reuses an installed prefix while iterating; a report made that way says so and
-is not a release report.
+The goal-driven screen-only trials, the comprehension trials, the other scripted
+journeys and the HTML report described below were removed from the runner
+(`policy.py`, `trials.py`, `comprehension.py`, `report.py`, `journeys_core.py`,
+`journeys_review.py`); `--trial` no longer exists. The native tests cover their
+areas, and the sections below stay as the acceptance plan until the documentation
+is rewritten.
 
 ## Goal-driven screen-only trials
 
@@ -127,9 +130,7 @@ and run deadlines (90 s); a full run takes about four minutes.
 
 The planning journeys use a labelled deterministic provider fixture
 (`tests/fixtures/usability/provider.py`). `planning` reaches it through a custom
-interactive profile; `result-review` and `recovery` install it as `codex` on a
-private PATH, so Hydra reaches it only through the built-in profile's interactive
-launch and headless `codex exec --json` contracts. It publishes proposals with the
+interactive profile. It publishes proposals with the
 public `workflow plan propose` command (with `--asset` for the verifier), and as a
 worker follows only `FIXTURE-*` lines in the plan's inline prompt. It never
 fabricates Hydra state and never claims live-provider coverage. Tests
