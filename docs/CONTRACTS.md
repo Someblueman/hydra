@@ -804,11 +804,12 @@ until a fresh exact identity is established. Native UI behavior is covered by th
 public CLI and protocol rules in this guide.
 
 The public routes are `hydra workflow attention --json`, `workflow attention-data`,
-`fleet attention --json`, `fleet attention-data`, and `hydra workflow review-data`
-and `fleet review-data`, which take the 13 positional selection fields (`KIND
-PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256
-IDENTITY_SHA256`) and an optional 14th argument, a bounded JSON array of explicit
-references (transcript, log or PR locators). A local reference preview is capped at
+`fleet attention --json` and `fleet attention-data`, which take no selection, and
+`hydra workflow review-data` and `hydra fleet review-data`, the only two that take the
+13 positional selection fields (`KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD
+INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256`) and an optional 14th
+argument, a bounded JSON array of explicit references (transcript, log or PR
+locators). A local reference preview is capped at
 4096 bytes; the producer never opens a URL, and in the native review Enter on a web
 reference passes its locator to `open` (macOS) or `xdg-open` without reading it.
 
@@ -839,7 +840,9 @@ review has readiness `failed` (`candidate_state` `failed_needs_decision`) and
 the plan's result section; a run-level failure is reviewed from the run's own
 records.
 
-Seen markers are a per-user client preference, not workflow state.
+Seen markers are a per-user client preference, not workflow state. They live in the
+`HYDRA_HOME`, so clients sharing one `HYDRA_HOME` share them: marking an item seen in
+one marks it seen in the others.
 `hydra workflow attention-seen list | mark IDENTITY REVISION | clear IDENTITY`
 (64-hex digests) keeps them in `$HYDRA_HOME/attention/seen.tsv`, one
 `identity<TAB>revision<TAB>seen-at` row per identity, at most 512 rows (oldest

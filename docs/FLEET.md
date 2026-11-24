@@ -912,11 +912,17 @@ on the receiver fails `tmux -V` and refuses any other call loudly, so a case fai
 if anything tried a terminal operation. T2 runs one receiver (command and adapter
 tasks, reconnect, duplicate submission, lost start, owner death, cancellation,
 bounded logs, a locally compiled plan). T3 runs two receivers through a placed task
-plan (fan-out, cross-host validation, evidence join, composition, lost
-acknowledgment, coordinator restart, stale results). The SSH boundary is either
-the fault-injecting loopback transport the DAG fleet cases use or, for T3, two
-private `sshd` daemons on loopback ports with ephemeral keys and a `ForceCommand`
-that runs each request with the receiver `PATH`; nothing touches `~/.ssh`.
+plan (fan-out, cross-host validation, evidence join, composition, coordinator
+restart, and over the controlled transport only, lost acknowledgment and stale or
+corrupt results). The SSH boundary is either the fault-injecting loopback transport
+the DAG fleet cases use or, for T3, two private `sshd` daemons on loopback ports with
+ephemeral keys and a `ForceCommand` that runs each request with the receiver `PATH`;
+nothing touches `~/.ssh`. Only the controlled transport injects faults
+(`tests/test_t3_distributed.sh`): a lost first acknowledgment must leave the run
+`waiting-remote` (exit 3) with one acceptance on the first host, a replayed result
+must leave it `recovery-required` with no dependent attempt, and a result whose
+digest does not match its bytes must end `recovery-required` with exit code 76 on
+the producing attempt.
 
 ```sh
 make test-t2-headless            # controlled transport
@@ -925,10 +931,15 @@ make test-t3-distributed-ssh     # loopback SSH only
 make test-one T=t3_distributed   # one case, log printed
 ```
 
-The loopback SSH variant needs `sshd`, `ssh` and `ssh-keygen`; without them it
+The loopback SSH variant needs `/usr/sbin/sshd` (that exact path), `ssh` and
+`ssh-keygen`; without them it
 prints `SKIP T3 distributed SSH: ...` and exits 0, so CI requires its pass line
 rather than the exit code. The controlled cases also run as part of
-`make test-fleet`. A failed case keeps its log under `$BUILD_DIR/test-logs/`.
+`make test-fleet`. A failed case keeps its log under `$BUILD_DIR/test-logs/`. The
+interactive suites keep their tmux requirement; `make test-tui-pty` (real
+pseudo-terminal attach and review) compares recorded PIDs with the live process
+table, so run it on a quiet machine: concurrent process churn can disturb its
+process-reaping checks.
 
 These are loopback qualifications. They do not authenticate to a provider or to a
 separately administered host. To qualify a real host without tmux, run the public
@@ -936,9 +947,9 @@ interfaces against it:
 
 1. `hydra remote setup NAME USER@HOST` (or `hydra remote add NAME USER@HOST
    --ssh-config FILE`), checking the host key through your own trusted process.
-   The preflight should show tmux as a warning only.
-2. `hydra fleet list --json`: the host answers with `execution-headless` and
-   without `tmux` in `capabilities`.
+   `hydra remote preflight NAME --json` should show tmux as a warning only.
+2. `hydra fleet handshake NAME --json`: `data.capabilities` lists
+   `execution-headless` and not `tmux`.
 3. Place the recipes of `tests/fixtures/plan-task` (or your own, with
    `"capabilities":["exec","execution-headless"]`) on that host, then
    `hydra workflow plan compile` and `plan run --accept`. Disconnect and
