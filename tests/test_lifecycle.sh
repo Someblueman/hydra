@@ -108,10 +108,7 @@ assert_success $? "head tears down"
 transcript="$head_dir/transcripts/$old_instance.txt"
 test -f "$transcript" && grep -q 'API_TOKEN=\[REDACTED\]' "$transcript" && ! grep -q supersecret "$transcript"
 assert_success $? "opt-in transcript is bounded and redacted"
-case "$(uname -s)" in
-    Darwin) transcript_mode="$(stat -f '%Lp' "$transcript")" ;;
-    *) transcript_mode="$(stat -c '%a' "$transcript")" ;;
-esac
+transcript_mode="$(test_file_mode "$transcript")"
 assert_equal 600 "$transcript_mode" "transcript permissions are private"
 grep -q "pre lifecycle-test $old_instance" "$HOOK_LOG" && grep -q "post lifecycle-test $old_instance" "$HOOK_LOG"
 assert_success $? "trusted pre/post teardown hooks receive instance identity"

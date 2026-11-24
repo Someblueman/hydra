@@ -34,7 +34,10 @@ done
 
 tree="$root/worker" run="$root/run" attempt="$root/run/steps/implement/attempt-1"
 mkdir -p "$tree" "$run" "$attempt"
+# An empty excludes file keeps a developer's global gitignore (which often lists
+# .env and *.pem) from hiding the secret-looking fixtures from `git add`.
 (cd "$tree" && git init -q && git config user.name Test && git config user.email test@example.invalid &&
+    git config core.excludesFile /dev/null &&
     printf 'base\n' > README && printf 'old\n' > .env.tracked && git add . &&
     git -c commit.gpgSign=false commit -qm base) || exit 1
 printf 'plan-1\tadd-greeting\n' > "$run/graph.tsv"

@@ -25,6 +25,17 @@ review_fixture_environment() {
     HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
     TMUX_TMPDIR="$fixture/tmux"
     mkdir -p "$TMUX_TMPDIR"
+    # The fixture's tmux server must not read the developer's tmux.conf: a
+    # plugin such as tmux-continuum restores the user's saved sessions into it,
+    # and those sessions (outside the fixture) keep the server alive after the
+    # fixture's own are killed, which the runner reports as a LEAK.
+    if review_real_tmux="$(command -v tmux)"; then
+        mkdir -p "$fixture/bin"
+        printf '#!/bin/sh\nexec "%s" -f /dev/null "$@"\n' "$review_real_tmux" > "$fixture/bin/tmux"
+        chmod +x "$fixture/bin/tmux"
+        PATH="$fixture/bin:$PATH"
+        export PATH
+    fi
     unset TMUX TMUX_PANE
     export HYDRA_FLEET_BIN HYDRA_BIN_CMD HYDRA_HOME HYDRA_STATE_V2_ROOT
     export HYDRA_NONINTERACTIVE HYDRA_SKIP_AI HYDRA_NO_SWITCH TMUX_TMPDIR
