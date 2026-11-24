@@ -149,7 +149,7 @@ case "${1:-}:${2:-}" in
         printf '%s\n' "FAKE DASHBOARD"
         ;;
     agent:list)
-        printf "PROFILE AVAILABLE\ncodex yes\nnone yes\n"
+        printf "PROFILE AVAILABLE\ncodex yes\nunavailable-agent no\nnone yes\n"
         ;;
     init:*)
         printf "Ready: fixture\n"

@@ -332,6 +332,11 @@ assert_success $? "an empty sample is not called filtered out"
 assert_success $? "an empty sample draws no chart"
 ! grep -Fq "Unobserved" "$test_root/stats-empty.out"
 assert_success $? "an empty sample draws no tiles"
+# An unregistered repository reports its scope as unavailable, not as zero.
+printf 'HYDRA_STATISTICS\t6\t1788789600\nX\tProject identity unavailable\nZ\t0\t0\t0\n' > "$test_root/statistics-unregistered.tsv"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$test_root/statistics-unregistered.tsv" --size 140x40 --view stats > "$test_root/stats-unregistered.out"
+contains "Partial sample: Project identity unavailable" "$test_root/stats-unregistered.out" "an unregistered repository's statistics name the missing identity"
+contains "No sessions recorded yet" "$test_root/stats-unregistered.out" "an unregistered repository's statistics say nothing was recorded"
 # Golden frames of every screen at 140x40 and 80x24 (Work also at 100x30
 # and 60x20, where its panes share one), in Unicode and ASCII: the frame (top
 # bar, titled rules, status chip, generated footer) is pinned. The earlier

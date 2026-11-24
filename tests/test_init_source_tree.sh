@@ -83,6 +83,34 @@ case "$json" in
     *) assert_success 1 "init --json envelope fields are unchanged"; echo "  Actual: $json" ;;
 esac
 
+# --- a dirty repository keeps its edits, untracked files and ignore rules ---
+new_repo "$fixture/dirty"
+printf '*.log\nbuild/\n' > .gitignore
+git add .gitignore
+git commit -qm ignore-rules
+printf 'edited\n' > tracked.txt
+printf 'untracked draft\n' > notes.txt
+printf 'ignored output\n' > debug.log
+mkdir build
+printf 'out\n' > build/out.bin
+printf 'private-notes.txt\n' >> .git/info/exclude
+printf 'excluded locally\n' > private-notes.txt
+status_before="$(git status --porcelain)"
+exclude_before="$(cat .git/info/exclude)"
+assert_contains "$status_before" " M tracked.txt" "the dirty fixture has a tracked edit"
+assert_contains "$status_before" "?? notes.txt" "the dirty fixture has an untracked file"
+"$HYDRA_BIN" init --no-agent >/dev/null 2>&1
+assert_success $? "init succeeds in a dirty repository"
+"$HYDRA_BIN" init >/dev/null 2>&1
+assert_success $? "reopening a dirty repository succeeds"
+assert_equal "$status_before" "$(git status --porcelain)" "init and reopen leave a dirty git status byte-identical"
+assert_equal "$exclude_before" "$(cat .git/info/exclude)" "init and reopen leave .git/info/exclude byte-identical"
+assert_not_contains "$(git status --porcelain)" "debug.log" "ignored files stay ignored"
+assert_not_contains "$(git status --porcelain)" "private-notes.txt" "locally excluded files stay excluded"
+assert_equal "edited" "$(cat tracked.txt)" "the tracked edit is preserved"
+assert_equal "untracked draft" "$(cat notes.txt)" "the untracked file is preserved"
+assert_equal "ignored output" "$(cat debug.log)" "the ignored file is preserved"
+
 # --- committed shared configuration is still parsed and still needs trust ---
 new_repo "$fixture/committed"
 mkdir -p .hydra
