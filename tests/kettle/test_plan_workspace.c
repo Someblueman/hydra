@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 static struct hf_fixture f;
+#define STATUS (const char *[]){"git", "status", "--porcelain", NULL}
 #define U(marker, timeout) kt_until(&s, (marker), (timeout))
 /* The Plan page's state line: "READY · revision 1 · awaiting you". */
 #define STATE(word, n) word " \xc2\xb7 revision " #n
@@ -46,6 +47,7 @@ static void resize_plan(struct kt_session *s) {
 int main(void) {
     struct kt_session s;
     char draft[4096], policy[4096], path[4096], text[8192];
+    char status_before[4096], exclude_before[4096], exclude_after[4096];
     json_object *changed;
     kt_init();
     hf_init(&f, "hydra-plan-workspace", "repo", true, false);
@@ -56,9 +58,20 @@ int main(void) {
     kt_format(path, sizeof(path), "%s/tests/fixtures/plan/policy.json", f.root);
     kt_copy(path, policy, false);
     hf_commit_init(&f);
+    kt_format(status_before, sizeof(status_before), "%s", hf_run(&f, NULL, 0, STATUS));
+    hf_file(&f, ".git/info/exclude", path, sizeof(path));
+    kt_read(path, exclude_before, sizeof(exclude_before));
     hf_open(&f, &s);
     /* Work is up with nothing in it yet: an imported plan belongs to no head. */
     U("No agent work in this project yet", 5);
+    /* Opening the control centre only observes the project: the checkout, its
+     * git status and exclude rules are as they were, and no head exists. */
+    CHECK(!*status_before && !strcmp(hf_run(&f, NULL, 0, STATUS), status_before),
+          "opening the control centre leaves git status unchanged");
+    kt_read(path, exclude_after, sizeof(exclude_after));
+    CHECK(!strcmp(exclude_before, exclude_after), "opening the control centre leaves .git/info/exclude unchanged");
+    CHECK(!strstr(hf_run(&f, NULL, 0, (const char *[]){f.hydra, "list", "--json", NULL}), "\"branch\""),
+          "opening the control centre creates no head");
     kt_send(&s, ":import\r");
     U("Draft JSON path", 3);
     kt_send(&s, draft);
