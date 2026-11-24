@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`src/tui/{actions,adapter,input,render,selection}.h`), the provider-driven
   scripts and prompts the feature and research planning examples no longer call,
   an unreferenced dashboard screenshot and two empty `.gitkeep` placeholders.
+- The 72 pre-pass I4 screen captures (`docs/evidence/i4/*-before.txt`); the
+  after captures that `tests/test_native_tui_i4.sh` compares stay.
 
 ### Fixed
 - The 9B fixture README names the native contract runner, `docs/workflows.md`

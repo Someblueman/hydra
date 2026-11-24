@@ -1303,9 +1303,10 @@ provider status for Hydra verification.
       compact hint set that fits whole (a footer that still does not fit drops
       whole hints, never half a word), keyboard help wraps, scrolls and lists
       the attention and review keys, and Enter opens Details for the selected
-      head from whichever Workspace pane holds focus. Before/after text captures
-      of every state at 80x24 and 140x40 from deterministic fixtures are in
-      `docs/evidence/i4/` (`scripts/capture-i4.sh`), and
+      head from whichever Workspace pane holds focus. Text captures of every
+      state at 80x24 and 140x40 after the pass, from deterministic fixtures, are
+      in `docs/evidence/i4/` (`scripts/capture-i4.sh`; the pre-pass captures are
+      in git history before the cleanup that removed them), and
       `tests/test_native_tui_i4.sh` compares a fresh capture with each committed
       after capture. Acceptance still needs the user's review of the
       `make visual-review` contact sheet (themes, contrast and hierarchy; the
