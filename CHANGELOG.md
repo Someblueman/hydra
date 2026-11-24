@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **The installed-build acceptance journeys other than the flicker measurement.**
+  `make test-acceptance` now runs only `u6-flicker`; `--item` and `--case` are gone
+  from `ACCEPTANCE_ARGS`, and so are the U-number report matrix beyond U6, the
+  `scripts/acceptance/` modules `entry`, `terminal`, `details`, `navigation`,
+  `overview`, `removal`, `journeys` and `ptyrun`, and `tests/fixtures/acceptance/`.
+  The assertions are covered by the focused tests: `tests/test_init_source_tree.sh`,
+  `tests/test_onboarding.sh`, `tests/test_project_trust.sh` (U1),
+  `tests/test_spawn_bootstrap.sh`, `tests/test_tmux.sh` (U2),
+  `tests/test_spawn_ux.sh`, `tests/c/test_tui_pty.c`, `tests/c/test_tui_visualization.inc`
+  (U3), `tests/test_native_tui.sh`, `tests/test_native_tui_i4.sh` (U7, U9, U13, U15),
+  `tests/kettle/test_attach_cycles.c` (U8), `tests/test_kill.sh` (U12) and
+  `tests/kettle/test_plan_conversation.c`, `test_plan_launch.c`, `test_workflow_controls.c`
+  (U9, U17).
+- **The simulated-discoverability layer of `make test-usability`:** the goal-driven
+  trials, the comprehension trials, the scripted journeys other than `planning`, the
+  HTML report and the `--trial` option (`scripts/usability/policy.py`, `trials.py`,
+  `comprehension.py`, `report.py`, `journeys_core.py`, `journeys_review.py`, the
+  greeting plan helpers and `tests/fixtures/usability/greeting-repo`, `verify-summary.sh`).
+  `tests/fixtures/usability/provider.py`, which the U10 loopback test copies, stays.
+
+### Changed
+- `make visual-review` captures a focused set by default: the Work flow (with Inbox,
+  Stats and review) and the Hosts flow at 80x24 and 140x40 in the dark and light
+  themes. `VISUAL_REVIEW_FULL=1` (`run.py --full`) captures every flow in every theme,
+  including no-colour, as before.
+- `make test-usability` runs the `planning` first-use walkthrough and writes `report.json`.
+- The five palette exceptions in `scripts/visual_review/lint-known.tsv` name the flows
+  and theme they cover instead of every capture; `lint.py` accepts comma-separated globs.
+- Assertions moved from the removed journeys into existing tests: the control centre
+  leaves the checkout, git status and `.git/info/exclude` unchanged and creates no head
+  (`tests/kettle/test_plan_workspace.c`, and the `planning` walkthrough); init keeps a
+  dirty repository's edits, untracked, ignored and excluded files
+  (`tests/test_init_source_tree.sh`); the new-task form lists only available agents
+  (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say the project
+  identity is unavailable (`tests/test_workflow_statistics.sh`, `tests/test_native_tui.sh`).
+
 ## [5.0.0] - 2026-11-21
 
 Hydra 5.0.0 is a reliability and performance release. It fixes defects that
