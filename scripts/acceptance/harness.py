@@ -1,4 +1,4 @@
-"""Case harness: an installed-build journey that records matrix checks.
+"""Case harness: an installed-build scenario that records matrix checks.
 
 A Case is a usability Journey (fresh HOME, HYDRA_HOME, tmux socket namespace
 and disposable repository on the prefix-installed product) whose checks are
@@ -8,8 +8,6 @@ tagged with the acceptance bullet they establish, each with retained evidence.
 from __future__ import annotations
 
 import json
-import os
-import re
 import subprocess
 import time
 from collections.abc import Callable
@@ -17,8 +15,6 @@ from pathlib import Path
 
 from bench_i1_pty import Observer
 from usability import journey as usability
-from acceptance import vt
-from acceptance.ptyrun import PtyProcess
 
 CASES: list[dict] = []
 
@@ -32,59 +28,11 @@ def case(name: str, bullets: tuple[str, ...], columns: tuple[int, ...] = (80,), 
     return register
 
 
-RAW_ID = re.compile(r"\b(head|instance|project|run)_[0-9a-f]{8,}")
-STATE_PATH = re.compile(r"/state/v2/|/\.hydra-worktrees/")
-
-
-def strip_frame(line: str) -> str:
-    return line.strip().strip("|│").strip()
-
-
-def squeezed(text: str) -> str:
-    """Text without any whitespace: a sentence the terminal wrapped at any
-    column still matches."""
-    return "".join(text.split())
-
-
-def says(screen: str, sentence: str) -> bool:
-    """Whether the screen shows the sentence, however it is wrapped (a
-    dialog's side borders are not part of its text)."""
-    return squeezed(sentence) in squeezed(usability.prose(screen))
-
-
-def column_rows(screen: str, anchor: str) -> list[str]:
-    """The rows of the pane whose left edge shows ``anchor`` (a label such as
-    "Agent" on the Details page), from its column rightwards, stripped."""
-    rows = screen.splitlines()
-    for row in rows:
-        match = re.search(rf"(?:^|\s){re.escape(anchor)}\s", row)
-        if match:
-            x = match.start() + (1 if row[match.start()] == " " else 0)
-            return [r[x:].strip() for r in rows]
-    return []
-
-
-def pane_text(screen: str, anchor: str) -> str:
-    """Text of the pane that shows `anchor`, with its wrapped rows rejoined.
-    The pane's column span is the frame-free run around the anchor's row."""
-    lines = screen.splitlines()
-    for line in lines:
-        start = line.find(anchor)
-        if start < 0:
-            continue
-        left = max(line.rfind("|", 0, start), line.rfind("│", 0, start)) + 1
-        right_candidates = [i for i in (line.find("|", start), line.find("│", start)) if i >= 0]
-        right = min(right_candidates) if right_candidates else len(line)
-        pieces = [row[left:right].strip() for row in lines]
-        return " ".join(" ".join(pieces).split())
-    return ""
-
-
 class Case(usability.Journey):
     def __init__(self, source: Path, prefix: Path, output: Path, name: str, columns: int) -> None:
         super().__init__(source, prefix, output, name, columns)
         # The native observer strips colour from its ASCII snapshots but the
-        # raw bytes keep it when the TUI is allowed to colour (styled snapshots).
+        # raw bytes keep it when the TUI is allowed to colour.
         self.env["HYDRA_TEST_COLOR"] = "1"
         self.name = f"{name}-{columns}"
         self.results: list[dict] = []
@@ -118,69 +66,15 @@ class Case(usability.Journey):
 
     # Opening the control centre ---------------------------------------------
     def open(self, argv_env: dict[str, str] | None = None) -> None:
-        """Open the public entry (`hydra` in the repository) on a fresh observer;
-        a second call after close() retains a second terminal directory."""
-        self.opens = getattr(self, "opens", 0) + 1
-        directory = self.output / ("terminal" if self.opens == 1 else f"terminal-{self.opens}")
+        """Open the public entry (`hydra` in the repository) on a fresh observer."""
         self.observer = Observer(
             self.source / "build/test-tui-pty", self.prefix / "libexec/hydra/hydra-tui", self.hydra,
-            directory, self.repo, {**self.env, **(argv_env or {})}, self.columns,
+            self.output / "terminal", self.repo, {**self.env, **(argv_env or {})}, self.columns,
             40 if self.columns > 80 else 24)
         self.observer.wait("raw-ready", timeout=15)
         self.see_all(*usability.TOP_BAR)
 
-    def quit(self) -> dict:
-        """Leave the control centre with q and require a clean exit."""
-        assert self.observer
-        cleanup = self.observer.close(attached=self.attached)
-        self.attached = False
-        if not cleanup.get("reaped") or cleanup.get("observer_exit"):
-            raise RuntimeError(f"UI did not exit cleanly: {cleanup}")
-        self.observer = None
-        return cleanup
-
     # Screens ----------------------------------------------------------------
-    def rows(self) -> list[str]:
-        return [strip_frame(line) for line in self.screen().splitlines()]
-
-    def tab_bar(self, screen: str | None = None) -> str:
-        """The top bar: the brand, the four screens by their keys, the summary."""
-        lines = (screen or self.screen()).splitlines()
-        return lines[0] if lines else ""
-
-    def hint(self, screen: str | None = None) -> str:
-        lines = (screen or self.screen()).rstrip("\n").splitlines()
-        return lines[-1].strip() if lines else ""
-
-    def settled(self, screen: str, quiet: float = 0.3, timeout: float = 6) -> str:
-        """The screen once two consecutive snapshots agree. A snapshot can land
-        between the bytes of one frame (new rows above, the previous view's
-        footer still below), so a footer is read from a settled screen."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            time.sleep(quiet)
-            current = self.screen()
-            if current == screen:
-                return current
-            screen = current
-        return screen
-
-    def styled(self, tag: str) -> vt.Screen:
-        """Re-derive the latest snapshot with colours from the retained raw bytes."""
-        assert self.observer
-        last = next(r for r in reversed(self.observer.records) if r.get("event") == "snapshot")
-        directory = self.observer.directory
-        end = 0
-        for line in (directory / "terminal.index").read_text().splitlines():
-            sequence, _, offset, length = map(int, line.split())
-            if sequence <= last["sequence"]:
-                end = max(end, offset + length)
-        screen = vt.Screen(self.observer.columns, self.observer.rows)
-        with (directory / "terminal.raw").open("rb") as raw:
-            screen.feed(raw.read(end))
-        (self.output / f"styled-{tag}.html").write_text(screen.html(tag))
-        return screen
-
     def selected_row(self, screen: str | None = None) -> str:
         """The Work list's selected row, as "> name": the selection bar ('>'
         without Unicode) and the row's status glyph are dropped."""
@@ -192,154 +86,8 @@ class Case(usability.Journey):
                 return "> " + " ".join(words)
         return ""
 
-    def watch(self, seconds: float, interval: float = 0.1) -> list[str]:
-        """Snapshots taken continuously for a bounded time (transient screens)."""
-        screens, deadline = [], time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            screens.append(self.screen())
-            time.sleep(interval)
-        return screens
-
     # Processes and terminals ------------------------------------------------
     def tmux(self, *argv: str) -> str:
         result = subprocess.run(["tmux", *argv], env=self.env, cwd=self.repo, capture_output=True,
                                 text=True, timeout=10, check=False)
         return result.stdout.rstrip("\n") if result.returncode == 0 else ""
-
-    def pane_pids(self, session: str | None = None) -> list[int]:
-        target = ["-t", session] if session else ["-a"]
-        listing = self.tmux("list-panes", *target, "-F", "#{pane_pid}")
-        return [int(p) for p in listing.split() if p.isdigit()]
-
-    @staticmethod
-    def environ(pid: int) -> dict[str, str]:
-        data = Path(f"/proc/{pid}/environ").read_bytes()
-        pairs = (chunk.partition(b"=") for chunk in data.split(b"\0") if chunk)
-        return {k.decode(errors="replace"): v.decode(errors="replace") for k, _, v in pairs}
-
-    @staticmethod
-    def children(pid: int) -> list[int]:
-        found = []
-        for entry in Path("/proc").iterdir():
-            if not entry.name.isdigit():
-                continue
-            try:
-                stat = (entry / "stat").read_text()
-            except OSError:
-                continue
-            fields = stat.rsplit(")", 1)[1].split()
-            if fields and int(fields[1]) == pid:
-                found.append(int(entry.name))
-        return found
-
-    @staticmethod
-    def command_line(pid: int) -> str:
-        try:
-            return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
-        except OSError:
-            return ""
-
-    def pty(self, tag: str, argv: list[str], columns: int, rows: int, env: dict[str, str] | None = None,
-            cwd: Path | None = None) -> PtyProcess:
-        return PtyProcess(argv, cwd or self.repo, env or self.env, self.output / f"pty-{tag}", columns, rows)
-
-    def wait_file(self, path: Path, timeout: float = 5) -> bool:
-        deadline = time.monotonic() + timeout
-        while not path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        return path.exists()
-
-    def history_files(self) -> dict[str, str]:
-        home = Path(self.env["HOME"])
-        return {p.name: p.read_text(errors="replace") for p in home.glob(".*history*") if p.is_file()}
-
-    def make_repo_dirty(self) -> None:
-        """Tracked modification, untracked file, ignore rules and an ignored file."""
-        (self.repo / ".gitignore").write_text("*.log\nbuild/\n")
-        self.command("git", "add", ".gitignore")
-        self.command("git", "-c", "commit.gpgSign=false", "commit", "-qm", "ignore rules")
-        (self.repo / "README.txt").write_text("Disposable usability fixture, edited.\n")
-        (self.repo / "notes.txt").write_text("untracked draft\n")
-        (self.repo / "debug.log").write_text("ignored output\n")
-        (self.repo / "build").mkdir()
-        (self.repo / "build" / "out.bin").write_bytes(b"\0\1")
-        exclude = self.repo / ".git" / "info" / "exclude"
-        exclude.write_text(exclude.read_text() + "private-notes.txt\n")
-        (self.repo / "private-notes.txt").write_text("excluded locally\n")
-
-    def repo_state(self) -> dict:
-        return {"tree": usability.tree(self.repo), "status": self.command("git", "status", "--porcelain"),
-                "exclude": (self.repo / ".git" / "info" / "exclude").read_text()}
-
-
-def select_head(j: Case, name: str, attempts: int = 12) -> str:
-    """Move the Work list selection to the named head with k/j."""
-    j.keys(b"k" * attempts)
-    time.sleep(0.3)
-    for _ in range(attempts):
-        row = j.selected_row()
-        if row.split()[1:2] == [name]:
-            return row
-        j.keys(b"j")
-        time.sleep(0.2)
-    raise AssertionError(f"head {name!r} not found in the list; last selected {j.selected_row()!r}")
-
-
-# What each screen shows of its own once it is up.
-SCREEN_MARKERS = {
-    "Work": ("Heads ",), "Inbox": ("Needs you",), "Hosts": ("+ Add a host",),
-    "Stats": ("Sessions  Runs",),
-}
-
-
-def heads(j: Case) -> set[str]:
-    """Branch names from `hydra list` (its rows may start with the current-head marker)."""
-    rows = j.cli("list").splitlines()
-    start = next((i + 1 for i, r in enumerate(rows) if r.split()[:1] == ["BRANCH"]), len(rows))
-    names = set()
-    for row in rows[start:]:
-        tokens = row.split()
-        if tokens and tokens[0] == "*":
-            tokens = tokens[1:]
-        if tokens:
-            names.add(tokens[0])
-    return names
-
-
-def tab_position(j: Case, *labels: str) -> int:
-    """The key the top bar gives a screen ("2 Inbox"); 0 if absent."""
-    match = re.search(r"\b([1-9]) (" + "|".join(map(re.escape, labels)) + r")\b", j.tab_bar())
-    return int(match.group(1)) if match else 0
-
-
-def goto_tab(j: Case, *labels: str) -> str:
-    """Press the number the visible top bar gives the screen and wait for it."""
-    position = tab_position(j, *labels)
-    if not position:
-        raise AssertionError(f"screen {labels} not in the bar {j.tab_bar()!r}")
-    j.keys(str(position).encode())
-    return j.see_all(*next(SCREEN_MARKERS[label] for label in labels if label in SCREEN_MARKERS))
-
-
-def make_stopped(j: Case, branch: str) -> None:
-    """A head whose agent reported its exit through the public adapter
-    contract and whose terminal is gone: shown as 'stopped'."""
-    lifecycle = json.loads(j.cli("lifecycle", branch, "--json"))["data"]
-    event = json.dumps({"schema_version": 1, "instance_id": lifecycle["instance_id"],
-                        "kind": "observed", "status": "exited"})
-    result = subprocess.run([str(j.hydra), "adapter", "ingest", branch], cwd=j.repo, env=j.env, input=event,
-                            capture_output=True, text=True, timeout=30, check=False)
-    if result.returncode:
-        raise RuntimeError(f"adapter ingest failed: {result.stderr}")
-    j.proof.append({"command": ("hydra", "adapter", "ingest", branch), "input": event, "output": result.stdout})
-    j.tmux("kill-session", "-t", branch)
-
-
-def profile_fixture(j: Case, name: str = "codex", script: Path | None = None) -> Path:
-    """Install the deterministic provider as `name` on a private PATH."""
-    tools = j.base / "fixture-bin"
-    tools.mkdir(exist_ok=True)
-    target = script or (j.source / "tests/fixtures/usability/provider.py")
-    (tools / name).symlink_to(target)
-    j.env["PATH"] = os.pathsep.join([str(tools), str(j.prefix / "bin"), j.env["PATH"]])
-    return tools

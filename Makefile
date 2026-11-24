@@ -2,8 +2,8 @@
 # POSIX-compliant build and lint tasks
 
 .PHONY: all lint test test-fast test-all clean install uninstall test-install test-native-install smoke-onboarding \
-	dev-setup bench bench-tui build-core build-tui test-c test-tui test-tui-pty test-parity sanitize-core sanitize-tui sanitizer \
-	sanitize bench-core benchmark-core package-core package-tui help
+	dev-setup bench-tui build-core build-tui test-c test-tui test-tui-pty test-parity sanitize-core sanitize-tui \
+	sanitize bench-core package-core package-tui help
 
 CC ?= cc
 AR ?= ar
@@ -328,7 +328,7 @@ test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_rows.sh
 
-test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install
 
 # Sanitizer lanes. Every lane compiles with the same flags, so they share one
 # tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
@@ -366,19 +366,15 @@ sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-wo
 sanitize-fleet: build-fleet
 	$(SANITIZE_FLEET_ENV) $(MAKE) $(SANITIZE_ARGS) test-fleet
 
-sanitizer: sanitize-core
-
 sanitize: $(if $(filter fleet,$(SANITIZE_LANES)),build-fleet)
 	@$(if $(filter fleet,$(SANITIZE_LANES)),$(SANITIZE_FLEET_ENV)) $(MAKE) $(SANITIZE_ARGS) $(foreach lane,$(SANITIZE_LANES),$(if $(SANITIZE_GOALS_$(lane)),$(SANITIZE_GOALS_$(lane)),$(error unknown sanitizer lane '$(lane)')))
 
 bench-core: build-core
 	@sh scripts/bench-core.sh
 
-benchmark-core: bench-core
-
 .PHONY: bench-i1 test-bench-i1
 bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@sh scripts/bench-i1.sh --build "$(abspath $(BUILD_DIR))" $(BENCH_I1_ARGS)
+	@python3 scripts/bench-i1.py --build "$(abspath $(BUILD_DIR))" $(BENCH_I1_ARGS)
 
 test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	@HYDRA_ITEM10_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_bench_i1.sh
@@ -386,27 +382,19 @@ test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
-# Item 10 matrix over the I1 fixture: measurement only, never a gate.
-# Example: make perf-matrix PERF_MATRIX_ARGS="--output /tmp/hydra-perf --heads 1 10"
-.PHONY: perf-matrix perf-attention test-perf-matrix
-perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf-matrix.py --build "$(abspath $(BUILD_DIR))" $(PERF_MATRIX_ARGS)
-
+# Annotated attention corpus: real `hydra workflow attention` rows scored
+# against tests/fixtures/perf/attention-cases.json. Exits 1 on any missed signal
+# or false positive; tests/test_attention_corpus.sh runs it under make test.
+# Example: make perf-attention PERF_ATTENTION_ARGS="--out /tmp/hydra-attention"
+.PHONY: perf-attention
 perf-attention: build-fleet
-	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf_matrix_attention.py --build "$(abspath $(BUILD_DIR))" $(PERF_ATTENTION_ARGS)
-
-test-perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@HYDRA_PERF_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_perf_matrix.sh
+	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/attention_corpus.py --build "$(abspath $(BUILD_DIR))" $(PERF_ATTENTION_ARGS)
 
 package-core: build-core
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh core
 
 package-tui: build-tui
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh tui
-
-# Record shell baseline timings (not a CI gate; no speedup claims)
-bench:
-	@sh scripts/bench.sh
 
 # Clean temporary files
 clean:
@@ -476,9 +464,8 @@ help:
 	@echo "  make quality-c - Run clang-tidy analysis and the complexity ceiling (test-quality-c checks the policy)"
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
-	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
-	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
-	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
+	@echo "  make bench-i1  - Measure real-worktree readiness and one workload (BENCH_I1_ARGS=\"...\")"
+	@echo "  make perf-attention - Score the annotated attention corpus (PERF_ATTENTION_ARGS=\"--out DIR\")"
 	@echo "  make clean     - Remove editor temporary files and BUILD_DIR"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"
@@ -489,7 +476,7 @@ help:
 	@echo "  make build-fleet-static [ARCH=x86_64|aarch64] - Reproducible static Linux fleet helper (Docker)"
 	@echo "  make check-fleet-assets - Validate the pinned release/fleet-assets.tsv digests table"
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
-	@echo "  make visual-review [VISUAL_BASELINE=dir] - Capture, render and lint the native TUI screens into one contact sheet"
+	@echo "  make visual-review [VISUAL_REVIEW_FULL=1] [VISUAL_BASELINE=dir] - Capture, render and lint the native TUI screens into one contact sheet (focused: Work, Inbox, Hosts in dark and light; FULL adds every flow and no-colour)"
 	@echo "  make test-visual-lint - Run the bounded layout lint over the visual-review captures"
 	@echo "  make test-u10-loopback - Guided remote setup of a throwaway account over loopback SSH through the control centre"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
@@ -576,8 +563,9 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
-test-workflow-contracts: build-fleet
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
+# Local names for fleet cases of scripts/fleet-tests.mk: the recipe lives there.
+test-workflow-contracts: build-fleet $(BUILD_DIR)/native-tests/workflow-contract-cases
+	+@$(MAKE) fleet-case-native-workflow-contract-cases
 
 .PHONY: test-fleet-controls test-fleet-recovery
 test-fleet-controls: build-tui
@@ -608,11 +596,12 @@ test-workflow-metrics: build-fleet build-core
 	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
 
 # Bounded expansions (roadmap 9F): native admission cases over fabricated run
-# records, then the public CLI over real base and round runs.
+# records, then the public CLI over real base and round runs. Both are fleet
+# cases of scripts/fleet-tests.mk; the recipes live there.
 .PHONY: test-plan-expansion
 test-plan-expansion: build-fleet $(BUILD_DIR)/test-plan-expansion $(SHELL_TEST_PREREQS)
-	$(BUILD_DIR)/test-plan-expansion
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" plan-expansion tests/test_workflow_plan_expansion.sh
+	+@$(MAKE) fleet-case-native-plan-expansion
+	+@$(MAKE) fleet-case-shell-workflow-plan-expansion
 
 test-plan-staged: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-staged"
@@ -621,8 +610,8 @@ test-plan-staged-public: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" "$(BUILD_DIR)/native-tests/test-plan-staged-public" --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
 # Planning-quality evaluation (roadmap 9E): archived pilot cases plus held-out
-# additions through the independent oracle, one executed run per arm and the
-# serial/fork-join scheduling patterns. The report lands in build/plan-eval/.
+# additions through the independent oracle, and the serial/fork-join scheduling
+# patterns, each run once. The report lands in build/plan-eval/.
 .PHONY: test-plan-eval
 test-plan-eval: build-fleet build-plan-example
 	python3 scripts/plan-eval.py --execute 1 --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --plan-example "$(abspath $(BUILD_DIR))/plan-example" --output "$(abspath $(BUILD_DIR))/plan-eval/report.json"
@@ -714,6 +703,10 @@ test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-assets"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-runs-heads"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-first-entry"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-head-removal"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-sign-in-recovery"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-head-changes"
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery
@@ -735,7 +728,7 @@ test-remote-setup-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
 
 # T2/T3 qualification with tmux absent on the execution hosts (the coordinator
-# keeps its PATH). See docs/T2_T3_QUALIFICATION.md. The loopback SSH variant
+# keeps its PATH). See docs/FLEET.md (Execution hosts without tmux). The loopback SSH variant
 # prints SKIP and exits 0 without an OpenSSH server, like test-remote-setup-ssh.
 .PHONY: test-t2-headless test-t3-distributed test-t3-distributed-ssh
 test-t2-headless: fleet-test-build
@@ -752,32 +745,44 @@ include scripts/native-tests.mk
 include scripts/fleet-tests.mk
 include scripts/shell-tests.mk
 
+# Installed-build first-use and planning walkthrough (scripts/usability/): a
+# fresh prefix, a repository nobody initialized, a conversation to a proposal,
+# one approval of the exact revision and its checked delivery, at 80x24 and
+# 140x40. USABILITY_ARGS="--journey planning --columns 80" narrows it.
 .PHONY: test-usability
 USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
 test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)
 
 # Replays captured terminal bytes through the product's own terminal
-# interpreter (src/kettle) and prints exact cells; see docs/VISUAL-REVIEW.md.
+# interpreter (src/kettle) and prints exact cells; see docs/TUI-REVIEW.md.
 $(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle/terminal.h
 	$(CC) $(CORE_CFLAGS) src/kettle/tools/cells.c $(KETTLE_OBJECTS) -o $@
 
 # Visual review without manual runs (U4, I4, 2.9.0 Hosts screens): drives the
 # prefix-installed native TUI over a PTY through fixture states at 80x24 and
-# 140x40 in the dark, light and no-colour themes, renders each capture to
-# HTML/SVG with exact colours, lints the layouts and writes one contact sheet
-# to $(VISUAL_REVIEW_OUTPUT)/index.html. VISUAL_BASELINE=dir adds before/after
-# columns from an earlier output directory.
+# 140x40, renders each capture to HTML/SVG with exact colours, lints the
+# layouts and writes one contact sheet to $(VISUAL_REVIEW_OUTPUT)/index.html.
+# The default is focused: the work flow (Work, Inbox, Stats, review) and the
+# hosts flow in the dark and light themes. VISUAL_REVIEW_FULL=1 (only the
+# value 1 turns it on) captures every flow in the dark, light and no-colour
+# themes. VISUAL_BASELINE=dir adds before/after columns from an earlier output
+# directory.
 VISUAL_REVIEW_OUTPUT ?= $(BUILD_DIR)/visual-review
 .PHONY: visual-review test-visual-lint
 visual-review: build-core build-tui build-fleet $(BUILD_DIR)/kettle-cells
 	python3 scripts/visual_review/run.py --output "$(abspath $(VISUAL_REVIEW_OUTPUT))" \
-		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)")
+		--cells "$(abspath $(BUILD_DIR))/kettle-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)") \
+		$(if $(filter 1,$(VISUAL_REVIEW_FULL)),--full)
 
-# The bounded, deterministic layout lint over the captures (captures them
-# first when the output directory has none).
+# The bounded, deterministic layout lint over the captures. It captures first
+# when the output directory has none, and again when VISUAL_REVIEW_FULL=1 asks
+# for the full sweep but the captures there are the focused default.
 test-visual-lint: $(BUILD_DIR)/kettle-cells
-	@if [ ! -f "$(VISUAL_REVIEW_OUTPUT)/manifest.json" ]; then $(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)"; fi
+	@manifest="$(VISUAL_REVIEW_OUTPUT)/manifest.json"; \
+	if [ ! -f "$$manifest" ] || { [ "$(VISUAL_REVIEW_FULL)" = 1 ] && ! grep -q '"full": true' "$$manifest"; }; then \
+		$(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)" VISUAL_REVIEW_FULL="$(VISUAL_REVIEW_FULL)"; \
+	fi
 	python3 scripts/visual_review/lint.py "$(abspath $(VISUAL_REVIEW_OUTPUT))"
 
 # U10 loopback acceptance: a private sshd on a loopback port serves a fresh
@@ -790,8 +795,8 @@ test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/kettle-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
 
-# Installed-build acceptance for the open roadmap items (docs/ACCEPTANCE.md):
-# one HTML+JSON matrix mapping each acceptance bullet to its checks and evidence.
+# Installed-build flicker acceptance (U6, docs/TUI-REVIEW.md): one HTML+JSON
+# report mapping each U6 bullet to its checks and retained recordings.
 .PHONY: test-acceptance
 ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)
 test-acceptance: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty

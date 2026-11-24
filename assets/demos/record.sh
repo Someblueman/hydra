@@ -1,14 +1,14 @@
 #!/bin/sh
-# Record the README's quick tour (quick-tour.gif, quick-tour.mp4) from this
+# Record the README's quick tour (quick-tour.gif) from this
 # checkout's native control centre. Builds the TUI, makes a throwaway Git
 # repository with real heads, plan and workflow runs under a private
 # HYDRA_HOME and tmux socket, drives `hydra-tui` over a pseudo-terminal with
 # record.py and renders the captured bytes through kettle's own terminal
-# model. Nothing is created inside this checkout except the two outputs (and
-# the build directory). See README.md beside this script.
+# model. Nothing is created inside this checkout except the output (and the
+# build directory). See README.md beside this script.
 #
-#   sh assets/demos/record.sh            # writes assets/demos/quick-tour.{gif,mp4}
-#   HYDRA_DEMO_OUTPUT=dir sh assets/demos/record.sh   # writes them to dir
+#   sh assets/demos/record.sh            # writes assets/demos/quick-tour.gif
+#   HYDRA_DEMO_OUTPUT=dir sh assets/demos/record.sh   # writes it to dir
 #   HYDRA_DEMO_FRAMES=dir ...            # also keep every rendered frame (PNG)
 set -eu
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)

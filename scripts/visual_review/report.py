@@ -95,6 +95,13 @@ def write(output: Path, manifest: dict, findings: dict, baseline: Path | None) -
             parts.append(f"<li><b>{html.escape(r['rule'])}</b> {html.escape(r['capture'])} "
                          f"'{html.escape(r['message'])}': remove its row from lint-known.tsv ({html.escape(r['reason'])})</li>")
         parts.append("</ul>")
+    if findings.get("not_captured"):
+        parts.append("<h2>Known findings not captured in this run</h2><ul>")
+        for r in findings["not_captured"]:
+            parts.append(f"<li><b>{html.escape(r['rule'])}</b> {html.escape(r['capture'])} "
+                         f"'{html.escape(r['message'])}': not captured; run with VISUAL_REVIEW_FULL=1 to check it "
+                         f"({html.escape(r['reason'])})</li>")
+        parts.append("</ul>")
 
     current_flow = None
     for (flow, state), entries in states.items():

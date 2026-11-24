@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Installed-build acceptance for the open roadmap items (see docs/ACCEPTANCE.md).
+"""Installed-build flicker acceptance (U6; see docs/TUI-REVIEW.md).
 
-Installs a fresh prefix, runs every registered case on real Git, tmux and
-pseudo-terminals, and writes an acceptance matrix (HTML and JSON) that maps
-each acceptance bullet to its checks and retained evidence.
+Installs a fresh prefix, runs the flicker case on real Git, tmux and
+pseudo-terminals, and writes a report (HTML and JSON) that maps each U6
+bullet to its checks and retained evidence.
 """
 
 from __future__ import annotations
@@ -23,20 +23,9 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from usability import journey as usability  # noqa: E402
-from acceptance import harness, matrix, report  # noqa: E402
+from acceptance import harness, report  # noqa: E402
 
-MODULES = ("entry", "terminal", "flicker", "details", "navigation", "overview", "removal", "journeys")
-
-
-def selected_cases(args: argparse.Namespace) -> list[dict]:
-    chosen = []
-    for entry in harness.CASES:
-        if args.case and not any(c in entry["name"] for c in args.case):
-            continue
-        if args.item and not any(matrix.item_of(b) in args.item for b in entry["bullets"]):
-            continue
-        chosen.append(entry)
-    return chosen
+MODULES = ("flicker",)
 
 
 def run_case(source: Path, prefix: Path, output: Path, entry: dict, columns: int) -> dict:
@@ -82,8 +71,6 @@ def install(source: Path, output: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--case", action="append", help="run cases whose name contains this text")
-    parser.add_argument("--item", action="append", help="run cases that report on this item, e.g. U6")
     parser.add_argument("--columns", type=int, nargs="+", help="restrict to these widths where a case offers them")
     parser.add_argument("--list", action="store_true", help="list cases and exit")
     parser.add_argument("--prefix", type=Path, help="reuse an installed prefix (development only, never for a report)")
@@ -92,7 +79,7 @@ def main() -> int:
         parser.error("Run without Python optimization so outcome assertions remain enabled")
     for name in MODULES:
         importlib.import_module(f"acceptance.{name}")
-    cases = selected_cases(args)
+    cases = harness.CASES
     if args.list:
         for entry in cases:
             print(f"{entry['name']:28} {','.join(map(str, entry['columns'])):8} {' '.join(entry['bullets'])}")
@@ -104,8 +91,7 @@ def main() -> int:
         "mode": "installed deterministic shell and provider fixtures; no live provider, no remote host",
         "commit": usability.run(["git", "rev-parse", "HEAD"], source, dict(os.environ)),
         "cases": [],
-        "unqualified": ["Live authenticated provider", "Real terminal visual review (perceptual flicker)",
-                        "Screen-only discoverability trial", "Authorized remote host", "macOS terminal apps"],
+        "unqualified": ["Real terminal visual review (perceptual flicker)", "macOS terminal apps"],
     }
     try:
         if args.prefix:
@@ -118,7 +104,7 @@ def main() -> int:
         result["installed_hashes"] = usability.tree(prefix)
         result["source_files"] = {
             str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
-            for root in ("src", "lib", "scripts/acceptance", "tests/fixtures/acceptance", "tests/fixtures/usability")
+            for root in ("src", "lib", "scripts/acceptance")
             for p in (source / root).rglob("*") if p.is_file()}
         for entry in cases:
             widths = [c for c in entry["columns"] if not args.columns or c in args.columns] or [entry["columns"][0]]

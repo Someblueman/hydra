@@ -9,9 +9,9 @@ word painted in a contradicting tone), raw identifiers in headings or too
 many outside detail/diagnostic screens, repeated keyboard hints, and text
 contrast below the threshold in the dark and light themes.
 
-Findings listed in lint-known.tsv (rule, capture glob, message substring,
-reason) are reported as known and do not fail the lint; everything else does.
-See docs/VISUAL-REVIEW.md.
+Findings listed in lint-known.tsv (rule, capture globs separated by commas,
+message substring, reason) are reported as known and do not fail the lint; everything else does.
+See docs/TUI-REVIEW.md.
 """
 
 from __future__ import annotations
@@ -226,7 +226,6 @@ class Lint:
     def palette(self) -> None:
         s = self.s
         if s.theme == "nocolor":
-            foreign = sorted({c for row in s.cells for c in (row[0][1], row[0][2]) if c})
             for y, row in enumerate(s.cells):
                 if any(c[1] or c[2] for c in row):
                     self.finding("palette", y, f"colour escapes in no-colour mode: {sorted({c[1] or c[2] for c in row if c[1] or c[2]})[:3]}")
@@ -337,6 +336,11 @@ host hosts machine remote changed nothing continue identity log transcript secti
 """.split())
 
 
+def in_captures(identifier: str, patterns: str) -> bool:
+    """Whether the capture id matches one of the comma-separated globs."""
+    return any(fnmatch.fnmatch(identifier, pattern.strip()) for pattern in patterns.split(",") if pattern.strip())
+
+
 def load_known(path: Path) -> list[tuple[str, str, str, str]]:
     rows = []
     if not path.exists():
@@ -361,7 +365,7 @@ def lint_directory(output: Path) -> dict:
         screen = Screen(entry, data)
 
         def finding(rule: str, row: int, message: str, entry=entry) -> None:
-            match = next((k for k in known if k[0] == rule and fnmatch.fnmatch(entry["id"], k[1]) and k[2] in message), None)
+            match = next((k for k in known if k[0] == rule and in_captures(entry["id"], k[1]) and k[2] in message), None)
             findings.append({"capture": entry["id"], "rule": rule, "row": row, "message": message,
                              "known": bool(match), "reason": match[3] if match else ""})
 
@@ -371,12 +375,18 @@ def lint_directory(output: Path) -> dict:
     # One finding per (capture, rule, message) keeps the report bounded.
     unique = {(f["capture"], f["rule"], f["message"]): f for f in findings}
     findings = sorted(unique.values(), key=lambda f: (f["capture"], f["rule"], f["row"], f["message"]))
-    # A known row that no finding matches any more: the screen was fixed (or
-    # the state is no longer captured); report it so the row can go.
-    resolved = [{"rule": k[0], "capture": k[1], "message": k[2], "reason": k[3]} for k in known
-                if not any(f["rule"] == k[0] and fnmatch.fnmatch(f["capture"], k[1]) and k[2] in f["message"]
-                           for f in findings)]
+    # A known row that no finding matches any more: the screen was fixed, so
+    # the row can go. A row whose globs match no capture of this run says
+    # nothing (the focused default skips most screens): it is "not captured".
+    resolved, not_captured = [], []
+    for k in known:
+        row = {"rule": k[0], "capture": k[1], "message": k[2], "reason": k[3]}
+        if not any(in_captures(entry["id"], k[1]) for entry in manifest["captures"]):
+            not_captured.append(row)
+        elif not any(f["rule"] == k[0] and in_captures(f["capture"], k[1]) and k[2] in f["message"] for f in findings):
+            resolved.append(row)
     return {"screens": len(manifest["captures"]), "findings": findings, "resolved": resolved,
+            "not_captured": not_captured,
             "known": sum(1 for f in findings if f["known"]), "new": sum(1 for f in findings if not f["known"])}
 
 
@@ -392,8 +402,12 @@ def main() -> int:
         print(f"[{mark}] {f['capture']} row {f['row']} {f['rule']}: {f['message']}")
     for r in result["resolved"]:
         print(f"[resolved] {r['rule']} {r['capture']} '{r['message']}': no longer found; remove its row from lint-known.tsv")
+    for r in result["not_captured"]:
+        print(f"[not captured] {r['rule']} {r['capture']} '{r['message']}': no capture of this run matches it; "
+              "run with VISUAL_REVIEW_FULL=1 to check it")
     print(f"visual lint: {result['screens']} screens, {len(result['findings'])} findings, {result['known']} known, "
-          f"{result['new']} new, {len(result['resolved'])} known row(s) resolved")
+          f"{result['new']} new, {len(result['resolved'])} known row(s) resolved, "
+          f"{len(result['not_captured'])} not captured")
     return 1 if result["new"] else 0
 
 

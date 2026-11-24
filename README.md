@@ -39,7 +39,7 @@ Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
 [the roadmap](docs/ROADMAP.md#next-target-live-and-human-acceptance)
-and [usability testing](docs/USABILITY-TESTING.md).
+and the [TUI review guide](docs/TUI-REVIEW.md).
 
 ## What you can do
 
@@ -226,7 +226,7 @@ For comparing and growing plans, `hydra workflow plan evaluate` compares two
 compiled alternatives by decomposition, fixed-graph scheduling and placement with
 ranges and explicit unknowns, `plan decision` records why one was selected and
 replays that comparison from its recorded inputs, and `make test-plan-eval`
-measures held-out planning quality. `hydra workflow plan expand` admits a bounded
+checks the independent held-out oracle and a scheduling comparison. `hydra workflow plan expand` admits a bounded
 expansion of a finished run as a new version compiled under the same policy, with
 retries kept apart from new claims; each round runs with its own exact digest and
 its steps pass the same per-step guard as any approved plan. Use `hydra workflow
@@ -244,6 +244,7 @@ model itself; an ordinary agent authors the proposal through the CLI.
 | Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
 | Task pools and host-timer schedules | [Workflows: pools and schedules](docs/workflows.md#pools-and-schedules) |
 | State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
+| Reviewing the TUI: flicker, first use, screen captures | [TUI review](docs/TUI-REVIEW.md) |
 | Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 
 ## Development
