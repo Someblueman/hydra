@@ -12,12 +12,12 @@ $(BUILD_DIR)/test-support/kettle/%.o: tests/kettle/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 -include $(PTY_SUPPORT_OBJECTS:.o=.d) $(PTY_HYDRA_FIXTURE:.o=.d)
-PTY_NAMES = pty program-pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads first-entry head-removal remote-setup responsive-reads refresh-cost onboarding
+PTY_NAMES = pty program-pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads first-entry head-removal sign-in-recovery remote-setup responsive-reads refresh-cost onboarding
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
 $(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/kettle/test_$(subst -,_,$(n)).c))
-$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads first-entry head-removal): $(PTY_HYDRA_FIXTURE)
+$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads first-entry head-removal sign-in-recovery): $(PTY_HYDRA_FIXTURE)
 $(BUILD_DIR)/native-tests/pty-attached-pty: src/tui/fleet_budget.h
 $(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/kettle/fleet_recovery_support.c
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conversation plan-assets fleet-recovery): PTY_JSON_CFLAGS = $(FLEET_JSON_CFLAGS)
@@ -42,6 +42,7 @@ test-plan-workspace: $(BUILD_DIR)/native-tests/pty-workflow-controls
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-runs-heads
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-first-entry
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-head-removal
+test-plan-workspace: $(BUILD_DIR)/native-tests/pty-sign-in-recovery
 test-tui-pty: $(BUILD_DIR)/native-tests/pty-remote-setup
 test-tui-pty: $(BUILD_DIR)/native-tests/pty-responsive-reads
 test-tui-pty: $(BUILD_DIR)/native-tests/pty-refresh-cost
