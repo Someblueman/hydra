@@ -202,10 +202,7 @@ assert_equal 143 "$?" "terminated exec exits 143"
 assert_equal "" "$(find "$exec_tmp" -name 'hydra-exec-selection.*' -print)" "terminated exec removes its selection file"
 
 run_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f -name stdout -print | head -1 | xargs dirname)"
-case "$(uname -s)" in
-    Darwin) output_mode="$(stat -f '%Lp' "$run_dir/stdout")" ;;
-    *) output_mode="$(stat -c '%a' "$run_dir/stdout")" ;;
-esac
+output_mode="$(test_file_mode "$run_dir/stdout")"
 assert_equal 600 "$output_mode" "captured exec output is private"
 
 git -C "$worktree" restore -- tracked.txt

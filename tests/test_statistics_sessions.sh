@@ -235,7 +235,7 @@ cache="$HYDRA_HOME/cache/sessions/$project"
 assert_equal "$settled_rows" "$(rows 2500)" "the first cached read agrees"
 if [ -f "$cache/$alpha.tsv" ] && [ -f "$cache/$beta.tsv" ]; then status=0; else status=1; fi
 assert_success "$status" "settled history is checkpointed"
-assert_equal 600 "$(stat -c %a "$cache/$alpha.tsv" 2>/dev/null || stat -f %Lp "$cache/$alpha.tsv")" "checkpoints are private"
+assert_equal 600 "$(test_file_mode "$cache/$alpha.tsv")" "checkpoints are private"
 assert_equal "" "$(find "$cache" -name '*.next.*')" "no partial checkpoint is left"
 assert_equal "$settled_rows" "$(rows 2500)" "a read from checkpoints agrees"
 assert_equal "$(HYDRA_SESSIONS_NO_CACHE=1 rows 9000)" "$(rows 9000)" "checkpoints agree at a later time"

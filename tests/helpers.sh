@@ -66,6 +66,13 @@ test_mktemp_file() {
     mktemp "${_tmf_base%/}/hydra-test.XXXXXX"
 }
 
+# Octal permission bits of a path (for example 600), on GNU and BSD userlands.
+# GNU stat takes -c; BSD stat (macOS) rejects it and takes -f.
+# Usage: test_file_mode <path>
+test_file_mode() {
+    stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
 # Poll until a command succeeds instead of sleeping for a fixed time.
 # Usage: wait_for <description> <command> [args...]
 # WAIT_FOR_TIMEOUT (seconds, default 30) and WAIT_FOR_INTERVAL (seconds,

@@ -192,7 +192,7 @@ activity_observer_beat "$project" 2000
 activity_observer_beat "$project" 1500
 assert_equal "$(printf '2000\t2000\n')" "$(tail -n 1 "$coverage")" "a report after a gap starts a new interval"
 assert_equal 3 "$(wc -l < "$coverage" | tr -d ' ')" "an out-of-order report changes nothing"
-assert_equal 600 "$(stat -c %a "$coverage" 2>/dev/null || stat -f %Lp "$coverage")" "coverage is private"
+assert_equal 600 "$(test_file_mode "$coverage")" "coverage is private"
 # shellcheck disable=SC2034 # Read by activity_observer_beat.
 (HYDRA_ACTIVITY_COVERAGE_MAX_INTERVALS=2; activity_observer_beat "$project" 3000)
 assert_equal "$(printf 'HYDRA_ACTIVITY_COVERAGE\t1\t%s\n2000\t2000\n3000\t3000\n' $((1010 + HYDRA_ACTIVITY_COVERAGE_STALE_SECONDS)))" \
