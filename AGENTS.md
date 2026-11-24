@@ -53,8 +53,9 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   for example with `test_stop_processes_naming` from `tests/helpers.sh`.
 - Cases and the native PTY lanes run with git and tmux isolated from your own
   configuration (`scripts/test-env.sh`, applied by `scripts/run-test.sh` and, for
-  the PTY lanes, `$(TEST_ENV)` in the `Makefile`): `GIT_CONFIG_GLOBAL` names a
-  private file, `GIT_CONFIG_NOSYSTEM=1`, and `scripts/test-env/tmux` first on
+  the PTY lanes, `$(TEST_ENV)` in the `Makefile`): `HOME` and `XDG_CONFIG_HOME`
+  point at an empty private directory, `GIT_CONFIG_NOSYSTEM=1` (not
+  `GIT_CONFIG_GLOBAL`, which review refuses), and `scripts/test-env/tmux` first on
   `PATH` starts every tmux server with `-f /dev/null`, so `~/.tmux.conf`
   plugins (tmux-continuum restoring saved sessions) never run in a test server.
   A new native test binary started from a `Makefile` recipe needs `$(TEST_ENV)`.
