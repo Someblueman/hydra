@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `comprehension.py`, `report.py`, `journeys_core.py`, `journeys_review.py`, the
   greeting plan helpers and `tests/fixtures/usability/greeting-repo`, `verify-summary.sh`).
   `tests/fixtures/usability/provider.py`, which the U10 loopback test copies, stays.
+- Unused repository files: five TUI headers nothing includes
+  (`src/tui/{actions,adapter,input,render,selection}.h`), the provider-driven
+  scripts and prompts the feature and research planning examples no longer call,
+  an unreferenced dashboard screenshot and two empty `.gitkeep` placeholders.
+- The 72 pre-pass I4 screen captures (`docs/evidence/i4/*-before.txt`); the
+  after captures that `tests/test_native_tui_i4.sh` compares stay.
 
 ### Changed
 - `make visual-review` captures a focused set by default: the Work flow (with Inbox,
@@ -43,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/test_init_source_tree.sh`); the new-task form lists only available agents
   (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say the project
   identity is unavailable (`tests/test_workflow_statistics.sh`, `tests/test_native_tui.sh`).
+
+### Fixed
+- The 9B fixture README names the native contract runner, `docs/workflows.md`
+  no longer mentions shell-only workflow execution, and `make help` no longer
+  lists TUI timings under `make bench` (use `make bench-tui`).
+- Documentation corrected where it described removed or superseded behaviour:
+  the comprehension trial's entry points (Work, Stats, Inbox; no shell TUI),
+  the roadmap's U2, U12 and change-locality passages, the T2/T3 guide's fixture
+  retention and shard assignment, the research planning example's
+  `plan-example` step, and the attention acceptance record's local-only paths.
 
 ## [5.0.0] - 2026-11-21
 

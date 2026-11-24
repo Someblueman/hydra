@@ -305,8 +305,7 @@ records `plan-repair-budget` 0 and the driver skips the repair step.
 
 Every expert plan runs through the same scheduler, and final
 success requires artifact-bound verification reports for the declared
-deliverables. This optional native path does not change workflow schema 1 or
-shell-only execution.
+deliverables. Workflow schema 1 is unchanged.
 
 A policy's `writes` may contain the exact scope `@spawned:*`. It authorizes a
 plan's declared `<head>:<path>` or `<head>:*` scopes only for heads created by
