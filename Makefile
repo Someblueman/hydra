@@ -476,7 +476,7 @@ help:
 	@echo "  make quality-c - Run clang-tidy analysis and the complexity ceiling (test-quality-c checks the policy)"
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
-	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
+	@echo "  make bench     - Record list/status/doctor timings at 5 and 20 heads"
 	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
 	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
 	@echo "  make clean     - Remove editor temporary files and BUILD_DIR"
