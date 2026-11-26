@@ -334,6 +334,19 @@ cleanup:
     unlink(argv_path); unsetenv("HYDRA_TEST_RESUME_ARGV");
 }
 
+/* The Inbox default selection has settled on the decision: its detail
+ * offers "Y Approve", read on the screen as drawn. */
+static bool wait_for_default_decision(struct session *session, long timeout_ms) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    while (monotonic_ms() < deadline) {
+        char bytes[4096];
+        ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (session_visible(session, "Approve S-1: T-1") && session_visible(session, "Y Approve")) return true;
+        if (length <= 0) sleep_ms(10);
+    }
+    return false;
+}
+
 /* A plan run that succeeded with its worker head still listed is "Ready to
  * land" in Inbox; L asks first, n lands nothing, y runs hydra land with
  * exactly that worker. */
@@ -359,12 +372,18 @@ static void test_inbox_land(const char *tui, const char *hydra, const char *fake
     (void)wait_for_model(&session);
     write_input(session.master, "2", 1U);
     result(wait_for_marker(&session, "Ready to land: kill-dry-run-worker", 4000), "a finished plan run's worker is ready to land");
-    /* Until the user moves, Inbox selects the first unseen item, and the
-     * attention read that brings the decisions can land after the first
-     * frames: wait for it, so the land item is chosen, not a default the
-     * decisions then take over. Each step waits for its frame, so a slow one
-     * is not taken for a miss and moved past; the check reads the screen. */
-    (void)wait_for_marker(&session, "Approve S-1: T-1", 4000);
+    /* Until the user moves, Inbox selects the first unseen item, and which
+     * item that is changes while the data arrives: the land item alone first,
+     * then the decisions beside it, and the decision becomes the default only
+     * once the seen markers have been read (here: found unavailable, so every
+     * item is unseen). A frame can show the decision row with the land item
+     * still selected. Wait until the decision is the selected row, the state
+     * the default settles in (its detail offers "Y Approve"; the land item's
+     * offers "L Land"), so the "j" below is the first move and chooses the
+     * land item for good, not a default the data then takes over. Each step
+     * waits for its frame, so a slow one is not taken for a miss and moved
+     * past; the check reads the screen. */
+    (void)wait_for_default_decision(&session, 12000);
     for (i = 0; i < 8 && !wait_for_markers(&session, "L Land", "Worker      kill-dry-run-worker", 1000); i++) {
         drain_output(&session);
         write_input(session.master, "j", 1U);
