@@ -22,7 +22,7 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   what the POSIX-compliance checks assume.
 - Optional (improve UX, not required for tests): `fzf` (interactive `switch`),
   `gh` (GitHub issue/PR features), and an AI CLI such as `claude`/`aider`/`gemini`.
-  `python3` is needed only by the bench-i1, perf-matrix, plan-eval, usability,
+  `python3` is needed only by the bench-i1, perf-attention, plan-eval, usability,
   acceptance and visual-review targets.
 - Optional locally, required in CI (versions pinned in `quality.json`): `ruff` and
   `actionlint`. `make lint` warns and skips a missing one; `HYDRA_LINT_STRICT=1`

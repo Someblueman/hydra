@@ -416,14 +416,11 @@ class Fixture:
         finally:
             os.close(descriptor)
 
-    def finish_workers(
-        self, owner_timeout: float = 10, completion_timeout: float = 15
-    ) -> list[dict[str, Any]]:
+    def finish_workers(self) -> list[dict[str, Any]]:
         results = []
         for row in self.workers:
             self.tell(row, {"action": "finish"})
-        finish_told_ns = time.monotonic_ns()
-        deadline = time.monotonic() + completion_timeout
+        deadline = time.monotonic() + 15
         for row in self.workers:
             while time.monotonic() < deadline:
                 records = json_lines(Path(row["receipt"]))
@@ -444,11 +441,9 @@ class Fixture:
                     "receipt": records[-1],
                 }
             )
-        self.owner_exit_waits_ns = []
         for owner in self.owners:
-            if owner.wait(timeout=owner_timeout) != 0:
+            if owner.wait(timeout=10) != 0:
                 raise RuntimeError("supervised worker result failed")
-            self.owner_exit_waits_ns.append(time.monotonic_ns() - finish_told_ns)
         if self.mode == "headless":
             for index, row in enumerate(self.workers):
                 if (Path(row["worktree"]) / "retained-result.txt").read_text() != row[

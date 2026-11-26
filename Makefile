@@ -2,8 +2,8 @@
 # POSIX-compliant build and lint tasks
 
 .PHONY: all lint test test-fast test-all clean install uninstall test-install test-native-install smoke-onboarding \
-	dev-setup bench bench-tui build-core build-tui test-c test-tui test-tui-pty test-parity sanitize-core sanitize-tui sanitizer \
-	sanitize bench-core benchmark-core package-core package-tui help
+	dev-setup bench-tui build-core build-tui test-c test-tui test-tui-pty test-parity sanitize-core sanitize-tui \
+	sanitize bench-core package-core package-tui help
 
 CC ?= cc
 AR ?= ar
@@ -329,7 +329,7 @@ test-parity: build-core build-tui
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_tui_store_rows.sh
 
-test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-kettle-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install
 
 # Sanitizer lanes. Every lane compiles with the same flags, so they share one
 # tree, $(BUILD_DIR)/sanitize, and each object is built once. A lane is the
@@ -367,19 +367,15 @@ sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-wo
 sanitize-fleet: build-fleet
 	$(SANITIZE_FLEET_ENV) $(MAKE) $(SANITIZE_ARGS) test-fleet
 
-sanitizer: sanitize-core
-
 sanitize: $(if $(filter fleet,$(SANITIZE_LANES)),build-fleet)
 	@$(if $(filter fleet,$(SANITIZE_LANES)),$(SANITIZE_FLEET_ENV)) $(MAKE) $(SANITIZE_ARGS) $(foreach lane,$(SANITIZE_LANES),$(if $(SANITIZE_GOALS_$(lane)),$(SANITIZE_GOALS_$(lane)),$(error unknown sanitizer lane '$(lane)')))
 
 bench-core: build-core
 	@sh scripts/bench-core.sh
 
-benchmark-core: bench-core
-
 .PHONY: bench-i1 test-bench-i1
 bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@sh scripts/bench-i1.sh --build "$(abspath $(BUILD_DIR))" $(BENCH_I1_ARGS)
+	@python3 scripts/bench-i1.py --build "$(abspath $(BUILD_DIR))" $(BENCH_I1_ARGS)
 
 test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	@HYDRA_ITEM10_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_bench_i1.sh
@@ -387,27 +383,19 @@ test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
-# Item 10 matrix over the I1 fixture: measurement only, never a gate.
-# Example: make perf-matrix PERF_MATRIX_ARGS="--output /tmp/hydra-perf --heads 1 10"
-.PHONY: perf-matrix perf-attention test-perf-matrix
-perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf-matrix.py --build "$(abspath $(BUILD_DIR))" $(PERF_MATRIX_ARGS)
-
+# Annotated attention corpus: real `hydra workflow attention` rows scored
+# against tests/fixtures/perf/attention-cases.json. Exits 1 on any missed signal
+# or false positive; tests/test_attention_corpus.sh runs it under make test.
+# Example: make perf-attention PERF_ATTENTION_ARGS="--out /tmp/hydra-attention"
+.PHONY: perf-attention
 perf-attention: build-fleet
-	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf_matrix_attention.py --build "$(abspath $(BUILD_DIR))" $(PERF_ATTENTION_ARGS)
-
-test-perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	@HYDRA_PERF_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_perf_matrix.sh
+	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/attention_corpus.py --build "$(abspath $(BUILD_DIR))" $(PERF_ATTENTION_ARGS)
 
 package-core: build-core
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh core
 
 package-tui: build-tui
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh tui
-
-# Record shell baseline timings (not a CI gate; no speedup claims)
-bench:
-	@sh scripts/bench.sh
 
 # Clean temporary files
 clean:
@@ -477,9 +465,8 @@ help:
 	@echo "  make quality-c - Run clang-tidy analysis and the complexity ceiling (test-quality-c checks the policy)"
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
-	@echo "  make bench     - Record list/status/doctor timings at 5 and 20 heads"
-	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
-	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
+	@echo "  make bench-i1  - Measure real-worktree readiness and one workload (BENCH_I1_ARGS=\"...\")"
+	@echo "  make perf-attention - Score the annotated attention corpus (PERF_ATTENTION_ARGS=\"--out DIR\")"
 	@echo "  make clean     - Remove editor temporary files and BUILD_DIR"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"
@@ -577,8 +564,9 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
-test-workflow-contracts: build-fleet
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
+# Local names for fleet cases of scripts/fleet-tests.mk: the recipe lives there.
+test-workflow-contracts: build-fleet $(BUILD_DIR)/native-tests/workflow-contract-cases
+	+@$(MAKE) fleet-case-native-workflow-contract-cases
 
 .PHONY: test-fleet-controls test-fleet-recovery
 test-fleet-controls: build-tui
@@ -609,11 +597,12 @@ test-workflow-metrics: build-fleet build-core
 	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
 
 # Bounded expansions (roadmap 9F): native admission cases over fabricated run
-# records, then the public CLI over real base and round runs.
+# records, then the public CLI over real base and round runs. Both are fleet
+# cases of scripts/fleet-tests.mk; the recipes live there.
 .PHONY: test-plan-expansion
 test-plan-expansion: build-fleet $(BUILD_DIR)/test-plan-expansion $(SHELL_TEST_PREREQS)
-	$(BUILD_DIR)/test-plan-expansion
-	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" plan-expansion tests/test_workflow_plan_expansion.sh
+	+@$(MAKE) fleet-case-native-plan-expansion
+	+@$(MAKE) fleet-case-shell-workflow-plan-expansion
 
 test-plan-staged: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-staged"
@@ -622,8 +611,8 @@ test-plan-staged-public: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" "$(BUILD_DIR)/native-tests/test-plan-staged-public" --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
 # Planning-quality evaluation (roadmap 9E): archived pilot cases plus held-out
-# additions through the independent oracle, one executed run per arm and the
-# serial/fork-join scheduling patterns. The report lands in build/plan-eval/.
+# additions through the independent oracle, and the serial/fork-join scheduling
+# patterns, each run once. The report lands in build/plan-eval/.
 .PHONY: test-plan-eval
 test-plan-eval: build-fleet build-plan-example
 	python3 scripts/plan-eval.py --execute 1 --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --plan-example "$(abspath $(BUILD_DIR))/plan-example" --output "$(abspath $(BUILD_DIR))/plan-eval/report.json"

@@ -1,6 +1,6 @@
 # Quick tour of the control centre
 
-[Watch the MP4](quick-tour.mp4) or view the [GIF](quick-tour.gif).
+View the [GIF](quick-tour.gif).
 
 The recording is this checkout's native control centre (`hydra tui`) at 120x32
 in the default dark theme, about 70 seconds long. A caption bar under the
@@ -68,13 +68,13 @@ Not real:
 sh assets/demos/record.sh
 ```
 
-It overwrites `quick-tour.gif` and `quick-tour.mp4` beside this file and takes
+It overwrites `quick-tour.gif` beside this file and takes
 about two minutes: setup, a tour of about 70 seconds in real time, then
 rendering and encoding. It needs a C99 compiler, Make, pkg-config and JSON-C
 development files (for `hydra-fleet`, which plans need), Git, tmux 3.0 or
-later, Python 3 with Pillow, ffmpeg with libx264, and fontconfig with DejaVu
+later, Python 3 with Pillow, ffmpeg, and fontconfig with DejaVu
 Sans Mono (`HYDRA_DEMO_FONT` names another monospace family). It needs no network, AI
-CLI, SSH host or terminal recorder. `HYDRA_DEMO_OUTPUT=dir` writes the two files
+CLI, SSH host or terminal recorder. `HYDRA_DEMO_OUTPUT=dir` writes the GIF
 elsewhere, `HYDRA_DEMO_FRAMES=dir` also keeps every distinct frame as PNG, and
 `BUILD_DIR` is honoured as by `make`.
 
@@ -92,8 +92,8 @@ How it is made:
    each distinct screen with the exact cell colours (box drawing and block
    elements as geometry, other glyphs in DejaVu Sans Mono; cells left on the
    terminal's default colours take the dark theme's text and surface colours),
-   and encodes the frames with their real timing: the GIF with ffmpeg's
-   palettegen and paletteuse, the MP4 as H.264 in yuv420p.
+   and encodes the frames with their real timing as a GIF with ffmpeg's
+   palettegen and paletteuse.
 
 Inspect the frames before accepting a new recording. When the tour changes,
 change `tour()` in [record.py](record.py) and the list above together.

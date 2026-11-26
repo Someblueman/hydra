@@ -60,7 +60,8 @@ class Harness:
 
     def setup(self) -> None:
         self.repo.mkdir()
-        self.home.mkdir()
+        # Admission refuses a HYDRA_HOME that is group- or world-writable (umask 002).
+        self.home.mkdir(mode=0o700)
         self.call("git", "init", "-q")
         self.call("git", "config", "user.email", "perf@example.invalid")
         self.call("git", "config", "user.name", "perf attention fixture")
@@ -267,7 +268,8 @@ def main() -> int:
     print(json.dumps({key: report[key] for key in ("complete", "error", "false_positives_total",
                                                    "missed_signals_total", "unsupported_silent_total")}))
     print(args.out / "report.json")
-    return 0 if report["complete"] else 1
+    clean = report["false_positives_total"] == 0 and report["missed_signals_total"] == 0
+    return 0 if report["complete"] and clean else 1
 
 
 if __name__ == "__main__":

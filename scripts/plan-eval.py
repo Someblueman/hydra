@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Planning-quality evaluation runner (roadmap 9E).
 
-Revives the archived finite pilot's cases at the current source without
-altering the archived record, adds held-out cases, and compares the frozen
-"current" and "contract-aware" candidate arms under matched scope, tools and
-budgets. Planning, validation and scheduling effects are reported separately.
-Every unobserved quantity is reported as unknown, never estimated.
+Checks the independent held-out oracle (the archived pilot's cases plus the
+held-out additions, with their declared incorrect artifacts) and compares the
+serial and fork/join scheduling patterns through the current compiler. Validation
+and scheduling effects are reported separately. Every unobserved quantity is
+reported as unknown, never estimated. The archived candidate arms are not run;
+they remain reproducible at the commit named in archive-manifest.json.
 
-    python3 scripts/plan-eval.py [--execute N] [--repeat K] [--output FILE]
+    python3 scripts/plan-eval.py [--execute N] [--output FILE]
 """
 
 import argparse
@@ -32,12 +33,12 @@ UNOBSERVED = "unknown (not observed)"
 
 
 def export_archive(manifest, out: Path):
-    """Export the archived pilot from Git history and verify every digest."""
+    """Export the archived held-out cases from Git history and verify every digest."""
     target = out / "archive"
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
-    archive = subprocess.run(["git", "archive", manifest["commit"], "examples/planning/evaluation"], cwd=ROOT, capture_output=True, check=False)
+    archive = subprocess.run(["git", "archive", manifest["commit"], *manifest["files"]], cwd=ROOT, capture_output=True, check=False)
     if archive.returncode:
         raise RuntimeError(f"archived commit {manifest['commit'][:12]} is not available in this checkout (shallow clone?): {archive.stderr.decode(errors='replace').strip()}")
     with tarfile.open(fileobj=__import__("io").BytesIO(archive.stdout)) as tar:
@@ -47,49 +48,6 @@ def export_archive(manifest, out: Path):
         if actual != digest:
             raise RuntimeError(f"archived file {name} digest {actual} differs from the manifest")
     return target / "examples/planning/evaluation"
-
-
-def by_class(rows, key):
-    out = {}
-    for row in rows:
-        bucket = out.setdefault(row["class"], {"total": 0, key: 0})
-        bucket["total"] += 1
-        bucket[key] += int(bool(row[key]))
-    return out
-
-
-def planning_phase(archive: Path, manifest, cases, contracts, repeats):
-    """Candidate acceptance per arm and interface; n = repeats per case."""
-    arms = {}
-    for arm, names in manifest["arms"].items():
-        arms[arm] = []
-        for name in names:
-            candidate = archive / "candidates" / name / "candidate.py"
-            entry = {"candidate": name, "sha256": oracle.sha256_file(candidate), "interfaces": {}}
-            for interface in ("declared", "adapted"):
-                signatures, rows, wall, cpu = set(), [], 0.0, 0.0
-                for _ in range(repeats):
-                    rows = []
-                    for case in cases:
-                        contract = contracts[case["contract_id"]]
-                        inputs = oracle.declared_inputs(case["contract_id"], case["inputs"]) if interface == "declared" else oracle.adapted_inputs(case["contract_id"], case["inputs"], contract)
-                        value, seconds, elapsed, error = oracle.run_candidate(candidate, case["contract_id"], inputs)
-                        if interface == "adapted" and error is None:
-                            value = oracle.adapt_output(value, contract)
-                        accepted = error is None and oracle.equal_artifact(value, case["expected"])
-                        rows.append({"id": case["id"], "class": case["class"], "source": case["source"], "accepted": accepted,
-                                     "reason": "accepted" if accepted else (error or "output_mismatch")})
-                        wall += elapsed
-                        cpu += seconds if isinstance(seconds, (int, float)) else 0.0
-                    signatures.add(tuple(row["accepted"] for row in rows))
-                entry["interfaces"][interface] = {
-                    "accepted": sum(row["accepted"] for row in rows), "total": len(rows),
-                    "by_class": by_class(rows, "accepted"),
-                    "by_source": {source: sum(1 for r in rows if r["source"] == source and r["accepted"]) for source in ("archived-v2", "additions-v3")},
-                    "cases": rows, "repeats": repeats, "distinct_outcomes": len(signatures),
-                    "wall_seconds_total": round(wall, 3), "cpu_seconds_total": round(cpu, 3)}
-            arms[arm].append(entry)
-    return arms
 
 
 def validation_phase(cases):
@@ -109,52 +67,6 @@ def validation_phase(cases):
                                 "false_rejections": sum(1 for r in rows if r["class"] == name and r["false_rejection"])} for name in CLASSES},
             "controls": controls,
             "limits": "Exact-artifact equality with strict JSON types and a 64 KiB bound; a rejected declared corruption shows the checker discriminates that corruption only."}
-
-
-def current_source_phase(hydra, archive: Path, manifest, execute):
-    """Admit the archived evaluation plan with the current compiler; optionally
-    execute one run per arm through Hydra and read the verified outcome."""
-    out = {"compiled": {}, "runs": {}}
-    for arm, names in manifest["arms"].items():
-        for index, name in enumerate(names):
-            if index >= max(execute, 1):
-                break
-            f = hydra.fixture(f"current-source-{name}")
-            for file in ("plan.json", "policy.json", "requests.json", "evaluate.py", "produce.py", "check.py", "planner-evaluation-heldout-v2.json"):
-                shutil.copy2(archive / file, f.repo / file)
-            shutil.copy2(archive / "candidates" / name / "candidate.py", f.repo / "candidate.py")
-            f.commit()
-            hydra.init(f)
-            compiled = f.base / "compiled.json"
-            digest, compile_seconds = hydra.compile(f, "plan.json", "policy.json", compiled, "compile")
-            out["compiled"][name] = {"plan_sha256": digest, "compile_seconds": round(compile_seconds, 3), "admissible": True}
-            if index >= execute:
-                continue
-            expected_verified = arm == "contract_aware"
-            run_id, run_seconds, succeeded, as_expected = hydra.run(f, compiled, digest, 0 if expected_verified else 1, "run")
-            verified, result_seconds = hydra.result(f, run_id, "result")
-            run = hydra.run_dir(f, run_id)
-            report_path = run / "steps/check/attempt-1/outputs/check.json"
-            report = json.loads(report_path.read_text()) if report_path.exists() else {}
-            record = hy.run_record(run, ["spawn-work", "work", "spawn-check", "check"])
-            observed = hydra.observed(f, run_id, "observed")
-            to_verified = None
-            if observed:
-                estimates = f.base / "observed.json"
-                estimates.write_text(json.dumps(observed) + "\n")
-                to_verified = hydra.evaluate(f, compiled, compiled, estimates, "evaluate")["scheduling"]["left"]["time_to_verified_result_milliseconds"]
-            hydra.kill(f, ["evaluation-work", "evaluation-check"])
-            out["runs"][name] = {
-                "arm": arm, "run_id": run_id, "plan_sha256": digest, "run_state": record["state"],
-                "verified_outcome": verified, "expected_verified": expected_verified, "as_expected": as_expected and verified == expected_verified,
-                "checker_verdict": report.get("verdict"), "checker_counts": (report.get("evidence_records") or [{}])[0].get("counts"),
-                "wall_seconds": {"run_command": round(run_seconds, 3), "result_command": round(result_seconds, 3), "recorded_run": record["elapsed_seconds"]},
-                "time_to_verified_result_milliseconds": to_verified,
-                "cost": "unknown (local Python candidate; no provider cost recorded)",
-                "human_corrections": {"count": None, "status": UNOBSERVED},
-                "repeated_work": {"steps": record["repeated_work_steps"], "attempts": record["attempts"]},
-                "fixture": str(f.base)}
-    return out
 
 
 def scheduling_phase(hydra, example_binary: Path, execute):
@@ -208,14 +120,8 @@ def scheduling_phase(hydra, example_binary: Path, execute):
 
 def summary(report):
     lines = [f"plan-eval: {report['status']} ({len(report['case_set']['cases'])} cases, {report['validation']['incorrect_total']} incorrect artifacts)"]
-    for arm, entries in report["planning"].items():
-        for entry in entries:
-            d, a = entry["interfaces"]["declared"], entry["interfaces"]["adapted"]
-            lines.append(f"  {arm}/{entry['candidate']}: declared {d['accepted']}/{d['total']}, adapted {a['accepted']}/{a['total']}, distinct outcomes over {d['repeats']} repeats: {d['distinct_outcomes']}")
     v = report["validation"]
     lines.append(f"  validation: {v['incorrect_rejected']}/{v['incorrect_total']} corruptions rejected, {v['false_acceptances']} false acceptances, {v['false_rejections']} false rejections")
-    for name, run in report["execution"]["runs"].items():
-        lines.append(f"  executed {name}: verified={run['verified_outcome']} as_expected={run['as_expected']} run {run['wall_seconds']['run_command']}s")
     s = report["scheduling"]
     lines.append(f"  scheduling: depth serial {s['structural']['scheduling']['left']['depth_nodes']} vs forkjoin {s['structural']['scheduling']['right']['depth_nodes']}; executed: {'yes' if s['executed'] else 'no'}; calibration: {s['calibration'].get('status')}")
     for failure in report["failures"]:
@@ -226,8 +132,7 @@ def summary(report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=ROOT / "build/plan-eval/report.json")
-    parser.add_argument("--execute", type=int, default=0, help="candidates per arm to execute through hydra workflow plan run (also runs the scheduling patterns)")
-    parser.add_argument("--repeat", type=int, default=2, help="repeated candidate invocations per case for the determinism check")
+    parser.add_argument("--execute", type=int, default=0, help="1 runs the serial and fork/join patterns through hydra workflow plan run; 0 compares them structurally only")
     parser.add_argument("--fleet", type=Path, default=ROOT / "build/hydra-fleet")
     parser.add_argument("--plan-example", type=Path, default=ROOT / "build/plan-example")
     args = parser.parse_args()
@@ -243,7 +148,6 @@ def main():
         archive = export_archive(manifest, out)
         report["archive"]["verified"] = True
         heldout = json.loads((archive / "planner-evaluation-heldout-v2.json").read_text())
-        contracts = {c["contract_id"]: c for c in json.loads((archive / "planner-visible-contracts.json").read_text())["task_contracts"]}
         cases = oracle.load_cases(archive / "planner-evaluation-heldout-v2.json", EVALUATION / "heldout-v3-additions.json")
     except Exception as exc:  # the report must still say why nothing was measured
         report.update({"status": "fail", "failures": [f"setup: {exc}"]})
@@ -254,44 +158,27 @@ def main():
     report["case_set"] = {"archived": sum(c["source"] == "archived-v2" for c in cases), "additions": sum(c["source"] == "additions-v3" for c in cases),
                           "additions_file_sha256": oracle.sha256_file(EVALUATION / "heldout-v3-additions.json"), "oracle_sha256": oracle.sha256_file(EVALUATION / "oracle.py"),
                           "cases": [{"id": c["id"], "class": c["class"], "contract_id": c["contract_id"], "source": c["source"], "incorrect_artifacts": len(c["incorrect_artifacts"])} for c in cases]}
-    report["planning"] = planning_phase(archive, manifest, cases, contracts, max(args.repeat, 1))
     report["validation"] = validation_phase(cases)
     hydra = hy.Hydra(ROOT, args.fleet.resolve(), out)
-    try:
-        report["execution"] = current_source_phase(hydra, archive, manifest, args.execute)
-    except Exception as exc:
-        report["execution"] = {"compiled": {}, "runs": {}}
-        failures.append(f"execution: {exc}")
     try:
         report["scheduling"] = scheduling_phase(hydra, args.plan_example.resolve(), args.execute)
     except Exception as exc:
         report["scheduling"] = {"structural": None, "executed": None, "calibration": {"status": UNOBSERVED}}
         failures.append(f"scheduling: {exc}")
-    report["calibration"] = {"by_class": {name: {"status": "unknown", "reason": "no estimate was supplied for this class; the frozen candidates estimate nothing"} for name in CLASSES},
-                             "fixed_graph_scheduling": report["scheduling"].get("calibration")}
+    report["calibration"] = {"fixed_graph_scheduling": report["scheduling"].get("calibration")}
     report["human_corrections"] = {"count": None, "status": UNOBSERVED, "note": "no human took part in these deterministic runs; the field is reserved for recorded corrections"}
-    report["stochastic_variability"] = {"status": "not exercised", "n_per_case": max(args.repeat, 1),
-                                        "note": "frozen deterministic candidates and fixtures; repeated invocations are a determinism check, not a variability estimate"}
+    report["stochastic_variability"] = {"status": "not exercised", "note": "deterministic fixtures and one run per fixed graph"}
     v = report["validation"]
     if v["false_acceptances"] or v["incorrect_rejected"] != v["incorrect_total"]:
         failures.append("a declared incorrect artifact was accepted")
     if v["false_rejections"]:
         failures.append("a correct artifact was rejected")
-    for arm, entries in report["planning"].items():
-        for entry in entries:
-            declared = entry["interfaces"]["declared"]
-            if declared["distinct_outcomes"] != 1:
-                failures.append(f"{entry['candidate']} produced varying outcomes across repeats")
-            archived = declared["by_source"]["archived-v2"]
-            if arm == "contract_aware" and archived != 9 or arm == "current" and archived != 0:
-                failures.append(f"{entry['candidate']} archived-case acceptance {archived}/9 differs from the archived record")
-    for name, run in report["execution"].get("runs", {}).items():
-        if not run["as_expected"]:
-            failures.append(f"executed {name}: verified outcome did not match the archived expectation")
+    if sum(c["source"] == "archived-v2" for c in cases) != 9:
+        failures.append("the archived held-out file no longer carries nine cases")
     report["failures"] = failures
     report["status"] = "fail" if failures else "pass"
     report["elapsed_seconds"] = round(time.time() - started, 3)
-    report["limits"] = ["Interface conformance, not semantic planning advantage, is the only difference these frozen arms show; the adapted interface makes it visible.",
+    report["limits"] = ["The oracle shows the checker rejects its declared corruptions; it measures no planner.",
                         "No planning benefit over its overhead is claimed; no live agent or provider took part.",
                         "Deterministic fixtures: stochastic planner variability is not exercised here."]
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
