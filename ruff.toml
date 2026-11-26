@@ -2,8 +2,7 @@
 # Ruff's default rules (E4, E7, E9, F) plus flake8-bugbear. Formatting and line
 # length (E501) are deliberately not enforced.
 #
-# The scripts need Python 3.12 (perf_matrix_report.py nests quotes in an f-string)
-# and CI runs them with the 3.12 that ubuntu-latest provides.
+# CI runs the scripts with the Python 3.12 that ubuntu-latest provides.
 target-version = "py312"
 
 [lint]
