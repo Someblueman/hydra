@@ -11,6 +11,9 @@ struct hf_fixture {
  * keeps the directory (never the server). */
 void hf_init(struct hf_fixture *f, const char *name, const char *repo_name, bool copied_plan,
              bool tmux);
+/* A committed git repository and nothing else: Hydra has not seen it. */
+void hf_git_init(struct hf_fixture *f);
+/* hf_git_init, then `hydra init --no-agent --trust`. */
 void hf_commit_init(struct hf_fixture *f);
 /* Every head's shell prompts with "$ " from now on. */
 void hf_short_prompt(struct hf_fixture *f);

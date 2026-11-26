@@ -207,6 +207,9 @@ static void approval_outlived(struct kt_session *s) {
     U(STATE("DRAFT", 2), 10);
     S("E");
     U("Approve and run planner revision 2?", 3);
+    /* The copy says what the confirmation covers and that a change runs nothing. */
+    CHECK(kt_contains(s, "validates exactly this revision") && kt_contains(s, "the draft or policy changes first") &&
+          kt_contains(s, "nothing runs."), "the approval dialog says a changed draft or policy runs nothing");
     write_draft("Revised again while the dialog was open");
     U(STATE("DRAFT", 3), 10);
     CHECK(kt_contains(s, "Approve and run planner revision 2?"), "the dialog still names revision 2");

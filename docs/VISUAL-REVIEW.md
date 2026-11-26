@@ -14,12 +14,18 @@ the same application") remains the reviewer's, and the contact sheet is its
 input.
 
 ```sh
-make visual-review                                  # build/visual-review/index.html
+make visual-review                                  # focused: build/visual-review/index.html
+make visual-review VISUAL_REVIEW_FULL=1             # every flow, every theme
 make visual-review VISUAL_BASELINE=/path/to/earlier # before/after columns
 make test-visual-lint                               # the bounded layout lint only
 ```
 
-A full run takes about seven minutes on a shared 4-core machine; a subset is
+The default capture is focused: the `work` flow (Work, its Run and Details
+pages, Inbox, review, Stats) and the `hosts` flow (the guided remote setup) at
+80x24 and 140x40 in the dark and light themes, about two minutes on a shared
+4-core machine. `VISUAL_REVIEW_FULL=1` (`--full`) adds the `fleet` and the other
+`hosts-*` flows and the no-colour theme; a full run takes about seven minutes.
+A subset is
 `python3 scripts/visual_review/run.py --output build/visual-review --cells
 build/kettle-cells --keep-prefix --flow work --theme dark --size 80x24`
 (`--keep-prefix` reuses the installed prefix and keeps the captures of every
@@ -109,8 +115,11 @@ message substring, reason) are reported as known on the contact sheet and do
 not fail `make test-visual-lint`; everything else does. That file is the open
 list of layout defects for the people who own `src/tui`: a fix removes its
 row, a new row needs a reason, and a known finding that disappears is reported
-as such. Add a row only for a finding that needs a design decision, never to
-hide a regression.
+as such. A row whose capture globs match no capture of the run (the focused
+default skips most screens) is reported as "not captured", not as resolved;
+`make test-visual-lint VISUAL_REVIEW_FULL=1` recaptures the full sweep when the
+captures in the output directory are the focused default. Add a row only for a
+finding that needs a design decision, never to hide a regression.
 
 ## Boundaries
 

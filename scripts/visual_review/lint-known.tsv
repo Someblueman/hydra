@@ -1,13 +1,14 @@
 rule	capture	message	reason
 # Open layout findings of the native TUI as captured by make visual-review (contrast rows: 17 October
 # 2026; the rest: the four-screen frame, 14 November 2026). A row makes a matching finding "known" (reported on
-# the contact sheet, not failing make test-visual-lint). Columns: rule, capture glob (fnmatch over the capture id),
+# the contact sheet, not failing make test-visual-lint). Columns: rule, capture globs (fnmatch over the capture id, comma-separated),
 # a substring of the finding's message, and why it is open. Remove the row when the screen is fixed; add one only
 # for a finding that needs a design decision by the owners of src/tui, never for a regression.
-contrast	*	#5f8787 on #1c1c1c	dark border tone for section headings, captions and secondary text reads at 4.30:1, just under 4.5; palette decision for the I4 pass
-contrast	*	#5f87af on #eeeeee	light border tone for section headings and captions reads at 3.25:1; palette decision for the I4 pass
-contrast	*	#008700 on #eeeeee	light success tone (status words, graph edges) reads at 4.05:1; palette decision for the I4 pass
-contrast	*	#af5f00 on #eeeeee	light warning tone reads at 4.06:1; palette decision for the I4 pass
-contrast	*	#8a8a8a on #eeeeee	light muted tone (title bar, inactive tabs, footers) reads at 2.98:1 against the 3.0 secondary-text floor; palette decision for the I4 pass
+# The five contrast rows are scoped to the flows and theme whose palette tone they name.
+contrast	work--*--dark-*,fleet--*--dark-*,hosts*--*--dark-*	#5f8787 on #1c1c1c	dark border tone for section headings, captions and secondary text reads at 4.30:1, just under 4.5; palette decision for the I4 pass
+contrast	work--*--light-*,fleet--*--light-*,hosts*--*--light-*	#5f87af on #eeeeee	light border tone for section headings and captions reads at 3.25:1; palette decision for the I4 pass
+contrast	work--*--light-*,fleet--*--light-*,hosts*--*--light-*	#008700 on #eeeeee	light success tone (status words, graph edges) reads at 4.05:1; palette decision for the I4 pass
+contrast	work--*--light-*,fleet--*--light-*,hosts*--*--light-*	#af5f00 on #eeeeee	light warning tone reads at 4.06:1; palette decision for the I4 pass
+contrast	work--*--light-*,fleet--*--light-*,hosts*--*--light-*	#8a8a8a on #eeeeee	light muted tone (title bar, inactive tabs, footers) reads at 2.98:1 against the 3.0 secondary-text floor; palette decision for the I4 pass
 clip-area	work--technical-details--*-80x24	source: /tmp/hydra/state/head	the technical page's last visible row continues below the pane, which scrolls; the lint cannot see the rest
 hint-repeat	work--inbox-terminal-stopped--*-140x40	'R restarts it'	the Inbox detail repeats the selected item's two lines, its key hint included; hint consolidation (U8)

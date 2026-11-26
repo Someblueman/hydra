@@ -1,2 +1,2 @@
-"""Bounded installed-product usability journeys, goal-driven trials and
-comprehension trials; run with ``PYTHONPATH=scripts python3 -m usability``."""
+"""Installed-product usability walkthrough and the journey helper it and the
+visual review share; run with ``PYTHONPATH=scripts python3 -m usability``."""

@@ -148,6 +148,17 @@ assert_success $? "statistics-json still exports the run"
 grep -q '"unmeasured_reason":"remote receipt could not be verified against its dispatch"' "$base/unverified.json"
 assert_success $? "the cohort says the receipt could not be verified"
 
+# A repository nobody registered has no project identity: the sample says so
+# (a Z row of zeros would read as a measured empty history).
+mkdir "$base/unregistered"
+(
+    cd "$base/unregistered" || exit 1
+    git init -q
+    "$HYDRA_BIN" workflow statistics-data 2>/dev/null
+) > "$base/unregistered.tsv"
+grep -q "^X${tab}Project identity unavailable\$" "$base/unregistered.tsv"
+assert_success $? "an unregistered repository's statistics report the project identity as unavailable"
+
 "$HYDRA_BIN" kill --all --force >/dev/null 2>&1 || true
 
 echo ""

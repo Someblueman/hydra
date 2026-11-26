@@ -3,10 +3,15 @@
 
 Installs this checkout into a private prefix (as the usability runner under scripts/usability does),
 drives the installed native TUI over a PTY through the states in flows.py at
-80x24 and 140x40 in the dark, light and no-colour themes, keeps the raw byte
-stream of every state, renders each through the product's own terminal
-interpreter (kettle-cells) to HTML and SVG with exact colours, runs the
-layout lint and writes one contact sheet: OUTPUT/index.html.
+80x24 and 140x40, keeps the raw byte stream of every state, renders each
+through the product's own terminal interpreter (kettle-cells) to HTML and SVG
+with exact colours, runs the layout lint and writes one contact sheet:
+OUTPUT/index.html.
+
+The default capture is focused: the work flow (Work, its Run and Details
+pages, Inbox, review, Stats) and the hosts flow (the guided remote setup) in
+the dark and light themes. --full adds the fleet and the other hosts flows
+and the no-colour theme; --flow and --theme name any subset.
 """
 
 from __future__ import annotations
@@ -36,6 +41,8 @@ from usability.journey import run as run_command, tree  # noqa: E402
 ROOT = HERE.parent.parent
 SIZES = ((80, 24), (140, 40))
 THEMES = ("dark", "light", "nocolor")
+FOCUSED_FLOWS = ("work", "hosts")
+FOCUSED_THEMES = ("dark", "light")
 
 
 def variant_env(theme: str) -> dict[str, str]:
@@ -146,11 +153,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cells", type=Path, required=True, help="the kettle-cells executable")
     parser.add_argument("--baseline", type=Path, help="an earlier output directory for before/after columns")
-    parser.add_argument("--flow", choices=tuple(flows.FLOWS), nargs="+", default=list(flows.FLOWS))
-    parser.add_argument("--theme", choices=THEMES, nargs="+", default=list(THEMES))
+    parser.add_argument("--full", action="store_true",
+                        help="capture every flow in every theme, not the focused default")
+    parser.add_argument("--flow", choices=tuple(flows.FLOWS), nargs="+",
+                        help=f"flows to capture (default {' '.join(FOCUSED_FLOWS)}; every flow with --full)")
+    parser.add_argument("--theme", choices=THEMES, nargs="+",
+                        help=f"themes to capture (default {' '.join(FOCUSED_THEMES)}; every theme with --full)")
     parser.add_argument("--size", nargs="+", default=[f"{c}x{r}" for c, r in SIZES])
     parser.add_argument("--keep-prefix", action="store_true", help="reuse OUTPUT/installed when present")
     args = parser.parse_args()
+    args.flow = args.flow or list(flows.FLOWS if args.full else FOCUSED_FLOWS)
+    args.theme = args.theme or list(THEMES if args.full else FOCUSED_THEMES)
     output = args.output.resolve()
     if output.exists() and not args.keep_prefix:
         shutil.rmtree(output)
@@ -178,8 +191,12 @@ def main() -> int:
                     capture.failures.append({"flow": flow, "variant": f"{theme}-{columns}x{rows}",
                                              "error": "".join(traceback.format_exception(error))})
                 print(f"captured {flow} {theme} {columns}x{rows}", flush=True)
+    everything = set(args.flow) == set(flows.FLOWS) and set(args.theme) == set(THEMES)
+    if args.keep_prefix and previous.exists():
+        everything = everything or bool(json.loads(previous.read_text()).get("full"))
     manifest = {
-        "commit": run_command(["git", "rev-parse", "HEAD"], ROOT, dict(os.environ)),
+        "full": everything,
+        "commit":run_command(["git", "rev-parse", "HEAD"], ROOT, dict(os.environ)),
         "installed_hashes": tree(prefix),
         "captures": capture.manifest,
         "failures": capture.failures,
