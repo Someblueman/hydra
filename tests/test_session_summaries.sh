@@ -86,7 +86,7 @@ cp "$alpha_dir/instances/$alpha_i/activity.jsonl" "$test_root/alpha-activity.jso
 assert_success $? "the head is removed"
 if [ -f "$summaries/$alpha_i" ]; then status=0; else status=1; fi
 assert_success "$status" "teardown writes the session's summary"
-assert_equal 600 "$(stat -c %a "$summaries/$alpha_i" 2>/dev/null || stat -f %Lp "$summaries/$alpha_i")" "the summary is private"
+assert_equal 600 "$(test_file_mode "$summaries/$alpha_i")" "the summary is private"
 assert_equal "HYDRA_SESSION_SUMMARY${tab}1" "$(sed -n '1p' "$summaries/$alpha_i")" "the summary is versioned"
 assert_equal "ended" "$(awk -F '\t' '$1 == "state" { print $2 }' "$summaries/$alpha_i")" "the summary records how the session ended"
 if [ -e "$alpha_dir/instances/$alpha_i/activity.jsonl" ]; then status=1; else status=0; fi

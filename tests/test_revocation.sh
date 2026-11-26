@@ -60,9 +60,9 @@ run_cases() {
     assert_equal already_revoked "$(printf '%s' "$out" | json_field code)" "umask $1: second revocation is typed"
 
     record="$(find "$HYDRA_HOME/fleet/revocations/transport" -name '*.json' | head -n 1)"
-    assert_equal 600 "$(stat -c %a "$record")" "umask $1: revocation record is private"
-    assert_equal 700 "$(stat -c %a "$HYDRA_HOME/fleet/revocations")" "umask $1: revocation store is private"
-    assert_equal 700 "$(stat -c %a "$HYDRA_HOME/fleet/revocations/transport")" "umask $1: scope directory is private"
+    assert_equal 600 "$(test_file_mode "$record")" "umask $1: revocation record is private"
+    assert_equal 700 "$(test_file_mode "$HYDRA_HOME/fleet/revocations")" "umask $1: revocation store is private"
+    assert_equal 700 "$(test_file_mode "$HYDRA_HOME/fleet/revocations/transport")" "umask $1: scope directory is private"
     cmp -s "$fixture/alias-before" "$HYDRA_HOME/fleet/remotes/build.json" && same=yes || same=no
     assert_equal yes "$same" "umask $1: alias record is retained byte for byte"
 
@@ -116,7 +116,7 @@ run_cases() {
     case "$out" in *'"target":"other"'*'"freshness":"acquired_now"'*) imported=yes ;; *) imported=no ;; esac
     assert_equal yes "$imported" "umask $1: the other record becomes a candidate"
     cache="$(find "$HYDRA_HOME/fleet/discovery/sources" -name '*.json' | head -n 1)"
-    assert_equal 600 "$(stat -c %a "$cache")" "umask $1: snapshot cache is private"
+    assert_equal 600 "$(test_file_mode "$cache")" "umask $1: snapshot cache is private"
     out="$("$hydra" fleet discover --source "ssh-config:$fixture/ssh.conf" --ssh-config "$fixture/ssh.conf" --json)" && status=0 || status=$?
     assert_success "$status" "umask $1: ssh-config scan source"
     case "$out" in *'"kind":"ssh-config"'*'"name":"pat*"'*'"reason":"pattern"'*) skipped=yes ;; *) skipped=no ;; esac

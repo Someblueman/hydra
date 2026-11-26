@@ -46,7 +46,17 @@ export HYDRA_FLEET_BIN
 on_terminal() {
     _answer="$1"; shift
     case "$(uname -s)" in
-        Darwin) printf '%s\n' "$_answer" | (unset HYDRA_NONINTERACTIVE; script -q "$root/tty.log" "$@") ;;
+        Darwin)
+            # BSD script sends end-of-file to the terminal as soon as its input
+            # ends, ahead of an answer typed before the command asks. Type it
+            # once the typescript shows the prompt, and keep the input open
+            # for a moment so the answer is read before the end-of-file.
+            rm -f "$root/tty.log"
+            {
+                WAIT_FOR_TIMEOUT=20 wait_for 'the y/N prompt' grep -q 'y/N\]' "$root/tty.log" || :
+                printf '%s\n' "$_answer"
+                sleep 1
+            } | (unset HYDRA_NONINTERACTIVE; script -q "$root/tty.log" "$@") ;;
         *) printf '%s\n' "$_answer" | (unset HYDRA_NONINTERACTIVE; script -q -e -c "$*" "$root/tty.log") ;;
     esac
 }
@@ -118,11 +128,11 @@ grep -q '"schema_version":1,"plan":"add-a-greeting-file-and"' "$root/show.json" 
 assert_success $? 'the summary has a stable machine-readable form'
 
 # The agent cannot approve its own plan: a guard, not a security boundary.
-HYDRA_HEAD_ID=head_00000000000000000000 hydra plan approve --accept "$digest" > "$root/agent.out" 2>&1
+env HYDRA_HEAD_ID=head_00000000000000000000 "$HYDRA_BIN" plan approve --accept "$digest" > "$root/agent.out" 2>&1
 assert_failure $? 'approval is refused from an agent head environment'
 grep -q "inside an agent's head" "$root/agent.out"
 assert_success $? 'the refusal says why'
-HYDRA_INSTANCE_ID=instance_00000000000000000000 hydra workflow plan run "$root/none.json" --accept "$digest" > "$root/agent-run.out" 2>&1
+env HYDRA_INSTANCE_ID=instance_00000000000000000000 "$HYDRA_BIN" workflow plan run "$root/none.json" --accept "$digest" > "$root/agent-run.out" 2>&1
 assert_failure $? 'running a plan is refused from an agent instance environment'
 grep -q agent_environment "$root/agent-run.out" || grep -q "inside an agent's head" "$root/agent-run.out"
 assert_success $? 'the expert run command gives the same reason'
@@ -190,7 +200,7 @@ assert_success $? 'the review gives one command to land the result'
 worker="$(hydra path greeting-work)"
 verified="$(git -C "$worker" rev-parse HEAD)"
 base="$(git rev-parse HEAD)"
-HYDRA_HEAD_ID=head_00000000000000000000 hydra land greeting-work > "$root/land-agent.out" 2>&1
+env HYDRA_HEAD_ID=head_00000000000000000000 "$HYDRA_BIN" land greeting-work > "$root/land-agent.out" 2>&1
 assert_failure $? 'an agent cannot land a plan result'
 printf 'local edit\n' >> README
 hydra land greeting-work > "$root/land-dirty.out" 2>&1
@@ -233,7 +243,7 @@ assert_success $? 'the review says where the result landed'
 hydra plan policy > "$root/policy.out"
 grep -q 'Tools: sh, git, make' "$root/policy.out" && grep -q 'only inside the branches a plan creates' "$root/policy.out"
 assert_success $? 'the policy is shown in words'
-HYDRA_HEAD_ID=head_00000000000000000000 hydra plan policy --allow-tool npm >/dev/null 2>&1
+env HYDRA_HEAD_ID=head_00000000000000000000 "$HYDRA_BIN" plan policy --allow-tool npm >/dev/null 2>&1
 assert_failure $? 'an agent cannot widen the policy'
 hydra plan policy --allow-tool npm >/dev/null
 sed -e 's/"plan": "simple-1",/"plan": "simple-1", "worker": "npm-work",/' \
