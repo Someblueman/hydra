@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `make lint` also runs `ruff check` over every Python file (rules in `ruff.toml`:
+  the defaults plus flake8-bugbear) and `actionlint` over `.github/workflows`, and CI
+  requires both at the versions pinned in `quality.json`. Locally a missing tool is
+  skipped with a warning unless `HYDRA_LINT_STRICT=1` is set. The harness scripts
+  and the branch-update workflow were fixed to pass; no behaviour changes.
+
 ### Removed
 - Unused repository files: five TUI headers nothing includes
   (`src/tui/{actions,adapter,input,render,selection}.h`), the provider-driven

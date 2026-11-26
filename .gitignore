@@ -5,6 +5,9 @@ CLAUDE.md
 # OS files
 .DS_Store
 
+# Python lint cache
+.ruff_cache/
+
 # Editor files
 *.swp
 *.swo

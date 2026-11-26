@@ -56,6 +56,7 @@ all: lint
 # Lint all shell scripts for POSIX compliance
 lint:
 	@sh scripts/lint-shell.sh
+	@sh scripts/lint-extra.sh
 	@sh scripts/check-fleet-assets.sh release/fleet-assets.tsv
 	@echo "All checks passed!"
 
@@ -452,7 +453,7 @@ dev-setup:
 # Display help
 help:
 	@echo "Hydra Makefile targets (outputs go to BUILD_DIR, default ./build):"
-	@echo "  make lint      - Run ShellCheck and dash syntax validation"
+	@echo "  make lint      - Run ShellCheck and dash syntax validation, ruff (Python) and actionlint (workflows)"
 	@echo "  make test      - Build the three native helpers and test fixtures, then run the shell test suite (workflow runs are driven by hydra-fleet)"
 	@echo "  make test-fast - Run the fixed PR feedback test selection (lint, fast shell cases, native unit tests)"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"

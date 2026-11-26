@@ -173,7 +173,7 @@ def multi_agent_blocked(j: Case) -> None:
     screen = page(j, b"]", "handoff", "waiting-approval")
     j.record("U13.b", "Stats lists the recorded run with its state and counts it",
              any("handoff" in r and "waiting-approval" in r for r in screen.splitlines()) and "1 run" in screen,
-             detail=next((l.strip() for l in screen.splitlines() if "handoff" in l), "")[:100])
+             detail=next((line.strip() for line in screen.splitlines() if "handoff" in line), "")[:100])
     # Approve inside the control centre from the Inbox; then resume the run.
     states = j.base / "state" / "state" / "v2" / "projects"
     run_dirs = list(states.glob(f"*/workflows/runs/{run}")) if run else []

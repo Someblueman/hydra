@@ -1,0 +1,13 @@
+# Python lint policy for the harness scripts (`make lint` runs `ruff check`).
+# Ruff's default rules (E4, E7, E9, F) plus flake8-bugbear. Formatting and line
+# length (E501) are deliberately not enforced.
+#
+# The scripts need Python 3.12 (perf_matrix_report.py nests quotes in an f-string)
+# and CI runs them with the 3.12 that ubuntu-latest provides.
+target-version = "py312"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "B"]
+# B905 (zip without strict=): the nine calls pair sequences on purpose, several by
+# truncation (`zip(seq, seq[1:])`), so strict= would change behaviour or add noise.
+ignore = ["B905"]

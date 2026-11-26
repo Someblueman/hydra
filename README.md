@@ -267,7 +267,7 @@ addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds
 the native test fixtures and example programs.
 
 ```sh
-make lint       # ShellCheck and shell syntax
+make lint       # ShellCheck, shell syntax, ruff (Python) and actionlint (workflows)
 make test-all   # Complete acceptance suite, including native and PTY checks
 make sanitize   # All native sanitizer checks
 make sanitize-fleet # Focused fleet, agent and planning sanitizer checks
