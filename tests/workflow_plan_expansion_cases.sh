@@ -55,8 +55,8 @@ chain_dir="$(dirname "$compiled1")"
 expansions="$(dirname "$chain_dir")"
 if [ "$(basename "$expansions")" = "$run" ] && [ -f "$chain_dir/expansion.json" ] && [ -f "$chain_dir/proposal.json" ]; then check=0; else check=1; fi
 assert_success "$check" 'the round lives under the head planning state of the base run'
-assert_equal 700 "$(stat -c %a "$chain_dir" 2>/dev/null || stat -f %Lp "$chain_dir")" 'round directories are private'
-assert_equal 600 "$(stat -c %a "$chain_dir/expansion.json" 2>/dev/null || stat -f %Lp "$chain_dir/expansion.json")" 'expansion records are private'
+assert_equal 700 "$(test_file_mode "$chain_dir")" 'round directories are private'
+assert_equal 600 "$(test_file_mode "$chain_dir/expansion.json")" 'expansion records are private'
 grep -q '"effects":"artifact_only"' "$chain_dir/expansion.json" && grep -q '"joins":{"compose1":\["spawn1"\]}' "$chain_dir/expansion.json"
 assert_success $? 'the record freezes the join membership and names the dependency effects'
 "$HYDRA_BIN" workflow plan show "$compiled1" --json > "$ROOT/show1.json"

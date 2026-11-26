@@ -879,6 +879,8 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     /* One form: Tab to the agent, the next option (codex), Tab to the objective, Enter starts. */
     write_input(session.master, "\t\033[C\t", 5U);
     (void)wait_for_marker(&session, "Objective", 1000);
+    result(session_visible(&session, "codex") && !session_visible(&session, "unavailable-agent"),
+           "the new task form's Agent choice lists only the agents the CLI reports available");
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "Task \"Feature Native\" started on branch feature-native", 2000),
            "new task launches through captured CLI without a return acknowledgement");

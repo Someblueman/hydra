@@ -7,7 +7,7 @@ records the cumulative byte stream up to a settled frame; its markers are the
 text that must be on screen before the frame counts as that state.
 
 Groups: ``detail`` and ``diagnostic`` screens may show raw identifiers; the
-lint exempts them from the identifier rule (docs/VISUAL-REVIEW.md).
+lint exempts them from the identifier rule (docs/TUI-REVIEW.md).
 """
 
 from __future__ import annotations

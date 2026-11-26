@@ -10,11 +10,6 @@ from acceptance import matrix
 
 HUMAN_GATES = {
     "U6": "Perceptual flicker in a real terminal app: review the retained recordings.",
-    "U7": "Plain-language judgement of the wording.",
-    "U8": "Discoverability by a first-time user (goal-driven trial).",
-    "U9": "Whether the summaries answer a real user's question.",
-    "U3": "Live provider sign-in flows.",
-    "U17": "A live provider authoring a plan.",
 }
 
 
@@ -121,12 +116,11 @@ def write(output: Path, result: dict) -> None:
         "font-size:13px}tr.passed td.state{background:#d9f2d9}tr.failed td.state{background:#f5c6c6}"
         "tr.blocked td.state{background:#f3e3b4}.detail{color:#555;font-size:12px}.bullet{white-space:nowrap}"
         "pre{font:13px monospace;white-space:pre-wrap}.captures{font-size:12px}.reason{color:#a00}</style>"
-        "<h1>Installed-build acceptance matrix</h1>"
+        "<h1>Installed-build flicker acceptance</h1>"
         f"<p>{html.escape(result['mode'])}. Source commit {html.escape(result.get('commit', ''))}. "
         "Each row is one reproducible check with retained evidence: escaped screen snapshots (ASCII, from the "
-        "native observer), styled snapshots re-derived from the raw terminal bytes (colour kept), proof.json "
-        "action logs, Git/tmux/state inspection and /proc reads. A failed row is a finding against the build, "
-        "not a weakened assertion.</p>"
+        "native observer), the raw terminal recording of each phase with its end screen, and proof.json "
+        "action logs. A failed row is a finding against the build, not a weakened assertion.</p>"
         "<pre>" + html.escape(summary(result)) + "</pre>"
         + "".join(table)
         + "<h2>Still needs a human</h2><ul>" + gates + "</ul><p>" + html.escape("; ".join(result["unqualified"]))

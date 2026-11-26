@@ -21,6 +21,9 @@ for case_binary in "$HYDRA_SHELL_EXEC" "$HYDRA_FLEET_BIN" "$HYDRA_TUI_BIN"; do
     exit 2
 done
 case_root=$(mktemp -d /tmp/hydra-sh.XXXXXX)
+# Hydra compares the physical paths it records with the ones it is given; where
+# /tmp is a symlink (macOS: /private/tmp) the case must start from the real one.
+case_root=$(CDPATH='' cd -- "$case_root" && pwd -P)
 case_runner=
 # Private whatever the caller's umask: under 002 a group-writable TMPDIR
 # ancestor makes Hydra's ownership checks refuse fixture stores beneath it.

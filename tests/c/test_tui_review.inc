@@ -8,7 +8,13 @@ static volatile sig_atomic_t review_owner_stopped;
 static void review_owner_signal(int signum) { review_owner_stopped = signum; }
 
 /* A cooperative producer owns a TERM-resistant child in a separate group,
- * matching Fleet's nested f_run lifecycle and 500 ms escalation grace. */
+ * matching Fleet's nested f_run lifecycle: TERM, a grace, then KILL. The
+ * control centre kills the whole capture 750 ms after its own TERM, so the
+ * producer must finish its whole cleanup inside that: the grace is kept well
+ * under it (the case asserts that the producer, not the kill, ran its
+ * cleanup), because a runner that stalls the producer for 250 ms, the margin
+ * a 500 ms grace leaves, has the kill arrive first. */
+#define REVIEW_OWNER_ESCALATION_MS 200L
 static pid_t review_owner_child(const char *scratch) {
     pid_t child;
     if (mkdir(scratch, 0700) || (child = fork()) < 0) return -1;
@@ -22,7 +28,7 @@ static pid_t review_owner_child(const char *scratch) {
 static void review_owner_reap(pid_t child, bool grace) {
     int status = 0;
     if (child <= 0) return;
-    if (grace) { (void)kill(-child, SIGTERM); sleep_ms(500); }
+    if (grace) { (void)kill(-child, SIGTERM); sleep_ms(REVIEW_OWNER_ESCALATION_MS); }
     (void)kill(-child, SIGKILL);
     while (waitpid(child, &status, 0) < 0 && errno == EINTR) { }
 }

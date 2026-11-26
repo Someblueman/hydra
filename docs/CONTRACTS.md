@@ -445,14 +445,10 @@ bytes or ID changed fails with `invalid_decision`. `decision list --json` return
 
 The planning evaluation report (`build/plan-eval/report.json`, schema 1,
 `report` `hydra-plan-eval-1`) records `source_commit`, `archive` (`commit`,
-`files` digests, `verified`), `matched_contract`, `case_set`, `planning` (per arm
-and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
-`total`, `by_class`, `by_source`, `cases`, `repeats`, `distinct_outcomes`),
+`files` digests, `verified`), `matched_contract`, `case_set`,
 `validation` (`false_rejections`, `false_acceptances`, `incorrect_rejected`,
-`incorrect_total`, `by_class`, `controls`), `execution` (`compiled`, `runs` with
-`verified_outcome`, `as_expected`, `wall_seconds`,
-`time_to_verified_result_milliseconds`, `cost`, `human_corrections`,
-`repeated_work`), `scheduling` (`structural`, `executed`, `calibration`),
+`incorrect_total`, `by_class`, `controls`),
+`scheduling` (`structural`, `executed`, `calibration`),
 `calibration`, `human_corrections`, `stochastic_variability`, `failures`,
 `status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
 never estimates.
@@ -807,6 +803,16 @@ durable state or confer approval. Stale or ambiguous selections remain unavailab
 until a fresh exact identity is established. Native UI behavior is covered by the
 public CLI and protocol rules in this guide.
 
+The public routes are `hydra workflow attention --json`, `workflow attention-data`,
+`fleet attention --json` and `fleet attention-data`, which take no selection, and
+`hydra workflow review-data` and `hydra fleet review-data`, the only two that take the
+13 positional selection fields (`KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD
+INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256`) and an optional 14th
+argument, a bounded JSON array of explicit references (transcript, log or PR
+locators). A local reference preview is capped at
+4096 bytes; the producer never opens a URL, and in the native review Enter on a web
+reference passes its locator to `open` (macOS) or `xdg-open` without reading it.
+
 Attention data is `HYDRA_ATTENTION<TAB>3`: each `ITEM` keeps the 19 version-1
 fields and appends a presentation `label` (the workflow name, or `-`; version 2)
 and a presentation `detail` (version 3: for a failed check, the IDs of the
@@ -834,7 +840,9 @@ review has readiness `failed` (`candidate_state` `failed_needs_decision`) and
 the plan's result section; a run-level failure is reviewed from the run's own
 records.
 
-Seen markers are a per-user client preference, not workflow state.
+Seen markers are a per-user client preference, not workflow state. They live in the
+`HYDRA_HOME`, so clients sharing one `HYDRA_HOME` share them: marking an item seen in
+one marks it seen in the others.
 `hydra workflow attention-seen list | mark IDENTITY REVISION | clear IDENTITY`
 (64-hex digests) keeps them in `$HYDRA_HOME/attention/seen.tsv`, one
 `identity<TAB>revision<TAB>seen-at` row per identity, at most 512 rows (oldest
@@ -1019,7 +1027,7 @@ terminal operations (interactive spawn and resume, attach, switch, broadcast,
 dashboard, TUI, and workflow steps that request a terminal); headless heads, exec,
 workflows, remote tasks, bootstrap, install, and doctor run without it. A tmux on
 PATH that cannot report a version is unusable, never "old enough". The root README
-lists supported tools; [T2/T3 qualification](T2_T3_QUALIFICATION.md) records the
+lists supported tools; [Execution hosts without tmux](FLEET.md#execution-hosts-without-tmux) describes the
 reproducible execution-without-tmux cases.
 
 ## Fleet coordination (since v2.1.0)

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -58,13 +59,29 @@ def main() -> None:
     root, build, output, source = (Path(value).resolve() for value in sys.argv[1:])
     output.mkdir(parents=True, exist_ok=True)
     retained_screen_controls(root, output)
+    # The control centre reads its heads from a state store, never from the
+    # fixture CLI: build the store of the three fixture heads (and the fixture
+    # tmux that lists their sessions) and start the observer in its repository.
+    fixtures = source / "tests/fixtures/tui"
+    store = output / "late-readiness-store"
+    subprocess.run(
+        ["sh", str(fixtures / "rows-store.sh"), str(fixtures / "native-v2.tsv"), str(store)],
+        check=True,
+    )
     client = Observer(
         build / "test-tui-pty",
         build / "hydra-tui",
-        source / "tests/fixtures/tui/fake-hydra.sh",
+        fixtures / "fake-hydra.sh",
         output / "late-readiness",
-        root,
-        {**os.environ, "HYDRA_HOME": str(output / "fake-home"), "LC_ALL": "C", "LANG": "C"},
+        store / "repo",
+        {
+            **os.environ,
+            "HYDRA_HOME": str(store / "home"),
+            "HYDRA_TEST_STORE": str(store),
+            "HYDRA_ITEM10_PATH_PREFIX": str(fixtures / "fake-bin"),
+            "LC_ALL": "C",
+            "LANG": "C",
+        },
     )
     resume: threading.Timer | None = None
     evidence: dict[str, object] = {}

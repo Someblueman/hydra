@@ -25,8 +25,20 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y shellcheck dash
-    
-    - name: Run ShellCheck
+
+    - name: Install pinned Python and workflow linters
+      run: |
+        pipx install ruff==0.11.13
+        ruff --version | grep -x 'ruff 0.11.13'
+        archive=actionlint_1.7.12_linux_amd64.tar.gz
+        curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$archive"
+        echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$archive" | sha256sum -c -
+        sudo tar -xzf "$RUNNER_TEMP/$archive" -C /usr/local/bin actionlint
+        actionlint --version | head -n 1 | grep -x '1.7.12'
+
+    - name: Run lint (ShellCheck, dash, ruff, actionlint)
+      env:
+        HYDRA_LINT_STRICT: 1
       run: make lint
     
   quality-c:
@@ -299,16 +311,18 @@ jobs:
         grep -q '^Remote setup host key trust over loopback SSH passed' "$RUNNER_TEMP/remote-setup-ssh.out"
 
     # T2/T3 with tmux absent on the execution hosts: the controlled-transport
-    # cases run in every fleet shard; the loopback SSH variant prints SKIP
-    # without sshd, so require its pass line here where sshd is installed.
-    - name: Qualify T2/T3 execution without tmux over loopback SSH
+    # cases are fleet cases (t3-distributed in the even shard, t2-headless in
+    # the odd one; see scripts/fleet-tests.mk), so only the loopback SSH variant
+    # runs here. It prints SKIP without sshd, so require its pass line where
+    # sshd is installed.
+    - name: Qualify T3 execution without tmux over loopback SSH
       if: matrix.os == 'ubuntu-latest' && matrix.mode == 'acceptance' && matrix.shard == 'odd'
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-headless
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make test-t2-headless test-t3-distributed | tee "$RUNNER_TEMP/t2-t3.out"
-        grep -q '^T3 distributed over loopback SSH passed' "$RUNNER_TEMP/t2-t3.out"
+        make test-t3-distributed-ssh | tee "$RUNNER_TEMP/t3-ssh.out"
+        grep -q '^T3 distributed over loopback SSH passed' "$RUNNER_TEMP/t3-ssh.out"
 
     - name: Run fleet sanitizers
       if: matrix.mode == 'sanitizers'

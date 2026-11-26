@@ -12,7 +12,9 @@
     "Makefile",
     "docs/quality",
     "quality.json",
-    "examples/planning"
+    "examples/planning",
+    "ruff.toml",
+    ".github/workflows"
   ],
   "exclude": [],
   "tools": {
@@ -47,23 +49,32 @@
       ],
       "install": []
     },
+    "ruff": {
+      "command": [
+        "ruff"
+      ],
+      "version": "0.11.13",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "actionlint": {
+      "command": [
+        "actionlint"
+      ],
+      "version": "1.7.12",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
     "shell-lint": {
       "command": [
         "sh",
         "scripts/lint-shell.sh"
       ],
       "version": "0.11.0",
-      "version_args": [
-        "--version"
-      ],
-      "install": []
-    },
-    "c-incremental": {
-      "command": [
-        "sh",
-        "scripts/quality-c-incremental.sh"
-      ],
-      "version": "22.1.8",
       "version_args": [
         "--version"
       ],
@@ -92,30 +103,41 @@
       "kind": "lint"
     },
     {
-      "name": "Hydra C complexity regression gate",
-      "tool": "c-incremental",
-      "args": [],
+      "name": "Hydra Python lint (ruff)",
+      "tool": "ruff",
+      "args": [
+        "check",
+        "--quiet"
+      ],
       "patterns": [
-        "*.c",
-        "*.h",
-        "*.inc"
+        "*.py"
       ],
       "files": true,
-      "stage": "full",
+      "stage": "fast",
       "failure_codes": [
         1,
         2
       ],
-      "scope": "translation-units",
       "inputs": [
-        "Makefile",
-        "scripts/quality-c.sh",
-        "scripts/quality-c-incremental.sh",
-        "docs/quality/*.tsv",
-        "scripts/native-tests.mk",
-        "scripts/*.mk",
-        "scripts/clang-tidy.sh"
+        "ruff.toml"
       ],
+      "kind": "lint"
+    },
+    {
+      "name": "Hydra workflow lint (actionlint)",
+      "tool": "actionlint",
+      "args": [],
+      "patterns": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+      ],
+      "files": true,
+      "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "inputs": [],
       "kind": "lint"
     },
     {
@@ -146,7 +168,6 @@
         "scripts/*.mk",
         "scripts/clang-tidy.sh",
         "scripts/quality-c.sh",
-        "scripts/quality-c-incremental.sh",
         "docs/quality/*.tsv"
       ]
     },
@@ -230,7 +251,7 @@
     "mode": "review"
   },
   "verification": {
-    "green": "Changed behavior preserves Hydra POSIX CLI, state and native protocol contracts; affected native builds and existing behavioral checks pass. Broad runtime changes require make test-all, make quality-c and applicable make sanitize targets, with Linux/macOS CI passing before integration. Incremental lint or complexity success alone is not acceptance.",
+    "green": "Changed behavior preserves Hydra POSIX CLI, state and native protocol contracts; affected native builds and existing behavioral checks pass. Broad runtime changes require make test-all, make quality-c and applicable make sanitize targets, with Linux/macOS CI passing before integration. Lint or complexity success alone is not acceptance.",
     "manual": [
       "For TUI or interaction changes, inspect the affected real PTY workflow for readable layout, navigation, input routing and terminal restoration; automated assertions do not establish visual quality.",
       "For state, recovery or cancellation changes, assess the relevant failure interleaving and durable evidence; distinguish controlled fixtures from live-host or authenticated-provider qualification.",

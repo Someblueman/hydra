@@ -431,7 +431,7 @@ static void machine_case(struct app *app, int cols, int rows) {
     size_t i;
     app->cols = cols; app->rows = rows; app->setup->open = false; app->host_selected = 0;
     m->read = m->agents_read = true;
-    copy_text(m->tmux, sizeof(m->tmux), "3.4"); copy_text(m->hydra, sizeof(m->hydra), "5.0.0");
+    copy_text(m->tmux, sizeof(m->tmux), "3.4"); copy_text(m->hydra, sizeof(m->hydra), "5.0.1");
     for (i = 0; i < 8; i++) { copy_text(m->agents[i].name, sizeof(m->agents[i].name), names[i]); m->agents[i].available = !i; }
     m->agent_count = 8;
     check(render_capture(app, frame, sizeof(frame)), "This machine renders");

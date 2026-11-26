@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 5.0.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 5.0.1 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -332,6 +332,11 @@ assert_success $? "an empty sample is not called filtered out"
 assert_success $? "an empty sample draws no chart"
 ! grep -Fq "Unobserved" "$test_root/stats-empty.out"
 assert_success $? "an empty sample draws no tiles"
+# An unregistered repository reports its scope as unavailable, not as zero.
+printf 'HYDRA_STATISTICS\t6\t1788789600\nX\tProject identity unavailable\nZ\t0\t0\t0\n' > "$test_root/statistics-unregistered.tsv"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$test_root/statistics-unregistered.tsv" --size 140x40 --view stats > "$test_root/stats-unregistered.out"
+contains "Partial sample: Project identity unavailable" "$test_root/stats-unregistered.out" "an unregistered repository's statistics name the missing identity"
+contains "No sessions recorded yet" "$test_root/stats-unregistered.out" "an unregistered repository's statistics say nothing was recorded"
 # Golden frames of every screen at 140x40 and 80x24 (Work also at 100x30
 # and 60x20, where its panes share one), in Unicode and ASCII: the frame (top
 # bar, titled rules, status chip, generated footer) is pinned. The earlier
@@ -528,7 +533,7 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 5.0.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 5.0.1 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > "$test_root/unexpected.out" 2> "$test_root/unexpected.err"
 assert_equal "4" "$?" "unexpected native exit status is returned unchanged"
@@ -559,7 +564,7 @@ done
 contains "  tui  " "$test_root/help.out" "help lists the tui command"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 5.0.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 5.0.1 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"

@@ -7,6 +7,10 @@ test_count=0
 pass_count=0
 fail_count=0
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
+# bin/hydra canonicalizes HYDRA_HOME, so the backup paths it prints are
+# physical. Where TMPDIR sits behind a symlink (/tmp on macOS), start from the
+# physical path too, or state_v2_rollback refuses those paths as outside HYDRA_HOME.
+test_root="$(cd "$test_root" && pwd -P)"
 repo="$test_root/repo"
 HYDRA_HOME="$test_root/home"
 HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"

@@ -20,7 +20,7 @@ static void first_line(const char *text, char *out, size_t size) {
     snprintf(out, size, "%.*s", (int)strcspn(text, "\r\n"), text);
 }
 
-/* "tmux 3.4" and "Hydra version 5.0.0" name their version last. */
+/* "tmux 3.4" and "Hydra version 5.0.1" name their version last. */
 static void version_of(const char *text, char *out, size_t size) {
     char line[160];
     const char *space;

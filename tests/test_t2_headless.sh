@@ -3,7 +3,7 @@
 # execution host. The coordinator keeps its own PATH (tmux may be present);
 # every receiver command runs with a private PATH that has no tmux and a tmux
 # stand-in that refuses terminal operations loudly. The SSH boundary is the
-# controlled transport the DAG fleet cases use; see docs/T2_T3_QUALIFICATION.md.
+# controlled transport the DAG fleet cases use; see docs/FLEET.md (Execution hosts without tmux).
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null

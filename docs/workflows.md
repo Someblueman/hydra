@@ -305,8 +305,7 @@ records `plan-repair-budget` 0 and the driver skips the repair step.
 
 Every expert plan runs through the same scheduler, and final
 success requires artifact-bound verification reports for the declared
-deliverables. This optional native path does not change workflow schema 1 or
-shell-only execution.
+deliverables. Workflow schema 1 is unchanged.
 
 A policy's `writes` may contain the exact scope `@spawned:*`. It authorizes a
 plan's declared `<head>:<path>` or `<head>:*` scopes only for heads created by
@@ -653,41 +652,32 @@ runtime membership changes and late conditional evaluation remain unsupported.
 
 ### Planning evaluation
 
-`make test-plan-eval` (or `python3 scripts/plan-eval.py --execute 1`) measures
-planning quality on a held-out case set. It exports the archived finite pilot from
-Git history at commit `b0fb5b1d` and refuses to continue if any byte differs from
-`examples/planning/evaluation/archive-manifest.json`; the archived record is never
-edited. The nine archived cases are joined by the eight held-out additions in
-`examples/planning/evaluation/heldout-v3-additions.json`, each with two declared
-incorrect artifacts, and `examples/planning/evaluation/oracle.py` computes every
-expected artifact from the case inputs and the frozen visible contracts alone.
-Three effects are reported separately in `build/plan-eval/report.json`:
+`make test-plan-eval` (or `python3 scripts/plan-eval.py --execute 1`) checks the
+independent held-out oracle and compares two scheduling patterns. It exports the
+archived finite pilot's case file from history at commit `b0fb5b1d` and refuses to
+continue if any byte differs from `examples/planning/evaluation/archive-manifest.json`;
+the archived record is never edited. The nine archived cases are joined by the
+eight held-out additions in `examples/planning/evaluation/heldout-v3-additions.json`,
+each with two declared incorrect artifacts, and
+`examples/planning/evaluation/oracle.py` computes every expected artifact from the
+case inputs and the frozen visible contracts alone. The archived candidate arms are
+not run; they remain reproducible at the archived commit. Two effects are reported
+separately in `build/plan-eval/report.json`:
 
-- **planning**: each frozen `current` and `contract-aware` candidate against all
-  seventeen cases under the declared interface and under the archived post hoc
-  interface adaptation, by task class and by source, with the number of repeated
-  invocations and the number of distinct outcomes (a determinism check; frozen
-  deterministic candidates exercise no stochastic variability);
 - **validation**: false rejections of correct artifacts and false acceptances of
   the thirty-four declared corruptions, by task class; every declared corruption
   must be rejected;
 - **scheduling**: the serial and fork/join patterns compiled by the current
-  compiler and compared with `evaluate`; with `--execute`, both run through
+  compiler and compared with `evaluate`; with `--execute 1`, both run through
   `hydra workflow plan run`, their recorded durations become estimates through
   `observed`, and the serial run's step durations are transplanted onto the
   fork/join graph as a prediction that is compared with the fork/join run's own
   elapsed time (calibration, n = 1).
 
-With `--execute N`, the first N candidates of each arm also run through the
-archived evaluation plan at the current source; the report records the verified
-outcome, elapsed times, repeated work (steps with more than one attempt),
-provider cost (`unknown`) and human corrections (`unknown (not observed)`).
-Estimate calibration by task class stays `unknown`: the frozen candidates
-supplied no estimates. The runner exits non-zero when a corruption is accepted, a
-correct artifact is rejected, a candidate varies across repeats, the archived
-nine-case outcomes are not reproduced or an executed outcome differs from the
-archived expectation. See the [evaluation record](../examples/planning/evaluation/README.md)
-for the measured results and their limits.
+The runner exits non-zero when a corruption is accepted, a correct artifact is
+rejected, or the archived case file no longer carries nine cases. See the
+[evaluation record](../examples/planning/evaluation/README.md) for the commands and
+their limits.
 
 ## Pools and schedules
 

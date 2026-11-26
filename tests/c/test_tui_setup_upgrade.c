@@ -45,7 +45,7 @@ static void envelope_cases(struct setup_envelope *e) {
     bool listed = load("list-upgrade.json", e, 0) && e->listed_count == 1 && !e->listed[0].complete &&
         !strcmp(e->listed[0].status, "upgrade_available") && !strcmp(e->listed[0].next_step, "provision");
     if (listed) setup_listed_summary(&e->listed[0], summary, sizeof(summary));
-    check(listed && !strcmp(summary, "older Hydra (2.9.0) on this host; upgrade to 5.0.0"), "a finished setup on an older Hydra lists its upgrade");
+    check(listed && !strcmp(summary, "older Hydra (2.9.0) on this host; upgrade to 5.0.1"), "a finished setup on an older Hydra lists its upgrade");
     check(load("list-done.json", e, 0) && !e->listed[0].upgrade[0], "a current finished setup offers no upgrade");
     check(load("status-upgrade.json", e, 0) && (open = setup_open_step(e)) && !strcmp(open->id, "provision") &&
           !strcmp(open->status, "upgrade_available") && setup_screen_for(e) == SETUP_SCREEN_STEPS && !strcmp(e->next_step, "provision"),
@@ -56,7 +56,7 @@ static void envelope_cases(struct setup_envelope *e) {
     check(setup_argv_valid(e, "ovh") && e->argc == 5 && !strcmp(e->argv[2], "provision") && !setup_argv_valid(e, "other"),
           "the TUI runs only hydra remote provision for this host");
     check(load("provision-upgrade-approval.json", e, 3) && setup_screen_for(e) == SETUP_SCREEN_PLAN && !strcmp(e->plan_kind, "provision") &&
-          plan_row(e, "upgrade.from_version", "2.9.0") && plan_row(e, "upgrade.to_version", "5.0.0") &&
+          plan_row(e, "upgrade.from_version", "2.9.0") && plan_row(e, "upgrade.to_version", "5.0.1") &&
           plan_row(e, "upgrade.previous_prefix", "0029") && plan_row(e, "upgrade.alias.new_hydra", "/bin/hydra") &&
           plan_row(e, "upgrade.previous_install", "stays installed"), "the upgrade plan shows both versions, the kept prefix and the alias switch");
     check(setup_argv_valid(e, "ovh") && !strcmp(e->argv[4], "--approve") && !strcmp(e->argv[5], e->plan_sha256),

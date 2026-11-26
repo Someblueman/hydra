@@ -7,6 +7,169 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-11-26
+
+Hydra 5.0.1 is a maintenance release with no change to how Hydra behaves: CLI
+syntax, JSON output, state and event schemas, the fleet protocol and the
+installation layout are the same as in 5.0.0. It removes retired tooling, old
+evidence and unused files, consolidates the review and qualification guides,
+adds Python and workflow linting, moves the manual control-centre acceptance
+checks into tests CI runs, and makes the test suite independent of the
+developer's own git and tmux configuration.
+
+### Changed
+- `make lint` also runs `ruff check` over every Python file (rules in `ruff.toml`:
+  the defaults plus flake8-bugbear) and `actionlint` over `.github/workflows`, and CI
+  requires both at the versions pinned in `quality.json`. Locally a missing tool is
+  skipped with a warning unless `HYDRA_LINT_STRICT=1` is set. The harness scripts
+  were fixed to pass; no behaviour changes.
+- `make visual-review` captures a focused set by default: the Work flow (with Inbox,
+  Stats and review) and the Hosts flow at 80x24 and 140x40 in the dark and light
+  themes. `VISUAL_REVIEW_FULL=1` (`run.py --full`) captures every flow in every theme,
+  including no-colour, as before.
+- `make test-usability` runs the `planning` first-use walkthrough and writes `report.json`.
+- The five palette exceptions in `scripts/visual_review/lint-known.tsv` name the flows
+  and theme they cover instead of every capture; `lint.py` accepts comma-separated globs.
+- Assertions moved from the removed journeys into tests CI runs. In `make
+  test-plan-workspace`: `tests/kettle/test_first_entry.c` opens the control centre on a
+  repository Hydra has never seen and checks that no project is registered or trusted, no
+  tmux session starts, the committed workflow is still refused and git status, the tree and
+  `.git/info/exclude` are unchanged, also on a reopen after `hydra init --trust`;
+  `test_head_removal.c` drives the real removal dialog (cancel keeps the head, an active head's
+  terminal process is stopped, a bulk removal removes the clean head and refuses the dirty one,
+  keeping its draft, with no "Press Enter to return") and checks the Work selection survives
+  a visit to Stats; `test_sign_in_recovery.c` checks a machine with no agent (the new-task
+  form offers only `none`, Hosts names the missing agents, no head is created), an
+  interactive `hydra spawn --profile --prompt` (agent beside the top bar, Ctrl-] and `q`
+  keep the task), a provider that exits needing a login (its instruction on screen, a typed
+  command runs in the worktree), a scrollback with no bootstrap export and a one-line banner,
+  and Tab and Esc reaching an attached agent as typed; `test_head_changes.c` checks that two
+  committed files are not shown as zero in Work, are labelled apart from uncommitted
+  changes and are both in `:diff`, and that Tab and Shift-Tab walk the panes and return;
+  `test_plan_conversation.c` checks the approval dialog says a changed draft or policy runs
+  nothing; `test_terminal_restore.c` checks the Details and the Inbox item for a head whose
+  terminal is gone use plain words and offer restart and Open in Work but no removal.
+  Also: init keeps a dirty repository's edits and the contents of its untracked, ignored
+  and excluded files (`tests/test_init_source_tree.sh`); the new-task form lists only
+  available agents (`tests/c/test_tui_pty.c`); an unregistered repository's statistics say
+  the project identity is unavailable (`tests/test_workflow_statistics.sh`,
+  `tests/test_native_tui.sh`); the planning walkthrough and
+  `tests/kettle/test_plan_workspace.c` check git status after entry.
+- Dropped with the journeys, not moved: the shell-history file check after a provider exit,
+  reattaching at another terminal width and reading the agent process's `/proc` environment
+  (U2; `tests/test_spawn_bootstrap.sh` still checks the session environment and the spawn
+  transcript); Work or Details saying the agent exited after a failed login (U3; Work
+  still reports the session as running); Details of a stopped head, the raw kind and
+  confidence appearing only on the Inbox Technical page, and the launch objective in Details
+  (U7); the end-to-end two-head approval, resume and handoff run and Stats listing one run
+  as `waiting-approval` (U9; `tests/kettle/test_workflow_controls.c` still drives approval
+  and resume of a waiting run and `tests/test_native_tui.sh` the handoff Details); empty-state
+  and single-agent wording beyond the existing `tests/test_native_tui.sh` fixtures (U9, U13,
+  U15); the help text and 80-column footer hints (U8); a dirty head refused on its own and a
+  stopped head's removal (U12; the bulk case covers the refusal); and the independent
+  digest comparison and the no-user-command ledger of the plan journey (U17).
+- `make visual-review VISUAL_REVIEW_FULL=0` no longer captures the full sweep (only `1`
+  does), `make test-visual-lint VISUAL_REVIEW_FULL=1` recaptures when the existing captures
+  are the focused default, `lint.py` strips whitespace around comma-separated globs, and a
+  known row that no capture of the run matches is reported as "not captured" instead of
+  "resolved".
+- `docs/ROADMAP.md` lists prioritized open work only: open items with their
+  requirement and acceptance, the design constraints, and the release checklist. The
+  delivery tables, dated provider transcripts, delivered-item narratives and
+  references to removed acceptance journeys are gone (git history and this changelog
+  keep them); the version header names the current release.
+- `docs/TUI-REVIEW.md` describes the flicker measurement, the planning walkthrough,
+  the focused visual review and the layout lint (including comma-separated globs in
+  `lint-known.tsv`) as they are now, and what still needs a person.
+
+### Removed
+- Unused repository files: five TUI headers nothing includes
+  (`src/tui/{actions,adapter,input,render,selection}.h`), the provider-driven
+  scripts and prompts the feature and research planning examples no longer call,
+  an unreferenced dashboard screenshot and two empty `.gitkeep` placeholders.
+- The 72 pre-pass I4 screen captures (`docs/evidence/i4/*-before.txt`); the
+  after captures that `tests/test_native_tui_i4.sh` compares stay.
+- **Perf matrix.** `make perf-matrix`, `make test-perf-matrix` and
+  `scripts/perf-matrix.py` with its `perf_matrix_*` modules are gone, as is the
+  October 2026 evidence bundle under `docs/evidence/performance/`, which measured
+  the shell data reader that 5.0 removed. `make perf-attention` stays, now run
+  as `scripts/attention_corpus.py`; it exits 1 on any missed signal or false
+  positive, and `tests/test_attention_corpus.sh` runs it under `make test`. To
+  reproduce the study, check out commit `c82547c`.
+- **`make bench`** and `scripts/bench.sh` (one-shot `list`, `status` and `doctor`
+  timings), the `benchmark-core` alias of `bench-core` and the `sanitizer` alias
+  of `sanitize-core`. Use `make bench-core`, `make bench-tui` and
+  `make sanitize-core`. `scripts/bench-i1.sh` is folded into the `bench-i1`
+  recipe (`make bench-i1` is unchanged), and `scripts/quality-c-incremental.sh`
+  and its `quality.json` registrations are deleted; `make quality-c` remains.
+- **`make test-plan-eval` no longer runs the archived candidate arms.** It
+  checks the independent held-out oracle and the serial/fork-join scheduling
+  comparison; the `--repeat` option and the `planning` and `execution` sections
+  of `build/plan-eval/report.json` are gone. The archived candidates remain
+  reproducible at commit `b0fb5b1d9220189ad2498a244274ae498a3c7d0c`.
+- **`assets/demos/quick-tour.mp4`.** `assets/demos/record.sh` now writes only
+  `quick-tour.gif` and no longer needs libx264.
+- The `update-notification` workflow (a daily branch-behind reminder), and
+  `smoke-onboarding` from `make test-all`, where `make test` already runs it.
+- **The installed-build acceptance journeys other than the flicker measurement.**
+  `make test-acceptance` now runs only `u6-flicker`; `--item` and `--case` are gone
+  from `ACCEPTANCE_ARGS`, and so are the U-number report matrix beyond U6, the
+  `scripts/acceptance/` modules `entry`, `terminal`, `details`, `navigation`,
+  `overview`, `removal`, `journeys` and `ptyrun`, and `tests/fixtures/acceptance/`.
+  Their assertions are covered by existing tests (`tests/test_init_source_tree.sh`,
+  `tests/test_onboarding.sh`, `tests/test_project_trust.sh` for U1;
+  `tests/test_spawn_bootstrap.sh`, `tests/test_tmux.sh` for U2; `tests/test_spawn_ux.sh`,
+  `tests/c/test_tui_pty.c` for U3; `tests/test_native_tui.sh`, `tests/test_native_tui_i4.sh`
+  for U7, U9, U13 and U15; `tests/kettle/test_attach_cycles.c` for U8; `tests/test_kill.sh`
+  for U12; `tests/kettle/test_plan_conversation.c`, `test_plan_launch.c`,
+  `test_workflow_controls.c` for U9 and U17), by the tests added under "Changed" above, or
+  were dropped; the dropped ones are listed there.
+- **The simulated-discoverability layer of `make test-usability`:** the goal-driven
+  trials, the comprehension trials, the scripted journeys other than `planning`, the
+  HTML report and the `--trial` option (`scripts/usability/policy.py`, `trials.py`,
+  `comprehension.py`, `report.py`, `journeys_core.py`, `journeys_review.py`, the
+  greeting plan helpers and `tests/fixtures/usability/greeting-repo`, `verify-summary.sh`).
+  `tests/fixtures/usability/provider.py`, which the U10 loopback test copies, stays.
+- Process-scaffolding documents: `docs/T2_T3_QUALIFICATION.md` (its prerequisites,
+  commands and real-host checklist are now the "Execution hosts without tmux"
+  section of `docs/FLEET.md`), `docs/attention-review-acceptance.md` (a dated
+  September record; the attention and review routes and the `review-data` argument
+  list are in `docs/CONTRACTS.md`), and `docs/ACCEPTANCE.md`,
+  `docs/USABILITY-TESTING.md` and `docs/VISUAL-REVIEW.md`, merged into
+  `docs/TUI-REVIEW.md`.
+
+### Fixed
+- The 9B fixture README names the native contract runner, `docs/workflows.md`
+  no longer mentions shell-only workflow execution, and `make help` no longer
+  lists TUI timings under `make bench` (use `make bench-tui`).
+- Documentation corrected where it described removed or superseded behaviour:
+  the roadmap's U2, U12 and change-locality passages and the research planning
+  example's `plan-example` step. `docs/FLEET.md` no longer says cross-host DAG
+  coordination is only on the roadmap: the two-host scenario is qualified over
+  loopback receivers, and real hosts remain open.
+- Tests no longer read the developer's own configuration: every shell and fleet
+  case and every native PTY lane runs with an empty private `HOME` and
+  `XDG_CONFIG_HOME` and `GIT_CONFIG_NOSYSTEM=1`, and `scripts/test-env/tmux` starts
+  each test tmux server with `-f /dev/null`. A tmux plugin such as tmux-continuum
+  no longer restores sessions inside test servers (which kept them running and
+  failed the leak check), and global git settings such as `diff.mnemonicPrefix` or
+  a global ignore list no longer change fixture results. New native test recipes
+  run through `$(TEST_ENV)` (see `AGENTS.md`).
+- The shell suite passes on macOS: shell cases start from the physical temporary
+  directory (`/tmp` is a symlink there), file modes are read with a helper that
+  falls back to BSD `stat`, the plan CLI cases pass environment through `env`
+  rather than a prefix on a shell function (which bash 3.2's `sh` keeps after the
+  call), and the workflow-review fixtures start tmux without a user configuration.
+- `scripts/bench-attention.py --local-corpus` exits 1 when the corpus reports an
+  error, a missed signal or a false positive; it checked only that the run was
+  complete. `make test-bench-i1` gives its readiness case a state store to read
+  heads from (it had timed out since the control centre stopped reading heads
+  from the CLI).
+- Two PTY cases that failed intermittently on slow CI runners wait for the state
+  they assert on: the Inbox land case waits for the default selection to settle
+  before choosing the item, and the review cancellation fixture's producer
+  finishes its cleanup well inside the control centre's capture kill grace.
+
 ## [5.0.0] - 2026-11-21
 
 Hydra 5.0.0 is a reliability and performance release. It fixes defects that
@@ -2879,7 +3042,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.1...HEAD
+[5.0.1]: https://github.com/Someblueman/hydra/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/Someblueman/hydra/compare/v4.0.0...v5.0.0
 [4.0.0]: https://github.com/Someblueman/hydra/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Someblueman/hydra/compare/v2.9.0...v3.0.0

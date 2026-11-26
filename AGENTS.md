@@ -22,14 +22,18 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   what the POSIX-compliance checks assume.
 - Optional (improve UX, not required for tests): `fzf` (interactive `switch`),
   `gh` (GitHub issue/PR features), and an AI CLI such as `claude`/`aider`/`gemini`.
-  `python3` is needed only by the bench-i1, perf-matrix, plan-eval, usability,
+  `python3` is needed only by the bench-i1, perf-attention, plan-eval, usability,
   acceptance and visual-review targets.
+- Optional locally, required in CI (versions pinned in `quality.json`): `ruff` and
+  `actionlint`. `make lint` warns and skips a missing one; `HYDRA_LINT_STRICT=1`
+  makes a missing one an error.
 
 ### Lint / Test / Run (standard commands, see `Makefile` and `README.md`)
 - First check for a pull request: `make test-fast` — lint, a fixed selection of shell
   cases and the native unit tests (`CONTRIBUTING.md`).
 - Lint: `make lint` — runs ShellCheck (`--shell=sh --severity=style`) plus `dash -n`
-  syntax checks on every shell file.
+  syntax checks on every shell file, `ruff check` (rules in `ruff.toml`) on every
+  Python file and `actionlint` on `.github/workflows/*.yml` (`scripts/lint-extra.sh`).
 - Test: `make test` — runs with `sh` every `tests/test_*.sh` that is not listed in
   `SHELL_TEST_EXCLUDES` in `scripts/shell-tests.mk`; other targets such as
   `test-fleet`, `test-parity` and `test-tui` run the excluded files. Passing runs still print
@@ -51,6 +55,14 @@ get one and exits 1 (`hydra list` and `hydra switch` work without it).
   running whose arguments name its private `TMPDIR` fails with a `LEAK` report
   (the processes are then stopped); stop what a case starts on every exit path,
   for example with `test_stop_processes_naming` from `tests/helpers.sh`.
+- Cases and the native PTY lanes run with git and tmux isolated from your own
+  configuration (`scripts/test-env.sh`, applied by `scripts/run-test.sh` and, for
+  the PTY lanes, `$(TEST_ENV)` in the `Makefile`): `HOME` and `XDG_CONFIG_HOME`
+  point at an empty private directory, `GIT_CONFIG_NOSYSTEM=1` (not
+  `GIT_CONFIG_GLOBAL`, which review refuses), and `scripts/test-env/tmux` first on
+  `PATH` starts every tmux server with `-f /dev/null`, so `~/.tmux.conf`
+  plugins (tmux-continuum restoring saved sessions) never run in a test server.
+  A new native test binary started from a `Makefile` recipe needs `$(TEST_ENV)`.
 - Native warnings: `make -j4 check-opt-levels` compiles every `src/**/*.c` at `-O0`,
   `-Og`, `-O1`, `-O2`, `-O3` and `-Os` with warnings as errors and lists every
   failing site; the ordinary build only shows what `-O2` warns about.

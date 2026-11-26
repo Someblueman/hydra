@@ -53,8 +53,8 @@ dump_typed() { awk -F '\t' '$1 == "C" { print $3 "\t" $5 }'; }
 dir="$("$hydra" tui --onboarding-home)" && status=0 || status=$?
 assert_success "$status" "tui --onboarding-home names the onboarding directory"
 assert_equal "$HYDRA_HOME/fleet/onboarding" "$dir" "the onboarding directory is under the fleet state"
-assert_equal 700 "$(stat -c %a "$dir")" "the onboarding directory is private"
-assert_equal 700 "$(stat -c %a "$HYDRA_HOME/fleet")" "its parent is private"
+assert_equal 700 "$(test_file_mode "$dir")" "the onboarding directory is private"
+assert_equal 700 "$(test_file_mode "$HYDRA_HOME/fleet")" "its parent is private"
 
 # Discovery with a revoked candidate: identity and typed state agree.
 "$hydra" fleet revoke candidate other --reason "retired" --json > /dev/null
