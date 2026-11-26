@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-11-26
+
+Hydra 5.0.1 is a maintenance release with no change to how Hydra behaves: CLI
+syntax, JSON output, state and event schemas, the fleet protocol and the
+installation layout are the same as in 5.0.0. It removes retired tooling, old
+evidence and unused files, consolidates the review and qualification guides,
+adds Python and workflow linting, moves the manual control-centre acceptance
+checks into tests CI runs, and makes the test suite independent of the
+developer's own git and tmux configuration.
+
 ### Changed
 - `make lint` also runs `ruff check` over every Python file (rules in `ruff.toml`:
   the defaults plus flake8-bugbear) and `actionlint` over `.github/workflows`, and CI
@@ -67,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requirement and acceptance, the design constraints, and the release checklist. The
   delivery tables, dated provider transcripts, delivered-item narratives and
   references to removed acceptance journeys are gone (git history and this changelog
-  keep them); the version header now says 5.0.0.
+  keep them); the version header names the current release.
 - `docs/TUI-REVIEW.md` describes the flicker measurement, the planning walkthrough,
   the focused visual review and the layout lint (including comma-separated globs in
   `lint-known.tsv`) as they are now, and what still needs a person.
@@ -112,7 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/c/test_tui_pty.c` for U3; `tests/test_native_tui.sh`, `tests/test_native_tui_i4.sh`
   for U7, U9, U13 and U15; `tests/kettle/test_attach_cycles.c` for U8; `tests/test_kill.sh`
   for U12; `tests/kettle/test_plan_conversation.c`, `test_plan_launch.c`,
-  `test_workflow_controls.c` for U9 and U17), by the tests added under "Changed" below, or
+  `test_workflow_controls.c` for U9 and U17), by the tests added under "Changed" above, or
   were dropped; the dropped ones are listed there.
 - **The simulated-discoverability layer of `make test-usability`:** the goal-driven
   trials, the comprehension trials, the scripted journeys other than `planning`, the
@@ -137,6 +147,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   example's `plan-example` step. `docs/FLEET.md` no longer says cross-host DAG
   coordination is only on the roadmap: the two-host scenario is qualified over
   loopback receivers, and real hosts remain open.
+- Tests no longer read the developer's own configuration: every shell and fleet
+  case and every native PTY lane runs with an empty private `HOME` and
+  `XDG_CONFIG_HOME` and `GIT_CONFIG_NOSYSTEM=1`, and `scripts/test-env/tmux` starts
+  each test tmux server with `-f /dev/null`. A tmux plugin such as tmux-continuum
+  no longer restores sessions inside test servers (which kept them running and
+  failed the leak check), and global git settings such as `diff.mnemonicPrefix` or
+  a global ignore list no longer change fixture results. New native test recipes
+  run through `$(TEST_ENV)` (see `AGENTS.md`).
+- The shell suite passes on macOS: shell cases start from the physical temporary
+  directory (`/tmp` is a symlink there), file modes are read with a helper that
+  falls back to BSD `stat`, the plan CLI cases pass environment through `env`
+  rather than a prefix on a shell function (which bash 3.2's `sh` keeps after the
+  call), and the workflow-review fixtures start tmux without a user configuration.
+- `scripts/bench-attention.py --local-corpus` exits 1 when the corpus reports an
+  error, a missed signal or a false positive; it checked only that the run was
+  complete. `make test-bench-i1` gives its readiness case a state store to read
+  heads from (it had timed out since the control centre stopped reading heads
+  from the CLI).
+- Two PTY cases that failed intermittently on slow CI runners wait for the state
+  they assert on: the Inbox land case waits for the default selection to settle
+  before choosing the item, and the review cancellation fixture's producer
+  finishes its cleanup well inside the control centre's capture kill grace.
 
 ## [5.0.0] - 2026-11-21
 
@@ -3010,7 +3042,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v5.0.1...HEAD
+[5.0.1]: https://github.com/Someblueman/hydra/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/Someblueman/hydra/compare/v4.0.0...v5.0.0
 [4.0.0]: https://github.com/Someblueman/hydra/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Someblueman/hydra/compare/v2.9.0...v3.0.0

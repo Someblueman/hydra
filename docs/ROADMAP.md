@@ -2,7 +2,7 @@
 
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 24 November 2026
-> - **Release:** `v5.0.0` (21 November 2026), a reliability and performance release
+> - **Release:** `v5.0.1` (26 November 2026), a maintenance release after the `v5.0.0` reliability and performance release
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Contracts](CONTRACTS.md) · [Release definition of done](#release-definition-of-done)
