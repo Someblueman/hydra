@@ -5,7 +5,7 @@ bounded emulator and counted per refresh.
 
 A refresh (frame) is one burst of presenter output: reads of the PTY that
 arrive within FRAME_GAP_NS of each other. Thresholds were set from the
-current build's idle behaviour (see docs/ACCEPTANCE.md) and are asserted as
+current build's idle behaviour (see docs/TUI-REVIEW.md) and are asserted as
 desired behaviour, never relaxed to the measurement.
 """
 

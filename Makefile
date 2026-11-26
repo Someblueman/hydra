@@ -729,7 +729,7 @@ test-remote-setup-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
 
 # T2/T3 qualification with tmux absent on the execution hosts (the coordinator
-# keeps its PATH). See docs/T2_T3_QUALIFICATION.md. The loopback SSH variant
+# keeps its PATH). See docs/FLEET.md (Execution hosts without tmux). The loopback SSH variant
 # prints SKIP and exits 0 without an OpenSSH server, like test-remote-setup-ssh.
 .PHONY: test-t2-headless test-t3-distributed test-t3-distributed-ssh
 test-t2-headless: fleet-test-build
@@ -756,7 +756,7 @@ test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)
 
 # Replays captured terminal bytes through the product's own terminal
-# interpreter (src/kettle) and prints exact cells; see docs/VISUAL-REVIEW.md.
+# interpreter (src/kettle) and prints exact cells; see docs/TUI-REVIEW.md.
 $(BUILD_DIR)/kettle-cells: src/kettle/tools/cells.c $(KETTLE_OBJECTS) src/kettle/terminal.h
 	$(CC) $(CORE_CFLAGS) src/kettle/tools/cells.c $(KETTLE_OBJECTS) -o $@
 
@@ -796,7 +796,7 @@ test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/kettle-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
 
-# Installed-build flicker acceptance (U6, docs/ACCEPTANCE.md): one HTML+JSON
+# Installed-build flicker acceptance (U6, docs/TUI-REVIEW.md): one HTML+JSON
 # report mapping each U6 bullet to its checks and retained recordings.
 .PHONY: test-acceptance
 ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)

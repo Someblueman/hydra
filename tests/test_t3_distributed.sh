@@ -5,7 +5,7 @@
 # selects the SSH boundary: "controlled" (default; the fault-injecting
 # loopback the DAG fleet cases use) or "ssh" (two private loopback OpenSSH
 # daemons; prints SKIP and exits 0 without an OpenSSH server).
-# See docs/T2_T3_QUALIFICATION.md.
+# See docs/FLEET.md (Execution hosts without tmux).
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 transport="${HYDRA_TEST_T3_TRANSPORT:-controlled}"

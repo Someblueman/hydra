@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are the focused default, `lint.py` strips whitespace around comma-separated globs, and a
   known row that no capture of the run matches is reported as "not captured" instead of
   "resolved".
+- `docs/ROADMAP.md` lists prioritized open work only: open items with their
+  requirement and acceptance, the design constraints, and the release checklist. The
+  delivery tables, dated provider transcripts, delivered-item narratives and
+  references to removed acceptance journeys are gone (git history and this changelog
+  keep them); the version header now says 5.0.0.
+- `docs/TUI-REVIEW.md` describes the flicker measurement, the planning walkthrough,
+  the focused visual review and the layout lint (including comma-separated globs in
+  `lint-known.tsv`) as they are now, and what still needs a person.
 
 ### Removed
 - Unused repository files: five TUI headers nothing includes
@@ -112,17 +120,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `comprehension.py`, `report.py`, `journeys_core.py`, `journeys_review.py`, the
   greeting plan helpers and `tests/fixtures/usability/greeting-repo`, `verify-summary.sh`).
   `tests/fixtures/usability/provider.py`, which the U10 loopback test copies, stays.
+- Process-scaffolding documents: `docs/T2_T3_QUALIFICATION.md` (its prerequisites,
+  commands and real-host checklist are now the "Execution hosts without tmux"
+  section of `docs/FLEET.md`), `docs/attention-review-acceptance.md` (a dated
+  September record; the attention and review routes and the `review-data` argument
+  list are in `docs/CONTRACTS.md`), and `docs/ACCEPTANCE.md`,
+  `docs/USABILITY-TESTING.md` and `docs/VISUAL-REVIEW.md`, merged into
+  `docs/TUI-REVIEW.md`.
 
 ### Fixed
 - The 9B fixture README names the native contract runner, `docs/workflows.md`
   no longer mentions shell-only workflow execution, and `make help` no longer
   lists TUI timings under `make bench` (use `make bench-tui`).
 - Documentation corrected where it described removed or superseded behaviour:
-  the comprehension trial's entry points (Work, Stats, Inbox; no shell TUI),
-  the roadmap's U2, U12 and change-locality passages, the T2/T3 guide's fixture
-  retention and shard assignment, the research planning example's
-  `plan-example` step, and the attention acceptance record's local-only paths.
-
+  the roadmap's U2, U12 and change-locality passages and the research planning
+  example's `plan-example` step. `docs/FLEET.md` no longer says cross-host DAG
+  coordination is only on the roadmap: the two-host scenario is qualified over
+  loopback receivers, and real hosts remain open.
 
 ## [5.0.0] - 2026-11-21
 

@@ -11,7 +11,7 @@ contrast below the threshold in the dark and light themes.
 
 Findings listed in lint-known.tsv (rule, capture globs separated by commas,
 message substring, reason) are reported as known and do not fail the lint; everything else does.
-See docs/VISUAL-REVIEW.md.
+See docs/TUI-REVIEW.md.
 """
 
 from __future__ import annotations
